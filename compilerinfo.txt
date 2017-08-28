@@ -1,0 +1,251 @@
+FORMAT:
+
+OS
+
+  compiler, target architecture
+
+compiler invocation example: executable, optimize, static link to std. lib., no debug info
+
+compiler invocation example: executable, no optimization, dynamic link to std. lib., no debug info
+
+compiler invocation example: shared library, optimize, static link to std. lib., no debug info
+
+compiler invocation example: shared library, no optimization, dynamic link to std. lib., no debug info
+
+NOTE In examples, private module symbols binding is preferred everywhere if possible.
+  This is recommended mode. (Global names visibility also works in many cases,
+  but it's not reliable - behavior greatly varies across systems and compilers.)
+
+================================================================
+
+Linux Ubuntu 14.04 LTS
+
+
+  Clang 3.5 (3.5-1ubuntu1 (trunk), LLVM 3.5), x86_64-pc-linux-gnu
+
+clang -static-libgcc -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+clang -Wl,-E -m64 -Wl,-Bsymbolic -O0 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+clang -static-libgcc -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+clang -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O0 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+
+  GCC 4.8.2 (Ubuntu 4.8.2-19ubuntu1), x86_64-linux-gnu
+
+g++ -static-libgcc -static-libstdc++ -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+g++ -Wl,-E -m64 -Wl,-Bsymbolic -O0 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+g++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O0 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+================================================================
+
+Linux Ubuntu 16.04 LTS
+
+
+  Clang 4.0.0 (4.0.0-1ubuntu1~16.04.1, tags/RELEASE_400/rc1), x86_64-pc-linux-gnu
+
+Compiler invocation: same as in Ubuntu 14.04 (above).
+
+  GCC 5.4.0 (Ubuntu 5.4.0-6ubuntu1~16.04.4), x86_64-linux-gnu
+
+Compiler invocation: same as in Ubuntu 14.04 (above).
+
+================================================================
+
+macOS 10.12.4
+
+
+  Clang 700.1.81, LLVM 7.0.2, x86_64-apple-darwin16.5.0
+
+clang -m64 -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+clang -shared -Wall -m64 -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+
+  GCC 5.1.0, x86_64-apple-darwin14.4.0
+
+g++ -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+g++ -shared -Wall -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+================================================================
+
+Solaris 11.1
+
+
+  CC: Sun C++ 5.12 SunOS_i386 2011/11/16
+
+CC -Bstatic -m64 -xldscope=symbolic -xwe -O3 -o test1_cc path/test1.cpp path/bmdx_main.cpp
+
+CC -Bdynamic -m64 -xldscope=symbolic -xwe -o test1_cc path/test1.cpp path/bmdx_main.cpp
+
+CC -Bstatic -shared -m64 -xldscope=symbolic -xwe -O3 -o test1_cc.so path/test1.cpp path/bmdx_main.cpp
+
+CC -Bdynamic -shared -m64 -xldscope=symbolic -xwe -o test1_cc.so path/test1.cpp path/bmdx_main.cpp
+
+================================================================
+
+FreeBSD 10.1
+
+
+  Clang 3.4.1 (tags/RELEASE_34/dot1-final 208032) 20140512, x86_64-unknown-freebsd10.1
+
+clang -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -lpthread
+
+clang -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -lpthread
+
+
+  GCC 4.8.3, x86_64-portbld-freebsd10.1
+
+g++ -static-libgcc -static-libstdc++ -Wl,-E -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I/usr/local/lib/gcc48/include/c++ -I/usr/local/lib/gcc48/include/c++/x86_64-portbld-freebsd10.1 -O1 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -L/usr/local/lib -L/usr/local/lib/gcc48 -lpthread
+
+g++ -Wl,-E -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I/usr/local/lib/gcc48/include/c++ -I/usr/local/lib/gcc48/include/c++/x86_64-portbld-freebsd10.1 -O0 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -L/usr/local/lib -L/usr/local/lib/gcc48 -lpthread
+
+g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I/usr/local/lib/gcc48/include/c++ -I/usr/local/lib/gcc48/include/c++/x86_64-portbld-freebsd10.1 -O1 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -L/usr/local/lib -L/usr/local/lib/gcc48 -lpthread
+
+g++ -shared -fPIC -Wall -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I/usr/local/lib/gcc48/include/c++ -I/usr/local/lib/gcc48/include/c++/x86_64-portbld-freebsd10.1 -O0 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -L/usr/local/lib -L/usr/local/lib/gcc48 -lpthread
+
+================================================================
+
+Windows XP SP2 (x86)
+
+
+  MinGW 4.6.2, mingw32
+
+g++  -static -static-libgcc -static-libstdc++ -I"\include" -I"\include\win32" -O2 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+
+g++  -I"\include" -I"\include\win32" -O0 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+
+g++  -static -static-libgcc -static-libstdc++ -shared -Wl,--add-stdcall-alias -Wall -I"\include" -I"\include\win32" -O2 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+g++  -shared -Wl,--add-stdcall-alias -Wall -I"\include" -I"\include\win32" -O0 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+
+  MSVC 15.00.21022.08 (VS 2008), x86
+
+Compiler invocation: same as in Windows 8.1 (below).
+
+================================================================
+
+Windows 8.1 (x64)
+
+
+  MinGW 4.8.1, mingw32
+
+g++  -static -static-libgcc -static-libstdc++  -O2 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+
+g++   -O0 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+
+g++  -static -static-libgcc -static-libstdc++ -shared -Wl,--add-stdcall-alias -Wall  -O2 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+g++  -shared -Wl,--add-stdcall-alias -Wall  -O0 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+
+  MSVC 15.00.21022.08 (VS 2008), x86
+
+cl   -nologo -EHsc -WX  -I"c:\path\vc2008\include" -MT -O2 -Fetest1_cl8.exe path\test1.cpp path\bmdx_main.cpp
+
+cl   -nologo -EHsc -WX  -I"c:\path\vc2008\include" -MD -Od -Fetest1_cl8.exe path\test1.cpp path\bmdx_main.cpp  -link -manifest
+mt.exe -manifest test1_cl8.exe.manifest -outputresource:test1_cl8.exe;1
+
+cl   -nologo -EHsc -WX  -I"c:\path\vc2008\include" -MT -O2 -Fetest1_cl8.dll -LD path\test1.cpp path\bmdx_main.cpp
+
+cl   -nologo -EHsc -WX  -I"c:\path\vc2008\include" -MD -Od -Fetest1_cl8.dll -LD path\test1.cpp path\bmdx_main.cpp  -link -manifest
+mt.exe -manifest test1_cl8.dll.manifest -outputresource:test1_cl8.dll;2
+
+
+  MSVC 18.00.21005.1 (VS 2013), x86, x64
+
+cl   -nologo -EHsc -WX  -I"C:\Program Files (x86)\Microsoft Visual Studio 12.0\include" -MT -O2 -Fetest1_cl13.exe path\test1.cpp path\bmdx_main.cpp
+
+cl   -nologo -EHsc -WX  -I"C:\Program Files (x86)\Microsoft Visual Studio 12.0\include" -MD -Od -Fetest1_cl13.exe path\test1.cpp path\bmdx_main.cpp  -link -manifest
+mt.exe -manifest test1_cl13.exe.manifest -outputresource:test1_cl13.exe;1
+
+cl   -nologo -EHsc -WX  -I"C:\Program Files (x86)\Microsoft Visual Studio 12.0\include" -MT -O2 -Fetest1_cl13.dll -LD path\test1.cpp path\bmdx_main.cpp
+
+cl   -nologo -EHsc -WX  -I"C:\Program Files (x86)\Microsoft Visual Studio 12.0\include" -MD -Od -Fetest1_cl13.dll -LD path\test1.cpp path\bmdx_main.cpp  -link -manifest
+mt.exe -manifest test1_cl13.dll.manifest -outputresource:test1_cl13.dll;2
+
+
+  MSVC 19.10.25019 (VS 2017), x86, x64
+
+cl   -nologo -EHsc -WX  -MT -O2 -Fetest1_cl17.exe path\test1.cpp path\bmdx_main.cpp  -link -libpath:c:\path\vc2017\VC\Tools\MSVC\14.10.25017\lib\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\um\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\ucrt\x86
+
+cl   -nologo -EHsc -WX  -MD -Od -Fetest1_cl17.exe path\test1.cpp path\bmdx_main.cpp  -link -libpath:c:\path\vc2017\VC\Tools\MSVC\14.10.25017\lib\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\um\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\ucrt\x86 -manifest
+
+cl   -nologo -EHsc -WX  -MT -O2 -Fetest1_cl17.dll -LD path\test1.cpp path\bmdx_main.cpp  -link -libpath:c:\path\vc2017\VC\Tools\MSVC\14.10.25017\lib\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\um\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\ucrt\x86
+
+cl   -nologo -EHsc -WX  -MD -Od -Fetest1_cl17.dll -LD path\test1.cpp path\bmdx_main.cpp  -link -libpath:c:\path\vc2017\VC\Tools\MSVC\14.10.25017\lib\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\um\x86 -libpath:c:\path\winsdk10\Lib\10.0.10586.0\ucrt\x86 -manifest
+
+Compiler invocation for 64-bit target: all the same except x64 instead of x86 in paths.
+
+
+  Intel C++ 15.0.3.208 (build 20150407), IA-32, x64
+
+icl   -nologo -EHsc -WX  -MT -fast -Fetest1_icl.exe path\test1.cpp path\bmdx_main.cpp
+
+icl   -nologo -EHsc -WX  -MD -Od -Fetest1_icl.exe path\test1.cpp path\bmdx_main.cpp  -link -manifest
+mt.exe -manifest test1_icl.exe.manifest -outputresource:test1_icl.exe;1
+
+icl   -nologo -EHsc -WX  -MT -fast -Fetest1_icl.dll -LD path\test1.cpp path\bmdx_main.cpp
+
+icl   -nologo -EHsc -WX  -MD -Od -Fetest1_icl.dll -LD path\test1.cpp path\bmdx_main.cpp  -link -manifest
+mt.exe -manifest test1_icl.dll.manifest -outputresource:test1_icl.dll;2
+
+
+  clang 5.0.0 (trunk), i686-pc-windows-msvc, x86_64-pc-windows-msvc
+
+clang  -static -m32 -Xclang -flto-visibility-public-std  -O2 -o test1_clang.exe path\test1.cpp path\bmdx_main.cpp
+
+clang  -m32 -Xclang -flto-visibility-public-std  -O0 -o test1_clang.exe path\test1.cpp path\bmdx_main.cpp
+
+clang  -static -shared -Wall -m32 -Xclang -flto-visibility-public-std  -O2 -o test1_clang.dll path\test1.cpp path\bmdx_main.cpp
+
+clang  -shared -Wall -m32 -Xclang -flto-visibility-public-std  -O0 -o test1_clang.dll path\test1.cpp path\bmdx_main.cpp
+
+Compiler invocation for 64-bit target: all the same except -m64.
+
+
+  bcc64 3.1 (LLVM 3.1svn), x86_64-pc-win32-elf
+
+bcc64  -tM  -O2 -o test1_bcc.exe path\test1.cpp path\bmdx_main.cpp
+
+bcc64  -tR -tM  -O0 -o test1_bcc.exe path\test1.cpp path\bmdx_main.cpp
+
+bcc64  -tM -tD -Wall  -O2 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
+
+bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
+
+
+  MinGW-W64 6.2.0, x86_64-win32-seh-rev1
+
+g++  -static -static-libgcc -static-libstdc++  -O2 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+
+g++   -O0 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+
+g++  -static -static-libgcc -static-libstdc++ -shared -Wl,--add-stdcall-alias -Wall  -O2 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+g++  -shared -Wl,--add-stdcall-alias -Wall  -O0 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+================================================================
+
+Android / Linux
+
+
+  Android clang version 3.8.275480  (based on LLVM 3.8.275480), i686-none-linux-android, armv7-none-linux-android
+  Test builds are created with Android Studio 2.3.1. Specific options (in build.gradle):
+cppFlags "-std=c++11 -frtti -fexceptions -O2 -Wl,-Bsymbolic"
+
+================================================================
+
+iOS
+
+
+  Test builds are created with XCode 7.2 / Clang / LLVM 7.0. Specific options (build settings):
+executable: Symbols hidden by default / Release / No
+executable, shared library: Warnings / Implicit conversion to 32 bit type / Debug, Release / No

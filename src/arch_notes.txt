@@ -1,0 +1,646 @@
+====================================================
+=== HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
+====================================================
+
+[A]
+
+For using ONLY utilities like file i/o, multithreading etc., include
+  bmdx_cpiomt.h
+This header is self-contained.
+
+
+[B]
+
+For using ONLY polymorphic vector and high-perf. hash map, include
+  vecm_hashx.h
+This header is self-contained.
+
+NOTE In multithreaded programs, (optionally) lock_impl_t class may be defined
+  before including vecm_hashx.h (see comments near struct _lock_base_t).
+
+NOTE If the program uses bmdx_config.h, bmdx_main.h,
+  or any custom template specializations based on vecm_hashx.h,
+  each related translation unit should include them all in the same order of appearance.
+
+
+[C]
+
+For more or all functions, consider dependencies:
+
+  bmdx_config.h --> vecm_hashx.h (lock_impl_t based on critsec_t) --> bmdx_cpiomt.h
+  [yk_cx.h (if alone) --> vecm_hashx.h]
+  (bmdx_main.cpp + bmdx_main.h) --> yk_cx.h --> bmdx_config.h
+
+
+==================================
+=== COMPILER NOTES BY PLATFORM ===
+==================================
+
+The below notes may be useful if you want to ensure near-identical behavior
+  of the same program (even if it does not use BMDX)
+  on the variety of operating systems and compilers.
+
+Linux Ubuntu (Clang, GCC)
+
+1. The library may be compiled with optimization 0..2.
+2. Recommended linker binding mode - do not share symbols between binary modules.
+  Use -Wl,-Bsymbolic .
+3. For GCC, it's recommended to link with C, C++ std. libs. statically:
+    -static-libgcc -static-libstdc++
+  For Clang:
+    -static-libgcc
+(4). By default (without -Bsymbolic), Clang DOES NOT share symobols between binary modules,
+  and GCC DOES. This may lead to interoperability issues.
+  If the default behavior (no -Bsymbolic) is required, use
+    -Dbmdx_cmti_stdstring_mode=0,
+  to force strings to be converted in all cases rather than referenced.
+  Also, without -Bsymbolic, per-module library symbols sharing
+  in unity::mod-->dlopen call may be enabled with
+    -Dbmdx_mod_load_def_flags=1
+  (use RTLD_DEEPBIND on shared library load, see also man dlopen).
+  This works well only with g++, so automatic guess, based on compiler type, is better:
+    -Dbmdx_mod_load_def_flags=2
+  (Default bmdx_mod_load_def_flags is 0: do not use RTLD_DEEPBIND.)
+5. If shared library needs to import symbols from main executable (via dlsym), use
+    -Wl,-E
+  for that executable.
+6. Prefer g++ (main system compiler) if possible.
+7. Do not use dynamic_cast in multimodule program.
+  Replace with virtual functions if possible.
+
+g++ -static-libgcc -static-libstdc++ -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+clang -static-libgcc -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+clang -static-libgcc -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+
+==================================
+Android (Clang)
+
+1. The library test builds were created with Android Studio 2.3.1 / Gradle build system / Clang compiler.
+  Compiler settings in app/build.gradle:
+    -std=c++11 -frtti -fexceptions -O0 -Wl,-Bsymbolic
+  Factually, all of them are optional. Binaries behave mostly like in desktop Linux.
+  NOTE Optimization levels tested: -O0, -O2.
+
+==================================
+Solaris (CC)
+
+1. The library has been tested with optimization 0, 3.
+2. Recommended linker binding mode - do not share symbols between binary modules.
+  Use -xldscope=symbolic .
+3. It's recommended to treat warnings as errors:
+  -xwe
+(4). The library is tested with global template instances linking:
+    -instances=global
+  This is the default mode in CC.
+5. Do not use dynamic_cast in multimodule program.
+  Replace with virtual functions if possible.
+
+CC -Bstatic -m64 -xldscope=symbolic -xwe -O3 -o test1_cc path/test1.cpp path/bmdx_main.cpp
+CC -Bstatic -shared -m64 -xldscope=symbolic -xwe -O3 -o test1_cc.so path/test1.cpp path/bmdx_main.cpp
+
+==================================
+OS X / macOS / iOS (Clang, GCC)
+
+1. The library may be compiled with optimization 0..2.
+2. Linking via both GCC and Clang uses different default rules for binding and visibility.
+  Certain symbols (esp. static variables and inline functions) are shared between modules
+  in unexpected manner.
+  Nonetheless, modules, into which the library is compiled, can freely interoperate regardless of used compilers.
+  Note on -fvisibility-inlines-hidden: this may be used to partially suppress unnecessary aliasing (esp. for GCC).
+  Note on -fvisibility=hidden: if this is used, cross-module calls won't operate (dlsym fails because the module does not export symbols).
+  Note on Xcode release build: to make symbols from main executable available via dlsym, set Build Settings / Symbols Hidden by Default = No.
+  (For shared libraries and debug builds the default setting does not hide external symbols.)
+3. Prefer Clang (main system compiler) if possible.
+4. Do not link C, C++ libs. statically into program (this produces faulty binaries).
+5. Do not use dynamic_cast in multimodule program.
+  Replace with virtual functions if possible.
+
+clang -m64 -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+clang -shared -Wall -m64 -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
+g++ -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+g++ -shared -Wall -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+
+==================================
+FreeBSD (Clang, GCC)
+
+1. The library may be compiled with optimization:
+  0..2 for Clang,
+  0..1 for GCC (level 2 is not valid - exception handling is faulty).
+2. The only reliable linker binding mode for multimodule programs -
+  do not share symbols between binary modules:
+    -Wl,-Bsymbolic
+3. For GCC, it's recommended to link with C, C++ std. libs. statically:
+    -static-libgcc -static-libstdc++
+4. If shared library needs to import symbols from main executable (via dlsym), use
+    -Wl,-E
+  for that executable.
+5. -ldl switch is NOT needed to link with shared library API (dlopen, dlsym).
+6. Do not use dynamic_cast in multimodule program.
+  Replace with virtual functions if possible.
+
+clang -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -lpthread
+clang -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -lpthread
+g++ -static-libgcc -static-libstdc++ -Wl,-E -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I/usr/local/lib/gcc48/include/c++ -I/usr/local/lib/gcc48/include/c++/x86_64-portbld-freebsd10.1 -O1 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -L/usr/local/lib -L/usr/local/lib/gcc48 -lpthread
+g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I/usr/local/lib/gcc48/include/c++ -I/usr/local/lib/gcc48/include/c++/x86_64-portbld-freebsd10.1 -O1 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -L/usr/local/lib -L/usr/local/lib/gcc48 -lpthread
+
+==================================
+Windows (MSVC, Intel C++)
+
+1. The library has been tested with optimization -Od, -O2 (MSVC) and -Od, -fast (Intel C++).
+2. It's recommended to minimize dynamic library dependencies:
+  -MT
+  NOTE This mode does not require additional mt.exe call for manifest embedding.
+3. It's recommended to treat warnings as errors:
+  -WX
+
+  32-, 64-bit compiler (after vcvars32.bat, vcvars64.bat, + (icl only) compilervars_arch.bat ia32, compilervars_arch.bat intel64):
+cl   -nologo -EHsc -WX  -I"C:\Program Files (x86)\Microsoft Visual Studio 12.0\include" -MT -O2 -Fetest1_cl13.exe path\test1.cpp path\bmdx_main.cpp
+cl   -nologo -EHsc -WX  -I"C:\Program Files (x86)\Microsoft Visual Studio 12.0\include" -MT -O2 -Fetest1_cl13.dll -LD path\test1.cpp path\bmdx_main.cpp
+icl   -nologo -EHsc -WX  -MT -fast -Fetest1_icl.exe path\test1.cpp path\bmdx_main.cpp
+icl   -nologo -EHsc -WX  -MT -fast -Fetest1_icl.dll -LD path\test1.cpp path\bmdx_main.cpp
+
+==================================
+Windows (MinGW 32-bit port, 64-bit port)
+
+1. The library may be compiled with optimization 0..2.
+2. It's recommended to minimize dynamic library dependencies:
+  -static -static-libgcc -static-libstdc++
+3. When creating a DLL, DLL symbols must be correctly exported to interoperate with other modules:
+  -Wl,--add-stdcall-alias
+
+g++  -static -static-libgcc -static-libstdc++  -O2 -o test1_mingw.exe path\test1.cpp path\bmdx_main.cpp
+g++  -static -static-libgcc -static-libstdc++ -shared -Wl,--add-stdcall-alias -Wall  -O2 -o test1_mingw.dll path\test1.cpp path\bmdx_main.cpp
+
+==================================
+Windows (Clang)
+
+The library has been tested with optimization 0, 2.
+
+clang  -static -m32 -Xclang -flto-visibility-public-std  -O2 -o test1_clang.exe path\test1.cpp path\bmdx_main.cpp
+clang  -static -shared -Wall -m32 -Xclang -flto-visibility-public-std  -O2 -o test1_clang.dll path\test1.cpp path\bmdx_main.cpp
+
+Compiler invocation for 64-bit target: all the same except -m64.
+
+==================================
+Windows (bcc64)
+
+1. The library has been tested with optimization 0, 2.
+2. The compiler has certain amount of bugs. To create modules that can freely interoperate,
+  use the factually working -tR, -tD, -tM switches combination, as shown below.
+
+  Executable, static RTL:
+bcc64  -tM  -O2 -o test1_bcc.exe path\test1.cpp path\bmdx_main.cpp
+
+  Executable, dynamic RTL:
+bcc64  -tR -tM  -O0 -o test1_bcc.exe path\test1.cpp path\bmdx_main.cpp
+
+  DLL, static RTL:
+bcc64  -tM -tD -Wall  -O2 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
+
+  DLL, dynamic RTL:
+bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
+
+
+
+
+========================================
+=== INTRO TO CROSS-MODULE STRUCTURES ===
+========================================
+
+[A] Highly compatible objects.
+
+1. struct bmdx_str::flstr_t
+
+  Fixed length string.
+  Data buffer does not use dynamic allocation.
+  All member functions behave similarly in any binary module.
+  Effective size: 5 + string length.  Alignment: 4 bytes.
+
+2. struct critsec_t
+
+  Per-type lock.
+  May be created per-object if passed a pointer to individual crit. sec. data structure.
+  May be created/destroyed/copied in different binary modules.
+  Size: 12 or 16 depending on pointer size.
+
+3. struct threadctl
+
+  Thread control object.
+  Based on client implementing virtual function (threadctl::ctx_base::_thread_proc).
+  Base class supports high-level object passing to thread procedure,
+    and its destruction on thread exit (both normal and termination).
+  Size: 32.
+
+4. struct threadctl::tid
+
+  Wraps system-dependent thread handle type.
+  Allows for handle conversion into number and checking
+    for implementation compatibility if passed into another module.
+  Size: 24 (assuming size of any kind of native thread handle <= 16).
+
+5. struct carray_t, cpparray_t, arrayref_t
+
+  carray_t: wrapper around C-style array.
+    Based on _carray_base_t.
+    Assumes that elements do not require procedural copy construction or destruction.
+    carray_t object may be passed between binary modules.
+    If the original module uses malloc/free common to all modules,
+      carray_t object may be safely destroyed in another module
+      even after the original module has been unloaded.
+    Size: 24 or 32 depending on pointer size.
+
+  cpparray_t: wrapper around C-style array.
+    Based on _carray_base_t.
+    Assumes that elements require C++-style construction and/or destruction.
+    In other respects, cpparray_t is similar to carray_t.
+    Size: 24 or 32 depending on pointer size.
+
+  arrayref_t: weak reference to contiguous array of elements.
+    Contains a pointer and a number of elements.
+    Basically, may be constructed from T*, carray_t, cpparray_t, basic_string.
+    (See also _arrayref_adapter_t.)
+    Size: 16.
+
+6. struct unity
+
+  Polymorphic value: number, string, array, map, hash-list, object wrapper.
+  May be created/destroyed/copied/modified in different binary modules.
+  Uses built-in compatibility checks and static methods redirection for all types.
+  Size: 16 or 32 depending on pointer size.
+
+7. struct unity::mod_handle
+
+  Wraps system-dependent shared library handle type.
+  mod_handle may be freely passed between modules,
+    and live longer than module where it's created.
+    (Handle destruction is safe unless the top-level module
+    invoking unity::mod to load library has been itself loaded/unloaded in other way.)
+  Size: 16 or 24 depending on pointer size.
+
+8. struct unity::o_api
+
+  Functions to operate on an object, wrapped (strong- or weak-referenced) into unity object.
+  o_api should be always created and called locally, it automatically redirects
+    any requested operation into the native module of the referenced object.
+  Size: 12 or 24 depending on pointer size.
+
+9. struct unity::o_api::critsec_rc
+
+  Critical section object to protect several interconnected operations
+    on o_api and around it.
+  Size: 40.
+
+10. struct o_type_info, o_ref_info
+
+  Information on type and reference count of an object,
+    wrapped (strong- or weak-referenced) into unity object.
+  Size:
+    o_type_info 28 or 56 depending on pointer size.
+    o_ref_info 12.
+
+11. struct i_dispatcher_mt
+
+  Interface to message dispatcher proxy object.
+  Proxy objects (wrapped into unity object) are created with dispatcher_mt::new_proxy.
+  Access: via unity::pinterface.
+
+12. struct o_proxy, o_interfaces, o_ibind, o_iimpl etc.
+
+  Several structures for dynamic attaching interfaces+implementations
+    to an object wrapped into unity object.
+  The unity object with attached interfaces may be passed through one or more binary modules,
+    where the interfaces are called, new attached, and any removed as necessary.
+  Proxy implementation is based on static function calls.
+
+
+
+[B] Conditionally compatible objects.
+
+1. struct vecm
+
+  Polymorphic multipart vector.
+  Performs operations on elements by calling static functions
+    in the module where the vector is created.
+  Does not move or copy elements if only appended.
+  Supports defining custom or memmove-based elem. copying, destruction etc.
+  Cross-module use is limited:
+    1) Only types, explicitly declared as cross-module (by assigning specific numeric type index),
+      may be handled in a module different than the native.
+    2) vecm structure and size may (potentially) vary.
+      The client checks this with special function (compatibility()).
+
+2. struct hashx
+
+  High-performance hash-map.
+  Keeps elements in the order of insertion if only inserted.
+  Allows for array-like access by numeric index as well as iterators.
+  Based on vecm, so inherits all its compatibility specifics.
+
+3. struct vec2_t
+
+  Analogous to std::vector template + support for cross-module use.
+  Based on vecm, so inherits all its compatibility specifics.
+
+4. struct ordhs_t
+
+  Hashed ordered map.
+  Allows for array-like access by numeric index as well as iterators.
+  Based on hashx, vecm, so inherits all their compatibility specifics.
+
+5. struct cref_t
+
+  Strong/weak reference to an object.
+  May be passed between binary modules itself by reference,
+    because of simplicity
+    (1 pointer to ref. cnt. structure + 1 pointer to object),
+    but must be deleted or copied exactly in the module where it's created.
+  NOTE Complete cross-module obj. reference API is implemented in struct unity.
+
+6. struct file_io
+
+  Wrapper around file handle (FILE).
+  May be passed between modules, if their C library file functions,
+    operating on file descriptor (fread, fwrite, rewind etc.) are compatible.
+  file_io contains a family of static functions (load_bytes, save_bytes)
+    for loading/saving file as single object
+    (basic_string, char*, carray_t, cpparray_t, arrayref_t).
+
+
+
+
+==========================
+=== MESSAGE DISPATCHER ===
+==========================
+
+Dispatcher is an object+thread, assisting multiple threads
+  in sending/receiving messages (strings) to each other.
+  For each thread, message slots are created, based on the initial text config.
+  At run time, threads and slots may be created/deleted as necessary.
+
+NOTE The dispatcher is evolving feature.
+  Currently, only in-process message sending is implemented.
+
+Slot name:
+  <slot type>_<name root>
+    or
+  |<slot type>_<name root>|<name part 2>[|part 3[|part 4...]]
+
+The second form is an array of positional parameters.
+  In the program, it is prepended by target type, process name or network address,
+  to specify full target address for a message.
+Name root must have at least one character.
+
+Slot types.
+  Pins (containing single value, or no value for output-only pins):
+    po -- output-only pin, message goes directly to the receiver.
+    pi -- input-only pin, messages may be overwritten if not popped.
+    pbo -- strong-bound call (command) pin, keeps sequence
+      "sender pushes cmd, receiver pops cmd, receiver pushes response, sender pops response".
+    pbi -- strong-bound call input pin on the receiver side,
+      only one command at a time may be processed.
+  Queues:
+    qi -- non-blocking input queue for values; on overflow, the new value cannot be pushed
+      (local sender receives an error code, remote sender is not notified).
+    qbi -- strong-bound call (command) input queue on the receiver side; on overflow,
+      a new command will not be pushed, and for (local or remote) sender
+      a response with an error message is automatically generated.
+      qbi should be preferred if single receiver gets calls from multiple senders.
+    qs -- queue for broadcasting (multiple senders, multiple receivers).
+
+Message format on sender side.
+  1. For client, messages are paramline-encoded strings. (See also struct paramline.)
+    Internally, message may have up to 2 parts (client message + associated binary data),
+    with part length fields.
+  2. Message format on sender side:
+    src = <slot name>; trg = <ADDR>; text = <T>
+    ADDR - destination slot, consisting of concatenated scope, process, thread, slot names.
+      For in-process messages:
+        |LP|<thread name>|<slot name>
+        |LPA|<qs slot name>
+      For inter-process messages:
+        (not implemented) |LM|<process name>|<thread name>|<slot name>
+        (not implemented) |LMA|<qs slot name>
+      For network messages:
+        (not implemented) |R|<host name or address:port>|<process name>|<thread name>|<slot name>
+        (not implemented) |RMA|<host name or address:port>|<qs slot name>
+        (not implemented) |RPA|<host name or address:port>|<process name>|<qs slot name>
+    T - arbitrary data. May be empty.
+  NOTE Process name is supplied by the client program. The client program is responsible for
+    name uniqueness in process, machine or network.
+  NOTE Threads are created/named by the program. One dispatcher instance accepts
+    only unique thread names. The program is responsible for possible name conflicts
+    beyond that one instance.
+  NOTE For dispatcher, "process" and "thread" may be different from
+    CPU-related items. One CPU process may create several dispatcher instances,
+    even in one CPU thread. One CPU thread may represent several dispatcher threads
+    and communicate with several dispatcher instances.
+    This has only one limitation: after sending command message (initiating strong-bound call),
+    the client may not sleep, waiting for response, if the command target is in the same thread.
+
+Message format on the receiver side.
+  src = <ADDR>; trg = <ADDR>; text = <T>[; bin = <D>][; src0 = <ADDR>][; trg0 = <ADDR>]
+    "src" contains source slot as it was specified by the latest resender.
+        This address is suitable for writing responses.
+    "trg" contains target slot address as it was specified by the latest resender.
+    "bin" may appear only if message has binary part, but the client did not supply
+      a container for it. D is a sequence of wide character values in range 0..255.
+      (Each wide character encodes only 1 byte of binary data.)
+    "src0" appears in messages delivered by subscription or from external source.
+      It is the in-process address of the initial message sender.
+    "trg0" appears in messages delivered by subscription or from external source.
+      It is the target slot address specified by primary sender.
+
+Matching of slot names between sender and receiver.
+  1. Allowed slot types correspondence:
+    po --> pi, qi, qs
+    qs --> pi, qi
+    pbo --> pbi, qbi (send command)
+    pbi, qbi --> pbo (send response)
+
+  2. Slot with type and name root only (no additional name parts)
+    may send to any slot with corresponding type, exactly same name root,
+    with or without any additional name parts.
+
+  3. Slot with type, name root and additional name parts
+    may send to any slot with corresponding type,
+    exactly same name root and exactly same additional name parts.
+
+Overview of slots and threads locking.
+  Internally, the dispatcher uses 5 kinds of locking.
+
+  1. critsec_t<dispatcher_mt>(cch_session.lkm_ths) - dispatcher instance-global
+    lock for session data.
+    (Session data: threads/slots tree and associated objects.)
+
+  2. critsec_t<dispatcher_mt>(cch_slot.lkd) - locks particular slot object
+    before any read/write access to it, except its constant members (c*).
+    Only one CPU thread at a time works (inside a proxy function)
+    with particular slot (or several slots).
+    Sending and receiving slot locks may be acquired together,
+    but slot lock are never mixed with session lock (see above).
+
+  3. cref_t<cch_session> - strong reference to dispatcher session data.
+    Its copying/destruction is protected by a lock, for short on:
+      a) thread_proxy object creation/destruction,
+      b) dispatcher_mt object destruction.
+    Session data object (cch_session) exists until all references
+      are released. dispatcher_mt holds one of them, and it may be destroyed
+      before clients using thread proxy objects.
+    NOTE On the client side, thread proxy object may be shared
+      between threads in the form of strong reference (copying the wrapping unity object).
+      In the good design, sharing simply by pointer should be avoided
+      to minimize possibility of erroneous releasing the last strong reference
+      to session data object concurrently with i_dispatcher_mt calling by other thread.
+
+  4. cref_t<cch_slot, dispatcher_mt> - strong reference to slot object.
+    Its copying/destruction is protected by a lock.
+    Slot references never exist beyond session data object lifetime.
+
+  5. critsec_t<dispatcher_mt>(cch_session.lkm_nprx) - short process-global lock
+    for proxy objects counting.
+
+dispatcher_mt threads configuration structure.
+  assoc. { <thread name | global param. name>, <thread configuration (tree) | global param. value (anything)> }
+  global param. name format (regexp.): __.+
+  thread name: non-empty, must not start with "__".
+
+  Thread configuration tree.
+
+    (required)
+    { "slots", { <slot name>, <empty or slot configuration tree> } }
+    Complete 3-threads config. example (C++):
+      wstring cfg = L"=|UI|slots; po_info; qi_log; |pi_indicator|REC; |pi_statechange|REC\r\n"
+        L"=|REC|slots; po_indicator; po_log; pi_info; qbi_allocbuf; po_statechange\r\n"
+        L"=|REC|slots|qs_statechange|output; |LP|UI|pi_statechange|REC; |LP|scale analyzer|qi_statechange|REC;"
+        L"  |LP|scale analyzer-2|qi_statechange|REC; |LP|scale analyzer-3|qi_statechange|REC\r\n"
+        L"=|DISP|slots; pi_info\r\n";
+    NOTE When configuration is in text form, slot name may appear as part of branch path
+      (when slot configuration is specified in separate line). In this case,
+      If the slot name is multi-component or not a string value,
+        it must be paramline-encoded as single string value.
+      The following example defines 2 qs slots, each having one subscriber (specified in "output" key):
+        L"=|REC|slots|\\|qs_statechange\\|internal|output; |LP|UI|pi_statechange|REC;"
+        L"=|REC|slots|\\|qs_statechange\\|plugins|output; |LP|scale analyzer|qi_statechange|REC;"
+      In the working program, qs slots will have the following names:
+        |qs_statechange|internal
+        |qs_statechange|plugins
+
+    (optional)
+    disp = <true | false (default)>
+      disp == true may be specified only for one thread.
+      This thread mediates in delivering LPA, RPA, LMA, RMA messages
+      for qs slots, configured with "input lpa = true"
+      (see slot configuration parameters below).
+
+      Delivery for messages in all threads qs slots configured with "delivery = disp":
+
+        a) By disp thread proxy i_dispatcher_mt::periodic(),
+          called from any client CPU thread (by program design).
+          All messages currently in qs queues with "delivery = disp",
+          in all threads, are delivered to recipients.
+
+        b) Same as (a), but disp thread proxy i_dispatcher_mt::periodic()
+          is called automatically from internal CPU thread,
+          created because of global param. __qsdt >= 0.
+
+      Delivery for messages in particular thread qs slots configured with "delivery = thread":
+
+        c) By the thread proxy i_dispatcher_mt::periodic(),
+          called from the associated client CPU thread, or any other CPU thread
+          having proxy object reference (by program design).
+
+  Configuration parameters for different kinds of slots.
+    qi, qs, qbi (all queues):
+      size = <N>
+        N >= 3 - specific queue size. If not specified,
+          all queues have default size 10, except qi_char with default size 200.
+    pi, qi, qs, qbi (all inputs):
+      input all = <true (default) | false>
+        true - allow all threads to write messages directly (not via subscription) to this slot.
+      input lpa = <true | false (default)>
+        true - enable writing global messages (LPA, RPA, LMA, RMA) to this slot.
+        In this case, no other thread may specify input lpa = true for slot with same name
+        (particular name of shared slot points to exactly one thread).
+      NOTE If both input all == false and input lpa == false,
+        only the thread owning the input slot may send it messages.
+    qs only:
+      delivery = <"immediate" (default) | "disp" | "thread">
+        "immediate": message is delivered to each subscriber
+          immediately inside write() call for qs.
+        "thread": message is delivered to subscribers
+          on i_dispatcher_mt::periodic() call of the proxy of the thread
+          owning this qs slot.
+        "disp": message is delivered to subscribers
+          on i_dispatcher_mt::periodic() call of the disp thread proxy.
+      output: { <address>, empty } - predefined subscribers.
+        Example line (C++):
+          wstring cfg = L"=|REC|slots|qs_statechange|output;"
+            "|LP|UI|pi_statechange|REC; |LP|scale analyzer|qi_statechange|REC;"
+            "|LP|scale analyzer-2|qi_statechange|REC; |LP|scale analyzer-3|qi_statechange|REC\r\n";
+        Address format: see trg = <ADDR> in message format.
+        NOTE qs slot and receiver slot must always have same name root (in example: statechange)
+          for subscribing to succeed.
+      output fixed = <true | false (default)>
+        true: any thread can call subscribe() to become this qs slot subscriber, or unsubscribe.
+        false: subscribers list cannot change from predefined value.
+
+Global configuration parameters.
+
+__qsdt = <T (integer, default == -1)>
+  Period of automatic subscriptions delivery, in mcs.
+
+  On T >= 0, dispatcher_mt starts an internal CPU thread. Each T mcs, the internal CPU thread
+    calls disp thread's periodic(), which automatically delivers global qs messages
+    (qs slots with delivery = disp), in all dispatcher threads.
+
+    NOTE On T >= 0, but disp thread not existing (not configured with disp = true, or deleted),
+      automatic periodic delivery is not working. It resumes when disp thread is created dynamically
+      by the client request.
+
+    NOTE The client may call disp thread's periodic() to make additional delivery between automatic calls from internal thread.
+
+  On T == -1, automatic periodic delivery is disabled.
+    Messages in qs slots with "delivery = disp" are delivered only
+    a) on client calling disp thread's periodic(),
+    b) immediately (if disp thread is not configured with disp = true, or deleted).
+
+  Summary. Example of making automatic delivery for "|LPA|qs_1" address with single subscriber:
+    1) __qsdt = 1000;
+    2) configure one thread Td with disp = true;
+      =|Td; disp = true;
+    3) configure subscribing slot qi_1 in any thread Ts
+      =|Ts|slots; qi_1;
+    4) configure slot qs_1 in any thread Tq, with 1 subscriber:
+      =|Tq|slots|qs_1; delivery = disp; input lpa = true;
+      =|Tq|slots|qs_1|output; |LP|Ts|qi_1;
+    NOTE Instead of qi_1, a multi-component name may be specified.
+      This allows one thread to receive messages from several supplying threads
+      with equally named qs slots (qs_1) into different qi slots.
+    NOTE Depending on declarations and client code, several roles (any of Td, Ts, Tq)
+      may be played by one thread at the same time.
+
+
+__exitmode = <M (integer, default == 1)>
+
+  M == 0
+  ~dispatcher_mt() exits immediately, but DOES NOT end the session.
+  The session is completed in the following stages:
+    1. (in any order) a) dispatcher_mt object is released, b) all client proxy objects are released.
+    2. All internal dispatcher_mt threads exit, releasing the remaining session object refs.
+    3. Session object is automatically deleted.
+
+  M == 1 (dflt.)
+  ~dispatcher_mt() clears the session flag and exits immediately.
+    The session is completed like in mode 0, only, after dispatcher_mt object release,
+    all operations in all proxy objects return "no session" error code.
+    Normally, this should stimulate all client threads to release their proxy object references.
+
+  M == 2
+  ~dispatcher_mt() resets session flag, waits for releasing all proxy objects
+    and all internal objects, then exits. (The client threads must release their proxy object references
+    at once when received "no session" error code first time.
+  NOTE When dispatcher_mt is released in mode 2, the CPU thread, doing that,
+    must not own any proxy object, otherwise deadlock occurs.
+  NOTE ~dispatcher_mt() may hang in mode 2 if any client thread forgets to release its proxy object,
+    or does not periodically check for session existence.
