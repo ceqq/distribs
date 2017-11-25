@@ -1,5 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
+// rev. 2017-11-25
 //
 // Copyright 2004-2017 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z007d9 [at] gmail [dot] com
@@ -1128,6 +1129,12 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
       default: return 0;
     }
   }
+    //  timeout_ms:
+    //    >= 0 - set b_stop() flag if it was 0, wait for thread exiting up to timeout, release thread context.
+    //    -1 or <= -4: set b_stop() flag if it was 0, then immediately release thread context (it will be destroyed when the last reference has gone).
+    //    -2: immediately release thread context, but set b_stop() flag only if the current context reference is the last one from side of threadctl.
+    //    -3: immediately release thread context, do not modify b_stop() flag.
+    //  Returns:
     //    2 - thread has exited normally. threadctl is cleared.
     //    1 - thread already exited. threadctl is cleared.
     //    0 - thread was not running (threadctl is empty).
@@ -1136,7 +1143,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) throw()
   {
     if (!p) { return 0; }
-    if (!p->bs) { p->bs = 1; }
+    if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl <= 1))) { p->bs = 1; }
     if (!p->in_thread) { th_ctx_release(p, 2); return 1; }
     if (timeout_ms < 0) { th_ctx_release(p, 2); return -1; }
     _s_long t = timeout_ms;
@@ -1556,6 +1563,12 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
 
     return 0;
   }
+    //  timeout_ms:
+    //    >= 0 - set b_stop() flag if it was 0, wait for thread exiting up to timeout, release thread context.
+    //    -1 or <= -4: set b_stop() flag if it was 0, then immediately release thread context (it will be destroyed when the last reference has gone).
+    //    -2: immediately release thread context, but set b_stop() flag only if the current context reference is the last one from side of threadctl.
+    //    -3: immediately release thread context, do not modify b_stop() flag.
+    //  Returns:
     //    2 - thread has exited normally. threadctl is cleared.
     //    1 - thread already exited. threadctl is cleared.
     //    0 - thread was not running (threadctl is empty).
@@ -1564,7 +1577,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) throw()
   {
     if (!p) { return 0; }
-    if (!p->bs) { p->bs = 1; }
+    if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl <= 1))) { p->bs = 1; }
     if (!p->in_thread) { _threadctl_tu_static_t<_>::th_ctx_release(p, 2); return 1; }
     if (timeout_ms < 0) { _threadctl_tu_static_t<_>::th_ctx_release(p, 2); return -1; }
     _s_long t = timeout_ms;
@@ -1894,18 +1907,25 @@ namespace bmdx
       //    pflag() allows to use the flag in any other way.
     volatile _s_long* pflag() const throw() { if (!_pctx) { return 0; } return &_pctx->__dat.bs; }
 
-      // Detach from the current thread object.
-    void clear() throw() { stop(-1); _pctx = 0; _tid.clear(); }
+      // 1) If this threadctl is the last one referencing the thread, set b_stop() flag to 1 if it was 0.
+      // 2) Detach from the current thread object.
+    void clear() throw() { stop(-2); _pctx = 0; _tid.clear(); }
 
-      // Sets pctx()->b_stop() flag to 1, and possibly waits for thread exiting.
+      // Detach from the current thread object.
+    void detach() throw() { stop(-3); _pctx = 0; _tid.clear(); }
+
+      // Sets pctx()->b_stop() flag to 1 (only if it was 0), and possibly waits (depending on timeout) for thread exiting.
       //    If thread had exited, detaches from its context
       //    (which is automatically destroyed if this was the last reference).
       // timeout_ms:
       //    >0 - sleeps approx.  (timeout_ms / 10) times * 10 ms,
       //      checking thread state and returns on timeout or thread having exited.
       //    0 - yields once (sleep(0)), then checks thread state and returns.
-      //    -1 immediately detaches from thread context.
-      //      Thread context may be destroyed this time or later when thread exits.
+      //    -1 - Sets b_stop() to 1 if it was 0. Detaches from thread context.
+      //    -2 - Sets b_stop() to 1 if it was 0 -- only if the current threadctl is the last one
+      //      referencing the thread context. Detaches from thread context.
+      //    -3 - detaches from thread context without modifying b_stop() flag.
+      //      Thread signaling and ending is responsibility of the client and the thread procedure.
       //  Returns:
       //    2 - thread has exited normally. threadctl is cleared.
       //    1 - thread already exited. threadctl is cleared.

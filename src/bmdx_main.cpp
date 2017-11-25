@@ -1,5 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
+// rev. 2017-11-25
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -214,7 +215,7 @@ struct cv_ff
   template<class T, class _ = __vecm_tu_selector>
   struct _pdyn_t { _pdyn_t(T* p_) : _p(p_) {} ~_pdyn_t() { if (_p) { try { delete _p;  } catch (...) {} _p = 0; } } operator bool() const { return bool(_p); } T* ptr() const { return _p; } T* take() { T* p2 = _p; _p = 0; return p2; } private: T* _p; void operator=(const _pdyn_t&); _pdyn_t(const _pdyn_t&); };
 
-    // Returns std::string representation of the dimensions.
+    // Returns string representation of the dimensions.
     //  "" on error.
   static std::string vecm_strdim(const vecm& x);
   template<s_long utta, class _ = __vecm_tu_selector> struct vec2_strdim_t { static std::wstring F(const wchar_t* prefix, const unity& u) {
@@ -1798,7 +1799,7 @@ bool _static_conv::conv_String_Date0(const std::wstring& x, _unitydate& retval, 
         if (s.size() == 0) { break; }
           is_frac = true; s = "." + s; frac = atof(s.c_str());
 
-        // end of std::string or trailing spaces
+        // end of string or trailing spaces
       s = trim_n(s0, pos, space, -1); pos += s.size(); if (pos == s0.size() || s.size() > 0) { b = true; break; }
     }
     while (false);
@@ -2959,7 +2960,7 @@ s_long cv_ff::cv_convert::Fasg(unity* p, const unity* px, s_long flags) throw()
       case utString:
         {
             // NOTE pss may be incompatible with current module.
-            // It's not called directly, only through cv_std::wstring::L* wrappers.
+            // It's not called directly, only through cv_wstring::L* wrappers.
           std::wstring* pss = unity::reference_t<std::wstring>::deref(px->_data, true);
           std::wstring* next = cv_ff::cv_wstring::Fnew(cv_ff::cv_wstring::Ln(px->pmsm, pss), cv_ff::cv_wstring::Lp0(px->pmsm, pss), cv_ff::cv_wstring::Lwcs(px->pmsm), 0);
           if (!next) { return -2; }
@@ -3021,7 +3022,7 @@ bool unity::_x_cnv_this_val(EConvStrength cs, s_long utt_dest, s_long flags, voi
       if (pmsm != unity_common::ls_modsm)
       {
           // NOTE pss may be incompatible with current module.
-          // It's not called directly, only through cv_std::wstring::L* wrappers.
+          // It's not called directly, only through cv_wstring::L* wrappers.
         std::wstring* pss = reference_t<std::wstring>::deref(_data, true);
         if (utt_dest == utString)
         {
@@ -4862,7 +4863,7 @@ bool wstring_like(const std::wstring& str, const std::wstring& pattern)
     sFixed.clear();
   }
 
-  std::vector<_t_wz> strPosStack; // std::string positions tried to match against *
+  std::vector<_t_wz> strPosStack; // string positions tried to match against *
   std::vector<_t_wz> indPtnStack; // the index of *-s that are matched
 
   _t_wz strPos = 0;
@@ -4883,17 +4884,17 @@ bool wstring_like(const std::wstring& str, const std::wstring& pattern)
       {
         if (indPtnPart == ptnParts.size() - 1 && isPtnRange[indPtnPart] && ptnParts[indPtnPart] == L"*")
         {
-          // case: in pattern, only * is left, here this matches with the end of std::string, i.e. with ""
+          // case: in pattern, only * is left, here this matches with the end of string, i.e. with ""
           goto lProcessMatch;
         }
       }
       goto lProcessMismatch;
     }
-    else // case: comparing the current pos in the std::string with the current pattern
+    else // case: comparing the current pos in the string with the current pattern
     {
       if (indPtnPart >= ptnParts.size())
       {
-        // case: pattern has gone, but std::string had not gone yet, i.e. mismatch
+        // case: pattern has gone, but string had not gone yet, i.e. mismatch
         goto lProcessMismatch;
       }
       if (isPtnRange[indPtnPart])
@@ -4903,7 +4904,7 @@ bool wstring_like(const std::wstring& str, const std::wstring& pattern)
           if (ptnParts[indPtnPart] == L"?")
           {
             // matched successfully (any character matches),
-            // move to next position in the std::string and process the next pattern
+            // move to next position in the string and process the next pattern
             strPos += 1;
             indPtnPart += 1;
           }
@@ -4912,7 +4913,7 @@ bool wstring_like(const std::wstring& str, const std::wstring& pattern)
             if (isdigit(str[strPos]))
             {
               // matched a digit,
-              // move to next position in the std::string and process the next pattern
+              // move to next position in the string and process the next pattern
               strPos += 1;
               indPtnPart += 1;
             }
@@ -4946,7 +4947,7 @@ bool wstring_like(const std::wstring& str, const std::wstring& pattern)
           if (isMatch == isInRangeTest)
           {
             // matched successfully,
-            // move to next position in the std::string and process the next pattern
+            // move to next position in the string and process the next pattern
             strPos += 1;
             indPtnPart += 1;
           }
@@ -4961,7 +4962,7 @@ bool wstring_like(const std::wstring& str, const std::wstring& pattern)
         if (str.substr(strPos, ptnParts[indPtnPart].size()) == ptnParts[indPtnPart])
         {
           // matched successfully,
-          // move to next position in the std::string and process the next pattern
+          // move to next position in the string and process the next pattern
           strPos += ptnParts[indPtnPart].size();
           indPtnPart += 1;
         }
@@ -6801,7 +6802,7 @@ namespace bmdx
       catch (...) { throw XUExec("_bsToWs.2"); }
     }
 
-      // wide character std::string comparison
+      // wide character string comparison
     s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case)
     {
         if (ignore_case)
@@ -7522,7 +7523,7 @@ lExitFor1:
     break;
   } // while (true)
 
-  // Create the resulting std::string.
+  // Create the resulting string.
 
   if (is_successful) { if (&ret_s!=&unity::_0nc) { ret_s = s0; return true; } else { return s0; } }
     else { if (&ret_s!=&unity::_0nc) { ret_s.clear(); return false; } else { return unity(); } }
@@ -8746,9 +8747,9 @@ _fls75 dispatcher_mt::thread_proxy::address::slt() const throw()
 
   // Encodes message hash or map (hm), converts the result to char std::string,
   //    adds header length prefix. If buf is given, buf length and data are appended.
-  // retmsg: the resulting std::string.
+  // retmsg: the resulting string.
   // Limits:
-  //    max. hm size when encoded into std::string - 2^30 16-bit characters.
+  //    max. hm size when encoded into string - 2^30 16-bit characters.
   //    max. buf size - 2^31-1 chars.
   //    sum of sizes must be < min(std::string::max_size(), 2^60).
   // Returns:
