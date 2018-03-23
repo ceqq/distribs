@@ -1,9 +1,9 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2017-11-25
+// rev. 2018-03-24
 //
 // Copyright 2004-2017 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
-// Contacts: bmdx-dev [at] mail [dot] ru, z007d9 [at] gmail [dot] com
+// Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.

@@ -1,8 +1,9 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
+// rev. 2018-03-24
 // Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2017)
 // Project website: hashx.dp.ua
-// Contacts: bmdx-dev [at] mail [dot] ru, z007d9 [at] gmail [dot] com
+// Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // See also "Guidelines for using this file" at its end.
 
 #ifndef yk_c_vecm_hashx_H
@@ -3391,12 +3392,16 @@ struct hashx_common
 
     // kf_std is the single class, combining STL-style hash and equality functions for passing into hashx.
     // NOTE Directly, hashx calls exclusively cnew(), hash(), is_eq().
+    // Example:
+    //    typedef yk_c::hashx<long long, string, yk_c::hashx_common::kf_std<long long, std::hash<long long>, std::equal_to<long long> > > t_hashx;
+    // NOTE std::hash<K> may be slightly faster than kf_basic<K> in certain cases, e. g. for near-sequential numeric keys.
   template<class K, class HashF = kf_basic<K>, class Eq = kf_basic<K> >
-  struct kf_std : HashF, Eq
+  struct kf_std
   {
+    HashF _h; Eq _e;
     template<class K2> inline void cnew(K* p, const K2& x) const { new (p) K(x); }
-    template<class K2> inline s_long hash(const K2& x) const { return this->operator()(x); }
-    template<class K2> inline bool is_eq(const K& x1, const K2& x2) const { return this->operator()(x1, x2); }
+    template<class K2> inline s_long hash(const K2& x) const { return s_long(_h(K(x))); }
+    template<class K2> inline bool is_eq(const K& x1, const K2& x2) const { return _e(x1, K(x2)); }
   };
 
 

@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2017-11-25
+// rev. 2018-03-24
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -6663,7 +6663,13 @@ namespace bmdx
   #endif
 
   #if __APPLE__ && __MACH__
-    #include <libproc.h>
+    #if TARGET_OS_IPHONE
+//    NOTE libproc.h may be missing for particular architecture.
+//      Patched: libproc is part of libSystem, which is always loaded,
+//      so the needed symbol (proc_pidpath) address is got via dlsym.
+    #else
+      #include <libproc.h>
+    #endif
   #endif
 
 static int __buf_argc = 0;
@@ -6864,7 +6870,13 @@ namespace bmdx
           sysctl(mib, 4, buf, &n, 0, 0);
           buf[n] = '\0';
         #elif __APPLE__ && __MACH__
-          if (proc_pidpath(getpid(), buf, sizeof(buf)) <= 0) { buf[0] = '_'; buf[1] = '\0'; }
+          typedef int (*Fpidpath)(int pid, void* buf, uint32_t bufsize);
+          #if TARGET_OS_IPHONE
+            Fpidpath f = (Fpidpath)dlsym(RTLD_DEFAULT, "proc_pidpath");
+          #else
+            Fpidpath f = &proc_pidpath;
+          #endif
+          if (!f || f(getpid(), buf, sizeof(buf)) <= 0) { buf[0] = '_'; buf[1] = '\0'; }
         #else
           int n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
           if (n <= 0) { n = readlink("/proc/curproc/exe", buf, sizeof(buf) - 1); }
