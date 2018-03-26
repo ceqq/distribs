@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-03-24
+// rev. 2018-03-26
 //
 // Copyright 2004-2017 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -1734,7 +1734,11 @@ namespace bmdx
 
 
       void _set_b_own(char x) { __dat.b_own = x; } // should be set only if calling threadctl::start directly
+      void _set_pthdata(void* p) { __dat.pthdata = p; } // should be set only if calling threadctl::start directly
+
       virtual ~ctx_base() {}
+      ctx_base() { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); }
+      ctx_base(const ctx_base&) { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); } // NOTE the new context does not copy anything from the source object
     private:
       friend void _threadctl_thproc_impl(void* _p) throw();
       friend struct threadctl;
@@ -1750,8 +1754,10 @@ namespace bmdx
       {
         ctx_base* pbase = this; // Ctx must inherit from threadctl::ctx_base
         _data_container_tu_t<Thdata>* pthdata = this;
-        _threadctl_tu_static_t<_>::th_ctx_init(&pbase->__dat, pbase, &pthdata->_x);
+        pbase->_set_pthdata(&pthdata->_x);
       }
+      ctx_wrapper(const ctx_wrapper& x) : _data_container_tu_t<Thdata, _>(x), Ctx(x)
+        { this->_set_pthdata(&this->_x); }
     };
 
     typedef _threadctl_tid_data::t_native_tid t_native_tid;
@@ -1830,11 +1836,22 @@ namespace bmdx
 
     ctx_base* pctx() const throw() { return _pctx; }
 
-      // Succeeds only in state() == 0, if the new thread was created and started.
+      // Starts a new thread, using the given context.
+      //    Succeeds only in state() == 0, if the new thread has been created and started successfully.
       //    state() becomes > 0.
-      // p may be created dynamically or statically.
-      //    If p->b_own is set to 1, threadctl takes ownership on p. (If thread fails to start, ownership remains on the client side).
-      //    If p->b_own is set to 0 (as in dflt. init.), threadctl relies on that the context object is valid all time it's accessed.
+      //  The client should use the following functions to additionally initialize ctx_base:
+      //    p->_set_b_own(char flag)
+      //        Informs about the way the context object (*p) destruction should be done.
+      //        a) _set_b_own(1):
+      //          threadctl assumes that the object is created dynamically (new),
+      //          and takes ownership on p. When thread ends, p is deleted automatically.
+      //          NOTE If the thread fails to start, ownership remains on the client side.
+      //        b) _set_b_own(0)  (this is set by dflt. init.):
+      //          threadctl does not manage the context object's lifetime. The client is responsible for that.
+      //          The context object must remain valid during whole thread run time.
+      //    p->_set_pthdata(void* data)
+      //        If ctx_base subclass contains a data member to pass to thread proc.,
+      //        it has to call _set_pthdata to make the member available via ctx_base::pdata<>().
       // Returns:
       //    true - thread started successfully.
       //    false - thread failed to start.
@@ -2244,7 +2261,7 @@ static void _threadctl_thproc_impl(void* _p) throw()
 template<class _>
 _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) throw()
 {
-  if (!(p && pctxbase && pthdata)) { return -1; }
+  if (!(p && pctxbase)) { return -1; }
   p->pthsm = _threadctl_tu_static_t<>::sm; p->pctxbase = pctxbase; p->pthdata = pthdata;
   p->bs = 0; p->in_ctl = 0; p->in_thread = 0; p->b_own = 0; p->__pad1 = 0; p->__pad2 = 0;
   std::memset(&p->th, 0, sizeof(p->th));
@@ -2549,7 +2566,7 @@ static void _threadctl_thproc_impl(void* _p) throw()
 template<class _>
 _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) throw()
 {
-  if (!(p && pctxbase && pthdata)) { return -1; }
+  if (!(p && pctxbase)) { return -1; }
   p->pthsm = _threadctl_tu_static_t<>::sm; p->pctxbase = pctxbase; p->pthdata = pthdata;
   p->bs = 0; p->in_ctl = 0; p->in_thread = 0; p->b_own = 0; p->__pad1 = 0; p->__pad2 = 0;
   std::memset(&p->th, 0, sizeof(p->th));

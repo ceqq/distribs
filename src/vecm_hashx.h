@@ -1,6 +1,6 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2018-03-24
+// rev. 2018-03-26
 // Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2017)
 // Project website: hashx.dp.ua
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
