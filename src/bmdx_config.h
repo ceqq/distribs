@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-03-26
+// rev. 2018-04-14
 // See bmdx_main.h for description.
 
 // LIBRARY CONFIGURATION HEADER

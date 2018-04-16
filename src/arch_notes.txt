@@ -1,3 +1,4 @@
+// rev. 2018-04-14
 ====================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 ====================================================
@@ -107,10 +108,13 @@ OS X / macOS / iOS (Clang, GCC)
   Certain symbols (esp. static variables and inline functions) are shared between modules
   in unexpected manner.
   Nonetheless, modules, into which the library is compiled, can freely interoperate regardless of used compilers.
-  Note on -fvisibility-inlines-hidden: this may be used to partially suppress unnecessary aliasing (esp. for GCC).
-  Note on -fvisibility=hidden: if this is used, cross-module calls won't operate (dlsym fails because the module does not export symbols).
-  Note on Xcode release build: to make symbols from main executable available via dlsym, set Build Settings / Symbols Hidden by Default = No.
-  (For shared libraries and debug builds the default setting does not hide external symbols.)
+  NOTE -fvisibility-inlines-hidden: use it to suppress inline functions aliasing so that your code in shared library
+    could execute its own inline functions instead of mapping (as non-inline) into main executable.
+    In g++, with inlines hidden, use optimization level 0..1 (otherwise, optimized binaries cause faults and/or wrong operation).
+  NOTE -fvisibility=hidden: if this is used, cross-module calls won't operate (dlsym fails because the module does not export symbols).
+  NOTE Xcode release build: to make symbols from main executable available via dlsym (e.g. for shared libraries),
+    set in Build Settings: 1) Symbols Hidden by Default = No, 2) Dead Code Stripping = No.
+    (Default hiding extern "C" symbols is done only for executable, but not for shared libraries.)
 3. Prefer Clang (main system compiler) if possible.
 4. Do not link C, C++ libs. statically into program (this produces faulty binaries).
 5. Do not use dynamic_cast in multimodule program.
@@ -118,8 +122,8 @@ OS X / macOS / iOS (Clang, GCC)
 
 clang -m64 -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
 clang -shared -Wall -m64 -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
-g++ -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
-g++ -shared -Wall -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+g++ -m64 -idirafter/Users/admin/Xcode9.2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+g++ -shared -Wall -m64 -idirafter/Users/admin/Xcode9.2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
 
 ==================================
 FreeBSD (Clang, GCC)

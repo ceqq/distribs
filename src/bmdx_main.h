@@ -1,8 +1,8 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-03-26
+// rev. 2018-04-14
 //
-// Copyright 2004-2017 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -3567,9 +3567,7 @@ namespace
     static void x_replace4(const std::wstring& s1, std::wstring& s2, s_long& flags);
     static void x_decode1v(unity& v, bool v_ar_elem, s_long flags);
     static bool x_decode1v_auto_date(const std::wstring& s, unity& retval) throw ();
-    static bool x_incorrect_numeric_value(const unity& x, bool allow_empty = true);
-    static bool x_incorrect_numeric_value_str(const std::wstring& s);
-    static bool x_incorrect_integer_value(const unity& x, bool allow_empty = true, bool allow_float_str = false);
+    static bool x_incorrect_numeric_value_str(const std::wstring& s, bool b_nans);
     static bool x_incorrect_integer_value_str(const std::wstring& s, bool allow_float_str);
   };
 
@@ -3909,16 +3907,23 @@ namespace
       //    or overwrite prev. message.
       //  msg: paramline-encoded string, or else hash or map. Min. contents:
       //    src = <NAME>; trg = <ADDR>; text = <T>
-      //      NAME - source slot name, same as NAME, described near slots_create.
-      //      ADDR - destination slot address:
-      //        |<kind of target>|<thread name>|<slot name>
-      //        Kind of target: LP, LM, R, LPA, LMA, RPA, RMA.
-      //        Thread name: valid name of a thread created with dispatcher_mt() on the receiving side.
-      //        Slot name: see slots_create. NOTE Slot name root parts in NAME and ADDR must be equal.
+      //      NAME - source slot name. Name format variants (simple and specialized) are described near slots_create.
+      //      ADDR - destination slot address, consisting of concatenated scope, process, thread, slot names.
+      //        For in-process messages:
+      //          |LP|<thread name>|<slot name>
+      //          |LPA|<qs slot name>
+      //        For inter-process messages:
+      //          (not implemented) |LM|<process name>|<thread name>|<slot name>
+      //          (not implemented) |LMA|<qs slot name>
+      //        For network messages:
+      //          (not implemented) |R|<host name or address:port>|<process name>|<thread name>|<slot name>
+      //          (not implemented) |RMA|<host name or address:port>|<qs slot name>
+      //          (not implemented) |RPA|<host name or address:port>|<process name>|<qs slot name>
       //        ADDR examples:
       //          |LP|recevier|pi_log
       //          |LP|recevier|pi_indicator|volume_db|L
       //          |R|192.168.1.1|recevier|pi_indicator|power
+      //      See also arch_notes.txt for address and slot name formats.
       //      T is arbitrary client message (may be empty).
       //  Matching of slot names between sender and receiver.
       //    1. Allowed slot types correspondence:

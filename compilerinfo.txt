@@ -57,10 +57,11 @@ Compiler invocation: same as in Ubuntu 14.04 (above).
 
 ================================================================
 
-macOS 10.12.4
+macOS 10.12.4, 10.12.6
 
 
   Clang 700.1.81, LLVM 7.0.2, x86_64-apple-darwin16.5.0
+  Clang 900.0.39.2, LLVM 9.0.0, x86_64-apple-darwin16.7.0
 
 clang -m64 -O2 -o test1_clang path/test1.cpp path/bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
 
@@ -69,9 +70,9 @@ clang -shared -Wall -m64 -O2 -o test1_clang.so path/test1.cpp path/bmdx_main.cpp
 
   GCC 5.1.0, x86_64-apple-darwin14.4.0
 
-g++ -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+g++ -m64 -idirafter/Users/admin/Xcode9.2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -O2 -o test1_g++ path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
 
-g++ -shared -Wall -m64 -idirafter/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/include -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
+g++ -shared -Wall -m64 -idirafter/Users/admin/Xcode9.2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -O2 -o test1_g++.so path/test1.cpp path/bmdx_main.cpp -ldl -lpthread
 
 ================================================================
 
@@ -237,8 +238,9 @@ g++  -shared -Wl,--add-stdcall-alias -Wall  -O0 -o test1_mingw.dll path\test1.cp
 Android / Linux
 
 
-  Android clang version 3.8.275480  (based on LLVM 3.8.275480), i686-none-linux-android, armv7-none-linux-android
-  Test builds are created with Android Studio 2.3.1. Specific options (in build.gradle):
+  Last used build system for tests: Android Studio 3.0 / Clang 3.8.275480, LLVM 3.8.275480, i686-none-linux-android, armv7-none-linux-android
+
+Specific options (in build.gradle):
 cppFlags "-std=c++11 -frtti -fexceptions -O2 -Wl,-Bsymbolic"
 
 ================================================================
@@ -246,6 +248,8 @@ cppFlags "-std=c++11 -frtti -fexceptions -O2 -Wl,-Bsymbolic"
 iOS
 
 
-  Test builds are created with XCode 7.2 / Clang / LLVM 7.0. Specific options (build settings):
-executable: Symbols hidden by default / Release / No
-executable, shared library: Warnings / Implicit conversion to 32 bit type / Debug, Release / No
+  Last used build system for tests: XCode 9.2 / Clang 900.0.39.2, LLVM 9.0.0, x86_64-apple-darwin16.7.0.
+
+Specific options (in build settings):
+executable: Symbols Hidden By Default = No, Dead Code Stripping = No
+executable, shared library: Warnings / Implicit conversion to 32 bit type = No

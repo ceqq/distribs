@@ -1,8 +1,8 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-03-26
+// rev. 2018-04-14
 //
-// Copyright 2004-2017 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -22,6 +22,7 @@
 //    Sleep with near-microseconds resolution.    (bmdx::  sleep_mcs)
 //    Recursive mutex.    (bmdx::  struct critsec_t)
 //    Unified thread control. Priorities, high-level data passing to thread etc.    (bmdx::  struct threadctl)
+//    Parallel task processing helper.     (bmdx::  struct multithread)
 //    Simple process launcher. Execute, wait, check running state.    (bmdx::  struct processctl)
 //    Const. reference object with threadsafe setting and copying, + unsafe non-const access.    (bmdx::  struct cref_t)
 //
@@ -49,6 +50,21 @@
   #define _yk_reg register
 #endif
 
+#if __APPLE__ && __MACH__
+  #define __bmdx_noarg , bmdx_meta::t_noarg = bmdx_meta::t_noarg()
+  #define __bmdx_noarg1 bmdx_meta::t_noarg = bmdx_meta::t_noarg()
+  #define __bmdx_noargt , bmdx_meta::t_noarg
+  #define __bmdx_noargt1 bmdx_meta::t_noarg
+  #define __bmdx_noargv , bmdx_meta::t_noarg()
+  #define __bmdx_noargv1 bmdx_meta::t_noarg()
+#else
+  #define __bmdx_noarg
+  #define __bmdx_noarg1
+  #define __bmdx_noargt
+  #define __bmdx_noargt1
+  #define __bmdx_noargv
+  #define __bmdx_noargv1
+#endif
 
 
 
@@ -57,6 +73,10 @@ namespace yk_c { namespace { struct __vecm_tu_selector; } }
 namespace bmdx_meta
 {
   struct nothing {};
+
+  template<class T, class _ = yk_c::__vecm_tu_selector> struct noarg_tu_t {};
+  typedef noarg_tu_t<nothing> t_noarg;
+
   template<bool cond, class T1, class T2> struct if_t { typedef T1 result; }; template<class T1, class T2> struct if_t<false, T1, T2> { typedef T2 result; };
   template <int n, class t1=nothing, class t2=nothing, class t3=nothing, class t4=nothing, class t5=nothing> struct find_size_n { typedef typename if_t<sizeof(t1) == n, t1, typename find_size_n<n, t2, t3, t4, nothing>::result>::result result; };
   template <int n> struct find_size_n<n> { typedef nothing result; };
@@ -67,7 +87,6 @@ namespace bmdx_meta
   typedef bmdx_meta::find_size_n<8, signed long long int, signed long int, signed int>::result s_ll;
   typedef bmdx_meta::find_size_n<8, unsigned long long int, unsigned long int, unsigned int>::result u_ll;
 
-  template<class T, class _ = yk_c::__vecm_tu_selector> struct noarg_tu_t {};
 }
 
 #undef _s_long
@@ -94,8 +113,22 @@ namespace bmdx_meta
 #include <cstdlib>
 #include <cstdio>
 #include <climits>
+#include <limits>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#if (defined(_MSC_VER) && _MSC_VER < 1800)
+  #include <float.h>
+  #define __bmdx_isfinite _finite
+#elif defined(__BORLANDC__)
+  namespace bmdx_str { namespace conv { static inline bool __bmdx_isfinite_ff(double x) { return (x == x) && x != std::numeric_limits<double>::infinity() && x != -std::numeric_limits<double>::infinity(); } }  }
+  #define __bmdx_isfinite bmdx_str::conv::__bmdx_isfinite_ff
+#elif defined(__SUNPRO_CC)
+  #include <ieeefp.h>
+  #define __bmdx_isfinite finite
+#else
+  #define __bmdx_isfinite std::isfinite
+#endif
 
 namespace bmdx_str
 {
@@ -129,12 +162,15 @@ namespace bmdx_str
     struct _bmdx_str_impl
     {
       static _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) throw();
-      static _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax) throw();
+      static _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax, bool b_nans) throw();
       static _s_ll str2i(const wchar_t* x, _s_ll xlen, _s_ll dflt, bool no_exc);
-      static double str2f(const wchar_t* x, _s_ll xlen, double dflt, bool no_exc);
+      static double str2f(const wchar_t* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans);
       static _s_ll str2i(const char* x, _s_ll xlen, _s_ll dflt, bool no_exc);
-      static double str2f(const char* x, _s_ll xlen, double dflt, bool no_exc);
+      static double str2f(const char* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans);
     };
+
+    static inline bool is_finite(double x)
+      { return __bmdx_isfinite(x); }
 
     template<class _>
     _s_long _bmdx_str_impl<_>::str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) throw()
@@ -154,12 +190,22 @@ namespace bmdx_str
     }
 
     template<class _>
-    _s_long _bmdx_str_impl<_>::str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax) throw()
+    _s_long _bmdx_str_impl<_>::str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax, bool b_nans) throw()
     {
-      if (!(x == x)) { x = 0.; }
       if (!(buf && nchars >= 0)) { return -1; }
       if (nchars == 0) { return 0; }
+      const bool b_fin = is_finite(x);
+      if (!b_fin)
+      {
+        if (!b_nans) { return -1; }
+        if (!(x == x)) { buf[0] = 'n'; if (nchars < 3) { return 1; } buf[1] = 'a'; buf[2] = 'n'; return 3; }
+      }
       if (nchars == 1) { buf[0] = x > 0. ? '+' : (x < 0. ? '-' : '0'); return 1; }
+      if (!b_fin)
+      {
+        buf[0] = x == std::numeric_limits<double>::infinity() ? '+' : (-x == std::numeric_limits<double>::infinity() ? '-' : '0');
+        buf[1] = 'i';  if (nchars < 4) { return 2; } buf[2] = 'n'; buf[3] = 'f'; return 4;
+      }
       const int ndm_mm = 14;
       const int nfrac_mm = 13;
       static const _s_ll _pow10[ndm_mm + 1] =
@@ -260,20 +306,22 @@ namespace bmdx_str
     }
 
     template<class _>
-    double _bmdx_str_impl<_>::str2f(const wchar_t* x, _s_ll xlen, double dflt, bool no_exc)
+    double _bmdx_str_impl<_>::str2f(const wchar_t* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans)
     {
         if (!x) { if (no_exc) { return dflt; } throw exc_str2f(); }
         if (xlen == -1) { xlen = _s_ll(wcslen(x)); }
         if (xlen <= 0) { if (no_exc) { return dflt; } throw exc_str2f(); }
         bool bf = false;
         _s_ll pos = 0; wchar_t c = L' ';
-        _s_ll q1(0), q2(0), q3(0); _s_long nq1(0), nq2(0), nq3(0); bool b_neg1(false), b_neg3(false); _s_ll nsd(0);
+        _s_ll q1(0), q2(0), q3(0); _s_long nq1(0), nq2(0), nq3(0); bool b_sign1(false), b_neg1(false), b_neg3(false); _s_ll nsd(0);
         do // once
         {
             while (pos < xlen) { c = x[pos]; if (c == L' ' || c == L'\t') { ++pos; } else { break; } }
               if (pos >= xlen) { bf = true; break; }
-          c = x[pos]; if (c == L'+') { ++pos; } else if (c == L'-') { b_neg1 = true; ++pos; }
+            if (b_nans && xlen - pos >= 3 && 0 == wcsncmp(L"nan", x + pos, 3)) { pos += 3; while (pos < xlen) { c = x[pos]; if (c == L' ' || c == L'\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } return std::numeric_limits<double>::quiet_NaN(); }
+          c = x[pos]; if (c == L'+') { b_sign1 = true; ++pos; } else if (c == L'-') { b_sign1 = true; b_neg1 = true; ++pos; }
               if (pos >= xlen) { bf = true; break; }
+            if (b_nans && b_sign1 && xlen - pos >= 3 && 0 == wcsncmp(L"inf", x + pos, 3)) { pos += 3; while (pos < xlen) { c = x[pos]; if (c == L' ' || c == L'\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } return b_neg1 ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity(); }
             while (pos < xlen) { c = x[pos]; if (c == L' ' || c == L'\t') { ++pos; } else { break; } }
               if (pos >= xlen) { bf = true; break; }
             while (pos < xlen) { c = x[pos]; if (c >= L'0' && c <= L'9') { q1 = q1 * 10 + int(c - L'0'); ++nq1; if (q1) { ++nsd; } ++pos; if (nq1 > 19) { bf = true; break; } } else { break; } }
@@ -298,8 +346,7 @@ namespace bmdx_str
                 if (nq3 == 0) { bf = true; break; }
             }
             else { bf = true; break; }
-            while (pos < xlen) { c = x[pos]; if (c == L' ' || c == L'\t') { ++pos; } else { break; } }
-              if (pos < xlen) { bf = true; break; }
+            while (pos < xlen) { c = x[pos]; if (c == L' ' || c == L'\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; }
         } while (false);
         double z(0.);
         do // once
@@ -347,10 +394,10 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2i();
 
       // Trivial analog of str2f(wchar_t*).
     template<class _>
-    double _bmdx_str_impl<_>::str2f(const char* x, _s_ll xlen, double dflt, bool no_exc)
+    double _bmdx_str_impl<_>::str2f(const char* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans)
     {
-if (!x) { if (no_exc) { return dflt; } throw exc_str2f(); } if (xlen == -1) { xlen = _s_ll(std::strlen(x)); } if (xlen <= 0) { if (no_exc) { return dflt; } throw exc_str2f(); } bool bf = false; _s_ll pos = 0; char c = ' '; _s_ll q1(0), q2(0), q3(0); _s_long nq1(0), nq2(0), nq3(0); bool b_neg1(false), b_neg3(false);
-do { while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { bf = true; break; } c = x[pos]; if (c == '+') { ++pos; } else if (c == '-') { b_neg1 = true; ++pos; } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q1 = q1 * 10 + int(c - '0'); ++nq1; ++pos; if (nq1 > 19) { bf = true; break; } } else { break; } } if (bf) { break; } if (pos >= xlen) { bf = nq1 == 0; break; }
+if (!x) { if (no_exc) { return dflt; } throw exc_str2f(); } if (xlen == -1) { xlen = _s_ll(std::strlen(x)); } if (xlen <= 0) { if (no_exc) { return dflt; } throw exc_str2f(); } bool bf = false; _s_ll pos = 0; char c = ' '; _s_ll q1(0), q2(0), q3(0); _s_long nq1(0), nq2(0), nq3(0); bool b_sign1(false), b_neg1(false), b_neg3(false);
+do { while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { bf = true; break; } if (b_nans && xlen - pos >= 3 && 0 == strncmp("nan", x + pos, 3)) { pos += 3; while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } return std::numeric_limits<double>::quiet_NaN(); } c = x[pos]; if (c == '+') { b_sign1 = true; ++pos; } else if (c == L'-') { b_sign1 = true; b_neg1 = true; ++pos; } if (pos >= xlen) { bf = true; break; } if (b_nans && b_sign1 && xlen - pos >= 3 && 0 == strncmp("inf", x + pos, 3)) { pos += 3; while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } return b_neg1 ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity(); } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q1 = q1 * 10 + int(c - '0'); ++nq1; ++pos; if (nq1 > 19) { bf = true; break; } } else { break; } } if (bf) { break; } if (pos >= xlen) { bf = nq1 == 0; break; }
 c = x[pos]; if (c == '.') { ++pos; while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q2 = q2 * 10 + int(c - '0'); ++nq2; ++pos; if (nq2 == 18) { break; } } else { break; } } } if (pos >= xlen) { bf = nq1 == 0 && nq2 == 0; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { break; } c = x[pos]; if (c == 'e' || c == 'E') { ++pos; c = x[pos]; if (c == '+') { ++pos; } else if (c == '-') { b_neg3 = true; ++pos; } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q3 = q3 * 10 + int(c - '0'); ++nq3; ++pos; if (nq3 > 3) { bf = true; break; } } else { break; } } if (bf) { break; } if (nq3 == 0) { bf = true; break; } } else { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } } while (false);
 double z(0.); do { if (bf) { break; } if (nq1 > 0) { if (nq2 > 0) { const _s_ll nprec = 15; _s_ll m(1); for (_s_ll i = 0; i < nq2; ++i) { m *= 10; } _s_ll nd = nq1 + nq2; if (nd >= nprec) { z = (q1 * m + q2 + 0.0) / m; } else { _s_ll m2 = 1; for (_s_ll i = nd; i < nprec; ++i) { m2 *= 10; } z = ((q1 * m + q2) * m2 + 0.1) / (m * m2); } } else { z = double(q1); } } if (b_neg1) { z = -z; } if (q3) { if (b_neg3) { q3 = -q3; } if (q3 >= 280) { z *= 1.e280; q3 -= 280; if (q3 > 50) { bf = true; break; } } else if (q3 >= -280) { } else { z *= 1.e-280; q3 += 280; if (q3 < -50) { z = 0.; break; } } z *= std::pow(10., int(q3)); } } while (false);
 if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
@@ -368,6 +415,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
   private: enum { _m_size = 0xfffff, _sh_res = 20 };
   public:
     typedef flstr_t t_string; enum { nmin_c = 4, nmax_c = nmax_ >= nmin_c ? (nmax_ <= _m_size ? nmax_ : _s_long(_m_size)) : nmin_c, res_max = _m_size, res_min = -res_max };
+    typedef bmdx_meta::noarg_tu_t<flstr_t> _noarg;
 
     flstr_t() { _nr = 1 << _sh_res; _x[0] = 0; }
 
@@ -379,7 +427,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
 
     template<_s_long nmax2> flstr_t(const flstr_t<nmax2>& s) throw () { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
 
-    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12) throw () { _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw () { _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
     flstr_t(_s_ll x, bool b_signed) throw () { _s_long n = conv::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
 
     flstr_t(signed short x) throw () { new (this) flstr_t(_s_ll(x), true); }
@@ -409,10 +457,10 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     _s_long find(char c, _s_long pos0 = 0) const throw() { _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } while (pos0 < pos2) { if (_x[pos0] == c) { return pos0; } ++pos0; } return -1; }
     _s_long find_any(const char* pcc, _s_long pos0 = 0, _s_long n_pcc = -1) const throw() { if (!pcc) { return -1; } _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } if (pos0 >= pos2) { return -1; } if (n_pcc < 0) { n_pcc = 0; const char* p = pcc; while (*p++) { ++n_pcc; } } while (pos0 < pos2) { char c = _x[pos0]; for (_s_long i = 0; i < n_pcc; ++i) { if (c == pcc[i]) { return pos0; } } ++pos0; } return -1; }
 
-    inline operator std::string () const { return _x; }
-    inline operator std::wstring () const { return wstr(); }
-    inline std::string str() const { return _x; }
-    std::wstring wstr() const // UTF-8 --> UTF-16
+    inline operator std::string () const throw (std::exception __bmdx_noargt) { return _x; }
+    inline operator std::wstring () const throw (std::exception __bmdx_noargt) { return wstr(); }
+    inline std::string str(__bmdx_noarg1) const { return _x; }
+    std::wstring wstr(__bmdx_noarg1) const // UTF-8 --> UTF-16
     {
       std::wstring s; _s_ll i = 0, n = length();
       while (i < n)
@@ -578,7 +626,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
 
   template<_s_long nmax_> inline std::ostream& operator << (std::ostream& stm, const flstr_t<nmax_>& s2) throw () { stm << s2.str(); return stm; }
 
-  namespace conv
+  namespace conv { namespace
   {
       // Converting numbers and pointer values to strings, using default format.
     template<class T> static inline std::string ntocs(const T& x) { typedef flstr_t<25> S; return S(x).str(); }
@@ -602,16 +650,17 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     static inline _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed = true) throw() { return _bmdx_str_impl<>::str_from_s_ll(x, buf, nchars, b_signed); }
 
       // ndmmax (max. num. of digits in mantissa) is limited to 1..14.
-      //  Max number of output characters == limited ndmmax + 7 (0..1 sign, 1 point, 0..1 "e", 0..4 order).
+      //    Max number of output characters == limited ndmmax + 7 (0..1 sign, 1 point, 0..1 "e", 0..4 order).
       // nfracmax (max. num. of digits in fractional part) is limited to 0..ndmmax-1.
       // abs(x) < 1.e-3 or  >= 1.e6 is shown in exponential format.
-      //  if x cannot fit in ndmmax, it is also shown in exponential format.
+      //    if x cannot fit in ndmmax, it is also shown in exponential format.
+      // b_nans: true: allow nan, +inf, -inf; false (dflt.): regard as error and return -1 for any of them.
       // Returns:
       //    >=2 - success.
       //    1 - string representation is longer than nchars, so only sign is extracted: buf[0] == '+', '0', or '-'.
       //    0 - nchars == 0.
-      //    -1 - invlaid input parameter (buf == 0, nchars < 0).
-    static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12) throw() { return _bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax); }
+      //    -1 - invlaid input parameter (buf == 0, nchars < 0, x is not finite with b_nans == false).
+    static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw() { return _bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax, b_nans); }
 
       // Converts string to number. On failure, returns dflt, or (if no_exc == false) generates exc_str2i.
       //  For char* and wchar_t* versions, xlen == -1 means that x is 0-terminated.
@@ -622,11 +671,12 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
 
       // Converts string to number. On failure, returns dflt, or (if no_exc == false) generates exc_str2f.
       //  For char* and wchar_t* versions, xlen == -1 means that x is 0-terminated.
-    static inline double str2f(const std::wstring& x, double dflt = 0., bool no_exc = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc); }
-    static inline double strn2f(const wchar_t* x, _s_ll xlen, double dflt = 0., bool no_exc = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc); }
-    static inline double str2f(const std::string& x, double dflt = 0., bool no_exc = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc); }
-    static inline double strn2f(const char* x, _s_ll xlen, double dflt = 0., bool no_exc = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc); }
-  }
+      //  b_nans true accepts nan, +inf, -inf; by default they are not recognized.
+    static inline double str2f(const std::wstring& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc, b_nans); }
+    static inline double strn2f(const wchar_t* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
+    static inline double str2f(const std::string& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc, b_nans); }
+    static inline double strn2f(const char* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
+  } }
 }
 
 #ifdef _bmdxpl_Wnds
@@ -3143,6 +3193,267 @@ namespace bmdx
     t_cnt* _pcnt; const t_value* _p;
     void _reset() throw () { if (_pcnt) { t_cnt c = (--*_pcnt); if (c == 0) { try { delete _p; } catch (...) {} } if ((c & _m) == 0) { try { delete _pcnt; } catch (...) {} } _pcnt = 0; } _p = 0; }
   };
+
+
+    // Multithread creates and holds several threads each executing the same user routine (defined as multithread::ictx::mt_proc override),
+    //    with same input argument, but different thread index.
+    //  Depending on specified mode, multithread waits for all threads to complete or returns immediately.
+    // NOTE Unlike threadctl, multithread may not be copied or assigned.
+    //  If multithread is passed by reference or as wrapped object into another binary module,
+    //    only the following functions are safe to call: operator bool(), n_run(), nth(), b_exc(), signal_stop().
+  struct multithread
+  {
+    struct ictx; struct icb; struct cbarg;
+  private: template<class C> struct _starter_t; public:
+
+      // Polymorphic callback reference, for passing into start() and multithread().
+      //  Default-constructed value (cbarg()) may be used to skip cb argument in start(...) and multithread(...).
+    struct cbarg
+    {
+      cref_t<icb> rx;
+      bool b_ok; // true mans successful construction
+      cbarg(__bmdx_noarg1) throw() : b_ok(true) {}
+      cbarg(const cbarg& x_ __bmdx_noarg) throw() : rx(x_.rx), b_ok(x_.b_ok) {}
+      template<class Cb> cbarg(const Cb& x_ __bmdx_noarg) throw() : b_ok(false) { try { icb* pbase = new Cb(x_); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} b_ok = !!rx; }
+    };
+
+
+    multithread(__bmdx_noarg1) : _ps(0) {}
+
+      // NOTE On destruction, the multithread object automatically sets b_stop() flag to all its running threads
+      //  (same as signal_stop()) and then detaches from them.
+      //  If this has is not desired, the client should call detach() before multithread object is destroyed.
+    ~multithread() throw(__bmdx_noargt1) { _clear(); }
+
+      // Start multithread.
+      //  nth: 1..5000.
+      //  mode:
+      //    1 - initialize only, 2 - initialize+start threads, 3 - initialize+start+detach (use custom callbacks for interop.),
+      //    4 - strong call (initialize+start+wait for completion).
+      //  c (custom context):
+      //    1) inherits from multithread::ictx, 2) implements mt_proc, 3) references or copies of all user data needed for thread proc.
+      //  cb (client callback):
+      //    a) cb is automatically created from anything inheriting from icb.
+      //    b) if cb is not specified or empty, c.rcb() is used as callback. E.g. it may have been set with ictx::set_cb.
+    template<class C>
+    multithread(_s_long nth, _s_long mode, const C& c, cbarg cb = cbarg(__bmdx_noargv1), _s_long priority = 4 __bmdx_noarg) : _ps(0)
+      { this->start(nth, mode, c, cb, priority); }
+
+      // See constructor for args.
+      // Returns:
+      //    1 - success, 0 - already started, -1 - bad args, -2 - failed,
+      //    -4 (only in strong call (mode 4)) - at least one of mt_proc caused C++ exception. See also b_exc().
+    template<class C>
+    _s_long start(_s_long nth, _s_long mode, const C& c, cbarg cb = cbarg(__bmdx_noargv1), _s_long priority = 4 __bmdx_noarg)
+    {
+      const ictx* pcbase = &c; // NOTE C must inherit from multithread::ictx
+      (void)pcbase;
+      if (!(nth >= 1 && nth <= 5000 && mode >= 1 && mode <= 4)) { return -1; }
+      if (!cb.b_ok) { return -2; }
+      if (_rth) { return 0; }
+      if (!_rth.create0(1)) { return -2; }
+      _rb_run.clear();
+      if (!_rb_run.create0(1)) { return -2; }
+      cpparray_t<threadctl>& a = *_rth._pnonc_u();
+      if (!a.resize(nth)) { _clear(); return -2; }
+      try { _ps = new _starter_t<C>(c, priority); _ps->pc()->_pm = this; if (cb.rx) { _ps->pc()->_cb = cb.rx; } _ps->pc()->_nth = nth; _ps->pc()->_rth = _rth; _ps->pc()->_pr = priority; _ps->pc()->_rb_run = _rb_run; } catch (...) {}
+        if (!_ps) { _clear(); return -2; }
+      if (mode != 1) { return start(mode); }
+      return 1;
+    }
+
+      // Start multithread, constructed in mode 1.
+      //    On failure, threads that have been created, are stopped, but the initialization context is not removed,
+      //    so the client may a) retry start, or b) detach and reuse multithread object.
+      //  mode:
+      //    2 - start threads, 3 - start+detach (use custom callbacks for interop.),
+      //    4 - strong call (start+wait for completion).
+      // Returns:
+      //    1 - success, 0 - already started, -1 - bad args, -2 - failed,
+      //    -4 (only in strong call (mode 4)) - at least one of mt_proc caused C++ exception. See also b_exc().
+    _s_long start(_s_long mode __bmdx_noarg)
+    {
+      if (!(_ps && _rb_run)) { return _rth ? 0 : -2; }
+      if (!(mode >= 2 && mode <= 4)) { return -1; }
+      char& brun = *_rb_run._pnonc_u();
+      cpparray_t<threadctl>& a = *_rth._pnonc_u();
+      cpparray_t<ictx*> cc; if (!cc.resize(a.n())) { return -2; }
+        _s_long n = 0;
+        for (_s_ll i = 0; i < a.n(); ++i) { cc[i] = _ps->start(a[i], _s_long(i)); n += !!cc[i]; }
+          if (n < a.n()) { for (_s_ll i = 0; i < a.n(); ++i) { a[i].stop(-1); } return -2; }
+        for (_s_ll i = 0; i < a.n(); ++i) { cc[i]->_rb_run = _rb_run; }
+        if (_ps->pr() <= 4) { for (_s_ll i = 0; i < a.n(); ++i) { a[i].set_priority(_ps->pr()); } }
+        brun = 1;
+      _clear_ps();
+      if (mode == 2) { return 1; }
+      if (mode == 3) { detach(); return 1; }
+      while (*this) { sleep_mcs(100); }
+      return brun == 2 ? -4 : 1;
+    }
+
+      // True if at least one thread runs.
+      //  After successful start in mode 2 or 3,
+      //  the client may wait for the value to become false as signal for full job completion.
+    operator bool() const throw(__bmdx_noargt1) { return n_run() > 0; }
+
+      // The number of currently running threads [0..nth()].
+      //  After successful start in mode 2 or 3,
+      //  the client may wait for n_run() == 0 as signal for full job completion.
+    _s_long n_run(__bmdx_noarg1) const { if (!_rth) { return 0; } _s_long n = 0; for (_s_long i = 0; i < _rth.ref().n(); ++i) { n += bool(_rth.ref()[i]); } return n; }
+
+      // The number of thread controls created.
+      //  The value is set by start(...) or multithread(...), and does not change until restart.
+    _s_long nth(__bmdx_noarg1) const { if (!_rth) { return 0; } return _s_long(_rth.ref().n()); }
+
+      // Reference to all thread controls. May be empty, depending on multithread state.
+      //  The value is set by start(...) or multithread(...), and does not change until restart.
+    cref_t<cpparray_t<threadctl> > rth(__bmdx_noarg1) const { return _rth; }
+
+      // Becomes true if, during threads operation, any of them (ictx::mt_proc) causes a C++ exception.
+      //  After all threads exit, the value does not change till new call to start().
+    bool b_exc(__bmdx_noarg1) const { return _rb_run ? _rb_run.ref() == 2 : false; }
+
+      // Sets b_stop() flag in all referenced threads.
+      //  May be used to notify ictx::mt_proc that it should to exit w/o completing its task.
+      //  NOTE signal_stop() does not detach from thread controls. Call clear() for that.
+    void signal_stop(__bmdx_noarg1) { if (_rth) { for (_s_long i = 0; i < _rth.ref().n(); ++i) { (*_rth._pnonc_u())[i].signal_stop(); } } }
+
+      // Detaches from all previous threads and data.
+      //    Even if any threads are still running, they are not notified, and the multithread object
+      //    is not responsible for their operation anymore.
+      //    nth() becomes 0.
+      //    After detach(), the multithread object may be reused.
+    void detach(__bmdx_noarg1) { if (_rth) { for (_s_long i = 0; i < _rth.ref().n(); ++i) { (*_rth._pnonc_u())[i].stop(-3); } } _clear(); }
+
+      // Detaches from all previous threads and data.
+      //    Before that, threads that are still running are notified by setting their b_stop() flag.
+      //    nth() becomes 0.
+      //    After clear(), the multithread object may be reused.
+    void clear(__bmdx_noarg1) { _clear(); }
+
+      // Base class for user-defined routine for parallel task.
+      //    A custom context (ictx subclass) must implement only void mt_proc().
+      // NOTE Most custom contexts require access to user-specific data and parameters.
+      //    Since custom context is many times (at least nth + 1) copied by value,
+      //    it should address any large data by reference.
+      // NOTE The client may create a context and call mt_proc directly (strong call without multithread).
+      //    nth == 1, ith == 0 by default.
+      //    This is especially useful if the client code has to handle case of multithread failure,
+      //    and retry in single-threaded mode.
+    struct ictx : threadctl::ctx_base
+    {
+      typedef _s_long s_long; typedef _s_ll s_ll;
+
+
+      virtual void mt_proc() = 0;
+
+
+      ictx(__bmdx_noarg1) throw() : _pm(0), _cb(), _nth(1), _ith(0), _pr(4), _rb_run(), _rth()  {}
+
+        // Parent multithread object.
+        //  This pointer is valid only if the client did not detach from the running threads.
+      const multithread* pm(__bmdx_noarg1) const throw() { return _pm; }
+
+        // Total number of running threads.
+      _s_long nth(__bmdx_noarg1) const throw() { return _nth; }
+
+        // The current thread number [0..nth()).
+      _s_long ith(__bmdx_noarg1) const throw() { return _ith; }
+
+        // Controls for all the running threads.
+        //  NOTE The array may be empty if the client called mt_proc directly (strong call without multithread).
+      cref_t<cpparray_t<threadctl> > rth(__bmdx_noarg1) const throw() { return _rth; }
+
+        // User callback, may be set or replaced at any time (before/during thread run or on direct mt_proc call).
+      cref_t<icb> rcb(__bmdx_noarg1) const throw() { return _cb; }
+      void set_cb(const cref_t<icb>& x __bmdx_noarg) throw() { _cb = x; }
+
+        // Helper function. Divides n into nth() ranges.
+        //  Calculates and sets i0 and i2 to half-open range [i0..i2),
+        //  corresponding to the current thread index (ith()).
+        //  If such i0 or i2 is out of [0..n), they are adjusted to fit into [0..n),
+        //  so the resulting range may be empty or shorter than in other threads.
+        // Returns:
+        //    true - the resulting [i0..i2) is not empty.
+        //    false - in any other case.
+      template<class N> inline bool range(s_ll n, N& i0, N& i2) const
+      {
+        i0 = 0; i2 = 0;
+        if (n <= 0) { return false; }
+        s_ll dn = (n + _nth - 1) / _nth;
+        i0 = N(_ith * dn); if (i0 >= n) { i0 = n; }
+        i2 = N((_ith + 1) * dn); if (i2 >= n) { i2 = n; }
+        return i2 > i0;
+      }
+
+    private:
+      friend struct multithread;
+      virtual void _thread_proc()
+      {
+        while (!(_rb_run && _rb_run.ref() != 0)) { if (b_stop()) { return; } sleep_mcs(_ith < _nth - 1 ? 100 : 10); }
+        if (_pr > 4 && _ith == _nth - 1) { for (_s_long i = _nth - 1; i >= 0; --i) { (*_rth._pnonc_u())[i].set_priority(_pr); } }
+        cref_t<icb> _rcb0 = _cb; icb* pcb0 = _rcb0._pnonc_u();
+        if (pcb0) { try { pcb0->cb_proc(this, _ith, -1, 0); } catch (...) {} }
+        bool b = false; try { mt_proc(); b = true; } catch (...) {}
+        if (!b) { *_rb_run._pnonc_u() = 2; }
+        if (pcb0) { try { pcb0->cb_proc(this, _ith, -2, b ? 1 : 0); } catch (...) {} }
+        if (pcb0 && _ith == _nth - 1) { while (true) { if (b_stop()) { return; } _s_long n = 0; for (_s_long i = 0; i < _nth; ++i) { n += bool(_rth.ref()[i]); } if (n <= 1) { break; } sleep_mcs(100); } pcb0->cb_proc(this, _ith, -3, 0); }
+      }
+      multithread* _pm; cref_t<icb> _cb; _s_long _nth, _ith, _pr; cref_t<char> _rb_run; cref_t<cpparray_t<threadctl> > _rth;
+    };
+
+      // Base class for user-defined callback implementation.
+      //  Called multiple times from multiple threads (unless each thread replaces it using ictx::set_cb).
+      //  A user-defined callback (ictx subclass) must implement only void cb_proc(...).
+      // NOTE Callbacks may contain user-specific data and parameters.
+      //  Implementation should take into account that callback object, passed into
+      //  start(...) or multithread(...), is once copied, to create a polymorphic reference common to all threads.
+    struct icb
+    {
+      typedef ictx t_ictx;
+      typedef _s_long s_long; typedef _s_ll s_ll;
+
+
+        // Callback from a thread to client.
+        //  pctx - sending ictx, may be cast into user thread proc. class if necessary.
+        //  msgtype <= 0 - multithread events, > 0 - user events.
+        //  Multithread events msgtypes:
+        //    -1 - i-th job started,
+        //    -2 - i-th job completed (msg == 1: success, 0: failure),
+        //    -3 - all jobs completed.
+      virtual void cb_proc(t_ictx* pctx, s_long ith, s_long msgtype, s_ll msg) = 0;
+
+
+      virtual ~icb() {}
+    };
+
+  private:
+    struct _starter_base { virtual ictx* pc() = 0; virtual _s_long pr() const = 0; virtual ictx* start(threadctl& tc, _s_long ith) = 0; virtual ~_starter_base() {} };
+    template<class C> struct _starter_t : _starter_base
+    {
+      C c;
+      _s_long priority;
+      _starter_t(const C& c_, _s_long priority_ __bmdx_noarg) : c(c_), priority(priority_) { }
+      virtual ictx* pc() { return &c; }
+      virtual _s_long pr() const { return priority; }
+      virtual ictx* start(threadctl& tc, _s_long ith)
+      {
+        ictx* pbase = 0;
+        try { pbase = new C(c); } catch (...) {} // C must inherit from multithread::ictx
+          if (!pbase) { return 0; }
+        pbase->_ith = ith;
+        pbase->_set_b_own(1);
+        bool b = tc.start(pbase);
+        if (!b) { try { delete pbase; } catch (...) {} pbase = 0; }
+        return pbase;
+      }
+    };
+    cref_t<cpparray_t<threadctl> > _rth; _starter_base* _ps; cref_t<char> _rb_run;
+    void _clear_ps(__bmdx_noarg1) { if (_ps) { try { delete _ps; } catch (...) {} _ps = 0; } }
+    void _clear(__bmdx_noarg1) { _rth.clear(); _clear_ps(); _rb_run.clear(); }
+    multithread(const multithread&); void operator=(const multithread&);
+  };
+
 
 }
 

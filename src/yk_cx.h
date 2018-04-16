@@ -1,8 +1,8 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-03-26
+// rev. 2018-04-14
 //
-// Copyright 2004-2017 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -51,6 +51,7 @@
 #endif
 
 #include <iterator>
+#include <exception>
 
 namespace yk_c
 {
@@ -290,7 +291,7 @@ namespace yk_c
           if (ec->v.px != pct) { return false; }
 
         hashx<void*, _link2_opinfo>* phl2 = 0;
-        try { phl2 = &__htr[ec->v.px];  } catch (...) { return false; }
+        try { phl2 = &__htr.opsub(ec->v.px);  } catch (...) { return false; }
 
         if (nrsv > ec->v.rcnt) { nrsv = (s_long)ec->v.rcnt; } if (nrsv < 0) { nrsv = 0; }
         if (!phl2->hashx_set_reserve(nrsv, true)) { return false; }
@@ -354,7 +355,7 @@ namespace yk_c
             return true;
           }
         hashx<void*, _link2_opinfo>& hl2 = etrc->v;
-        _link2_opinfo* pop = 0; try { pop = &hl2[psrc]; } catch (...) { return false; }
+        _link2_opinfo* pop = 0; try { pop = &hl2.opsub(psrc); } catch (...) { return false; }
 
         if (opflag & 0x6) { pop->pdest = pdest; } // set dest. for copy or move op.
         pop->flags |= opflag;
@@ -383,9 +384,8 @@ namespace yk_c
           lock_t_reg __lock(true); if (sizeof(__lock)) {} pl2 = _ref(true); if (pl2 && *pl2->_px) { pl2->__hp.hashx_clear(); pl2->__hp.hashx_setf_can_shrink(false); pl2->h.hashx_clear(); pl2->__htr.hashx_clear(); }
         }
       };
-      typedef meta::noarg_tu_t<_link2_reg> _noarg;
       template<class _> static _ff_mc4_base* _ff_mc4_p() { typedef _ff_mc4_impl t_var; static char bi(0); union u { char x[sizeof(t_var)]; meta::s_ll __; }; static u x; if (!bi) { new (&x.x[0]) t_var; bi = 1; } t_var* p = (t_var*)&x.x[0]; return p; }
-      static _ff_mc4_base& ff_mc(_noarg = _noarg()) { return *_ff_mc4_p<__vecm_tu_selector>(); }
+      static _ff_mc4_base& ff_mc(meta::t_noarg = meta::t_noarg()) { return *_ff_mc4_p<__vecm_tu_selector>(); }
     private:
       struct _l2reg_data0;
       template<class _ = __vecm_tu_selector> struct _l2reg_tu_stg_t;
@@ -632,59 +632,59 @@ namespace yk_c
       // partial replication of std vector
       //==section 1==============================================
 
-      inline vec2_t() throw() : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) {}
+      inline vec2_t(__vecm_noarg1) throw() : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) {}
 
         // NOTE vec2_t(const vec2_t&) and operator= set all destination flags to dflt., not that of x.
         // NOTE If operator= fails (gen. exception), the container is left with 0 size and default flags.
-      inline vec2_t(const vec2_t& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t&)"); }
-        template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
-      inline vec2_t& operator=(const vec2_t& x) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
+      inline vec2_t(const vec2_t& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t&)"); }
+        template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
+      inline vec2_t& operator=(const vec2_t& x) throw (exc_vec2_t  __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
 
         // Copying between vectors with same elem. type but different TA arg.
-      template<class TA2> inline vec2_t(const vec2_t<TA2, _bs>& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0)
+      template<class TA2> inline vec2_t(const vec2_t<TA2, _bs>& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0)
       {
         enum { __check = meta::assert<meta::same_t<typename vecm::specf<TA2>::t_value, t_value>::result>::result };
         if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA>&)");
       }
-      template<class TA2> inline vec2_t& operator=(const vec2_t<TA2, _bs>& x) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
+      template<class TA2> inline vec2_t& operator=(const vec2_t<TA2, _bs>& x) throw (exc_vec2_t __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
 
-      inline explicit vec2_t(size_type m, const value_type& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c T& x)"); }
-      inline explicit vec2_t(s_long base, size_type m, const value_type& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c T& x)"); }
-      template<class F> inline explicit vec2_t(size_type m, const F& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c F& x)"); }
-      template<class F> inline explicit vec2_t(s_long base, size_type m, const F& x) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c F& x)"); }
+      inline explicit vec2_t(size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c T& x)"); }
+      inline explicit vec2_t(s_long base, size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c T& x)"); }
+      template<class F> inline explicit vec2_t(size_type m, const F& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c F& x)"); }
+      template<class F> inline explicit vec2_t(s_long base, size_type m, const F& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c F& x)"); }
 
-      ~vec2_t() throw() { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return; } if (f_perm()) { _ptd2()->_p_tr_notify(this, 0, 0x1); } }
+      ~vec2_t() throw(__vecm_noargt1) { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return; } if (f_perm()) { _ptd2()->_p_tr_notify(this, 0, 0x1); } }
 
       inline size_type size() const throw() { return _n; }
       inline reference operator[] (size_type i) { return *this->vecm::pval_0u<t_value>(i); } // ignores nbase()
           inline const_reference operator[] (size_type i) const { return *this->vecm::pval_0u<t_value>(i); } // -"-
-      inline reference at (size_type i) { t_value* p = this->vecm::pval<t_value>(i + _nbase); if (p) { return *p; } throw exc_vec2_t("vec2_t.at"); } // -"-
-          inline const_reference at (size_type i) const { t_value* p = this->vecm::pval<t_value>(i + _nbase); if (p) { return *p; } throw exc_vec2_t("vec2_t.at c"); } // -"-
-      inline reference front() { t_value* p = this->vecm::pval_first<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.front"); }
-          inline const_reference front() const { t_value* p = this->vecm::pval_first<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.front c"); }
-      inline reference back() { t_value* p = this->vecm::pval_last<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.back"); }
-          inline const_reference back() const { t_value* p = this->vecm::pval_last<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.back c"); }
-      inline void push_back(const value_type& x) { if (this->vecm::el_append(x)) { return; }  throw exc_vec2_t("vec2_t.push_back"); }
-      inline void pop_back() { if (this->vecm::el_remove_last<t_value>() > 0) { return; } throw exc_vec2_t("vec2_t.pop_back"); }
+      inline reference at (size_type i __vecm_noarg) { t_value* p = this->vecm::pval<t_value>(i + _nbase); if (p) { return *p; } throw exc_vec2_t("vec2_t.at"); } // -"-
+          inline const_reference at (size_type i __vecm_noarg) const { t_value* p = this->vecm::pval<t_value>(i + _nbase); if (p) { return *p; } throw exc_vec2_t("vec2_t.at c"); } // -"-
+      inline reference front(__vecm_noarg1) { t_value* p = this->vecm::pval_first<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.front"); }
+          inline const_reference front(__vecm_noarg1) const { t_value* p = this->vecm::pval_first<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.front c"); }
+      inline reference back(__vecm_noarg1) { t_value* p = this->vecm::pval_last<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.back"); }
+          inline const_reference back(__vecm_noarg1) const { t_value* p = this->vecm::pval_last<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.back c"); }
+      inline void push_back(const value_type& x __vecm_noarg) { if (this->vecm::el_append(x)) { return; }  throw exc_vec2_t("vec2_t.push_back"); }
+      inline void pop_back(__vecm_noarg1) { if (this->vecm::el_remove_last<t_value>() > 0) { return; } throw exc_vec2_t("vec2_t.pop_back"); }
         // NOTE clear(), vec2_clear() set all to default, except:
         //    1. nbase() is kept.
         //    2. Permanent links mode (f_perm(), f_sync()) does not change.
         //      If it is enabled, the container may stay registered as perm. link target.
-      inline void clear() throw() { vecm_clear(); }
-        inline s_long vec2_clear() throw() { s_long nx = vecm_clear(); return nx; }
+      inline void clear(__vecm_noarg1) throw() { vecm_clear(); }
+        inline s_long vec2_clear(__vecm_noarg1) throw() { s_long nx = vecm_clear(); return nx; }
 
       inline bool empty() const throw() { return _n == 0; }
-      inline size_type capacity() const throw() { return this->vecm::nrsv(); }
-      inline void reserve(size_type n2) { if (n2 >= 0 && this->vecm::el_reserve_n(n2, _f_can_shrink())) { return; } throw exc_vec2_t("vec2_t.reserve"); }
-      inline void resize(size_type n2) { if (n2 > _n) { s_long m = n2 - _n; if (this->vecm::el_append_m(m, meta::construct_f<t_value, meta::nothing, _bs>()) == m) { return; } } else if (n2 >= 0) { s_long m = _n - n2; if (this->vec2_t::el_remove_ml(_nbase + n2, m) == m) { return; } } throw exc_vec2_t("vec2_t.resize(n2)"); }
-      inline void resize(size_type n2, const value_type& x) { if (n2 > _n) { s_long m = n2 - _n; if (this->vecm::el_append_m(m, x) == m) { return; } } else if (n2 >= 0) { s_long m = _n - n2; if (this->vec2_t::el_remove_ml(_nbase + n2, m) == m) { return; } } throw exc_vec2_t("vec2_t.resize(n2, x)"); }
-      inline void swap(vec2_t& x) { if (_ptd2()->_pswap(this, &x)) { return; } throw exc_vec2_t("vec2_t.swap"); }
+      inline size_type capacity(__vecm_noarg1) const throw() { return this->vecm::nrsv(); }
+      inline void reserve(size_type n2 __vecm_noarg) { if (n2 >= 0 && this->vecm::el_reserve_n(n2, _f_can_shrink())) { return; } throw exc_vec2_t("vec2_t.reserve"); }
+      inline void resize(size_type n2 __vecm_noarg) { if (n2 > _n) { s_long m = n2 - _n; if (this->vecm::el_append_m(m, meta::construct_f<t_value, meta::nothing, _bs>()) == m) { return; } } else if (n2 >= 0) { s_long m = _n - n2; if (this->vec2_t::el_remove_ml(_nbase + n2, m) == m) { return; } } throw exc_vec2_t("vec2_t.resize(n2)"); }
+      inline void resize(size_type n2, const value_type& x __vecm_noarg) { if (n2 > _n) { s_long m = n2 - _n; if (this->vecm::el_append_m(m, x) == m) { return; } } else if (n2 >= 0) { s_long m = _n - n2; if (this->vec2_t::el_remove_ml(_nbase + n2, m) == m) { return; } } throw exc_vec2_t("vec2_t.resize(n2, x)"); }
+      inline void swap(vec2_t& x __vecm_noarg) { if (_ptd2()->_pswap(this, &x)) { return; } throw exc_vec2_t("vec2_t.swap"); }
 
-      iterator insert(const iterator& pos, const t_value& x) { if (pos.pcontainer() == this) { s_long res = this->el_insert_1(pos.ind(), x); if (res == 1) { return iterator(*this, pos.ind()); } } throw exc_vec2_t("vec2_t.insert(pos, x)"); }
-      void insert(const iterator& pos, size_type m, const t_value& x) { if (pos.pcontainer() == this) { if (m == 0) { return; } if (m > 0) { s_long res = this->el_insert_ml(pos.ind(), m, x); if (res > 0) { return; } } } throw exc_vec2_t("vec2_t.insert(pos, m, x)"); }
-      template<class Itr> void insert(const iterator& pos, const Itr& s0, const Itr& s2) { if (pos.pcontainer() == this && s2 >= s0) { s_long m = 0; Itr x1 = s0; while (x1 != s2 && ++m > 0) { ++x1; } if (m == 0) { return; } if (m > 0) { s_long res = this->el_insert_ml(pos.ind(), m, meta::construct_f<_v2insert_arg<t_value, typename meta::nonc_t<Itr>::t >, meta::nothing, _bs>(s0)); if (res > 0) { return; } } } throw exc_vec2_t("vec2_t.insert(pos, s0, s2)"); }
-      iterator erase(const iterator& dest) { if (dest.pcontainer() == this) { s_long res = this->el_remove_1(dest.ind(), false); if (res == 1) { return iterator(*this, dest.ind()); } } throw exc_vec2_t("vec2_t.erase(dest)"); }
-      iterator erase(const iterator& dest0, const iterator& dest2) { if (dest0.pcontainer() == this && dest2.pcontainer() == this && dest2 >= dest0) { s_long m = dest2.ind0() - dest0.ind0(); if (m == 0) { return iterator(*this, dest0.ind()); } if (m > 0) { s_long res = this->el_remove_ml(dest0.ind(), m); if (res == m) { return iterator(*this, dest0.ind()); } } } throw exc_vec2_t("vec2_t.erase(dest0, dest2)"); }
+      iterator insert(const iterator& pos, const t_value& x __vecm_noarg) { if (pos.pcontainer() == this) { s_long res = this->el_insert_1(pos.ind(), x); if (res == 1) { return iterator(*this, pos.ind()); } } throw exc_vec2_t("vec2_t.insert(pos, x)"); }
+      void insert(const iterator& pos, size_type m, const t_value& x __vecm_noarg) { if (pos.pcontainer() == this) { if (m == 0) { return; } if (m > 0) { s_long res = this->el_insert_ml(pos.ind(), m, x); if (res > 0) { return; } } } throw exc_vec2_t("vec2_t.insert(pos, m, x)"); }
+      template<class Itr> void insert(const iterator& pos, const Itr& s0, const Itr& s2 __vecm_noarg) { if (pos.pcontainer() == this && s2 >= s0) { s_long m = 0; Itr x1 = s0; while (x1 != s2 && ++m > 0) { ++x1; } if (m == 0) { return; } if (m > 0) { s_long res = this->el_insert_ml(pos.ind(), m, meta::construct_f<_v2insert_arg<t_value, typename meta::nonc_t<Itr>::t >, meta::nothing, _bs>(s0)); if (res > 0) { return; } } } throw exc_vec2_t("vec2_t.insert(pos, s0, s2)"); }
+      iterator erase(const iterator& dest __vecm_noarg) { if (dest.pcontainer() == this) { s_long res = this->el_remove_1(dest.ind(), false); if (res == 1) { return iterator(*this, dest.ind()); } } throw exc_vec2_t("vec2_t.erase(dest)"); }
+      iterator erase(const iterator& dest0, const iterator& dest2 __vecm_noarg) { if (dest0.pcontainer() == this && dest2.pcontainer() == this && dest2 >= dest0) { s_long m = dest2.ind0() - dest0.ind0(); if (m == 0) { return iterator(*this, dest0.ind()); } if (m > 0) { s_long res = this->el_remove_ml(dest0.ind(), m); if (res == m) { return iterator(*this, dest0.ind()); } } } throw exc_vec2_t("vec2_t.erase(dest0, dest2)"); }
 
       inline iterator begin() throw() { return iterator(*this, _nbase); }
       inline iterator end() throw() { return iterator(*this); }
@@ -708,13 +708,13 @@ namespace yk_c
 
       inline s_long n() const throw() { return _n; }
       inline s_long nbase() const throw() { return _nbase; }
-      inline s_long nrsv() const throw() { return _bytes_tu::_nrsv(_nj); }
+      inline s_long nrsv(__vecm_noarg1) const throw() { return _bytes_tu::_nrsv(_nj); }
       inline bool can_shrink() const throw() { return _f_can_shrink(); }
       inline bool is_transactional() const throw() { return this->vecm::is_transactional(); }
       inline s_long nexc() const throw() { return _nxf >> _xsh; }
-      inline s_long integrity(_noarg = _noarg()) const throw() { return this->vecm::integrity(); }
-      inline s_long locality(_noarg = _noarg()) const throw() { return this->vecm::locality(); }
-      inline s_long compatibility(_noarg = _noarg()) const throw()
+      inline s_long integrity(__vecm_noarg1) const throw() { return this->vecm::integrity(); }
+      inline s_long locality(__vecm_noarg1) const throw() { return this->vecm::locality(); }
+      inline s_long compatibility(__vecm_noarg1) const throw()
       {
         s_long c = this->vecm::compatibility(); if (c <= -2) { return c; }
         s_long nx = _ptd2()->version; s_long n = _vec2_tu_td_ver::ver; if ((nx & 0xffff00) != (n & 0xffff00)) { return -3; }
@@ -734,30 +734,30 @@ namespace yk_c
         //  NOTE (!) is_tr false may not be used for copying between container and its own element,
         //    even indirectly. (This is possible with polymorphic types.)
         //  Returns: 1, 0, -1, -3 -- same as vecm_copy. No other values are returned.
-      template<class TA2, class _bs2> inline _result_eq<1> vec2_copy(const vec2_t<TA2, _bs2>& x, bool is_tr) throw()
+      template<class TA2, class _bs2> inline _result_eq<1> vec2_copy(const vec2_t<TA2, _bs2>& x, bool is_tr __vecm_noarg) throw()
       {
         enum { __check = meta::assert<meta::same_t<typename vecm::specf<TA2>::t_value, t_value>::result>::result };
         if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return -3; } return _ptd2()->pvec2_copy(this, &x, &x.rvecm(), s_long(is_tr) | 0x2 );
       }
         // Returns: 1, 0, -1 -- same as vecm_delete.
-      inline _result_ge<0> vec2_delete() throw() { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return -1; } return _ptd2()->pvec2_delete(this); }
+      inline _result_ge<0> vec2_delete(__vecm_noarg1) throw() { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return -1; } return _ptd2()->pvec2_delete(this); }
 
-      inline s_long el_remove_all() throw() { return this->vecm::el_remove_all(); }
-      inline bool el_reserve_n(s_long n, bool allow_shrink) throw() { return this->vecm::el_reserve_n(n, allow_shrink); }
-      inline t_value* el_expand_1() throw() { return this->vecm::el_expand_1<t_value>(); }
-      inline bool el_expand_n(s_long n2) throw() { return _ptd2()->_pexpand_n(this, n2); }
-      inline bool el_expunge_last() throw() { if (f_perm()) { _ptd2()->_pexpand_n(this, n() - 1); } return this->vecm::el_expunge_last<t_value>(); }
-      inline t_value* el_append(const t_value& x) throw() { return this->vecm::el_append(x); }
-        template<class F> inline t_value* el_append(const F& x) throw() { enum { __check = _fcheck<F>::result }; return this->vecm::el_append(x); }
-      inline s_long el_insert_1(s_long ind, const t_value& x) throw() { if (!f_perm()) { return this->vecm::el_insert_1(ind, x); } else { _transaction t(this, _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_insert_1(ind, x); t.end(res == 1 || res == -4); return res; } }
-        template<class F> inline s_long el_insert_1(s_long ind, const F& x) throw() { enum { __check = _fcheck<F>::result }; if (!f_perm()) { return this->vecm::el_insert_1(ind, x); } else { _transaction t(this, _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_insert_1(ind, x); t.end(res == 1 || res == -4); return res; } }
-      inline s_long el_remove_last() throw() { return this->vecm::el_remove_last<t_value>(); }
-      inline s_long el_remove_1(s_long ind, bool move_last) throw() { if (!f_perm()) { return this->vecm::el_remove_1<t_value>(ind, move_last); } else { _transaction t(this, move_last ? 2 : _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_remove_1<t_value>(ind, move_last); t.end(res == 1 || res == -4); return res; } }
-      inline s_long el_append_m(s_long m, const t_value& x) throw() { return this->vecm::el_append_m(m, x); }
-        template<class F> inline s_long el_append_m(s_long m, const F& x) throw() { enum { __check = _fcheck<F>::result }; return this->vecm::el_append_m(m, x); }
-      inline s_long el_insert_ml(s_long ind, s_long m, const t_value& x) throw() { if (!f_perm()) { return this->vecm::el_insert_ml(ind, m, x); } else { _transaction t(this, _nrsv_tr_m(ind, 0)); if (!t) { return -2; } s_long res = this->vecm::el_insert_ml(ind, m, x); t.end(res > 0 || res == -4); return res; } }
-        template<class F> inline s_long el_insert_ml(s_long ind, s_long m, const F& x) throw() { enum { __check = _fcheck<F>::result }; if (!f_perm()) { return this->vecm::el_insert_ml(ind, m, x); } else { _transaction t(this, _nrsv_tr_m(ind, 0)); if (!t) { return -2; } s_long res = this->vecm::el_insert_ml(ind, m, x); t.end(res > 0 || res == -4); return res; } }
-      inline s_long el_remove_ml(s_long ind, s_long m) throw() { if (!f_perm()) { return this->vecm::el_remove_ml<t_value>(ind, m); } else { _transaction t(this, _nrsv_tr_m(ind, m)); if (!t) { return -2; } s_long res = this->vecm::el_remove_ml<t_value>(ind, m); t.end(res > 0 || res == -4); return res; } }
+      inline s_long el_remove_all(__vecm_noarg1) throw() { return this->vecm::el_remove_all(); }
+      inline bool el_reserve_n(s_long n, bool allow_shrink __vecm_noarg) throw() { return this->vecm::el_reserve_n(n, allow_shrink); }
+      inline t_value* el_expand_1(__vecm_noarg1) throw() { return this->vecm::el_expand_1<t_value>(); }
+      inline bool el_expand_n(s_long n2 __vecm_noarg) throw() { return _ptd2()->_pexpand_n(this, n2); }
+      inline bool el_expunge_last(__vecm_noarg1) throw() { if (f_perm()) { _ptd2()->_pexpand_n(this, n() - 1); } return this->vecm::el_expunge_last<t_value>(); }
+      inline t_value* el_append(const t_value& x __vecm_noarg) throw() { return this->vecm::el_append(x); }
+        template<class F> inline t_value* el_append(const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; return this->vecm::el_append(x); }
+      inline s_long el_insert_1(s_long ind, const t_value& x __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_insert_1(ind, x); } else { _transaction t(this, _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_insert_1(ind, x); t.end(res == 1 || res == -4); return res; } }
+        template<class F> inline s_long el_insert_1(s_long ind, const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; if (!f_perm()) { return this->vecm::el_insert_1(ind, x); } else { _transaction t(this, _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_insert_1(ind, x); t.end(res == 1 || res == -4); return res; } }
+      inline s_long el_remove_last(__vecm_noarg1) throw() { return this->vecm::el_remove_last<t_value>(); }
+      inline s_long el_remove_1(s_long ind, bool move_last __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_remove_1<t_value>(ind, move_last); } else { _transaction t(this, move_last ? 2 : _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_remove_1<t_value>(ind, move_last); t.end(res == 1 || res == -4); return res; } }
+      inline s_long el_append_m(s_long m, const t_value& x __vecm_noarg) throw() { return this->vecm::el_append_m(m, x); }
+        template<class F> inline s_long el_append_m(s_long m, const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; return this->vecm::el_append_m(m, x); }
+      inline s_long el_insert_ml(s_long ind, s_long m, const t_value& x __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_insert_ml(ind, m, x); } else { _transaction t(this, _nrsv_tr_m(ind, 0)); if (!t) { return -2; } s_long res = this->vecm::el_insert_ml(ind, m, x); t.end(res > 0 || res == -4); return res; } }
+        template<class F> inline s_long el_insert_ml(s_long ind, s_long m, const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; if (!f_perm()) { return this->vecm::el_insert_ml(ind, m, x); } else { _transaction t(this, _nrsv_tr_m(ind, 0)); if (!t) { return -2; } s_long res = this->vecm::el_insert_ml(ind, m, x); t.end(res > 0 || res == -4); return res; } }
+      inline s_long el_remove_ml(s_long ind, s_long m __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_remove_ml<t_value>(ind, m); } else { _transaction t(this, _nrsv_tr_m(ind, m)); if (!t) { return -2; } s_long res = this->vecm::el_remove_ml<t_value>(ind, m); t.end(res > 0 || res == -4); return res; } }
 
       template<class T> struct checked_ptr
       {
@@ -780,22 +780,22 @@ namespace yk_c
         // pval_0u: vecm pval_0u and vec2 operator [ ] analog. i is 0-based.
         // pval_first: vecm pval_first and vec2 front analog.
         // pval_last: vecm pval_last and vec2 back analog.
-      inline const t_value* pval(s_long ind) const throw() { return this->vecm::pval<t_value>(ind); }
-      inline checked_ptr<const t_value> pc(s_long ind) const throw() { return this->vecm::pval<t_value>(ind); }
-      inline const t_value* pval_0u(s_long i) const throw() { return this->vecm::pval_0u<t_value>(i); }
-      inline const t_value* pval_first() const throw() { return this->vecm::pval_first<t_value>(); }
-      inline const t_value* pval_last() const throw() { return this->vecm::pval_last<t_value>(); }
+      inline const t_value* pval(s_long ind __vecm_noarg) const throw() { return this->vecm::pval<t_value>(ind); }
+      inline checked_ptr<const t_value> pc(s_long ind __vecm_noarg) const throw() { return this->vecm::pval<t_value>(ind); }
+      inline const t_value* pval_0u(s_long i __vecm_noarg) const throw() { return this->vecm::pval_0u<t_value>(i); }
+      inline const t_value* pval_first(__vecm_noarg1) const throw() { return this->vecm::pval_first<t_value>(); }
+      inline const t_value* pval_last(__vecm_noarg1) const throw() { return this->vecm::pval_last<t_value>(); }
 
-      inline t_value* pval(s_long ind) throw() { return this->vecm::pval<t_value>(ind); }
-      inline checked_ptr<t_value> pc(s_long ind) throw() { return this->vecm::pval<t_value>(ind); }
-      inline t_value* pval_0u(s_long i) throw() { return this->vecm::pval_0u<t_value>(i); }
-      inline t_value* pval_first() throw() { return this->vecm::pval_first<t_value>(); }
-      inline t_value* pval_last() throw() { return this->vecm::pval_last<t_value>(); }
+      inline t_value* pval(s_long ind __vecm_noarg) throw() { return this->vecm::pval<t_value>(ind); }
+      inline checked_ptr<t_value> pc(s_long ind __vecm_noarg) throw() { return this->vecm::pval<t_value>(ind); }
+      inline t_value* pval_0u(s_long i __vecm_noarg) throw() { return this->vecm::pval_0u<t_value>(i); }
+      inline t_value* pval_first(__vecm_noarg1) throw() { return this->vecm::pval_first<t_value>(); }
+      inline t_value* pval_last(__vecm_noarg1) throw() { return this->vecm::pval_last<t_value>(); }
 
-      inline link1_t<t_value, false, _bs> link1_begin() throw() { return this->vecm::link1_begin<t_value, _bs>(); }
-      inline link1_t<t_value, false, _bs> link1_aend() throw() { return this->vecm::link1_aend<t_value, _bs>(); }
-      inline link1_t<t_value, true, _bs> link1_cbegin() const throw() { return this->vecm::link1_cbegin<t_value, _bs>(); }
-      inline link1_t<t_value, true, _bs> link1_caend() const throw() { return this->vecm::link1_caend<t_value, _bs>(); }
+      inline link1_t<t_value, false, _bs> link1_begin(__vecm_noarg1) throw() { return this->vecm::link1_begin<t_value, _bs>(); }
+      inline link1_t<t_value, false, _bs> link1_aend(__vecm_noarg1) throw() { return this->vecm::link1_aend<t_value, _bs>(); }
+      inline link1_t<t_value, true, _bs> link1_cbegin(__vecm_noarg1) const throw() { return this->vecm::link1_cbegin<t_value, _bs>(); }
+      inline link1_t<t_value, true, _bs> link1_caend(__vecm_noarg1) const throw() { return this->vecm::link1_caend<t_value, _bs>(); }
 
       // permanent links in vec2_t
       //==section 3==============================================
@@ -815,7 +815,7 @@ namespace yk_c
         //    1 - links mode has been changed successfully (sync <--> non-sync.), forcedly. Previous links were lost.
         //    0 - new mode is same as the current. Nothing done.
         //    -1 - failed to set new mode. The existing mode and links are kept.
-      s_long link2_setf(bool perm, bool sync, bool forced_change) throw()
+      s_long link2_setf(bool perm, bool sync, bool forced_change __vecm_noarg) throw()
       {
         if (locality() != 1) { return -1; }
         bool sync0 = f_sync();
@@ -851,7 +851,7 @@ namespace yk_c
         //    - container is from other binary module,
         //    - target element is itself container, created in other binary module,
         //    - container with f_perm() == false. See also link2_setf().
-      link2_t<ta_value> link2(s_long ind0) throw() { return link2_t<ta_value>(*this, ind0); }
+      link2_t<ta_value> link2(s_long ind0 __vecm_noarg) throw() { return link2_t<ta_value>(*this, ind0); }
 
       // aux
       //==section 4==============================================
@@ -862,15 +862,15 @@ namespace yk_c
     private:
       struct _transaction
       {
-          _transaction(vec2_t* pct_, s_long nrsv) throw() : _pct(pct_), _pd(pct_->_ptd2()), _b(false) { start(nrsv); }
+          _transaction(vec2_t* pct_, s_long nrsv __vecm_noarg) throw() : _pct(pct_), _pd(pct_->_ptd2()), _b(false) { start(nrsv); }
           ~_transaction() throw() { end(false); }
           operator bool() const throw() { return _b; }
-          void start(s_long nrsv) throw() {  if (!_b && _pct->_cv0() >= 0 && _pd->_p_tr_start_2) { _b =  bool(_pd->_p_tr_start_2(_pct, nrsv)); } }
-          void end(bool commit) throw() { if (_b) { _b = false; _pd->_p_tr_end_2(_pct, commit); } }
+          void start(s_long nrsv __vecm_noarg) throw() {  if (!_b && _pct->_cv0() >= 0 && _pd->_p_tr_start_2) { _b =  bool(_pd->_p_tr_start_2(_pct, nrsv)); } }
+          void end(bool commit __vecm_noarg) throw() { if (_b) { _b = false; _pd->_p_tr_end_2(_pct, commit); } }
       private: vec2_t* _pct; _vec2_td* _pd; bool _b;
       };
       inline _vec2_td* _ptd2() const throw() { return reinterpret_cast<_vec2_td*>(_ptd->ptd2); }
-      inline int _cv0(_noarg = _noarg()) const throw() // if ver. 0 && sig. length 1, return ptd length (cur. mod.) - ptd length (this); else -1
+      inline int _cv0(__vecm_noarg1) const throw() // if ver. 0 && sig. length 1, return ptd length (cur. mod.) - ptd length (this); else -1
         { s_long nx = _ptd2()->version; s_long n = _vec2_tu_td_ver::ver; if (nx == 1 && n == 1)  { s_long ndx = _ptd2()->psig[0] >> 8; s_long nd = sizeof(_vec2_td); if (nd >= ndx) { return nd - ndx; } } return -1; }
       inline  s_long _nrsv_tr_1(s_long ind) { ind -= _nbase; if (! (ind >= 0 && ind <= _n)) { return 0; }  s_long j = 0, k = 0; _bytes_tu::_ind_jk(ind, j, k); return _last_j + 1 - j; }
       inline  s_long _nrsv_tr_m(s_long ind, s_long mdel) { ind -= _nbase; if (! (ind >= 0 && ind <= _n)) { return 0; } if (mdel < 0) { mdel = 0; }  s_long q = _n - ind - mdel; if (q < 0) { q = 0; } return q; }
@@ -878,7 +878,7 @@ namespace yk_c
         //    0x1 -- same as is_tr in vecm_copy.
         //    0x2 -- keep perm. links mode and registration for this container.
         //        (Otherwise perm. flags are switched off).
-      inline s_long _l_copy(const void* pctnr, const vecm& x, s_long mode, _noarg = _noarg()) throw()
+      inline s_long _l_copy(const void* pctnr, const vecm& x, s_long mode __vecm_noarg) throw()
       {
         if (this == pctnr) { return 1; } typedef vec2_t Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
         meta::s_ll _st[_nst]; Q* p = reinterpret_cast<Q*>(_st); s_long res = p->vecm::_l_cc(x);
@@ -898,7 +898,7 @@ namespace yk_c
       friend struct _vec2_tu_aux_t<ta_value>;
     };
 
-    template<class TA, class _bs1, class _bs2> inline bool operator==(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b)
+    template<class TA, class _bs1, class _bs2> inline bool operator==(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
     {
       typedef typename vec2_t<TA>::t_value T;
       if (a.n() != b.n()) { return false; }
@@ -906,23 +906,27 @@ namespace yk_c
       vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
       do { if (!(*la.pval() == *lb.pval())) { return false; } la.incr(); } while (lb.incr());
     }
-    template<class TA, class _bs1, class _bs2> inline bool operator!=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) { return !(a == b); }
+    template<class TA, class _bs1, class _bs2> inline bool operator!=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return !(a == b); }
 
-    template<class TA, class _bs1, class _bs2> inline bool operator<(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b)
+    template<class TA, class _bs1, class _bs2> inline bool operator<(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
     {
       typedef typename vec2_t<TA>::t_value T;
       if (a.n() == 0) { return b.n() > 0; } if (b.n() == 0) { return false; }
       vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
       do { _yk_reg const T* p1 = la.pval(); _yk_reg const T* p2 = lb.pval(); if (!p1) { return bool(p2); } if (!p2) { return false; } if (*p1 < *p2) { return true; } if (*p2 < *p1) { return false; } la.incr(); lb.incr(); } while (true);
     }
-    template<class TA, class _bs1, class _bs2> inline bool operator>(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) { return b < a; }
-    template<class TA, class _bs1, class _bs2> inline bool operator<=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) { return !(b < a); }
-    template<class TA, class _bs1, class _bs2> inline bool operator>=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) { return !(a < b); }
+    template<class TA, class _bs1, class _bs2> inline bool operator>(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return b < a; }
+    template<class TA, class _bs1, class _bs2> inline bool operator<=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return !(b < a); }
+    template<class TA, class _bs1, class _bs2> inline bool operator>=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return !(a < b); }
 
-    template<class TA, class _bs1, class _bs2> inline void swap(vec2_t<TA, _bs1>& a, vec2_t<TA, _bs2>& b) { a.swap((vec2_t<TA, _bs1>&)b); }
-
-    namespace _utils
+    namespace _utils { namespace
     {
+      template<class TA, class _bs1, class _bs2> inline void swap(vec2_t<TA, _bs1>& a, vec2_t<TA, _bs2>& b) { a.swap((vec2_t<TA, _bs1>&)b); }
+
         // each_f is a construction functor, iterating once through all elements in a source container.
         //    It is created from a container object, and points at once to its first element.
         //    .size() is the number of elements in the container.
@@ -1040,7 +1044,7 @@ namespace yk_c
           F(const Ctnr2& x)
             { Ctnr dest; copy(dest, x, 10); return dest; }
       };
-    }
+    } }
 
 
       // Permanent link to vec2_t object or its element.
@@ -1293,7 +1297,7 @@ namespace yk_c
         //    On success / found, ptr. != 0 and *pind_ord containing entry index [0..n()-1] in the order specified by Less. *pind_h is the index of entry in the hash.
         //    On success / not found, ptr. == 0 and *pind_ord containing index [0..n()] of the place of insertion. *pind_h == no_elem.
         //    On failure, ptr. == 0 and *pind_ord containing no_elem. *pind_h == no_elem.
-      inline const entry* find(const t_k& k, s_long* pind_ord = 0, s_long* pind_h = 0) const throw()
+      inline const entry* find(const t_k& k, s_long* pind_ord = 0, s_long* pind_h = 0 __vecm_noarg) const throw()
       {
         if (pind_ord)
         {
@@ -1317,7 +1321,7 @@ namespace yk_c
         //    -1 - an error occured. The container is not changed.
         //    On 1, 0, *pentry != 0. On -1, *pentry == 0.
         //    On 1, 0, *pind_ord, *pind_h contain a valid index. On -1, both of them are no_elem.
-      s_long insert(const t_k& k, const entry** pentry = 0, s_long* pind_ord = 0, s_long* pind_h = 0) throw()
+      s_long insert(const t_k& k, const entry** pentry = 0, s_long* pind_ord = 0, s_long* pind_h = 0 __vecm_noarg) throw()
       {
         if (pind_ord)
         {
@@ -1359,7 +1363,7 @@ namespace yk_c
         //    1 - the entry with k was removed.
         //    0 - the entry with k did not exist.
         //    -1 - an error occured. The container is not changed.
-      s_long remove(const t_k& k) throw()
+      s_long remove(const t_k& k __vecm_noarg) throw()
       {
         const entry* e(0); s_long i2;
         const f_kf* p = _d.pkf(); if (!p) { return -1; } s_long res = _d.find2(k, *p, 0, &e, &i2); if (res == 0) { return 0; } if (res != 1) { return -1; }
@@ -1385,11 +1389,12 @@ namespace yk_c
       }
 
         // Same as hashx::remove_all.
-      inline s_long remove_all() throw() { s_long m = _d.remove_all(); if (m < 0) { return m; } _inds.vecm_clear(); return m; }
+      inline s_long remove_all(__vecm_noarg1) throw() { s_long m = _d.remove_all(); if (m < 0) { return m; } _inds.vecm_clear(); return m; }
 
         // Finds/inserts an entry with key k. Returns a reference to value.
         //    O(1) if the entry exists. O(N^0.5) if it is inserted.
-      inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc)
+      inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc  __vecm_noargt) { return opsub(k); }
+      inline t_v& opsub(const t_k& k __vecm_noarg) throw (hashx_common::EHashOpExc)
       {
         do
         {
@@ -1409,24 +1414,24 @@ namespace yk_c
       inline s_long n() const throw() { return _d.n(); } // >=0
 
         // The number of errors since construction or the last assignment, clearing, or value reset.
-      inline s_long nexc() const throw() { return _d.nexc(); }
+      inline s_long nexc(__vecm_noarg1) const throw() { return _d.nexc(); }
 
         // Returns entry by index [0..n()-1] in the order.
-      inline const entry* operator()(s_long ind_ord) const throw() { s_long* p = _inds.pval<s_long>(ind_ord); if (!p) { return 0; } return _d(*p); }
+      inline const entry* operator()(s_long ind_ord __vecm_noarg) const throw() { s_long* p = _inds.pval<s_long>(ind_ord); if (!p) { return 0; } return _d(*p); }
 
         // Returns same as hashx::operator().
-      inline const entry* h(s_long ind_h) const throw() { return _d(ind_h); }
+      inline const entry* h(s_long ind_h __vecm_noarg) const throw() { return _d(ind_h); }
 
-      ordhs_t() throw() : _d(), _inds(typer<s_long, _bs>, 0) {}
-      ~ordhs_t() throw() {}
+      ordhs_t(__vecm_noarg1) throw() : _d(), _inds(typer<s_long, _bs>, 0) {}
+      ~ordhs_t() throw(__vecm_noargt1) {}
 
         // If copying fails, n() == 0, nexc() != 0.
-      ordhs_t(const ordhs_t& x) throw() : _d(x._d), _inds(x._inds) { if (_d.n() != _inds.n()) { _d.hashx_clear(); _inds.vecm_clear(); } }
+      ordhs_t(const ordhs_t& x __vecm_noarg) throw() : _d(x._d), _inds(x._inds) { if (_d.n() != _inds.n()) { _d.hashx_clear(); _inds.vecm_clear(); } }
 
         // Constructs a copy of x.
         //    On success, nexc() is set to 0.
         //    On failure nexc() is set to non-0, *this is not changed, no exceptions generated.
-      ordhs_t& operator=(const ordhs_t& x) throw()
+      ordhs_t& operator=(const ordhs_t& x) throw( __vecm_noargt1)
       {
         if (this == &x) { return *this; } typedef ordhs_t Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
         meta::s_ll _st[_nst]; Q* p = reinterpret_cast<Q*>(_st); new (p) Q(x);
@@ -1435,22 +1440,22 @@ namespace yk_c
       }
 
         // Removes all elements, sets everything to default value.
-      void ordhs_clear() throw() { _d.hashx_clear(); _inds.vecm_clear(); }
+      void ordhs_clear(__vecm_noarg1) throw() { _d.hashx_clear(); _inds.vecm_clear(); }
 
-      inline void ordhs_set0_nexc() const throw () { _d.hashx_set0_nexc(); }
+      inline void ordhs_set0_nexc(__vecm_noarg1) const throw () { _d.hashx_set0_nexc(); }
 
         // Links for iterating entries in hash order, analogous to that of hashx.
-      inline vecm::link1_t<entry, true, _bs> link1_cbegin() const throw() { return _d.link1_cbegin(); }
-      inline vecm::link1_t<entry, true, _bs> link1_caend() const throw() { return _d.link1_caend(); }
-      inline vecm::link1_t<entry, true, _bs> link1_cat(s_long ind) const throw() { return _d.link1_cat(ind); }
+      inline vecm::link1_t<entry, true, _bs> link1_cbegin(__vecm_noarg1) const throw() { return _d.link1_cbegin(); }
+      inline vecm::link1_t<entry, true, _bs> link1_caend(__vecm_noarg1) const throw() { return _d.link1_caend(); }
+      inline vecm::link1_t<entry, true, _bs> link1_cat(s_long ind __vecm_noarg) const throw() { return _d.link1_cat(ind); }
 
         // Reference to combined key function, value constructor, key function setter.
         //    Just an interface to hashx pkf, pctf, hashx_set_kf.
-      inline const f_kf* pkf() const throw() { return _d.pkf(); }
-      inline f_ctf* pctf() const throw() { return _d.pctf(); }
-      inline bool ordhs_set_kf(const f_kf& kf) throw() { return _d.hashx_set_kf(kf); }
+      inline const f_kf* pkf(__vecm_noarg1) const throw() { return _d.pkf(); }
+      inline f_ctf* pctf(__vecm_noarg1) const throw() { return _d.pctf(); }
+      inline bool ordhs_set_kf(const f_kf& kf __vecm_noarg) throw() { return _d.hashx_set_kf(kf); }
 
-      inline s_long compatibility() const throw() { const s_long ti = bytes::type_index_t<s_long>::ind(); s_long c = __s_crvx(_inds)._t_ind == ti && __s_crvx(__d()._ht)._t_ind == ti && sizeof(*this) == ((char*)&_inds - (char*)this) + sizeof(vecm) ? __d().vecm::compatibility() : -1; if (c == 0) { c = -1; } return c; }
+      inline s_long compatibility(__vecm_noarg1) const throw() { const s_long ti = bytes::type_index_t<s_long>::ind(); s_long c = __s_crvx(_inds)._t_ind == ti && __s_crvx(__d()._ht)._t_ind == ti && sizeof(*this) == ((char*)&_inds - (char*)this) + sizeof(vecm) ? __d().vecm::compatibility() : -1; if (c == 0) { c = -1; } return c; }
 
 //      template<class _bs2> operator ordhs_t<KA, VAF, Less, Kf, _bs2>&() { return *(ordhs_t<KA, VAF, Less, Kf, _bs2>*)this; }
 //      template<class _bs2> operator const ordhs_t<KA, VAF, Less, Kf, _bs2>&() const { return *(const ordhs_t<KA, VAF, Less, Kf, _bs2>*)this; }
@@ -1460,10 +1465,10 @@ namespace yk_c
       vecm _inds;
 
       typedef Less _t_less;
-      struct _tlsbind { inline _tlsbind(const t_hash& h_, const _t_less& l_) throw() : h(h_), l(l_) {} const t_hash& h; const _t_less& l; inline bool less21(const t_k& k1, s_long i2) const { return l.less21(k1, h(i2)->k); } inline bool less12(s_long i1, const t_k& k2) const { return l.less12(h(i1)->k, k2); } };
+      struct _tlsbind { inline _tlsbind(const t_hash& h_, const _t_less& l_ __vecm_noarg) throw() : h(h_), l(l_) {} const t_hash& h; const _t_less& l; inline bool less21(const t_k& k1, s_long i2 __vecm_noarg) const { return l.less21(k1, h(i2)->k); } inline bool less12(s_long i1, const t_k& k2 __vecm_noarg) const { return l.less12(h(i1)->k, k2); } };
 
-      struct _Hx : t_hash { friend struct ordhs_t; inline void _set_nexc(s_long n) throw() { this->_ht.vecm_set0_nexc(); vecm::_ff_mc()._nx_set(this->vecm::_nxf, n); } };
-      inline void _set_nexc(s_long n) throw() { __d()._set_nexc(n); _inds.vecm_set0_nexc(); }
+      struct _Hx : t_hash { friend struct ordhs_t; inline void _set_nexc(s_long n __vecm_noarg) throw() { this->_ht.vecm_set0_nexc(); vecm::_ff_mc()._nx_set(this->vecm::_nxf, n); } };
+      inline void _set_nexc(s_long n __vecm_noarg) throw() { __d()._set_nexc(n); _inds.vecm_set0_nexc(); }
       inline _Hx& __d() throw () { return *static_cast<_Hx*>(&_d); }
       inline const _Hx& __d() const throw () { return *static_cast<const _Hx*>(&_d); }
 

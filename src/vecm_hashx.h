@@ -1,6 +1,6 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2018-03-26
+// rev. 2018-04-14
 // Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2017)
 // Project website: hashx.dp.ua
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -29,6 +29,22 @@
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
 #endif
 
+#if __APPLE__ && __MACH__
+  #define __vecm_noarg , yk_c::meta::t_noarg = yk_c::meta::t_noarg()
+  #define __vecm_noarg1 yk_c::meta::t_noarg = yk_c::meta::t_noarg()
+  #define __vecm_noargt , yk_c::meta::t_noarg
+  #define __vecm_noargt1 yk_c::meta::t_noarg
+  #define __vecm_noargv , yk_c::meta::t_noarg()
+  #define __vecm_noargv1 yk_c::meta::t_noarg()
+#else
+  #define __vecm_noarg
+  #define __vecm_noarg1
+  #define __vecm_noargt
+  #define __vecm_noargt1
+  #define __vecm_noargv
+  #define __vecm_noargv1
+#endif
+
 namespace yk_c
 {
 namespace { struct __vecm_tu_selector; }
@@ -39,6 +55,7 @@ struct meta
     // Unused argument ensuring function binding on translation unit level.
   template<class T, class _ = __vecm_tu_selector> struct noarg_tu_t {};
   template<int i, class _ = __vecm_tu_selector> struct noargi_tu_t {};
+  typedef noarg_tu_t<nothing> t_noarg;
 
     // Static assertion.
   template<bool cond, class _ = nothing> struct assert { typedef bool t_false; };  template<class _> struct assert<true, _> { enum { result = true }; typedef bool t_true; };
@@ -90,11 +107,11 @@ struct meta
     //  NOTE t_3 most often should be set to T2, but may be of another (T1 or some third) type, depending on particular application.
   template<class T1, class T2> struct type_equi {}; template<class T> struct type_equi<T, T> { typedef T t_3; };
 
-  template <class C, class Tag1, class Tag2> struct _resolve2_t  { enum { result = false }; }; template <class C, class Tag1> struct _resolve2_t<C, Tag1, typename type_equi<C, Tag1>::t_3> { enum { result = true }; };
+  template<class C, class Tag1, class Tag2> struct _resolve2_t  { enum { result = false }; }; template<class C, class Tag1> struct _resolve2_t<C, Tag1, typename type_equi<C, Tag1>::t_3> { enum { result = true }; };
 
     // resolve_t:: result is true when class C is tagged by (is equivalent to) Tag.
     //  Namely, type_equi<C, Tag> specialization contains typedef Tag t_3. See type_equi.
-  template <class C, class Tag> struct resolve_t  { enum { result = _resolve2_t<C, Tag, Tag>::result }; };
+  template<class C, class Tag> struct resolve_t  { enum { result = _resolve2_t<C, Tag, Tag>::result }; };
 
   struct tag_functor {};
 
@@ -121,11 +138,11 @@ struct meta
     // NOTE (!) Custom constructors are expected to throw an exception when failed to initialize the destination.
     // NOTE In some applications, construct_f template argument may be T equivalent (T_alt), not T itself.
     //    In this case, specialization may look like
-    //    a) template <class Aux> struct construct_f<T_alt, Aux> { typedef typename vecm::specf<T_alt>::t_value t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
-    //    b) template <class Aux> struct construct_f<T_alt, Aux> { typedef T t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
+    //    a) template<class Aux> struct construct_f<T_alt, Aux> { typedef typename vecm::specf<T_alt>::t_value t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
+    //    b) template<class Aux> struct construct_f<T_alt, Aux> { typedef T t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
     //    See nt_allowDfltConstruct and ta_meta_construct in vecm::config_aux, and also vecm(ptyper p, s_long base).
   struct tag_construct {};
-  template <class T, class Aux = nothing, class _bs = nothing> struct construct_f { typedef T t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
+  template<class T, class Aux = nothing, class _bs = nothing> struct construct_f { typedef T t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
     template<class T, class Aux, class _bs> struct type_equi<construct_f<T, Aux, _bs>, tag_construct> { typedef tag_construct t_3; };
     template<class T, class Aux, class _bs> struct type_equi<construct_f<T, Aux, _bs>, tag_functor> { typedef tag_functor t_3; };
 
@@ -311,7 +328,7 @@ struct bytes
 {
 
     // Default "less" operation for keys of same or different type. Both less12(a, b), less21(a, b) return true if a < b.
-  template<class K, class K2 = K> struct less_t { bool less12(const K& a, const K2& b) const { return a < b; } bool less21 (const K2& a, const K& b) const { return a < b; } };
+  template<class K, class K2 = K> struct less_t { bool less12(const K& a, const K2& b __vecm_noarg) const { return a < b; } bool less21 (const K2& a, const K& b __vecm_noarg) const { return a < b; } };
 
 // bytes config0_t
 //==section 2==============================================
@@ -477,12 +494,7 @@ private:
     return n2;
   }
   struct _xind_mc0_base { void* __p0; _xind_mc0_base() { __p0 = this; } virtual s_long* f() = 0; virtual ~_xind_mc0_base() {} };
-  template<class C1, class C2> struct _xind_mc3_t : _xind_mc0_base { virtual s_long* f() {
-      s_long& xind = _xind_tu_stg_t<C1, C2>::xind;
-      lock_t<vecm> __lock;
-      if (__lock.is_lckinit()) { if (xind > 0) { return &xind; } xind = bytes()._ti_gen_mc(); return &xind; }
-        else { if (xind > 0) { return &xind; } s_long i1 = bytes()._ti_gen_mc(); s_long i2 = bytes()._ti_gen_mc(); if (i2 - i1 == 1) { i1 = i2; } xind = i1; return &xind; }
-  } };
+  template<class C1, class C2> struct _xind_mc3_t : _xind_mc0_base { virtual s_long* f(); };
   template<class C1, class C2, class _> static _xind_mc0_base* _xind_mc0_p() { typedef _xind_mc3_t<C1, C2> t_var; static char bi(0); union u { char x[sizeof(t_var)]; meta::s_ll __; }; static u x; if (!bi) { new (&x.x[0]) t_var; bi = 1; } t_var* p = (t_var*)&x.x[0]; return p; }
 public:
 
@@ -500,7 +512,7 @@ public:
     //    For example, see bytes::type_index_t<char>.)
   template<class T, class Aux = meta::nothing, class _ = __vecm_tu_selector> struct type_index_t
   {
-    static s_long xind; // storage unique to transl. unit, but values are kept same per module (or per compiler in certain compilers)
+    static s_long xind; // (NOTE Keep const!) type index value (variable is allocated in each transl. unit, but values are kept same per module or per compiler)
     static inline s_long ind() throw() { if (xind > 0) { return xind; } s_long* p = (s_long*)_xind_mc0_p<T, Aux, _>()->f(); xind = *p; return xind; }
   };
 
@@ -610,12 +622,12 @@ protected:
     virtual ~_ff_mc2_base() {}
   };
   template<class TA> struct _ff_mc1_impl;
-  struct _ff_mc2_impl;
+  template<class _ = meta::nothing> struct _ff_mc2_impl;
   template<class TA, class _> static _ff_mc1_base* _ff_mc1_p() { typedef _ff_mc1_impl<TA> t_var; static char bi(0); union u { char x[sizeof(t_var)]; meta::s_ll __; }; static u x; if (!bi) { new (&x.x[0]) t_var; bi = 1; } t_var* p = (t_var*)&x.x[0]; return p; }
-  template<class _> static _ff_mc2_base* _ff_mc2_p() { typedef _ff_mc2_impl t_var; static char bi(0); union u { char x[sizeof(t_var)]; meta::s_ll __; }; static u x; if (!bi) { new (&x.x[0]) t_var; bi = 1; } t_var* p = (t_var*)&x.x[0]; return p; }
+  template<class _> static _ff_mc2_base* _ff_mc2_p() { typedef _ff_mc2_impl<meta::nothing> t_var; static char bi(0); union u { char x[sizeof(t_var)]; meta::s_ll __; }; static u x; if (!bi) { new (&x.x[0]) t_var; bi = 1; } t_var* p = (t_var*)&x.x[0]; return p; }
   template<class _ = __vecm_tu_selector> struct __psig_i { static s_long* x; static s_long* F() { if (!x) { x = _ff_mc2_p<_>()->__psig(); } return x; } };
 public:
-  static _ff_mc2_base& _ff_mc(_noarg = _noarg()) { return *_ff_mc2_p<__vecm_tu_selector>(); }
+  static _ff_mc2_base& _ff_mc(meta::t_noarg = meta::t_noarg()) { return *_ff_mc2_p<__vecm_tu_selector>(); }
 
   template<class TA> struct spec;
 
@@ -737,7 +749,7 @@ protected:
     //    -1 copying has been completed unsuccessfully. vecm(const vecm&) case (c).
     //    -2 copying failed. x is invalid, unsafe or incompatible. Elem. type set to s_long. vecm(const vecm&) case (d).
     //    -3 this == 0. The call is ignored. vecm(const vecm&) case (e).
-  s_long _l_cc(const vecm& x) throw()
+  s_long _l_cc(const vecm& x __vecm_noarg) throw()
   {
     if (!(this)) { return -3; }
     _n = 0; _last_j = 0; _size_k = 0; _pj = 0; _nj = 0; _nxf = _nxf_default();
@@ -768,7 +780,7 @@ protected:
 
     // Local destructor.
     //    Clears the container and marks it invalid by settting _t_ind = 0.
-  inline void _l_destroy() const throw()
+  inline void _l_destroy(__vecm_noarg1) const throw()
   {
     if (!(this && _t_ind)) { return; }
     _column* pj = _pj;
@@ -782,7 +794,7 @@ protected:
   }
 
     // Local vecm_copy impl.
-  inline s_long _l_copy(const vecm* px, bool is_tr) throw()
+  inline s_long _l_copy(const vecm* px, bool is_tr __vecm_noarg) throw()
   {
     if (!(this && _t_ind)) { return -3; } if (this == px) { return 1; } typedef vecm Q; enum { _nq = sizeof(Q) };
     if (is_tr) { union { meta::s_ll _st; char _stc[_nq]; }; Q* p = reinterpret_cast<Q*>(&_st); p->_l_cc(*px); if (p->_nxf >> _xsh) { p->_l_destroy(); _ff_mc()._nx_add(_nxf, p->_nxf >> _xsh); return 0; } _nxf &= _fm; _l_destroy(); s_long ec = _nxf >> _xsh; bytes::memmove_t<Q>::F(this, p, _nq); _ff_mc()._nx_add(_nxf, ec); return 1; }
@@ -790,7 +802,7 @@ protected:
   }
 
     // Local vecm_clear impl.
-  inline s_long _l_clear() throw()
+  inline s_long _l_clear(__vecm_noarg1) throw()
   {
     if (!(this && _t_ind)) { return -1; }
     if (_pj)
@@ -803,7 +815,7 @@ protected:
   }
 
     // Comparisons for ordering type descriptors by their t_ind and ta_ind.
-  template<bool cmp_ta, class _ = meta::nothing> struct _less_td_ind { bool less21 (s_long t_ind1, const type_descriptor* p2) const throw() { return t_ind1 < p2->t_ind; } bool less12 (const type_descriptor* p1, s_long t_ind2) const throw() { return p1->t_ind < t_ind2; } };
+  template<bool cmp_ta, class _ = __vecm_tu_selector> struct _less_td_ind { bool less21 (s_long t_ind1, const type_descriptor* p2) const throw() { return t_ind1 < p2->t_ind; } bool less12 (const type_descriptor* p1, s_long t_ind2) const throw() { return p1->t_ind < t_ind2; } };
   template<class _> struct _less_td_ind<true, _> { bool less21 (s_long ta_ind1, const type_descriptor* p2) const throw() { return ta_ind1 < p2->ta_ind; } bool less12 (const type_descriptor* p1, s_long ta_ind2) const throw() { return p1->ta_ind < ta_ind2; } };
 
     // Part of el_reserve_n, unchecked op.
@@ -1161,7 +1173,7 @@ protected:
     //  NOTE Default less may be:
     //    bytes::less_t<K, K2>()
   template<class K, class K2, class C>
-  inline s_long _ord_find(const K2& k, s_long* r_pi, K** r_ppk, const C& less) const throw()
+  inline s_long _ord_find(const K2& k, s_long* r_pi, K** r_ppk, const C& less __vecm_noarg) const throw()
   {
     try
     {
@@ -1206,7 +1218,7 @@ protected:
     //    bytes::less_t<typename meta::resolve_TF<KF, meta::tag_construct>::t, K2>()
     //    bytes::less_t<K, K2>()
   template<class KF, class K2, class C>
-  inline s_long _ord_insert(const K2& k, const KF& k_ins, s_long* r_pi, typename meta::resolve_TF<KF, meta::tag_construct>::t** r_ppk, const C& less) throw()
+  inline s_long _ord_insert(const K2& k, const KF& k_ins, s_long* r_pi, typename meta::resolve_TF<KF, meta::tag_construct>::t** r_ppk, const C& less __vecm_noarg) throw()
   {
     typedef typename meta::resolve_TF<KF, meta::tag_construct>::t K; s_long i; K* pk;
     s_long res = _ord_find<K, K2, C>(k, &i, &pk, less);
@@ -1227,7 +1239,7 @@ protected:
     //  NOTE Default less may be:
     //    bytes::less_t<K, K2>()
   template<class K, class K2, class C>
-  inline s_long _ord_remove(const K2& k, const C& less) throw()
+  inline s_long _ord_remove(const K2& k, const C& less __vecm_noarg) throw()
   {
     s_long i;
     s_long res = _ord_find<K, K2, C>(k, &i, 0, less);
@@ -1464,14 +1476,11 @@ protected:
   template<class _ = __vecm_tu_selector> struct _cmreg_tu_stg_t;
   template<class _ = __vecm_tu_selector> struct _psig_tu_stg_t { static s_long sig0[]; }; // storage unique to transl. unit, but using 1 or 0 in each binary module
 
-  template<class TA> struct _ff_mc1_impl : _ff_mc1_base
+  template<class TA> struct _ff_mc1_impl : _ff_mc1_base { virtual const type_descriptor& rtd(); };
+  template<class _> struct _ff_mc2_impl : _ff_mc2_base
   {
-    virtual const type_descriptor& rtd() { return _ff_tu<>::rtd<TA>(); }
-  };
-  struct _ff_mc2_impl : _ff_mc2_base
-  {
-    inline virtual s_long* __psig();
-    inline virtual _cmreg_data0* _pg_cmd();
+    virtual s_long* __psig();
+    virtual _cmreg_data0* _pg_cmd();
 
       // Adds a delta to bc, xc or nxf, according to _nxf structure.
       //  (bc is treated as l-shifted by _xsh, delta as normal integer. Least _xsh bits of bc are kept.)
@@ -1484,8 +1493,8 @@ protected:
 
     virtual s_long __minmb() { return 769; }
 
-    inline virtual s_long _find_cm(s_long ind_t, s_long ind_ta, bool is_ta_first, const type_descriptor** ret_p);
-    inline virtual const type_descriptor* _get_compat(const type_descriptor* __p0, bool allow_t, bool allow_ta);
+    virtual s_long _find_cm(s_long ind_t, s_long ind_ta, bool is_ta_first, const type_descriptor** ret_p);
+    virtual const type_descriptor* _get_compat(const type_descriptor* __p0, bool allow_t, bool allow_ta);
   };
 
 
@@ -1735,7 +1744,7 @@ public:
     // The number of elements to which the container can grow
     //  without additional dynamic memory allocation for the storage.
     //  nrsv() >= n().
-  inline s_long nrsv() const throw() { return _bytes_tu::_nrsv(_nj); }
+  inline s_long nrsv(__vecm_noarg1) const throw() { return _bytes_tu::_nrsv(_nj); }
 
     // true (default): storage place reserve shrinks to minimal possible value
     //    when elements are removed from the sequence by el_remove*, el_expand*, el_expunge_last.
@@ -1807,7 +1816,7 @@ public:
     //  NOTE integrity() doesn't reflect execution of el_expand_* and el_expunge_last functions.
     //    They may create uninitialized positions or free objects storage without calling destructors.
     //    Only the client is responsible for correct processing in this case.
-  inline s_long integrity(_noarg = _noarg()) const throw() { if (!this) { return -3; } if (!_t_ind) { return -2; } if (!_ptd) { return -3; } if (_ptd->psig != __psig_i<>::F() &&  *_ptd->psig != *__psig_i<>::F()) { return -3; } if (_f_unsafe()) { return -1; } return _nxf & _xm ? 0 : 1; }
+  inline s_long integrity(__vecm_noarg1) const throw() { if (!this) { return -3; } if (!_t_ind) { return -2; } if (!_ptd) { return -3; } if (_ptd->psig != __psig_i<>::F() &&  *_ptd->psig != *__psig_i<>::F()) { return -3; } if (_f_unsafe()) { return -1; } return _nxf & _xm ? 0 : 1; }
 
     // Fast check if this container is created in this module or another module.
     //  NOTE integrity(), locality(), compatibility() work correctly independently on each other.
@@ -1818,7 +1827,7 @@ public:
     //  NOTE If non-local object is dynamically created (new), it may be correctly deleted
     //    only by vecm_delete(). vecm_delete() should be preferred to op. delete
     //    when working with both local and non-local objects.
-  inline s_long locality(_noarg = _noarg()) const throw() { if (!(this && _t_ind && _ptd)) { return -1; } return _ptd->psig == __psig_i<>::F() ? 1 : 0; }
+  inline s_long locality(__vecm_noarg1) const throw() { if (!(this && _t_ind && _ptd)) { return -1; } return _ptd->psig == __psig_i<>::F() ? 1 : 0; }
 
     // Check if this container may be called from the current binary module.
     //  NOTE integrity(), locality(), compatibility() work correctly independently on each other.
@@ -1854,7 +1863,7 @@ public:
     //        The container may be from this or another module.
     //        The only functions that execute correctly:
     //          integrity, locality, compatibility.
-  inline s_long compatibility(_noarg = _noarg()) const throw()
+  inline s_long compatibility(__vecm_noarg1) const throw()
   {
     if (!this) { return -3; } if (!_t_ind) { return -2; } if (!_ptd) { return -3; }
     if (_ptd->psig == __psig_i<>::F()) { return 2; }
@@ -1932,7 +1941,7 @@ public:
     //    base - base index of elements (numeric value of the index of the very first element of non-empty sequence).
     //
   typedef const type_descriptor& (*ptyper)();
-  inline vecm(ptyper p, s_long base) throw()
+  inline vecm(ptyper p, s_long base __vecm_noarg) throw()
     { if(!this) { return; } _ptd = &p(); _t_ind = _ptd ? _ptd->t_ind : 0; _n = 0; _last_j = 0; _size_k = 0; _pj = 0; _nj = 0; _nbase = base; _nxf = _nxf_default(); if (!_t_ind) { _ptd = &_ff_mc1_p<s_long, __vecm_tu_selector>()->rtd(); _t_ind = _ptd->t_ind; _nxf = (_nxf & _fm) | _xd; return; } _alloc_j0(); }
 
     // Copying nbase and n elements.
@@ -1956,12 +1965,12 @@ public:
     //        The container is empty, initialized by default for elements of type s_long. nbase() == 0.
     //        nexc() == 1. integrity() == 0.
     //    e) this object is invalid (integrity() <= -2). The call is ignored.
-  inline vecm(const vecm& x) throw() { if (!this) { return; } this->_l_cc(x); }
+  inline vecm(const vecm& x __vecm_noarg) throw() { if (!this) { return; } this->_l_cc(x); }
 
     // The object is cleared. _t_ind is set to 0 to mark the object unusable.
     // NOTE nexc() is not cleared. It may be increased by the number of errors in element destructors.
     // NOTE elements are destroyed in the order first-to-last.
-  inline ~vecm() throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return; } _ptd->pvecm_destroy(this); }
+  inline ~vecm() throw( __vecm_noargt1) { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return; } _ptd->pvecm_destroy(this); }
 
     // Copying x to *this.
     //  is_tr true: transactional copying. If it fails, all changes are cancelled.
@@ -1985,7 +1994,7 @@ public:
     //        The container is empty, initialized by default for elements of type s_long. nbase() == 0.
     //        nexc() != 0 (increased by 1 from prev. value). integrity() == 0.
     //    -3 - this object is invalid (integrity() <= -2) or incompatible. The call is ignored.
-  inline s_long vecm_copy(const vecm& x, bool is_tr) throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return -3; } return _ptd->pvecm_copy(this, &x, is_tr); }
+  inline s_long vecm_copy(const vecm& x, bool is_tr __vecm_noarg) throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return -3; } return _ptd->pvecm_copy(this, &x, is_tr); }
 
     // Removes all elements, frees the reserved place, sets all flags to default, sets nexc() to 0.
     //      nbase() is not changed.
@@ -1997,7 +2006,7 @@ public:
     //    makes v same as a new object constructed by
     //        vecm(typer<...>, nb);
     // NOTE elements are destroyed in the order first-to-last.
-  inline s_long vecm_clear() throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return -1; } return _ptd->pvecm_clear(this); }
+  inline s_long vecm_clear(__vecm_noarg1) throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return -1; } return _ptd->pvecm_clear(this); }
 
     // Replacement for op. delete vecm*, when the object may have been created in another module.
     //    Returns:
@@ -2007,7 +2016,7 @@ public:
     // NOTE vecm_delete() is integrity/compatibility-resistant.
     //    It should be preferred to op. delete when the client works
     //    with mixed local and non-local objects.
-  inline s_long vecm_delete() throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return -1; } return _ptd->pvecm_delete(this); }
+  inline s_long vecm_delete(__vecm_noarg1) throw() { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return -1; } return _ptd->pvecm_delete(this); }
 
 // vecm el_remove_all()
 //==section 6==============================================
@@ -2024,7 +2033,7 @@ public:
     //    ignores u_ignoreNullsOnCleanup and u_ignoreDestructorsOnCleanup flags,
     //    so, calling it for object with integrity() < 0 instead of vecm_clear() may be less safe.
     // NOTE elements are destroyed in the order first-to-last.
-  s_long el_remove_all() throw()
+  s_long el_remove_all(__vecm_noarg1) throw()
   {
     if (!_t_ind) { return -1; }
     s_long n_prev(_n);
@@ -2057,7 +2066,7 @@ public:
     //    The function is transactional in relation to the reserved place.
     //    The function ignores can_shrink() flag.
     //    Under normal conditions, on n <= n(), the function always succeeds, since the place is already allocated.
-  bool el_reserve_n(s_long n, bool allow_shrink) throw()
+  bool el_reserve_n(s_long n, bool allow_shrink __vecm_noarg) throw()
   {
     if (!_t_ind) { return false; } if (!_pj) { if (n <= 0) { return true; } if (!_alloc_j0()) { return false; } }
     s_long nj2; s_long nk2; _bytes_tu::_ind_jk(n > _n ? n : _n, nj2, nk2); if (nk2 > 0) { ++nj2; }
@@ -2098,7 +2107,7 @@ public:
     //          the function always succeeds.
     //    b) 0 on type error or memory allocation error. Elem. sequence is not changed.
   template<class T>
-  inline T* el_expand_1() throw()
+  inline T* el_expand_1(__vecm_noarg1) throw()
   {
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return 0; } }
     if (++_n <= 1) { if (_n < 0) { --_n; return 0; } if (!_pj) { if (!_alloc_j0()) { return 0; } } }
@@ -2128,7 +2137,7 @@ public:
     //    true -- Expand or expunge succeeded. (In the valid container, expunge always succeeds.)
     //    false -- Expand failed allocate enough place for additional n2 - n() elements. Nothing changed.
     //    false -- n2 < 0 or the container is invalid (integrity() == -2). Nothing changed.
-  inline bool el_expand_n(s_long n2) throw()
+  inline bool el_expand_n(s_long n2 __vecm_noarg) throw()
   {
     if (!_t_ind) { return false; }
     if (n2 > _n) { if (!_pj) { if (!_alloc_j0()) { return false; } } if ( ! _reserve_incr_u(n2) ) { return false; } _set_size(n2); }
@@ -2144,7 +2153,7 @@ public:
     //    false on type error or on n() == 0.
     // NOTE. el_expunge_last is counterpart to el_expand_1, same as el_remove_last to el_append.
   template<class T>
-  inline bool el_expunge_last() throw()
+  inline bool el_expunge_last(__vecm_noarg1) throw()
   {
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return false; } }
     if (_n <= 0) { return false; }
@@ -2158,7 +2167,7 @@ public:
     //    Only, on first failure, it can slightly increase the reserved place.
     // NOTE el_append also accepts as x an arbitrary functor like construct_f<T> (see).
   template<class TF> inline typename meta::resolve_TF<TF, meta::tag_construct>::t*
-  el_append(const TF& x) throw()
+  el_append(const TF& x __vecm_noarg) throw()
   {
     typedef typename meta::resolve_TF<TF, meta::tag_construct>::t T;
     typedef bytes::type_index_t<T> t_si;
@@ -2180,12 +2189,13 @@ public:
     }
   }
 
+
     // Removes the last element.
     // Returns:
     //    1: the last element existed and was removed.
     //    -1: wrong type or n() == 0.
   template<class T>
-  inline s_long el_remove_last() throw()
+  inline s_long el_remove_last(__vecm_noarg1) throw()
   {
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return -1; } }
     if (_n <= 0) { return -1; }
@@ -2214,7 +2224,7 @@ public:
     //      NOTE On appending (ind == nbase() + n()) the operation is always transactional,
     //        regardless of T configuration.
   template<class TF>
-  s_long el_insert_1(s_long ind, const TF& x) throw()
+  s_long el_insert_1(s_long ind, const TF& x __vecm_noarg) throw()
   {
     typedef typename meta::resolve_TF<TF, meta::tag_construct>::t T;
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return -1; } }
@@ -2416,7 +2426,7 @@ public:
     //        (On move_last == true, only the element [ind] may be left with invalid value.)
     //      NOTE It is not recommended to create type configurations allowing for unsafe non-transactional removal.
   template<class T>
-  s_long el_remove_1(s_long ind, bool move_last) throw()
+  s_long el_remove_1(s_long ind, bool move_last __vecm_noarg) throw()
   {
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return -1; } }
     ind -= _nbase; if (ind < 0)  { return -1; } if (ind >= _n)  { return -1; }
@@ -2572,7 +2582,7 @@ public:
     //        (On the first failure on appending 1 element (m == 1),
     //        the place reserve may be left a bit larger than it was, due to using el_append.)
   template<class TF>
-  s_long el_append_m(s_long m, const TF& x) throw()
+  s_long el_append_m(s_long m, const TF& x __vecm_noarg) throw()
   {
       if (m == 1) { if (el_append<TF>(x)) { return 1; } else { return -3; } }
     typedef typename meta::resolve_TF<TF, meta::tag_construct>::t T;
@@ -2653,7 +2663,7 @@ public:
     //      NOTE On appending (ind == nbase() + n()) the operation is always transactional,
     //        regardless of T configuration.
   template<class TF>
-  s_long el_insert_ml(s_long ind, s_long m, const TF& x) throw()
+  s_long el_insert_ml(s_long ind, s_long m, const TF& x __vecm_noarg) throw()
   {
     typedef typename meta::resolve_TF<TF, meta::tag_construct>::t T;
     typedef bytes::type_index_t<T> t_si;
@@ -2798,7 +2808,7 @@ public:
     //        (On move_last == true, only the element [ind] may be left with invalid value.)
     //      NOTE It is not recommended to create type configurations allowing for unsafe non-transactional removal.
   template<class T>
-  s_long el_remove_ml(s_long ind, s_long m) throw()
+  s_long el_remove_ml(s_long ind, s_long m __vecm_noarg) throw()
   {
     typedef bytes::type_index_t<T> t_si;
     _yk_reg s_long r = _t_ind; if (r != t_si::xind) { if (r != t_si::ind()) { return -1; } }
@@ -2860,7 +2870,7 @@ public:
     // Get element by ind = [nbase()..nbase()+n()-1].
     //    Returns 0 on type error or ind out of range.
   template<class T>
-  inline T* pval(s_long ind) const throw()
+  inline T* pval(s_long ind __vecm_noarg) const throw()
   {
     typedef _bytes_tu::_coefs m;
     enum { p1 = m::p1, p2 = m::p2, p3 = m::p3, m1 = m::m1, m2 = m::m2, c1 = m::c1, c2 = m::c2, c3 = m::c3, n1 = m::n1, n2 = m::n2, d2 = m::d2, d3 = m::d3, ind3 = m::ind3, mask1 = m::mask1, mask2 = m::mask2, mask3 = m::mask3 };
@@ -2875,7 +2885,7 @@ public:
     }
   }
 
-    // Get element by 0-based i, range unchecked.
+    // Get element by 0-based i, type and range not checked.
     //    Fastest access to elements.
   template<class T>
   inline T* pval_0u(s_long i) const throw()
@@ -2893,7 +2903,7 @@ public:
 
     // Get the first element. Returns 0 on type/size errors.
   template<class T>
-  inline T* pval_first() const throw()
+  inline T* pval_first(__vecm_noarg1) const throw()
   {
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return 0; } }
     if (_n <= 0) { return 0; } return _pj->at_0u<T>();
@@ -2901,7 +2911,7 @@ public:
 
     // Get the last element. Returns 0 on type/size errors.
   template<class T>
-  inline T* pval_last() const throw()
+  inline T* pval_last(__vecm_noarg1) const throw()
   {
     typedef bytes::type_index_t<T> t_si; if (_t_ind != t_si::xind) { if (_t_ind != t_si::ind()) { return 0; } }
     if (_n <= 0) { return 0; } return _pj[_last_j].at_ku<T>(_size_k-1, _bytes_tu::_cap_j(_last_j));
@@ -2948,9 +2958,9 @@ public:
       //    Setting a position to the left or right of that range will also limit it.
 
       // Creates a link to the after-end pos.
-    inline link1_t(t_ctnr& v) throw() : _i0(0), _i2(0) { typedef bytes::type_index_t<t_value> t_si; if (v._t_ind != t_si::xind)  { if (v._t_ind != t_si::ind()) { _pv = 0; _px = 0; _i = -2; return; } }  _pv = &v; _px = 0; _i = -2; }
+    inline link1_t(t_ctnr& v __vecm_noarg) throw() : _i0(0), _i2(0) { typedef bytes::type_index_t<t_value> t_si; if (v._t_ind != t_si::xind)  { if (v._t_ind != t_si::ind()) { _pv = 0; _px = 0; _i = -2; return; } }  _pv = &v; _px = 0; _i = -2; }
       // Creates a link to arbitrary pos. The given ind will be limited by [nbase()-1..nbase()+n()].
-    inline link1_t(t_ctnr& v, s_long ind) throw() : _i0(0), _i2(0) { typedef bytes::type_index_t<t_value> t_si; if (v._t_ind != t_si::xind)  { if (v._t_ind != t_si::ind()) { _pv = 0; _px = 0; _i = -2; return; } } _pv = &v; _set_ind_0u(ind - _pv->_nbase); }
+    inline link1_t(t_ctnr& v, s_long ind __vecm_noarg) throw() : _i0(0), _i2(0) { typedef bytes::type_index_t<t_value> t_si; if (v._t_ind != t_si::xind)  { if (v._t_ind != t_si::ind()) { _pv = 0; _px = 0; _i = -2; return; } } _pv = &v; _set_ind_0u(ind - _pv->_nbase); }
       // Creates an invalid link.
     inline link1_t() throw() : _i0(0), _i2(0) { _pv = 0; _px = 0; _i = -2; }
 
@@ -3018,17 +3028,24 @@ public:
     typedef t_value t; struct exc_construct {}; inline void f(t* p) const { if (_px) { new (p) t(*_px); } else { throw exc_construct(); } }
   };
 
-  template<class T> inline link1_t<T, false> link1_begin() throw() { return link1_t<T, false>(*this, _nbase); }
-  template<class T> inline link1_t<T, false> link1_aend() throw() { return link1_t<T, false>(*this); }
-  template<class T> inline link1_t<T, true> link1_cbegin() const throw() { return link1_t<T, true>(*this, _nbase); }
-  template<class T> inline link1_t<T, true> link1_caend() const throw() { return link1_t<T, true>(*this); }
-  template<class T, class _bs> inline link1_t<T, false, _bs> link1_begin() throw() { return link1_t<T, false, _bs>(*this, _nbase); }
-  template<class T, class _bs> inline link1_t<T, false, _bs> link1_aend() throw() { return link1_t<T, false, _bs>(*this); }
-  template<class T, class _bs> inline link1_t<T, true, _bs> link1_cbegin() const throw() { return link1_t<T, true, _bs>(*this, _nbase); }
-  template<class T, class _bs> inline link1_t<T, true, _bs> link1_caend() const throw() { return link1_t<T, true, _bs>(*this); }
+  template<class T> inline link1_t<T, false> link1_begin(__vecm_noarg1) throw() { return link1_t<T, false>(*this, _nbase); }
+  template<class T> inline link1_t<T, false> link1_aend(__vecm_noarg1) throw() { return link1_t<T, false>(*this); }
+  template<class T> inline link1_t<T, true> link1_cbegin(__vecm_noarg1) const throw() { return link1_t<T, true>(*this, _nbase); }
+  template<class T> inline link1_t<T, true> link1_caend(__vecm_noarg1) const throw() { return link1_t<T, true>(*this); }
+  template<class T, class _bs> inline link1_t<T, false, _bs> link1_begin(__vecm_noarg1) throw() { return link1_t<T, false, _bs>(*this, _nbase); }
+  template<class T, class _bs> inline link1_t<T, false, _bs> link1_aend(__vecm_noarg1) throw() { return link1_t<T, false, _bs>(*this); }
+  template<class T, class _bs> inline link1_t<T, true, _bs> link1_cbegin(__vecm_noarg1) const throw() { return link1_t<T, true, _bs>(*this, _nbase); }
+  template<class T, class _bs> inline link1_t<T, true, _bs> link1_caend(__vecm_noarg1) const throw() { return link1_t<T, true, _bs>(*this); }
 };
 
-
+template<class TA> const vecm::type_descriptor& vecm::_ff_mc1_impl<TA>::rtd() { return _ff_tu<>::rtd<TA>(); }
+template<class C1, class C2> s_long* bytes::_xind_mc3_t<C1, C2>::f()
+{
+  s_long& xind = _xind_tu_stg_t<C1, C2>::xind;
+  lock_t<vecm> __lock;
+  if (__lock.is_lckinit()) { if (xind > 0) { return &xind; } xind = bytes()._ti_gen_mc(); return &xind; }
+    else { if (xind > 0) { return &xind; } s_long i1 = bytes()._ti_gen_mc(); s_long i2 = bytes()._ti_gen_mc(); if (i2 - i1 == 1) { i1 = i2; } xind = i1; return &xind; }
+}
 
 struct vecm::_cmreg_data0
 {
@@ -3050,8 +3067,8 @@ template<class _> struct vecm::_cmreg_tu_stg_t
   };
   static _cmreg_data dat;
 }; // storage unique to transl. unit, but using 1 or 0 in each binary module
-vecm::_cmreg_data0* vecm::_ff_mc2_impl::_pg_cmd() { return &_cmreg_tu_stg_t<>::dat0; }
-s_long* vecm::_ff_mc2_impl::__psig()
+template<class _> vecm::_cmreg_data0* vecm::_ff_mc2_impl<_>::_pg_cmd() { return &_cmreg_tu_stg_t<>::dat0; }
+template<class _> s_long* vecm::_ff_mc2_impl<_>::__psig()
 {
   s_long* p = _psig_tu_stg_t<>::sig0;
   if (p[0]) { return p; }
@@ -3186,9 +3203,9 @@ namespace
   };
 }
 
-s_long vecm::_ff_mc2_impl::_find_cm(s_long ind_t, s_long ind_ta, bool is_ta_first, const type_descriptor** ret_p)
+template<class _> s_long vecm::_ff_mc2_impl<_>::_find_cm(s_long ind_t, s_long ind_ta, bool is_ta_first, const type_descriptor** ret_p)
   { return _vecm_tu_cmreg().find_cm(ind_t, ind_ta, is_ta_first, ret_p, _pg_cmd()); }
-const vecm::type_descriptor* vecm::_ff_mc2_impl::_get_compat(const type_descriptor* p, bool allow_t, bool allow_ta)
+template<class _> const vecm::type_descriptor* vecm::_ff_mc2_impl<_>::_get_compat(const type_descriptor* p, bool allow_t, bool allow_ta)
   { return _vecm_tu_cmreg().get_compat(p, allow_t, allow_ta, _pg_cmd()); }
 
 
@@ -3215,8 +3232,8 @@ template<class TA, s_long y, s_long m, s_long d, s_long h, s_long size, class _>
   //  (V(H), V(V), H(H), H(V), recursively) are very efficient.
 template<> struct vecm::spec<vecm> { struct aux : vecm::config_aux<vecm> { enum { nt_allowDfltConstruct = false }; };  typedef config_t<vecm, 1, 4, 2, aux> config; };
 template<> struct meta::copy_t<vecm> { struct exc_copy {}; static inline void F(vecm* pdest, const vecm* psrc) { new (pdest) vecm(*psrc); if (pdest->nexc() != 0) { pdest->~vecm(); throw exc_copy(); } } };
-template <class Aux, class _bs> struct meta::construct_f<vecm, Aux, _bs> { typedef vecm t; typedef Aux aux; void f(t* p) const { new (p) vecm(typer<aux, _bs>, 0); } };
-template <class _bs> struct meta::construct_f<vecm, meta::nothing, _bs> { };
+template<class Aux, class _bs> struct meta::construct_f<vecm, Aux, _bs> { typedef vecm t; typedef Aux aux; void f(t* p) const { new (p) vecm(typer<aux, _bs>, 0); } };
+template<class _bs> struct meta::construct_f<vecm, meta::nothing, _bs> { };
 
 template<class T, bool b, class _bs> struct meta::type_equi<vecm::link1_t<T, b, _bs>, meta::tag_construct> { typedef meta::tag_construct t_3; };
 template<class T, bool b, class _bs> struct meta::type_equi<vecm::link1_t<T, b, _bs>, meta::tag_functor> { typedef meta::tag_functor t_3; };
@@ -3558,13 +3575,13 @@ struct hashx : protected vecm
 //==section 9==============================================
 
     // Constructing an empty container.
-  inline hashx() throw() : vecm(typer<entry, _bs>, 0), _ht(typer<s_long, _bs>, 0), _pz(0) { _d_reinit(); }
+  inline hashx(__vecm_noarg1) throw() : vecm(typer<entry, _bs>, 0), _ht(typer<s_long, _bs>, 0), _pz(0) { _d_reinit(); }
 
-  inline ~hashx() throw() { _d_destroy(); }
+  inline ~hashx() throw( __vecm_noargt1) { _d_destroy(); }
 
     // Removes all entries, clears hash table, frees the reserved place, sets everything to default, sets nexc() == 0.
     //  Returns: The previous value of nexc() (it may indicate errors during clearing).
-  inline s_long hashx_clear() throw() { _d_reinit(); s_long nexc0 = nexc(); _set0_nexc(); return nexc0; }
+  inline s_long hashx_clear(__vecm_noarg1) throw() { _d_reinit(); s_long nexc0 = nexc(); _set0_nexc(); return nexc0; }
 
     // Copying the hash table and all entries.
     //  NOTE this->can_shrink() is set to dflt. true (not copied). this->nrsv() is set to min. value (not that of x).
@@ -3587,7 +3604,7 @@ struct hashx : protected vecm
     //          *this is empty. It will be reinitialized automatically on the next call of a public function.
     //          nexc() >= 1.
     //          integrity() == 0.
-  hashx(const hashx& x) throw() : vecm(typer<entry, _bs>, 0), _ht(typer<s_long, _bs>, 0), _pz(0)
+  hashx(const hashx& x __vecm_noarg) throw() : vecm(typer<entry, _bs>, 0), _ht(typer<s_long, _bs>, 0), _pz(0)
   {
     _d_reinit(); if (!_pz || x.integrity() < 0) { _nxf = (_nxf & _fm) | _xd; return; } if (cfge::cmode == 0) { return; }
     t_dyndata* _pz2 = _ff_mc3_p<__vecm_tu_selector>()->Fz_new_copy(_ht.ptd(), x._pz); if (!_pz2) { _nxf = (_nxf & _fm) | _xd; return; }
@@ -3615,7 +3632,7 @@ struct hashx : protected vecm
     //        The new object is initialized as hashx(x), but contains no entries.
     //        nexc() is increased by the errors during copying + possible errors during the old object destruction.
     //    -2 the function is called for a null pointer.
-  s_long hashx_copy(const hashx& x, bool is_tr) throw()
+  s_long hashx_copy(const hashx& x, bool is_tr __vecm_noarg) throw()
   {
     if (!this) { return -2; } if (this == &x) { return 1; } typedef t_hashx Q; enum { _nq = sizeof(Q) };
     if (is_tr) { union { meta::s_ll _st; char _stc[_nq]; }; Q* p = reinterpret_cast<Q*>(&_st); new (p) Q(x); if (p->nexc()) { p->~Q(); _ff_mc()._nx_add(_nxf, p->nexc()); return 0; } _set0_nexc(); this->~Q(); s_long ec = nexc(); bytes::memmove_t<Q>::F(this, p, _nq); _ff_mc()._nx_add(_nxf, ec); return 1; }
@@ -3629,7 +3646,7 @@ struct hashx : protected vecm
     //  Returns:
     //    a) a non-0 pointer when found a valid entry with the given key.
     //    b) 0 in all other cases.
-  inline const entry* find(const t_k& k) const throw() { if (!_pz) { return 0; }  entry* e; s_long ind; try { _find(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { return 0; } return e; }
+  inline const entry* find(const t_k& k __vecm_noarg) const throw() { if (!_pz) { return 0; }  entry* e; s_long ind; try { _find(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { return 0; } return e; }
 
     // Inserting an entry with key equal to k.
     //  Returns:
@@ -3638,7 +3655,7 @@ struct hashx : protected vecm
     //    c) -1 - failed to insert element (e.g. memory allocation error). No changes to hash.
     //    d) -2 - internal error. No changes.
     //  In cases c, d *ret_pentry is set to 0, *ret_pind to no_elem.
-  inline s_long insert(const t_k& k, const entry** ret_pentry = 0, s_long* ret_pind = 0) throw() { if (!_pz) { if (!_d_reinit()) { if (ret_pentry) { *ret_pentry = 0; } if (ret_pind) { *ret_pind = no_elem; } return -2; } } entry* e; s_long ind, res; try { res = _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; ind = no_elem; res = -2; } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; }  return res; }
+  inline s_long insert(const t_k& k, const entry** ret_pentry = 0, s_long* ret_pind = 0 __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { if (ret_pentry) { *ret_pentry = 0; } if (ret_pind) { *ret_pind = no_elem; } return -2; } } entry* e; s_long ind, res; try { res = _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; ind = no_elem; res = -2; } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; }  return res; }
 
     // Removing an entry with key equal to k.
     //  Returns:
@@ -3646,13 +3663,14 @@ struct hashx : protected vecm
     //    0 - the element did not exist.
     //    -1 - failed to remove the existing element (memory allocation error on non-trivial moving). No changes.
     //    -2 - internal error. No changes.
-  inline s_long remove(const t_k& k) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } if (_n == 0) { return 0; } try { return _remove(k, _pz->_kf.hash(k), _pz->_kf); } catch (...) { return -2; } }
+  inline s_long remove(const t_k& k __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } if (_n == 0) { return 0; } try { return _remove(k, _pz->_kf.hash(k), _pz->_kf); } catch (...) { return -2; } }
 
     // Accessing an entry with key equal to k, with automatic insertion.
     //  Returns:
     //      a) a reference to the value, corresponding to the newly inserted or existing key.
     //      b) throws hoxOpFailed when failed to insert (e.g. memory allocation / object construction error).
-  inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::hoxOpFailed; } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::hoxOpFailed; }
+  inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::hoxOpFailed; } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::hoxOpFailed; }
+  inline t_v& opsub(const t_k& k __vecm_noarg) throw (hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::hoxOpFailed; } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::hoxOpFailed; }
 
     // The number of entries in the hash.
   inline s_long n() const throw() { return _n; } // >=0
@@ -3661,7 +3679,7 @@ struct hashx : protected vecm
     //  Returns:
     //    a) a non-null pointer to a valid entry.
     //    b) 0 on ind out of range or any error.
-  inline const entry* operator()(s_long ind) const throw() { return pval<entry>(ind); }
+  inline const entry* operator()(s_long ind __vecm_noarg) const throw() { return pval<entry>(ind); }
 
 // hashx find2()
 //==section 11==============================================
@@ -3678,7 +3696,7 @@ struct hashx : protected vecm
     //    c) -1 - failed during search.
     //    d) -2 - internal error. Could not perform search.
     //  In cases b, c, d *ret_pentry is set to 0, *ret_pind to no_elem.
-  template<class K2, class Kf_> inline s_long find2(const K2& k, const Kf_& kf, const s_long* ph = 0, const entry** ret_pentry = 0, s_long* ret_pind = 0) const throw() { if (!_pz) { if (ret_pentry) { *ret_pentry = 0; } if (ret_pind) { *ret_pind = no_elem; } return -2; } entry* e; s_long ind, res; try { res = _find(k, ph ? *ph : kf.hash(k), kf, e, ind); } catch (...) { e = 0; ind = no_elem; res = -2; } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; } return res; }
+  template<class K2, class Kf_> inline s_long find2(const K2& k, const Kf_& kf, const s_long* ph = 0, const entry** ret_pentry = 0, s_long* ret_pind = 0 __vecm_noarg) const throw() { if (!_pz) { if (ret_pentry) { *ret_pentry = 0; } if (ret_pind) { *ret_pind = no_elem; } return -2; } entry* e; s_long ind, res; try { res = _find(k, ph ? *ph : kf.hash(k), kf, e, ind); } catch (...) { e = 0; ind = no_elem; res = -2; } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; } return res; }
 
     // Inserting an entry with key equal to k.
     //    K2 may differ from K.
@@ -3693,7 +3711,7 @@ struct hashx : protected vecm
     //    c) -1 - failed to insert element (e.g. memory allocation error). The container is not changed.
     //    d) -2 - internal error. The container is not changed.
     //  In cases c, d *ret_pentry is set to 0, *ret_pind to no_elem.
-  template<class K2, class Kf_> inline s_long insert2(const K2& k, const Kf_& kf, const s_long* ph = 0, const entry** ret_pentry = 0, s_long* ret_pind = 0) throw() { if (!_pz) { if (!_d_reinit()) { if (ret_pentry) { *ret_pentry = 0; } if (ret_pind) { *ret_pind = no_elem; } return -2; } } entry* e; s_long ind, res; try { res = _insert(k, ph ? *ph : kf.hash(k), kf, e, ind); } catch (...) { e = 0; ind = no_elem; res = -2; } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; }  return res; }
+  template<class K2, class Kf_> inline s_long insert2(const K2& k, const Kf_& kf, const s_long* ph = 0, const entry** ret_pentry = 0, s_long* ret_pind = 0 __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { if (ret_pentry) { *ret_pentry = 0; } if (ret_pind) { *ret_pind = no_elem; } return -2; } } entry* e; s_long ind, res; try { res = _insert(k, ph ? *ph : kf.hash(k), kf, e, ind); } catch (...) { e = 0; ind = no_elem; res = -2; } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; }  return res; }
 
     // Removing the entry with key equal to k.
     //    K2 may differ from K.
@@ -3706,7 +3724,7 @@ struct hashx : protected vecm
     //    0 - the element did not exist.
     //    -1 - failed to remove the existing element (e.g. memory allocation error). The container is not changed.
     //    -2 - internal error. The container is not changed.
-  template<class K2, class Kf_> inline s_long remove2(const K2& k, const Kf_& kf, const s_long* ph = 0) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } if (_n == 0) { return 0; } try { return _remove(k, ph ? *ph : kf.hash(k), kf); } catch (...) { return -2; } }
+  template<class K2, class Kf_> inline s_long remove2(const K2& k, const Kf_& kf, const s_long* ph = 0 __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } if (_n == 0) { return 0; } try { return _remove(k, ph ? *ph : kf.hash(k), kf); } catch (...) { return -2; } }
 
     // Removing the entry given by 0-based index or pointer.
     //    For success, the entry must belong to this container.
@@ -3715,8 +3733,8 @@ struct hashx : protected vecm
     //    0 - the entry does not exist (ind is out of range, e == 0 or not from this container).
     //    -1 - failed to remove the given entry. The container is not changed.
     //    -2 - internal error. The container is not changed.
-  inline s_long remove_i(s_long ind) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } return _remove_e(pval<entry>(ind)); }
-  inline s_long remove_e(const entry* e) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } return _remove_e(e); }
+  inline s_long remove_i(s_long ind __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } return _remove_e(pval<entry>(ind)); }
+  inline s_long remove_e(const entry* e __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { return -2; } } return _remove_e(e); }
 
     // Removing all elements.
     //    The space left is freed if can_shrink is true.
@@ -3727,7 +3745,7 @@ struct hashx : protected vecm
     //  0 if the container was empty (n() == 0). Nothing is done,
     //      except possible storage space reserve freeing.
     //  -2 internal error. The container is not changed.
-  s_long remove_all() throw()
+  s_long remove_all(__vecm_noarg1) throw()
   {
     if (!_pz) { return _d_reinit() ? 0 : -2; } s_long n_prev = _n; if (n_prev == 0) { if (this->vecm::can_shrink()) { el_reserve_n(0, true); } if (_ht.can_shrink()) { _ht.el_reserve_n(0, true); } return 0; }
     s_long nh2 = _ht.can_shrink() ? _base_min : (_rhdir && _rhind >= 0 ? _base2 : _base);
@@ -3740,18 +3758,18 @@ struct hashx : protected vecm
 
     // Normally, returns a valid ptr. to key hash/equality functor.
     //  On error, returns 0.
-  inline const f_kf* pkf() const throw() { if (!_pz) { if (!_d_reinit()) { return 0; } } return &_pz->_kf; }
+  inline const f_kf* pkf(__vecm_noarg1) const throw() { if (!_pz) { if (!_d_reinit()) { return 0; } } return &_pz->_kf; }
 
     // Normally, returns a valid ptr. to key hash/equality functor, used for creating default values (t_v).
     //    It may be modified or replaced if necessary.
     //  On error, returns 0.
-  inline f_ctf* pctf() const throw() { if (!_pz) { if (!_d_reinit()) { return 0; } } return &_pz->_c; }
+  inline f_ctf* pctf(__vecm_noarg1) const throw() { if (!_pz) { if (!_d_reinit()) { return 0; } } return &_pz->_c; }
 
     // Sets the new key hash/equality functor. (Only if n() == 0.)
     //    On success, returns true.
     //    On any error, returns false.
     //    On n() > 0, returns false (existing elements are already using the existing kf).
-  inline bool hashx_set_kf(const f_kf& kf) throw() { if (!_pz) { if (!_d_reinit()) { return false; } } if (_n > 0) { return false; } if (&kf == &_pz->_kf) { return true; } char bu[2][sizeof(f_kf)]; typedef vecm::_ff_tu<>::_tr_t<specf<f_kf> > tr; if (!tr::Fcopy_1only(&_pz->_kf, &kf, bu[1])) { return false; } tr::Fdestroy_prev_1only(&_pz->_kf, bu[1], bu[0], _nxf); return true; }
+  inline bool hashx_set_kf(const f_kf& kf  __vecm_noarg) throw() { if (!_pz) { if (!_d_reinit()) { return false; } } if (_n > 0) { return false; } if (&kf == &_pz->_kf) { return true; } char bu[2][sizeof(f_kf)]; typedef vecm::_ff_tu<>::_tr_t<specf<f_kf> > tr; if (!tr::Fcopy_1only(&_pz->_kf, &kf, bu[1])) { return false; } tr::Fdestroy_prev_1only(&_pz->_kf, bu[1], bu[0], _nxf); return true; }
 
     // Safety state of the container.
     //   1 - normal. nexc() == 0.
@@ -3766,16 +3784,16 @@ struct hashx : protected vecm
     //      The container functions, except the destructor, are unsafe.
     //  -3 - The function is called for a null pointer.
     //  See vecm integrity() for more details.
-  inline s_long integrity() const throw() { if (!this) { return -3; } return _bytes_tu::min_sl(this->vecm::integrity(), _ht.integrity()); }
+  inline s_long integrity(__vecm_noarg1) const throw() { if (!this) { return -3; } return _bytes_tu::min_sl(this->vecm::integrity(), _ht.integrity()); }
 
     // Getting a link to an entry. The link pval() returns const entry*,
     //    which has const k (key), h (hash fn. value), and non-const v (value).
     //    The fourth const member (q) should not be utilized by the client.
     //  For link1_cat, ind may be anything. It will be limited to the range [-1..n()].
     //    link1_cat(n()) is the same as link1_caend().
-  inline link1_t<entry, true, _bs> link1_cbegin() const throw() { return link1_t<entry, true, _bs>(*this, 0); }
-  inline link1_t<entry, true, _bs> link1_caend() const throw() { return link1_t<entry, true, _bs>(*this); }
-  inline link1_t<entry, true, _bs> link1_cat(s_long ind) const throw() { return link1_t<entry, true, _bs>(*this, ind); }
+  inline link1_t<entry, true, _bs> link1_cbegin(__vecm_noarg1) const throw() { return link1_t<entry, true, _bs>(*this, 0); }
+  inline link1_t<entry, true, _bs> link1_caend(__vecm_noarg1) const throw() { return link1_t<entry, true, _bs>(*this); }
+  inline link1_t<entry, true, _bs> link1_cat(s_long ind __vecm_noarg) const throw() { return link1_t<entry, true, _bs>(*this, ind); }
 
     // Max. number of entries, to which the container can grow
     //    without additional dynamic memory allocation
@@ -3785,7 +3803,7 @@ struct hashx : protected vecm
     //  NOTE Normally, n() <= nrsv(), but in certain cases, n() may be slightly larger,
     //    because of delayed reserve adjustment in response to n() growth.
     //    To ensure n() <= nrsv() at the moment, use hashx_set_reserve(n(), false).
-  inline s_long nrsv() const throw()
+  inline s_long nrsv(__vecm_noarg1) const throw()
   {
     if (!_pz) { return 0; } s_long n1 = this->vecm::nrsv();
     s_long n2; if (true) { _yk_reg s_long zmax = _ht.nrsv(); _yk_reg s_long z = _base;
@@ -3800,11 +3818,11 @@ struct hashx : protected vecm
     //    Amount of allocated memory may only increase, when entries are added
     //    and their number becomes larger than any previous.
     // NOTE On can_shrink() false, hash table is not resized on elements removal.
-  inline bool can_shrink() const throw() { return this->vecm::can_shrink(); }
+  inline bool can_shrink(__vecm_noarg1) const throw() { return this->vecm::can_shrink(); }
 
     // The number of exceptions in key, value constructors, destructors, and internal object destructors.
     //    Negative value means "too many". See also vecm nexc().
-  inline s_long nexc() const throw() { s_long n = _nxf; _ff_mc()._nx_add(n, _ht.nexc()); return n >> _xsh; }
+  inline s_long nexc(__vecm_noarg1) const throw() { s_long n = _nxf; _ff_mc()._nx_add(n, _ht.nexc()); return n >> _xsh; }
 
     // Setting the place reserve in the container enough for at least n entries.
     //    (This does not take into account possible allocations inside new k and v objects).
@@ -3817,7 +3835,7 @@ struct hashx : protected vecm
     //    false on n < 0 or any creation/allocation failure.
     //  NOTE The function does not resize the hash table,
     //    this is done only by insert/remove/clear functions.
-  inline bool hashx_set_reserve(s_long n, bool allow_shrink) throw()
+  inline bool hashx_set_reserve(s_long n, bool allow_shrink __vecm_noarg) throw()
   {
     if (n < 0) { return false; } if (!_pz) { if (n == 0) { return true; } if (!_d_reinit()) { return false; } }
     s_long n10 = this->vecm::nrsv(); s_long n20 = _ht.nrsv(); s_long n1 = n;
@@ -3831,10 +3849,10 @@ struct hashx : protected vecm
   }
 
     // Setting the value of can_shrink() flag.
-  inline void hashx_setf_can_shrink(bool x) throw() { _setf_can_shrink(x); _ht.vecm_setf_can_shrink(x); }
+  inline void hashx_setf_can_shrink(bool x __vecm_noarg) throw() { _setf_can_shrink(x); _ht.vecm_setf_can_shrink(x); }
 
     // Setting nexc() == 0. If integrity() was 0, it becomes 1.
-  inline void hashx_set0_nexc() const throw() { _set0_nexc(); }
+  inline void hashx_set0_nexc(__vecm_noarg1) const throw() { _set0_nexc(); }
 
 //  template<class _bs2> operator hashx<KA, VAF, Kf, _bs2>&() { return *(hashx<KA, VAF, Kf, _bs2>*)this; }
 //  template<class _bs2> operator const hashx<KA, VAF, Kf, _bs2>&() const { return *(const hashx<KA, VAF, Kf, _bs2>*)this; }
@@ -3885,15 +3903,15 @@ protected:
     //    true on success (_pz and other members are valid),
     //    false on failure (_pz == 0, other members are not initialized).
     //    NOTE nexc() keeps errs. counting.
-  inline bool _d_reinit() const throw() { return _ff_mc3_p<__vecm_tu_selector>()->Fd_reinit(const_cast<t_hashx*>(this)); }
+  inline bool _d_reinit(__vecm_noarg1) const throw() { return _ff_mc3_p<__vecm_tu_selector>()->Fd_reinit(const_cast<t_hashx*>(this)); }
     // Dynamic data cleanup. NOTE nexc() keep errs. counting.
-  inline void _d_destroy() const throw() { _ff_mc3_p<__vecm_tu_selector>()->Fd_destroy(const_cast<t_hashx*>(this)); }
+  inline void _d_destroy(__vecm_noarg1) const throw() { _ff_mc3_p<__vecm_tu_selector>()->Fd_destroy(const_cast<t_hashx*>(this)); }
   inline void _set0_nexc() const throw() { _nxf &= _fm; _ht.vecm_set0_nexc(); }
 
   inline s_long _hind(s_long h) const throw() { if (!_rhdir) { return h & _mask; } _yk_reg s_long r = h; r &= _mask; if (r < _rhind) { r = h; r &= _mask2; } return r; }
 
   template<class K2, class KeyFs>
-  s_long _find(const K2& k, s_long h, const KeyFs& _kf, entry*& ret_e, s_long& ret_ind) const throw()
+  s_long _find(const K2& k, s_long h, const KeyFs& _kf, entry*& ret_e, s_long& ret_ind __vecm_noarg) const throw()
   {
     try {
       _yk_reg s_long q = *_ht.pval_0u<s_long>(_hind(h));
@@ -3909,7 +3927,7 @@ protected:
   }
 
   template<class K2, class KeyFs>
-  s_long _insert(const K2& k, s_long h, const KeyFs& _kf, entry*& ret_e, s_long& ret_ind) throw()
+  s_long _insert(const K2& k, s_long h, const KeyFs& _kf, entry*& ret_e, s_long& ret_ind __vecm_noarg) throw()
   {
     try {
       _yk_reg s_long* pq = _ht.pval_0u<s_long>(_hind(h));
@@ -3972,7 +3990,7 @@ protected:
 
     // returns 1 - the element existed and was removed, 0 - the element did not exist, -1 - failed to remove the existing element (no changes were made).
   template<class K2, class KeyFs>
-  s_long _remove(const K2& k, s_long h, const KeyFs& _kf) throw()
+  s_long _remove(const K2& k, s_long h, const KeyFs& _kf __vecm_noarg) throw()
   {
     try {
       _yk_reg s_long* pq = _ht.pval_0u<s_long>(_hind(h));
@@ -4039,7 +4057,7 @@ protected:
     } catch (...) { return -2; }
   }
 
-  s_long _remove_e(const entry* e_) throw()
+  s_long _remove_e(const entry* e_ __vecm_noarg) throw()
   {
     if (!e_) { return 0; }
     s_long h = e_->h;
@@ -4063,7 +4081,7 @@ else { q = _base; q *= k_max; q -= q >> 2; if (_n >= q) { return 1; } _rhdir = -
     }
   }
 
-  void _rh_exp1() throw()
+  void _rh_exp1(__vecm_noarg1) throw()
   {
     s_long* p0 = _ht.pval_0u<s_long>(_rhind); _yk_reg s_long qx = *p0;
     if (qx != no_elem)
@@ -4077,7 +4095,7 @@ else { q = _base; q *= k_max; q -= q >> 2; if (_n >= q) { return 1; } _rhdir = -
       }
     }
   }
-  void _rh_exp1_k4() throw() // works better than _rh_exp1() for k_max >= 4
+  void _rh_exp1_k4(__vecm_noarg1) throw() // works better than _rh_exp1() for k_max >= 4
   {
     s_long* p0 = _ht.pval_0u<s_long>(_rhind); s_long q = *p0;
     if (q != no_elem)
@@ -4092,7 +4110,7 @@ else { q = _base; q *= k_max; q -= q >> 2; if (_n >= q) { return 1; } _rhdir = -
       for (s_long j2 = 0; j2 < j; ++j2) { *pqsb[j2] = no_elem; } for (s_long j2 = j + 1; j2 < k_grow; ++j2) { *pqsb[j2] = no_elem; }
     }
   }
-  void _rh_shr1() throw()
+  void _rh_shr1(__vecm_noarg1) throw()
   {
     s_long* pqa0(_ht.pval_0u<s_long>(_rhind));
     for (s_long j = 1; j < k_grow; ++j)

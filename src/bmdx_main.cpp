@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-03-26
+// rev. 2018-04-14
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -368,7 +368,7 @@ struct cv_ff
       L la(a.begin()); L lb(b.begin()); L lae(a.end()); L lbe(b.end());
       do {
         if (la == lae) { return lb != lbe; } if (lb == lbe) { return false; }
-        // ~!!+ add flag for locale-dependent comparing c1, c2
+        // ~!!! not impl. add flag for locale-dependent comparing c1, c2
         if (flags & unity::fkcmpSNocase) { T c1 = towlower(*la); T c2 = towlower(*lb); if (c1 != c2) { return c1 < c2; } }
           else { if (*la < *lb) { return true; } if (*lb < *la) { return false; } }
         ++la; ++lb;
@@ -1729,7 +1729,7 @@ void _static_conv::conv_String_Int(s_long fc, const std::wstring& x, meta::s_ll&
 
 void _static_conv::conv_String_Float(s_long fc, const std::wstring& x, double& retval)
 {
-  try { retval = str2f(x, 0, false); return; } catch (...) {}
+  try { retval = str2f(x, 0, false, true); return; } catch (...) {}
   if ((fc & cs_mask) == csLazy) { retval = 0.; return; }
   throw XUConvFailed("conv_String_Float.1", "", "", x);
 }
@@ -6014,13 +6014,16 @@ void paramline::x_encode1(const unity& x, std::wstring& retval, bool b_name, boo
             case utFloat:
             {
               double x1 = x.vfp();
+
+              if (!bmdx_str::conv::is_finite(x1)) { retval = L"\\f"; retval += _fls75(x1).wstr(); break; }
+
               const int prec_mimi = 11;
               int prec = 13;
               while (prec >= prec_mimi)
               {
                 _fls75 z1(x1, prec + 1, prec);
                 if (prec == prec_mimi) { retval = z1.wstr(); break; }
-                double x2 = str2f(z1.c_str()); _fls75 z2(x2, prec + 1, prec);
+                double x2 = str2f(z1.c_str(), 0, true, false); _fls75 z2(x2, prec + 1, prec);
                 if (z2 == z1) { retval = z1.wstr(); break; }
                 --prec;
               }
@@ -6259,7 +6262,7 @@ void paramline::x_decode1v(unity& v, bool v_ar_elem, s_long flags)
             if (pfx == L"\\e") { if (_trim(v.ref<utString>().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v.clear(); }
             else if (pfx == L"\\s") { v = v.ref<utString>().substr(2); x_replace2a(v.ref<utString>(), flags); }
             else if (pfx == L"\\i") { s = v.ref<utString>().substr(2); if (x_incorrect_integer_value_str(s, false)) { goto lLogicalDecodeError; } v = str2i(s); }
-            else if (pfx == L"\\f") { s = v.ref<utString>().substr(2); if (x_incorrect_numeric_value_str(s)) { goto lLogicalDecodeError; } v = str2f(s); }
+            else if (pfx == L"\\f") { s = v.ref<utString>().substr(2); if (x_incorrect_numeric_value_str(s, true)) { goto lLogicalDecodeError; } v = str2f(s, 0, true, true); }
             else if (pfx == L"\\d") { s = v.ref<utString>().substr(2); try { v = unity(s).val<utDate>(); } catch (...) { goto lLogicalDecodeError; } }
             else if (pfx == L"\\0") { if (_trim(v.ref<utString>().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = false; }
             else if (pfx == L"\\1") { if (_trim(v.ref<utString>().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = true; }
@@ -6291,7 +6294,7 @@ lAutoDetectType:
 
         if (x_decode1v_auto_date(s, v)) return;
         if (!x_incorrect_integer_value_str(s, false)) { v = str2i(s); return; }
-        if (!x_incorrect_numeric_value_str(s)) { v = str2f(s); return; }
+        if (!x_incorrect_numeric_value_str(s, false)) { v = str2f(s); return; }
         if (s == L"true") { v = true; return; }
         if (s == L"false") { v = false; return; }
         x_replace2a(v.ref<utString>(), flags);
@@ -6311,42 +6314,21 @@ bool paramline::x_decode1v_auto_date(const std::wstring& s, unity& retval) throw
     catch(...) { return false; }
 }
 
-bool paramline::x_incorrect_numeric_value(const unity& x, bool allow_empty)
+bool paramline::x_incorrect_numeric_value_str(const std::wstring& s, bool b_nans)
 {
-  switch(x.utype())
-  {
-    case utInt: case utFloat: return false;
-    case utEmpty: return !allow_empty;
-    case utString: return x_incorrect_numeric_value_str(x.ref<utString>());
-    default: return true;
-  }
-}
-bool paramline::x_incorrect_numeric_value_str(const std::wstring& s)
-{
-    if (s.find_first_not_of(L"0123456789.Ee + -") != nposw) return true;
-    try { double x = str2f(s, 0., false); return !(x == x); } catch(...) { return true; }
-}
-bool paramline::x_incorrect_integer_value(const unity& x, bool allow_empty, bool allow_float_str)
-{
-  switch(x.utype())
-  {
-    case utInt: return false;
-    case utFloat: { try { double y = x.ref<utFloat>(); return std::floor(y) != y; } catch(...) { return true; } return false; }
-    case utEmpty: return !allow_empty;
-    case utString: return x_incorrect_integer_value_str(x.ref<utString>(), allow_float_str);
-    default: return true;
-  }
+    if (s.find_first_not_of(L"0123456789.Eeinfa +-") != nposw) return true;
+    try { (void)str2f(s, 0., false, b_nans); return false; } catch(...) { return true; }
 }
 bool paramline::x_incorrect_integer_value_str(const std::wstring& s, bool allow_float_str)
 {
   if (allow_float_str)
   {
-    if (s.find_first_not_of(L"0123456789.Ee + -") != nposw) { return true; }
-    try { (void)str2i(s, 0, false); double y = str2f(s, 0., false); return std::floor(y) != y; } catch(...) { return true; }
+    if (s.find_first_not_of(L"0123456789.Eeinfa +-") != nposw) { return true; }
+    try { (void)str2i(s, 0, false); double y = str2f(s, 0., false, false); return std::floor(y) != y; } catch(...) { return true; }
   }
   else
   {
-    if (s.find_first_not_of(L"0123456789 + -") != nposw) { return true; }
+    if (s.find_first_not_of(L"0123456789 +-") != nposw) { return true; }
     try { (void)str2i(s, 0, false); return false; } catch(...) { return true; }
   }
 }
@@ -7199,8 +7181,10 @@ namespace bmdx
           case pdTempDir:
           {
               // <Wnds>
-              std::string sv; __bmdx_std_getenv("TEMP", sv); //~!!! what if getenv fails?
-              s = join_path(sv, sPath);
+              std::string sv;
+              if (__bmdx_std_getenv("TEMP", sv) || __bmdx_std_getenv("TMP", sv))
+                { s = join_path(sv, sPath); }
+              else { throw XUExec("file_utils::complete_path.1"); }
               // </Wnds>
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
               break;
@@ -7739,7 +7723,7 @@ namespace bmdx
               {
                 #if defined(__clang__) // leave deepb. off (not optimal only if the loaded .so is GCC, and linked statically to C and C++ lib.)
                 #elif defined(__GNUC__)
-                    //~!!! this may be not optimal for g++ exe build with dynamic C lib.
+                    //~!!! NOTE RTLD_DEEPBIND may be bad choice for g++ executable built with dynamic C lib.
                     mode |= RTLD_DEEPBIND;
                 #else
                 #endif
@@ -9436,7 +9420,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
     }
     else
     {
-      // ~!!! later: LM, R, LMA, RPA, RMA
+      // ~!!! not impl. LM, R, LMA, RPA, RMA
       return -11;
     }
   } catch (...) { return -2; }
@@ -9705,7 +9689,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
       }
       else
       {
-        //~!!! remote request:
+        //~!!! not impl. remote request:
         //  recode and verify qs and recv, also verify their matching
         //  the current op. is pending:
         //    match rt
@@ -10119,7 +10103,7 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cch_session& rses, cons
 
       const hashx<std::wstring, s_long>& h_qs = hsubs(i1)->v;
       address da; da.set_addr(hsubs(i1)->k);
-        if (!da.isLP()) { ++n1; continue; } //~!!+ send request to remote subscriber (remove qs from input list)
+        if (!da.isLP()) { ++n1; continue; } //~!!! not impl. send request to remote subscriber (remove qs from input list)
         if (!sln1chk_subscriber(da.wstr_sln_1())) { ++n1; continue; }
       std::wstring dsln = da.wstr_sln();
       unity da_u = da.addr();
@@ -10184,7 +10168,7 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cch_session& rses, cons
               }
             }
             else if (sa.isLPA()) { continue; } // subscription source addresses are expected to be dereferenced
-            else {} //~!!+ send request to remote qs slot (remove subscriber from output list)
+            else {} //~!!! not impl. send request to remote qs slot (remove subscriber from output list)
           }
         } catch (...) { bf = true; }
       }
