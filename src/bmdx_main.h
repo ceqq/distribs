@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-04-14
+// rev. 2018-04-29
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -411,7 +411,7 @@ namespace bmdx
       // Returned value:
       //    != 0 - if the value has been registered, and its state corresponds to flags.
       //    0 - failure, or storage state does not satisfy flags.
-    inline t_value* px(s_long flags = 2) {  if (!_pst_m) { _reg_stg(); if (!_pst_m) { return 0; } } int qq = _pst_m->init; (void)qq; if (flags & (1 << _pst_m->init)) { return (t_value*)&_pst_m->stg[0]; } return 0; }
+    inline t_value* px(s_long flags = 2) {  if (!_pst_m) { _reg_stg(); if (!_pst_m) { return 0; } } int qq = _pst_m->init; if (sizeof(qq)) {} if (flags & (1 << _pst_m->init)) { return (t_value*)&_pst_m->stg[0]; } return 0; }
       // Returned value: same as px(), but throws exception if the pointer is 0.
     inline t_value& rx(s_long flags = 2)        { t_value* p = px(flags); if (p) { return *p; } if (!_pst_m) { throw XUExec("rx.1", typeid(t_svf).name()); } throw XUExec("rx.2", typeid(t_svf).name()); }
 
@@ -1103,10 +1103,10 @@ namespace bmdx
       inline operator T*() const { return p; }
       inline operator bool() const { return bool(p); }
       inline T* operator->() const { check(); return p; }
-      inline bool operator==(const checked_ptr& p2) { return p == p2.p; }
-      inline bool operator==(const T* p2) { return p == p2; }
-      inline bool operator!=(const checked_ptr& p2) { return p == p2.p; }
-      inline bool operator!=(const T* p2) { return p != p2; }
+      inline bool operator==(const checked_ptr& p2) const { return p == p2.p; }
+      inline bool operator==(const T* p2) const { return p == p2; }
+      inline bool operator!=(const checked_ptr& p2) const { return p == p2.p; }
+      inline bool operator!=(const T* p2) const { return p != p2; }
 
       inline void check() const throw(XUExec) { if (!p) { throw XUExec("checked_ptr.p == 0: ", typeid(T*).name()); } }
     };
@@ -1522,19 +1522,22 @@ namespace bmdx
       //      1) utype() must exactly match the given type.
       //      2) In ref(ind), ind must be valid arrlb-based array index.
       //      3) If unity is utString, created in another binary module, it must be compatible with the current module.
-      //      4) Feature of ref<T>(): if unity is utObject, and the contained object
-      //        is a) valid object of type T b) valid cref_t<T> to such object,
+      //
+      //      4) Feature of ref<T>():
+      //        if unity is utObject, and the contained object is
+      //          a) valid object of type T,
+      //          b) valid cref_t<T> to such object,
       //        a reference to object T is returned.
       //
       //        Object type matching:
       //          a) Both T and the contained object have same static type name.
-      //              A reference is returned if T was created in the current binary module
-      //                and the binary module created with same compiler version.
-      //              NOTE In case (a), if the contained object is from other binary module,
-      //                ensuring its compatibility with the current module is the client's responsibility.
-      //                In part., sizeof(T) is not checked (use directly o_api::prefo for that).
+      //              In this case, the returned reference is unconditionally valid only if the contained object
+      //              has been created in the current binary module. If it is from other binary module,
+      //              the returned reference may be compatible or incompatible, in part., sizeof(T) is not checked.
+      //              The client is responsible for such checks (see also o_api::prefo).
       //
-      //          b) Both T and the contained object have same cross-module type index (see type_index_t in vecm_hashx.h for details).
+      //          b) Both T and the contained object have same cross-module type index
+      //              (see type_index_t in vecm_hashx.h for details).
       //              NOTE Several types have cross-module indexes pre-declared:
       //                  char, double, s_long, meta::s_ll -- in vecm_hashx.h.
       //                  _unitydate, unity -- below in bmdx_main.h.
@@ -1947,8 +1950,8 @@ namespace bmdx
     s_long uaUb();
     unity& uaS_set(s_long new_S);
     unity& uaS_set(s_long new_S, const unity& v);
-    unity& ua_resize(s_long ind, s_long m);
-    unity& ua_resize(s_long ind, s_long m, const unity& v);
+    unity& ua_resize(s_long ind, s_long m); // see arr_insrem for ind, m
+    unity& ua_resize(s_long ind, s_long m, const unity& v); // see arr_insrem for ind, m
     unity& uaLb_set(s_long new_L);
     unity& ua_fill(s_long utt, const unity& v = unity()); // -"-; creates new array with same bounds as existing, + fills with v; on err. gen. exc., the object is not changed
 
@@ -2002,8 +2005,13 @@ namespace bmdx
     bool hash_empty(const unity& k) const;
     bool hash_locate(const unity& k, bool insert = false);
     unity& hash(const unity& k);
+      // keep_first: true keeps existing value if k already exists in the hashlist.
+      // pos_before: list element, before which to make insertion of (k, v) pair if k did not exist.
+      //    May be
+      //      a) hashl_noel() - dflt., end of list.
+      //      b) in range [0..hashS()-1] - pos. as returned by hashl_pos_c().
       // Returns: true if k was inserted, false if it existed.
-    bool hash_set(const unity& k, const unity& v, bool keep_first = false);
+    bool hash_set(const unity& k, const unity& v, bool keep_first = false, s_long pos_before = hashx_common::no_elem);
     bool hash_del(const unity& k);
 
     s_long hashS();
@@ -2020,13 +2028,20 @@ namespace bmdx
     unity& hashi(s_long ind); // returns value at 1-based ind
     const unity& hashi_c(s_long ind) const; // returns value at 1-based ind
 
-      // In hashl, pos is 0-based.
-      //    Next, prev.: valid pos is (hashl_noel(),  [0..hashS()-1]). On invalid pos, hashl_noel() will be returned.
-      //    Key, value: valid pos. is [0..hashS()-1]. On invalid pos, an exception is generated.
-      //  Negative hashl_noel() serves as before-beginning and after-end list pos.
-      //    next/prev fns. generate list order, starting from hashl_noel().
-      //  NOTE Access by pos is fast, but pos numeric values are not in ascending order
-      //    if one or more elements were removed so far.
+      // hashl*: access to hashlist pairs (k, v) in the list order. By default, the order that of keys insertion.
+      // In hashl*, position is 0-based.
+      //    Next, prev.: valid pos is one of (hashl_noel(),  [0..hashS()-1]). If invalid pos. given, hashl_noel() is returned.
+      //    Key, value: valid pos. is [0..hashS()-1]. If invalid pos. given, an exception is generated.
+      //  Special value hashl_noel() (negative number) serves as single artificial position for at once "before-beginning" and "after-end".
+      // NOTE When an element (any except the last one) is deleted from the hashlist,
+      //    numeric value of the last element in hashlist is changed:
+      //    new numeric value will be that of the deleted element.
+      //    List order does not change anyway.
+      //    The client may rely on the following:
+      //    1. For any pos, when elem. at next(pos) is deleted,
+      //      all numeric values for positions from list start up to and including pos are kept.
+      //      (next(pos) returns different value before and after the deletion.)
+      //    2. When new (k, v) pair is inserted, all numeric positions of the existing elements are kept.
     s_long hashl_noel() const { return hashx_common::no_elem; }
     s_long hashl_first();
     s_long hashl_last();
@@ -2034,6 +2049,7 @@ namespace bmdx
     s_long hashl_prev(s_long pos);
     const unity& hashl_key(s_long pos);
     unity& hashl(s_long pos);
+    s_long hashl_pos_c(const unity& k) const; // returns pos. of k, or hashl_noel() if k not found
 
 
 
@@ -3171,7 +3187,7 @@ namespace bmdx
     unity& operator[] (const unity& k) throw (exc_subscript);
     const entry* operator() (s_long ind) const throw();
     const entry* find(const unity& k, s_long* ret_pind = 0) const throw();
-    s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0) throw();
+    s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = hashx_common::no_elem) throw();
     s_long remove(const unity& k) throw();
     s_long remove_i(s_long ind) throw();
     const entry* h(s_long ind_h) const throw();
@@ -3322,34 +3338,43 @@ namespace
   std::string cmd_arg1(const std::string& s, bool b_shell);
   std::string cmd_arg1(const std::wstring& s, bool b_shell);
 
-  const std::string cCR="\r";
-  const std::string cLF="\n";
-  const std::string cCRLF="\r\n";
-  const std::wstring wCR=L"\r";
-  const std::wstring wLF=L"\n";
-  const std::wstring wCRLF=L"\r\n";
-
-  const std::wstring __wBSCRLF=L"\\\r\n";
+  const std::string cCR = "\r";
+  const std::string cLF = "\n";
+  const std::string cCRLF = "\r\n";
+  const std::wstring wCR = L"\r";
+  const std::wstring wLF = L"\n";
+  const std::wstring wCRLF = L"\r\n";
 
   std::string cpathsep(); // single path separator character
   std::wstring wpathsep(); // single path separator character
   std::string cpathsep2(); // two path separator characters
   std::wstring wpathsep2(); // two path separator characters
 
-  // wide character string comparison (s1>s2: 1, s1==s2: 0, s1<s2: -1)
+    // Wide character string comparison (s1>s2: 1, s1==s2: 0, s1<s2: -1)
   s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case);
 
-  std::string replace(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase = false); // replace 'from' string occurences in 's' by 'to', return the result
-  std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase = false); // replace 'from' string occurences in 's' by 'to', return the result
+    // Non-recursive replacement.
+    // Replace 'from' string occurences in 's' by 'to', return the result.
+    // If nmax >= 0, no more than nmax leftmost replacements are done.
+  std::string replace(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase = false, s_ll nmax = -1);
+  std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase = false, s_ll nmax = -1);
 
-  std::wstring trim(const std::wstring& s, const std::wstring& swhat = L" ", bool b_left = true, bool b_right = true); // trim all 'swat' string occurences in the beginning and end of the string 's'
-  std::string trim(const std::string& s, const std::string& swhat = " ", bool b_left = true, bool b_right = true); // trim all 'swat' string occurences in the beginning and end of the string 's'
+    // Trim all 'swat' string occurences in the beginning and end of the string 's'
+  std::wstring trim(const std::wstring& s, const std::wstring& swhat = L" ", bool b_left = true, bool b_right = true);
+  std::string trim(const std::string& s, const std::string& swhat = " ", bool b_left = true, bool b_right = true);
 
-  // true if str matches the given pattern; not greedy, recognizes constructs similar to: [a-zA-Z], *, ?, # (i.e. digit)
+    // NOTE l/u-case functions depend on the currently set locale.
+  std::string lcase(const std::string& s);
+  std::wstring lcase(const std::wstring& s);
+  std::string ucase(const std::string& s);
+  std::wstring ucase(const std::wstring& s);
+
+    // true if str matches the given pattern.
+    //  Recognizes constructs similar to: [a-zA-Z], *, ?, # (i.e. digit)
   bool wstring_like(const std::wstring& str, const std::wstring& ptn0);
 
-  unity split(const std::wstring&, const std::wstring& delim, meta::s_ll nmax = -1); // returns 0-based array
-  unity split(const std::string&, const std::string& delim, meta::s_ll nmax = -1); // returns 0-based array
+  unity split(const std::wstring&, const std::wstring& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
+  unity split(const std::string&, const std::string& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
   std::vector<std::string> splitToVector(const std::string&, const std::string& delim, meta::s_ll nmax = -1);
   std::vector<std::wstring> splitToVector(const std::wstring&, const std::wstring& delim, meta::s_ll nmax = -1);
   std::string join(const unity& asrc, const std::string& delim);
@@ -3457,31 +3482,69 @@ namespace
     unity& decode1v(const std::wstring& ssrc, unity& dest);
     unity decode1v(const std::wstring& ssrc);
 
-      // Decoding multiline text that represents a tree of values. Default behavior:
-      //  1. Clears mh (or removes exiting elements if it's already of proper type).
-      //  2. Splits ssrc, using pterm2.
-      //  3. Decodes each resulting substring and merges the result into mh,
-      //      keeping existing end values if met a duplicate key. For duplicate subree keys,
-      //      contents are merged.
-      //    Normally, each substring specifies a path (an array under an empty key, in form "=|key1|key2..."),
-      //      where the decoded branch (all substring's key/value pairs including the path) will reside in the resulting hash.
-      //    If no path specified, the decoded branch is merged into the root of mh.
-      //    NOTE By default, in each branch (except root), the path is stored as pair (empty string, utUnityArray of keys).
-      //      This should be taken into account when iterating through branch values.
-      //      To not include branch paths, use flag 0x20 (see below).
+      // Decode multiline text, representing a tree of values.
+      //  Default behavior:
+      //  1. Clear mh and set its type to map or hash (for useMap true or false resp.).
+      //  2. Split ssrc, using pterm2.
+      //  3. Decode each resulting substring and merge the result into mh,
+      //      On duplicate key, the existing (i.e. first set) value is kept.
+      //      For lines with the same branch paths, contents are merged into the same branch of mh.
+      //  Branch path rules:
+      //  1. Normally, in a substring of ssrc, "" (empty string) key specifies a branch path, e.g. "=|key1|key2".
+      //      All other keys and values from this substring are put into the branch,
+      //      e.g. mh.hash("key1").hash("key2").hash(k[i]) = v[i].
+      //  2. If no path specified (or "" key's value is not an array), k[i], v[i] are merged into the root (mh itself).
+      //  3. Path element type: string, number, empty, or any other type, normally supported by paramline::decode() for array elements.
       // flags:
       //  0x1 - for mh and branches, use map as target container type instead of hash.
-      //  0x2 - overwrite value or branch if met duplicate key.
-      //    (Branch by value, value by branch, value by value. Branches having same path are merged).
+      //  0x2 - overwrite value in a branch if met duplicate path.
+      //      (Branch by value, value by branch, value by value. Branches having same path are always merged).
       //  0x4 (decode_tree(mh) only) - do not clear mh if it's already associative, merge ssrc tree into mh.
       //    This has the following effects:
       //      1) flag 0x1 is ignored, the input mh type (map or hash (dflt.)) is used for all new nodes.
       //      2) mh is not cleared, all decoded branches are merged into it.
       //      3) all new nodes inherit mapFlags (or hashFlags) from mh.
-      //  0x8 - ignore substring starting with regexp "[\t ]*//". This allows skipping single-line C-like comments.
+      //  0x8 - ignore substring like regexp. "^[\t ]*//.*$". This allows for writing single-line C-style comments.
       //  0x10 - convert distinct CR, LF and LFCR sequences to CRLF before decoding.
-      //  0x20 - include branch paths (pairs (empty string, branch path)) into the decoded tree.
-      //        If this flag is not set, empty string keys may be used in branch paths (same as non-empty).
+      //  0x20 - include branch paths, i.e. pairs ("", branch path as utUnityArray of keys),
+      //      into all branches of the decoded tree.
+      //      (NOTE By default, root path (empty array) is not assigned to mh[""], unless explicitly specified: "=\z").
+      //      When 0x20 flag is not set, "" (empty string) key does not occur in mh.
+      //  0x40 - treat lines containing braces and optional spaces (like regexp. "[ {}]+") as start/end of multiline key/value block.
+      //
+      //    A. decode_tree() without 0x40 flag:
+      //      begin: process lines.
+      //      (path[, keys/values]): branch path = path; branch[key[i]] = value[i].
+      //      keys/values only: branch path = empty path (i.e. root); mh[key[i]] = value[i].
+      //      line without path or keys: skip.
+      //
+      //    B. decode_tree() with 0x40 flag:
+      //      begin: stack.front = empty path (i.e. root); last_path = empty path; process lines.
+      //      (path[, keys/values]): last_path = stack.back + path; branch path = last_path; branch[key[i]] = value[i].
+      //      (keys/values only): last_path = stack.back; branch path = last_path; branch[key[i]] = value[i].
+      //      line without path or keys: skip.
+      //      {: if (last_path == stack.back) { last_path += empty elem. (utEmpty); } stack.push(last_path).
+      //      }: last_path = stack.size > 1 ? stack.pop() : stack.front.
+      //
+      //      Example. The following two sequences are equivalent, when decoded with 0x40 flag:
+      //
+      //      =|playback; autostart = true; stop1 = true
+      //      =|playback|lists; /home/list1.m3u; /home/list2.m3u; /home/list3.m3u;
+      //
+      //      =|playback
+      //      {
+      //        autostart = true; stop1 = true
+      //        =|lists
+      //        {
+      //          /home/list1.m3u;
+      //          /home/list2.m3u;
+      //          /home/list3.m3u;
+      //        }
+      //      }
+      //
+      //      NOTE Braces are recognized only if the line does not contain any other characters except spaces,
+      //        otherwise brace will be treated as part of a key.
+      //
       // Returns: mh.
       // NOTE With default pterm2, literal CRLF pairs in ssrc must be replaced with special sequence "\~".
       //  See also decode().
@@ -3580,8 +3643,9 @@ namespace
       pdCurDir, //the current directory
       pdThisAppDir, //path to the current application
       pdTempDir, //Windows: %systemroot%\temp, Linux: %TMPDIR%
-      pdUserDefinedDir
+      pdUserDefinedDir,
           //- user-defined directory, passed as second argument; if none, the path to the current application is used
+      pdDoNotChange // do not complete path
   };
   struct file_utils
   {
@@ -3784,7 +3848,7 @@ namespace
         t_elem e(x, true); if (!e.has_ref()) { return -4; }
         if (true)
         {
-          t_lock __lock; (void)__lock;
+          t_lock __lock; if (sizeof(__lock)) {}
           if (_irec == r) { s -= 1; if (s < 0) { s = _elems.n(); } *_elems.pval_0u<t_elem>(s) = e; return 0; }
         }
       }
@@ -3824,7 +3888,7 @@ namespace
         t_elem x;
         if (true)
         {
-          t_lock __lock; (void)__lock;
+          t_lock __lock; if (sizeof(__lock)) {}
           t_elem* p = _elems.pval_0u<t_elem>(r); x = *p;
           if (b_pop) { p->clear(); _irec = r2; }
         }

@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-04-14
+// rev. 2018-04-29
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -41,6 +41,7 @@ namespace
   const _t_sz nposc = std::string::npos;
   struct static_init_lks {};
   bmdx::unity_common::__Psm _rootmodsm(0);
+  // const std::wstring& __wBSCRLF() { static const std::wstring x(L"\\\r\n"); return x; }
 }
 
 namespace bmdx
@@ -82,11 +83,10 @@ namespace bmdx
   std::wstring trim(const std::wstring& s, const std::wstring& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
   std::string trim(const std::string& s, const std::string& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
 
-    // NOTE l/u case functions work with the currently set locale.
-  static std::string _lcase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(tolower(s[pos])); } return s2; }
-//  static std::string _ucase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(toupper(s[pos])); } return s2; }
-  static std::wstring _lcase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towlower(s[pos])); } return s2; }
-//  static std::wstring _ucase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towupper(s[pos])); } return s2; }
+  std::string lcase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(tolower(s[pos])); } return s2; }
+  std::string ucase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(toupper(s[pos])); } return s2; }
+  std::wstring lcase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towlower(s[pos])); } return s2; }
+  std::wstring ucase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towupper(s[pos])); } return s2; }
 
   static bool _wcsileftincl1(const wchar_t* ps1, const wchar_t* ps2) { if (!ps1 || !ps2) { return false; } while (*ps2) { if (!(*ps1 && std::towlower(*ps1) == std::towlower(*ps2))) { return false; } ++ps1; ++ps2; } return true; }
 
@@ -129,6 +129,33 @@ namespace bmdx
     return q;
   }
 
+    // Find (in s) pos. of first character which does not occur in chars.
+    //  Search only in range [begin..end). The range is automatically adjusted to fit into s.
+    // chars: 0-terminated string. (\0 character cannot be specified as ignored by search.)
+    // Returns:
+    //  a) if found -- the position in range [begin..end).
+    //  b) if not found -- s.length().
+  _t_wz _find_char_except(const std::wstring& s, _t_wz begin, _t_wz end, const wchar_t* chars) throw()
+  {
+    if (begin <= 0) { begin = 0; }
+    if (end > s.length()) { end = s.length(); }
+    if (!*chars || end <= begin) { return s.length(); }
+    for (_t_wz ic = begin; ic < end; ++ic)
+    {
+      _yk_reg wchar_t q = s[ic];
+      _yk_reg wchar_t c = 0;
+      _yk_reg const wchar_t* chars2 = chars;
+      while (true)
+      {
+        c = *chars2++;
+        if (!c) { break; }
+        if (q == c) { break; }
+      }
+      if (!c) { return ic; }
+    }
+    return s.length();
+  }
+
 namespace
 {
   typedef meta::assert<meta::same_t<unity::t_hash::entry, hashx<unity, unity>::entry>::result>::t_true __check1;
@@ -169,7 +196,7 @@ struct _unity_hl_impl : public unity::_hl_i, protected yk_c::hashx<unity, unity,
   unity& operator[] (const unity& k) throw (exc_subscript);
   const entry* operator() (s_long ind) const throw();
   const entry* find(const unity& k, s_long* ret_pind = 0) const throw();
-  s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0) throw();
+  s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = -1) throw();
   s_long remove(const unity& k) throw();
   s_long remove_i(s_long ind) throw();
   const entry* h(s_long ind_h) const throw();
@@ -189,7 +216,7 @@ private:
   mutable vecm _indk; // n == hash n
 
   bool _a_rsv_1() throw();
-  bool _a_appended() throw();
+  bool _a_inserted(s_long ind_before = -1) throw();
   void _a_removed(s_long ind) throw();
   void _a_cleared() throw();
   bool _a_indk() const throw();
@@ -302,7 +329,7 @@ struct cv_ff
       if (flags & unity::fkcmpSNocase)
       {
         if (p1->size() != p2->size()) { return false; }
-        _t_wz n = p1->size(); for (_t_wz pos = 0; pos < n; ++pos) { if (towlower((*p1)[pos]) != towlower((*p2)[pos])) { return false; } }
+        _t_wz n = p1->size(); for (_t_wz pos = 0; pos < n; ++pos) { if (std::towlower((*p1)[pos]) != std::towlower((*p2)[pos])) { return false; } }
         return true;
       }
       else { return *p1 == *p2; }
@@ -369,7 +396,7 @@ struct cv_ff
       do {
         if (la == lae) { return lb != lbe; } if (lb == lbe) { return false; }
         // ~!!! not impl. add flag for locale-dependent comparing c1, c2
-        if (flags & unity::fkcmpSNocase) { T c1 = towlower(*la); T c2 = towlower(*lb); if (c1 != c2) { return c1 < c2; } }
+        if (flags & unity::fkcmpSNocase) { T c1 = T(std::towlower(*la)); T c2 = T(std::towlower(*lb)); if (c1 != c2) { return c1 < c2; } }
           else { if (*la < *lb) { return true; } if (*lb < *la) { return false; } }
         ++la; ++lb;
       } while (true);
@@ -3147,7 +3174,7 @@ s_long cv_ff::u_clear::Fu_clear(unity* p, s_long flags)
 unity* unity::_path_u(const std::wstring& keylist, bool forced) throw()
 {
   try {
-    std::wstring s2 = _trim(keylist, L" ", true, false); if (s2.length() == 0) { s2 = L"=|" + keylist; } else if (s2[0] == L'=') {} else if (s2[0] == L'|') { s2 = L"=" + keylist; } else { s2 = L"=|" + keylist; }
+    std::wstring s2 = _trim(keylist, L" ", true, false); if (s2.length() == 0) { s2 = L"=|"; } else if (s2[0] == L'=') {} else if (s2[0] == L'|') { s2 = L"=" + keylist; } else { s2 = L"=|" + keylist; }
     unity k; k = paramline().decode(s2, false).hash(L"");
     if (!k.isArray()) { return 0; }
     unity* node = this;
@@ -4000,7 +4027,7 @@ unity& _unity_hl_impl::operator[] (const unity& k) throw (exc_subscript)
 {
   const t_hash::entry* e(0);
   s_long res = this->t_hash::insert(k, &e);
-  if (res > 0) { if (!_a_appended()) { this->t_hash::remove_e(e); res = -1; } }
+  if (res > 0) { if (!_a_inserted()) { this->t_hash::remove_e(e); res = -1; } }
   if (res >= 0) { return e->v; } throw exc_subscript();
 }
   // Returns same as hashx remove_all (>= 0 - success, < 0 - failure, no changes.)
@@ -4015,13 +4042,16 @@ bool _unity_hl_impl::_a_rsv_1() throw()  // reserve place in list and indk befor
 
   // Adjustment notifications for list and keys index, on each hash change.
 
-bool _unity_hl_impl::_a_appended() throw() // adjust list and indk after adding 1 elem. to hash, true on success
+bool _unity_hl_impl::_a_inserted(s_long ind_before) throw() // adjust list and indk after adding 1 elem. to hash, true on success
 {
+  if (ind_before == -1) {}
+    else { if (!(ind_before >= 0 && ind_before < n())) { return false; } }
   s_long i = n() - 1; if (i < 0 || i != _list.n() - 1) { return false; }
   if (!_list.el_append<meta::s_ll>(-1)) { return false; }
-  __insert(i, _prev_of(-1));
-  if (i == _indk.n() && _indk.el_append<s_long>(i)) { return true; }
-  if (_indk.n()) { _indk.vecm_clear(); } return true;
+  __insert(i, _prev_of(ind_before));
+  if (ind_before == -1 && i == _indk.n() && _indk.el_append<s_long>(i)) { return true; }
+  if (_indk.n()) { _indk.vecm_clear(); }
+  return true;
 }
 void _unity_hl_impl::_a_removed(s_long ind) throw() // adjust list and indk after removing 1 elem. from hash
 {
@@ -4083,7 +4113,7 @@ s_long unity::_hl_i::n() const throw() { return static_cast<const _unity_hl_impl
 unity& unity::_hl_i::operator[] (const unity& k) throw (exc_subscript) { return static_cast<_unity_hl_impl*>(this)->operator[](k); }
 const unity::_hl_i::entry* unity::_hl_i::operator() (s_long ind) const throw() { return static_cast<const _unity_hl_impl*>(this)->operator()(ind); }
 const unity::_hl_i::entry* unity::_hl_i::find(const unity& k, s_long* ret_pind) const throw() { return static_cast<const _unity_hl_impl*>(this)->find(k, ret_pind); }
-s_long unity::_hl_i::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind) throw() { return static_cast<_unity_hl_impl*>(this)->insert(k, ret_pentry, ret_pind); }
+s_long unity::_hl_i::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) throw() { return static_cast<_unity_hl_impl*>(this)->insert(k, ret_pentry, ret_pind, ind_before); }
 s_long unity::_hl_i::remove(const unity& k) throw() { return static_cast<_unity_hl_impl*>(this)->remove(k); }
 s_long unity::_hl_i::remove_i(s_long ind) throw() { return static_cast<_unity_hl_impl*>(this)->remove_i(ind); }
 const unity::_hl_i::entry* unity::_hl_i::h(s_long ind_h) const throw() { return static_cast<const _unity_hl_impl*>(this)->h(ind_h); }
@@ -4118,7 +4148,7 @@ void _unity_hl_impl::assign(const _unity_hl_impl& x)
 s_long _unity_hl_impl::n() const throw() { return _n; }
 const _unity_hl_impl::entry* _unity_hl_impl::operator() (s_long ind) const throw() { return this->t_hash::operator()(qi_indk(ind)); }
 const _unity_hl_impl::entry* _unity_hl_impl::find(const unity& k, s_long* ret_pind) const throw() { const entry* e; s_long ind; this->t_hash::find2(k, *this->t_hash::pkf(), 0, &e, &ind); if (ret_pind) { *ret_pind = ind; } return e; }
-s_long _unity_hl_impl::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind) throw() { const t_hash::entry* e(0); s_long ind; s_long res = this->t_hash::insert(k, &e, &ind); if (res > 0) { if (!_a_appended()) { this->t_hash::remove_e(e); e = 0; ind = no_elem; res = -1; } } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; } return res; }
+s_long _unity_hl_impl::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) throw() { const t_hash::entry* e(0); s_long ind; s_long res = this->t_hash::insert(k, &e, &ind); if (res > 0) { if (!_a_inserted(ind_before)) { this->t_hash::remove_e(e); e = 0; ind = no_elem; res = -1; } } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; } return res; }
 s_long _unity_hl_impl::remove(const unity& k) throw() { s_long ind; this->t_hash::find2(k, *this->t_hash::pkf(), 0, 0, &ind); return remove_i(ind); }
 s_long _unity_hl_impl::remove_i(s_long ind) throw() { s_long res = this->t_hash::remove_i(ind); if (res == 1) { _a_removed(ind); } return res; }
 const _unity_hl_impl::entry* _unity_hl_impl::h(s_long ind_h) const throw() { return this->t_hash::operator()(ind_h); }
@@ -4225,11 +4255,11 @@ bool unity::hash_locate(const unity& k, bool insert)
   return _h()->find(k);
 }
 unity& unity::hash(const unity& k)        { _ensure_h(); return (*_h())[k]; }
-bool unity::hash_set(const unity& k, const unity& v, bool keep_first)
+bool unity::hash_set(const unity& k, const unity& v, bool keep_first, s_long pos_before)
 {
   _ensure_h();
   const t_hash::entry* e(0);
-  s_long res = _h()->insert(k, &e);
+  s_long res = _h()->insert(k, &e, 0, pos_before);
   if (res > 0) { e->v = v; return true; }
     else if (res == 0) { if (!keep_first) { e->v = v; } return false; }
   throw XUExec("hash_set.1");
@@ -4258,6 +4288,11 @@ s_long unity::hashl_next(s_long pos)        { _ensure_h(); return _h()->qi_next(
 s_long unity::hashl_prev(s_long pos)        { _ensure_h(); return _h()->qi_prev(pos); }
 const unity& unity::hashl_key(s_long pos)        { _ensure_h(); const t_hash::entry* e = _h()->h(pos); if (e) { return e->k; } throw XUExec("hashl_key.1"); }
 unity& unity::hashl(s_long pos)        { _ensure_h(); const t_hash::entry* e = _h()->h(pos); if (e) { return e->v; } throw XUExec("hashl.1"); }
+s_long unity::hashl_pos_c(const unity& k) const
+{
+  if (isHash()) { if (_compat_chk()) { s_long pos = hashl_noel(); _h()->find(k, &pos); return pos; } throw XUExec("hashl_pos.1"); }
+    else { throw XUExec("hashl_pos.2"); }
+}
 
 bool unity::u_has(const unity& ki, s_long tt) const
 {
@@ -4282,17 +4317,17 @@ unity& unity::operator[] (const unity& ki)
   if (utype() == utUnityArray)
   {
     meta::s_ll ind;
-    try { ind = ki.vint(); } catch (...) { throw XUExec("operator[].1"); }
+    try { ind = ki.vint(); } catch (...) { throw XUExec("operator[].1", ki.vflstr()); }
     typedef valtype_t<utUnityArray>::t V;
     typedef valtype_t<utUnityArray>::t_tu Vtu;
     Vtu* pvec = (Vtu*)reference_t<V>::deref(_data, true);
     try { return *pvec->pc(s_long(ind));  } catch (...) {}
-    throw XUExec("operator[].2");
+    throw XUExec("operator[].2", ki.vflstr());
   }
-  else if (utype() == utMap) { const t_map::entry* e = _m()->find(ki); if (e) { return e->v; } throw XUExec("operator[].3"); }
-  else if (utype() == utHash) { const t_hash::entry* e = _h()->find(ki); if (e) { return e->v; } throw XUExec("operator[].4"); }
+  else if (utype() == utMap) { const t_map::entry* e = _m()->find(ki); if (e) { return e->v; } throw XUExec("operator[].3", ki.vflstr()); }
+  else if (utype() == utHash) { const t_hash::entry* e = _h()->find(ki); if (e) { return e->v; } throw XUExec("operator[].4", ki.vflstr()); }
   else if (utype() == utObject) { unity* p = objPtr<unity>(); if (p) { return (*p)[ki]; } }
-  throw XUExec("operator[].5");
+  throw XUExec("operator[].5", ki.vflstr());
 }
 
 
@@ -4653,11 +4688,12 @@ std::wstring _bsLsbToWs(const char* ps, meta::s_ll n)
 }
 
 
-std::string replace(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase)
+std::string replace(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase, s_ll nmax)
 {
-  if (from.length() == 0) { return s; }
+  if (from.length() == 0 || nmax == 0) { return s; }
   else if (s.length() > 0)
   {
+    s_ll n = 0; if (nmax < 0) { nmax = s.length(); }
     std::string dest;
     _t_sz pos, pos2;
     pos=0;
@@ -4665,39 +4701,44 @@ std::string replace(const std::string& s, const std::string& from, const std::st
     {
       t_critsec_locale __lock(wsbs_lkp(), -1); if (sizeof(__lock)) {}
       const char* prevlocn = std::setlocale(LC_CTYPE, "");
-        std::string s_l = _lcase(s);
-        std::string from_l = _lcase(from);
+        std::string s_l = lcase(s);
+        std::string from_l = lcase(from);
         do
         {
+          if (n >= nmax) { break; }
           pos2 = s_l.find(from_l, pos);
-          if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos, pos2 - pos); }
-            else { dest += s.substr(pos, pos2 - pos); dest += to; pos2 += from.length(); }
+          if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos); }
+            else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
           pos = pos2;
         }
         while(pos < s.length());
+        if (pos < s.length()) { dest += s.substr(pos); }
       std::setlocale(LC_CTYPE, prevlocn);
     }
     else
     {
       do
       {
+        if (n >= nmax) { break; }
         pos2 = s.find(from, pos);
-        if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos, pos2 - pos); }
-          else { dest += s.substr(pos, pos2 - pos); dest += to; pos2 += from.length(); }
+        if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos); }
+          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
         pos = pos2;
       }
       while(pos < s.length());
+      if (pos < s.length()) { dest += s.substr(pos); }
     }
     return dest;
   }
   else return s;
 }
 
-std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase)
+std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase, s_ll nmax)
 {
-  if (from.length() == 0) { return s; }
+  if (from.length() == 0 || nmax == 0) { return s; }
   else if (s.length() > 0)
   {
+    s_ll n = 0; if (nmax < 0) { nmax = s.length(); }
     std::wstring dest;
     _t_wz pos, pos2;
     pos=0;
@@ -4705,28 +4746,32 @@ std::wstring replace(const std::wstring& s, const std::wstring& from, const std:
     {
       t_critsec_locale __lock(wsbs_lkp(), -1); if (sizeof(__lock)) {}
       const char* prevlocn = std::setlocale(LC_CTYPE, "");
-        std::wstring s_l = _lcase(s);
-        std::wstring from_l = _lcase(from);
+        std::wstring s_l = lcase(s);
+        std::wstring from_l = lcase(from);
         do
         {
+          if (n >= nmax) { break; }
           pos2 = s_l.find(from_l, pos);
-          if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos, pos2 - pos); }
-            else { dest += s.substr(pos, pos2 - pos); dest += to; pos2 += from.length(); }
+          if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos); }
+            else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
           pos = pos2;
         }
         while(pos < s.length());
+        if (pos < s.length()) { dest += s.substr(pos); }
       std::setlocale(LC_CTYPE, prevlocn);
     }
     else
     {
       do
       {
+        if (n >= nmax) { break; }
         pos2 = s.find(from, pos);
-        if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos, pos2 - pos); }
-          else { dest += s.substr(pos, pos2 - pos); dest += to; pos2 += from.length(); }
+        if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos); }
+          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
         pos = pos2;
       }
       while(pos < s.length());
+      if (pos < s.length()) { dest += s.substr(pos); }
     }
     return dest;
   }
@@ -5767,10 +5812,10 @@ unity& paramline::decode_tree(const std::wstring& ssrc0, unity& mh, s_long flags
 {
   try {
     std::wstring pterm2 = pterm_0.length() == 0 ? wCRLF : pterm_0;
-    bool b_map = bool(flags & 0x1); bool b_clear = (flags & 0x4) == 0; bool b_keep = (flags & 0x2) == 0; bool b_skipslc = bool(flags & 0x8); bool b_convcr(flags & 0x10); bool b_noinclpath = (flags & 0x20) == 0;
+    bool b_map = bool(flags & 0x1); bool b_clear = (flags & 0x4) == 0; bool b_keep = (flags & 0x2) == 0; bool b_skipslc = bool(flags & 0x8); bool b_convcr(flags & 0x10); bool b_noinclpath = (flags & 0x20) == 0; bool b_braces(flags & 0x40);
       if (!b_clear && mh.isMap()) { b_map = true; }
       if (b_map) { if (b_clear || !mh.isMap()) { mh.map_clear(true); } } else { if (b_clear || !mh.isHash()) { mh.hash_clear(true); } }
-    const unity k_empty = L"";
+    const unity k_empty_str = L"";
 
     std::wstring s2;
     if (b_convcr)
@@ -5796,35 +5841,76 @@ unity& paramline::decode_tree(const std::wstring& ssrc0, unity& mh, s_long flags
     }
 
     _t_wz pos(0); const std::wstring& ssrc = b_convcr ? s2 : ssrc0;
+    unity stack, last_path; if (b_braces) { last_path.u_clear(utUnityArray); stack.ua_append(last_path); }
     while (pos < ssrc.length())
     {
       _t_wz pos2 = ssrc.find(pterm2, pos); if (pos2 == nposw) { pos2 = ssrc.length(); }
       if (pos2 > pos)
       {
         bool b_skip = false;
-        if (b_skipslc) { _t_wz pos3 = ssrc.find_first_not_of(L"\t ", pos); if (pos3 != nposw && pos3 + 2 <= pos2 && ssrc[pos3] == '/' && ssrc[pos3 + 1] == '/') { b_skip = true; } }
-        if (!b_skip)
+        if (b_skipslc) // test/skip C-style comments
+        {
+          _t_wz pos3 = _find_char_except(ssrc, pos, pos2, L"\t ");
+          if (pos3 + 2 <= pos2 && ssrc[pos3] == '/' && ssrc[pos3 + 1] == '/')
+            { b_skip = true; }
+        }
+        if (!b_skip) // skip lines w/o data
+        {
+          _t_wz pos3 = _find_char_except(ssrc, pos, pos2, L" ");
+          if (pos3 >= ssrc.length()) { b_skip = true; }
+        }
+        if (!b_skip && b_braces) // test/process lines with braces only
+        {
+          _t_wz pos3 = _find_char_except(ssrc, pos, pos2, L" {}");
+          if (pos3 >= ssrc.length())
+          {
+            for (_t_wz i = pos; i < pos2; ++i)
+            {
+              if (ssrc[i] == L'{') { if (last_path == stack.ua_last()) { last_path.ua_append(unity()); } stack.ua_append(last_path); }
+                else if (ssrc[i] == L'}') { last_path = stack.ua_last(); if (stack.uaS() > 1) { stack.ua_resize(stack.uaUb(), -1); } }
+            }
+            b_skip = true;
+          }
+        }
+        if (!b_skip) // decode branch, calc. path, merge
         {
           unity h; paramline().decode(ssrc.substr(pos, pos2 - pos), h, false, pterm2);
-          unity* node = &mh;
-          const unity& k = h.u_has(k_empty, 6) ? h[k_empty] : k_empty;
-          if (k.utype() == utUnityArray)
+
+          bool b_hk = h.u_has(k_empty_str, 6);
+          const unity* pk = b_hk ? &h[k_empty_str] : &k_empty_str;
+          if (b_braces)
           {
-            for (int j = k.arrlb(); j <= k.arrub(); ++j)
+            last_path = stack.ua_last();
+            if (pk->utype() == utUnityArray)
             {
-              const unity& k2 = k.ref<utUnity>(j);
+              if (last_path.uaS() > 0) { for (int j = pk->arrlb(); j <= pk->arrub(); ++j)  { last_path.ua_append(pk->ref<utUnity>(j)); } *(unity*)pk = last_path; }
+                else { last_path = *pk; }
+              pk = &last_path;
+            }
+            else
+            {
+              if (last_path.uaS() > 0) { if (b_hk) { *(unity*)pk = last_path; } else { h.hash_set(k_empty_str, last_path, 0, h.hashl_first()); } pk = &last_path; }
+            }
+          }
+
+          unity* node = &mh;
+          if (pk->utype() == utUnityArray)
+          {
+            for (int j = pk->arrlb(); j <= pk->arrub(); ++j)
+            {
+              const unity& k2 = pk->ref<utUnity>(j);
               node->assoc_set(k2, unity(), true);
               node = &(*node)[k2];
               if (node->isAssoc()) {}
-                else if (node->isEmpty() || !b_keep)
-                {
-                  if (b_map) { node->u_clear(utMap); node->mapFlags_set(0, mh.mapFlags()); }
-                    else { node->u_clear(utHash); node->hashFlags_set(0, mh.hashFlags()); }
-                }
-                else { node = 0; break; }
+              else if (!node->isEmpty() && b_keep) { node = 0; break; }
+              else
+              {
+                if (b_map) { node->u_clear(utMap); node->mapFlags_set(0, mh.mapFlags()); }
+                  else { node->u_clear(utHash); node->hashFlags_set(0, mh.hashFlags()); }
+              }
             }
           }
-          if (node) { if (b_noinclpath) { h.assoc_del(k_empty); } paramline().merge(*node, h, b_keep); }
+          if (node) { if (b_noinclpath) { h.assoc_del(k_empty_str); } if (h.hashS_c() > 0) { paramline().merge(*node, h, b_keep); } }
         }
       }
       pos = pos2 + pterm2.length();
@@ -6039,8 +6125,8 @@ void paramline::x_encode1(const unity& x, std::wstring& retval, bool b_name, boo
 //                  std::wstring s = _trim(retval, L" ");
 //                  if (s.length() == 0) { goto lInsertStringPrefix; }
 //                  if (wstring_like(s.substr(0,1), L"[0123456789.+-]")) { goto lInsertStringPrefix; }
-//                  if (_lcase(s) == L"true") { goto lInsertStringPrefix; }
-//                  if (_lcase(s) == L"false") { goto lInsertStringPrefix; }
+//                  if (lcase(s) == L"true") { goto lInsertStringPrefix; }
+//                  if (lcase(s) == L"false") { goto lInsertStringPrefix; }
                   _t_wz pos1 = retval.find_first_not_of(' '); if (pos1 == nposw) { goto lInsertStringPrefix; }
                   wchar_t c = retval[pos1]; if ((c >= L'0' && c <= L'9') || c == L'.' || c == L'+' || c == L'-') { goto lInsertStringPrefix; }
                   if (_wcsileftincl1(&retval[pos1], L"true") || _wcsileftincl1(&retval[pos1], L"false")) { goto lInsertStringPrefix; }
@@ -6157,7 +6243,7 @@ void paramline::x_repl_e1(const std::wstring& s1, std::wstring& s2, bool b_name,
 //            if (s2.find(L"\\\\") != nposw) s2 = replace(s2, L"\\\\", L"`b`b`b`b");
 //            if (s2.find(L"\\;") != nposw) s2 = replace(s2, L"\\;", L"`b`b;");
 //            if (s2.find(L"\\~") != nposw) s2 = replace(s2, L"\\~", L"`b`b~");
-//            if (s2.find(__wBSCRLF) != nposw) s2 = replace(s2, __wBSCRLF, L"`b`b`b~");
+//            if (s2.find(__wBSCRLF()) != nposw) s2 = replace(s2, __wBSCRLF(), L"`b`b`b~");
 //            if (s2.find(L"\\=") != nposw) s2 = replace(s2, L"\\=", L"`b`b=");
 //            if (s2.find(L"\\ ") != nposw) s2 = replace(s2, L"\\ ", L"`b`b ");
 //            if (s2.find(L"\\|") != nposw) s2 = replace(s2, L"\\|", L"`b`b|");
@@ -6692,7 +6778,7 @@ static char __buf_argv[65000] = "_\0\0";
     if (n == 0) { return 0; }
     for (; *s1; s1++, s2++)
     {
-      c1 = towlower(*s1); c2 = towlower(*s2);
+      c1 = wchar_t(std::towlower(*s1)); c2 = wchar_t(std::towlower(*s2));
       if (c1 != c2) { return (int)c1 - c2; }
       if (--n == 0) { return 0; }
     }
@@ -7112,8 +7198,6 @@ namespace bmdx
 
 #ifdef _bmdxpl_Wnds
 
-#include <direct.h>
-
 #ifndef F_OK
 #define F_OK  0 /* Check for file existence */
 #endif
@@ -7189,6 +7273,7 @@ namespace bmdx
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
               break;
           }
+          case pdDoNotChange: { s = sPath; break; }
           default: //pdUserDefinedDir
               s = join_path(sUserDefDir,sPath);
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
@@ -7249,6 +7334,7 @@ namespace bmdx
               // </Psx>
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
               break;
+          case pdDoNotChange: { s = sPath; break; }
           default: //pdUserDefinedDir
               s = join_path(sUserDefDir,sPath);
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
@@ -7874,7 +7960,7 @@ namespace bmdx
       if (!f_ih) { return mh; }
 
     s_long res = 0; try { res = f_ih(&mh, name, b_au ? 1 : 0, flags); } catch (...) {}
-    (void)res;
+    if (sizeof(res)) {}
     return mh;
   }
 

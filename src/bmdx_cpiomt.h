@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-04-14
+// rev. 2018-04-29
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -682,6 +682,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
 #ifdef _bmdxpl_Wnds
   #include <windows.h>
   #include <io.h>
+  #include <direct.h>
   #include <conio.h>
 #endif
 
@@ -1169,13 +1170,13 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (!prio) { return 0; }
     switch (prio)
     {
-      case 4: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 5: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_ABOVE_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 6: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_HIGHEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 7: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_TIME_CRITICAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 3: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_BELOW_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 2: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_LOWEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 1: { _s_long b = bool(SetThreadPriority(p->th, THREAD_PRIORITY_IDLE)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 4: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 5: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_ABOVE_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 6: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_HIGHEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 7: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_TIME_CRITICAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 3: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_BELOW_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 2: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_LOWEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 1: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_IDLE)); SetThreadPriorityBoost(p->th, FALSE); return b; }
       default: return 0;
     }
   }
@@ -1610,8 +1611,6 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
       case 3: { pl = SCHED_OTHER; lev = 2; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
       default: return 0;
     }
-
-    return 0;
   }
     //  timeout_ms:
     //    >= 0 - set b_stop() flag if it was 0, wait for thread exiting up to timeout, release thread context.
@@ -1789,10 +1788,10 @@ namespace bmdx
       virtual ~ctx_base() {}
       ctx_base() { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); }
       ctx_base(const ctx_base&) { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); } // NOTE the new context does not copy anything from the source object
+      _threadctl_ctx_data& _dat() { return __dat; }
     private:
       friend void _threadctl_thproc_impl(void* _p) throw();
       friend struct threadctl;
-      friend struct _threadctl_tu_static_t<>::_threadctl_thproc_cleanup;
       _threadctl_ctx_data __dat;
     };
 
@@ -2066,8 +2065,8 @@ struct _threadctl_tu_static_t<_>::_threadctl_thproc_cleanup
     threadctl::ctx_base* pbase = (threadctl::ctx_base*)((_threadctl_ctx_data*)_p)->pctxbase;
     typedef _s_long (*Pctx_release)(_threadctl_ctx_data* p, _s_long what);
     Pctx_release f_rel = 0;
-    try { if (pbase->__dat.pthsm) { f_rel = (Pctx_release)pbase->__dat.pthsm(7); } } catch (...) {}
-    if (f_rel) { try { f_rel(&pbase->__dat, 1); } catch (...) {} }
+    try { if (pbase->_dat().pthsm) { f_rel = (Pctx_release)pbase->_dat().pthsm(7); } } catch (...) {}
+    if (f_rel) { try { f_rel(&pbase->_dat(), 1); } catch (...) {} }
     _p = 0;
   }
 };
@@ -2125,8 +2124,8 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
     {
       struct ff_mc;
 
-      bool has_ref() const throw () { return bool(_hp); }
-      operator bool() const throw () { return bool(_hp); }
+      bool has_ref() const throw () { return !!_hp; }
+      operator bool() const throw () { return !!_hp; }
 
         // On has_ref() == true, pid() has meaningful value.
       typedef DWORD t_pid;
@@ -2332,7 +2331,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
     extern "C" typedef void (*PF_processctl_handler_sigchld)(int, siginfo_t*, void*);
     static void _processctl_handler_sigchld(int, siginfo_t*, void*) { pid_t p; do { p = waitpid(-1, NULL, WNOHANG); } while (p != (pid_t)0 && p != (pid_t)-1); }
-    static bool& _processctl_has_sigchld() { struct _deinit { ~_deinit() { _processctl_handler_sigchld(0, 0, 0); } }; static bool b(false); static _deinit x1; (void)x1; return b; }
+    static bool& _processctl_has_sigchld() { struct _deinit { ~_deinit() { _processctl_handler_sigchld(0, 0, 0); } }; static bool b(false); static _deinit x1; if (sizeof(x1)) {} return b; }
 
     struct processctl
     {
@@ -2745,25 +2744,9 @@ namespace bmdx
   struct file_io
   {
     typedef bmdx_meta::noarg_tu_t<file_io> _noarg;
-      // Returns true if the specified path points to the existing file, false in all other cases.
-    static bool is_ex_file(const char* ppath, _noarg = _noarg()) throw()
-    {
-      if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) )
-        { struct stat st; stat(ppath, &st); return bool(st.st_mode & S_IFREG); }
-      else { return false; }
-    }
-    static inline bool is_ex_file(const std::string& path, _noarg = _noarg()) throw()
-    { return is_ex_file(path.c_str()); }
 
-      // Returns true if the specified path points to the existing directory, false in all other cases.
-    static bool is_ex_dir(const char* ppath, bmdx_meta::noarg_tu_t<file_io> = bmdx_meta::noarg_tu_t<file_io>()) throw()
-    {
-      if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) )
-        { struct stat st; stat(ppath, &st); return bool(st.st_mode & S_IFDIR); }
-      else { return false; }
-    }
-    static inline bool is_ex_dir(const std::string& path, _noarg = _noarg()) throw()
-      { return is_ex_dir(path.c_str()); }
+      // Platform-dependent file handle type.
+    typedef std::FILE* t_handle;
 
       // Factual type of the offset in file.
       // NOTE OS X: consider compiling with -D__DARWIN_64_BIT_INO_T
@@ -2779,6 +2762,16 @@ namespace bmdx
     #endif
 
 
+      // Returns true if the specified path points to the existing file, false in all other cases.
+    static bool is_ex_file(const char* ppath, _noarg = _noarg()) throw()        { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
+    static inline bool is_ex_file(const std::string& path, _noarg = _noarg()) throw()        { return is_ex_file(path.c_str()); }
+
+      // Returns true if the specified path points to the existing directory, false in all other cases.
+    static bool is_ex_dir(const char* ppath, _noarg = _noarg()) throw()        { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
+    static inline bool is_ex_dir(const std::string& path, _noarg = _noarg()) throw()        { return is_ex_dir(path.c_str()); }
+
+
+
 
 
     //  is_open, result.
@@ -2792,10 +2785,14 @@ namespace bmdx
       //    Defined for compatibility only.
     file_io(const file_io&) throw() { new (this) file_io(); }
 
-    inline bool is_open() const throw() { return bool(_desc); }
+
+    inline bool is_open() const throw() { return !!_desc; }
       // mode 0: file is not open, mode 1: file is open read-only, mode 2: file is open read-write.
     inline _s_long mode() const throw() { return _desc ? _mode : 0; }
     inline _s_long result() const throw() { return _res; }
+
+      // Platform-dependent file handle.
+    inline t_handle _handle() const { return _desc; }
 
       // Opens or reopens a file with the specified name and parameters.
       // result():
@@ -2940,7 +2937,7 @@ namespace bmdx
 
     static const int __F_OK = 0;
 
-    std::FILE* _desc;
+    t_handle _desc;
     mutable size_t _nwr;
     _s_long _mode;
     mutable _s_long _res;
@@ -3081,6 +3078,13 @@ namespace bmdx
     struct exc_create4 : std::exception { const char* what() const throw () { return "bmdx::cref_t::create4"; } };
     struct exc_create5 : std::exception { const char* what() const throw () { return "bmdx::cref_t::create5"; } };
     struct exc_create6 : std::exception { const char* what() const throw () { return "bmdx::cref_t::create6"; } };
+    struct exc_iref0 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create0"; } };
+    struct exc_iref1 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create1"; } };
+    struct exc_iref2 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create2"; } };
+    struct exc_iref3 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create3"; } };
+    struct exc_iref4 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create4"; } };
+    struct exc_iref5 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create5"; } };
+    struct exc_iref6 : std::exception { const char* what() const throw () { return "bmdx::cref_t::iref::create6"; } };
     struct exc_assign : std::exception { const char* what() const throw () { return "bmdx::cref_t::assign"; } };
     struct exc_copy : std::exception { const char* what() const throw () { return "bmdx::cref_t::copy"; } };
     struct exc_cc3 : std::exception { const char* what() const throw () { return "bmdx::cref_t(x,is_own,false)"; } };
@@ -3094,13 +3098,13 @@ namespace bmdx
     const t_value& ref_ts() const { t_lock __lock; if (sizeof(__lock)) {} if (!_p) { throw exc_ref_ts(); } return *_p; }
 
       // true if this object contains a strong reference, false - weak reference.
-    bool is_own() const throw() { return bool(_pcnt); }
+    bool is_own() const throw() { return !!_pcnt; }
       // true if this object contains a strong reference in detached state (i.e. ref. counting, but object pointer not deleted).
     bool is_detached() const throw() { t_lock __lock; if (sizeof(__lock)) {} return _pcnt && (*_pcnt & _f1); }
 
       // false only if a) no-exception construction failed b) after cref_t().
-    bool has_ref() const throw () { return bool(_p); }
-    operator bool() const throw () { return bool(_p); }
+    bool has_ref() const throw () { return !!_p; }
+    operator bool() const throw () { return !!_p; }
     const t_value* ptr() const throw () { return _p; }
 
       // Non-const pointer to object.
@@ -3134,6 +3138,19 @@ namespace bmdx
     template<class Arg1, class Arg2, class Arg3, class Arg4> bool create4(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4) { t_lock __lock; if (sizeof(__lock)) {} t_cnt* pcnt2(0); const t_value* p2(0); try { p2 = new t_value(x1, x2, x3, x4); } catch (...) {} try { pcnt2 = new t_cnt(1); } catch (...) {} if (p2 && pcnt2) { _reset(); _p = p2; _pcnt = pcnt2; return true; } try { delete p2; } catch (...) {} try { delete pcnt2; } catch (...) {} if (!no_exc) { throw exc_create4(); } return false; }
     template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> bool create5(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5) { t_lock __lock; if (sizeof(__lock)) {} t_cnt* pcnt2(0); const t_value* p2(0); try { p2 = new t_value(x1, x2, x3, x4, x5); } catch (...) {} try { pcnt2 = new t_cnt(1); } catch (...) {} if (p2 && pcnt2) { _reset(); _p = p2; _pcnt = pcnt2; return true; } try { delete p2; } catch (...) {} try { delete pcnt2; } catch (...) {} if (!no_exc) { throw exc_create5(); } return false; }
     template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> bool create6(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6) { t_lock __lock; if (sizeof(__lock)) {} t_cnt* pcnt2(0); const t_value* p2(0); try { p2 = new t_value(x1, x2, x3, x4, x5, x6); } catch (...) {} try { pcnt2 = new t_cnt(1); } catch (...) {} if (p2 && pcnt2) { _reset(); _p = p2; _pcnt = pcnt2; return true; } try { delete p2; } catch (...) {} try { delete pcnt2; } catch (...) {} if (!no_exc) { throw exc_create6(); } return false; }
+
+    template<class I> struct iref
+    {
+        // Create object of type T, which is subclass of I. Assign it as strong reference to cref_t<I>.
+        //  Return the result. If creation failed, an empty cref_t is returned.
+      static cref_t<I> create0(bool no_exc __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref0(); } return rx; }
+      template<class Arg1> static cref_t<I> create1(bool no_exc, const Arg1& x1 __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref1(); } return rx; }
+      template<class Arg1, class Arg2> static cref_t<I> create2(bool no_exc, const Arg1& x1, const Arg2& x2 __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(x1, x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref2(); } return rx; }
+      template<class Arg1, class Arg2, class Arg3> static cref_t<I> create3(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3 __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref3(); } return rx; }
+      template<class Arg1, class Arg2, class Arg3, class Arg4> static cref_t<I> create4(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4 __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref4(); } return rx; }
+      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> static cref_t<I> create5(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5 __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref5(); } return rx; }
+      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> static cref_t<I> create6(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6 __bmdx_noarg) { cref_t<I> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_iref6(); } return rx; }
+    };
 
       // NOTE The following 6 functions do not throw exceptions.
     cref_t()         throw(): _pcnt(0), _p(0) {}
@@ -3247,7 +3264,7 @@ namespace bmdx
     _s_long start(_s_long nth, _s_long mode, const C& c, cbarg cb = cbarg(__bmdx_noargv1), _s_long priority = 4 __bmdx_noarg)
     {
       const ictx* pcbase = &c; // NOTE C must inherit from multithread::ictx
-      (void)pcbase;
+      if (pcbase) {}
       if (!(nth >= 1 && nth <= 5000 && mode >= 1 && mode <= 4)) { return -1; }
       if (!cb.b_ok) { return -2; }
       if (_rth) { return 0; }
