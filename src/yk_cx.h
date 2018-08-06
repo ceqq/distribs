@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-04-29
+// rev. 2018-06-01
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -48,6 +48,12 @@
   #pragma GCC diagnostic ignored "-Wpragmas"
   #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
+  #pragma GCC diagnostic ignored "-Wunused-function"
+  #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic ignored "-Wint-in-bool-context"
+#endif
+#ifdef _MSC_VER
+  #pragma warning(disable:4290)
 #endif
 
 #include <iterator>
@@ -105,15 +111,15 @@ namespace yk_c
 
       inline reference operator*() const throw() { return *this->_px; }
       inline pointer operator->() const throw() { return this->_px; }
-      inline reference operator[](difference_type delta) const throw() { return *this->_pv->template pval_0u<t_value>(this->_i + delta); }
+      inline reference operator[](difference_type delta) const throw() { return *this->_pv->template pval_0u<t_value>(this->_i + s_long(delta)); }
       inline iterator_type& operator++() throw() { this->incr(); return *this; }
       inline iterator_type& operator--() throw() { this->decr(); return *this; }
-      inline iterator_type& operator+=(difference_type delta) throw() { this->move_by(delta); return *this; }
-      inline iterator_type& operator-=(difference_type delta) throw() { this->move_by(-delta); return *this; }
+      inline iterator_type& operator+=(difference_type delta) throw() { this->move_by(s_long(delta)); return *this; }
+      inline iterator_type& operator-=(difference_type delta) throw() { this->move_by(s_long(-delta)); return *this; }
       inline iterator_type operator++(int) throw() { iterator_type i = *this; this->incr(); return i; }
       inline iterator_type operator--(int) throw() { iterator_type i = *this; this->decr(); return i; }
-      inline iterator_type operator+(difference_type delta) const throw() { iterator_type i = *this; i.move_by(delta); return i; }
-      inline iterator_type operator-(difference_type delta) const throw() { iterator_type i = *this; i.move_by(-delta); return i; }
+      inline iterator_type operator+(difference_type delta) const throw() { iterator_type i = *this; i.move_by(s_long(delta)); return i; }
+      inline iterator_type operator-(difference_type delta) const throw() { iterator_type i = *this; i.move_by(s_long(-delta)); return i; }
       inline difference_type operator-(const iterator_type& x) const throw() { return this->ind0() - x.ind0(); }
       inline bool operator==(const iterator_type& x) const throw() { return this->is_eq(x); }
       inline bool operator!=(const iterator_type& x) const throw() { return !this->is_eq(x); }
@@ -181,7 +187,7 @@ namespace yk_c
       struct lock_t_reg
       {
         storage_t<bytes::lock_t<link2_lks> > s; lock_t_reg(bool bsync) : s(bsync ? 1 : -1) {}
-        bool is_lckinit() const throw() { return s.mode == -1 || (bool(s.inited) && s.ptr()->is_lckinit()); }
+        bool is_lckinit() const throw() { return s.mode == -1 || (!!s.inited && s.ptr()->is_lckinit()); }
       };
 
         // When rpself_ == 0, registry ignores any calls, returning reasonable error codes.
@@ -589,8 +595,8 @@ namespace yk_c
 
         static s_long _ls_tr_start_21(void* pct, s_long nrsv) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(true); return pl2 ? s_long(pl2->tr_start(pct, nrsv)) : 0; }
         static s_long  _ls_tr_start_22(void* pct, s_long nrsv) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(false); return pl2 ? s_long(pl2->tr_start(pct, nrsv)) : 0; }
-        static void _ls_tr_end_21(void* pct, s_long commit) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(true); if (pl2) { pl2->tr_end(pct, commit); } }
-        static void _ls_tr_end_22(void* pct, s_long commit) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(false); if (pl2) { pl2->tr_end(pct, commit); } }
+        static void _ls_tr_end_21(void* pct, s_long commit) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(true); if (pl2) { pl2->tr_end(pct, !!commit); } }
+        static void _ls_tr_end_22(void* pct, s_long commit) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(false); if (pl2) { pl2->tr_end(pct, !!commit); } }
         static s_long _ls_tr_notify1(void* psrc, void* pdest, s_long opflag) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(true); return pl2 ? s_long(pl2->tr_notify(psrc, pdest, char(opflag))) : 1; }
         static s_long _ls_tr_notify2(void* psrc, void* pdest, s_long opflag) throw() { _link2_reg* pl2 = _link2_reg::ff_mc()._ref(false); return pl2 ? s_long(pl2->tr_notify(psrc, pdest, char(opflag))) : 1; }
       };
@@ -607,6 +613,10 @@ namespace yk_c
     template<s_long eq_i> struct _result_eq { const s_long res; inline _result_eq(s_long res_) throw() : res(res_) {} inline operator bool() throw() { return res == eq_i; } };
     template<s_long ge_i> struct _result_ge { const s_long res; inline _result_ge(s_long res_) throw() : res(res_) {} inline operator bool() throw() { return res >= ge_i; } };
 
+    struct _vec2_t_exceptions
+    {
+      struct exc_vec2_t : std::exception { const char* _p; exc_vec2_t(const char* pmsg) throw() : _p(pmsg) {} const char* what() const throw() { return _p; } };
+    };
 
       // Strongly-typed vector with most of vecm features.
       //    Possible application:
@@ -618,7 +628,7 @@ namespace yk_c
     {
     public:
       typedef yk_c::s_long s_long; typedef yk_c::vecm vecm;
-      typedef TA ta_value; typedef typename specf<ta_value>::t_value t_value; struct exc_vec2_t : std::exception { const char* _p; exc_vec2_t(const char* pmsg) throw() : _p(pmsg) {} const char* what() const throw() { return _p; } };
+      typedef TA ta_value; typedef typename specf<ta_value>::t_value t_value; struct exc_vec2_t : _vec2_t_exceptions::exc_vec2_t { exc_vec2_t(const char* pmsg) throw() : _vec2_t_exceptions::exc_vec2_t(pmsg) {} };
       typedef s_long size_type; typedef t_value value_type; typedef t_value& reference; typedef const t_value& const_reference; typedef s_long difference_type;
       typedef iterator_t<t_value, false> iterator; typedef iterator_t<t_value, true> const_iterator;
 #ifndef _RWSTD_NO_CLASS_PARTIAL_SPEC
@@ -841,7 +851,7 @@ namespace yk_c
         //    assuming that all vec2_t containers with f_sync() == false
         //    are called only by one thread in application.
         //  NOTE This flag is false when f_perm() == false.
-      inline bool f_sync() const throw() { return _ptd2()->link2_flags & 0x2; }
+      inline bool f_sync() const throw() { return !!(_ptd2()->link2_flags & 0x2); }
 
         // Returns:
         //  a) valid link to ind0-th element or after-end pos (n()).
@@ -865,7 +875,7 @@ namespace yk_c
           _transaction(vec2_t* pct_, s_long nrsv __vecm_noarg) throw() : _pct(pct_), _pd(pct_->_ptd2()), _b(false) { start(nrsv); }
           ~_transaction() throw() { end(false); }
           operator bool() const throw() { return _b; }
-          void start(s_long nrsv __vecm_noarg) throw() {  if (!_b && _pct->_cv0() >= 0 && _pd->_p_tr_start_2) { _b =  bool(_pd->_p_tr_start_2(_pct, nrsv)); } }
+          void start(s_long nrsv __vecm_noarg) throw() {  if (!_b && _pct->_cv0() >= 0 && _pd->_p_tr_start_2) { _b =  !!_pd->_p_tr_start_2(_pct, nrsv); } }
           void end(bool commit __vecm_noarg) throw() { if (_b) { _b = false; _pd->_p_tr_end_2(_pct, commit); } }
       private: vec2_t* _pct; _vec2_td* _pd; bool _b;
       };

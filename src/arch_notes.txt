@@ -1,13 +1,16 @@
-// rev. 2018-04-29
+// rev. 2018-06-01
 ====================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 ====================================================
 
 [A]
 
-For using ONLY utilities like file i/o, multithreading etc., include
-  bmdx_cpiomt.h
+For using ONLY utilities like file i/o, locks, C array wrappers, multithreading etc.:
+  #include "bmdx_cpiomt.h"
 This header is self-contained.
+It contains also experimental shared memory classes and queues, which may be enabled this way:
+  #define bmdx_part_shm 1
+  #include "bmdx_cpiomt.h"
 
 
 [B]
@@ -16,7 +19,7 @@ For using ONLY polymorphic vector and high-perf. hash map, include
   vecm_hashx.h
 This header is self-contained.
 
-NOTE In multithreaded programs, (optionally) lock_impl_t class may be defined
+NOTE In multithreaded programs, optionally, lock_impl_t class may be defined
   before including vecm_hashx.h (see comments near struct _lock_base_t).
 
 NOTE If the program uses bmdx_config.h, bmdx_main.h,
@@ -30,7 +33,7 @@ For more or all functions, consider dependencies:
 
   bmdx_config.h --> vecm_hashx.h (lock_impl_t based on critsec_t) --> bmdx_cpiomt.h
   [yk_cx.h (if alone) --> vecm_hashx.h]
-  (bmdx_main.cpp + bmdx_main.h) --> yk_cx.h --> bmdx_config.h
+  (bmdx_main.cpp + bmdx_main.h) --> yk_cx.h, bmdx_config.h
 
 
 ==================================
@@ -77,9 +80,9 @@ clang -static-libgcc -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1_clang.
 ==================================
 Android (Clang)
 
-1. The library test builds were created with Android Studio 2.3.1 / Gradle build system / Clang compiler.
+1. The library has been tested with Android Studio + Gradle build system + Clang compiler (different versions).
   Compiler settings in app/build.gradle:
-    -std=c++11 -frtti -fexceptions -O0 -Wl,-Bsymbolic
+    -std=c++11 -frtti -fexceptions -O0
   Factually, all of them are optional. Binaries behave mostly like in desktop Linux.
   NOTE Optimization levels tested: -O0, -O2.
 
@@ -233,7 +236,7 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
   Thread control object.
   Based on client implementing virtual function (threadctl::ctx_base::_thread_proc).
   Base class supports high-level object passing to thread procedure,
-    and its destruction on thread exit (both normal and termination).
+    and its automatic destruction on thread exit (both normal and termination).
   Size: 32.
 
 4. struct threadctl::tid
@@ -243,7 +246,7 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
     for implementation compatibility if passed into another module.
   Size: 24 (assuming size of any kind of native thread handle <= 16).
 
-5. struct carray_t, cpparray_t, arrayref_t
+5. struct carray_t, carray_r_t, cpparray_t, arrayref_t
 
   carray_t: wrapper around C-style array.
     Based on _carray_base_t.
@@ -254,26 +257,52 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
       even after the original module has been unloaded.
     Size: 24 or 32 depending on pointer size.
 
+  carray_r_t: carray_t with place reserving. It should be used
+    instead of std::basic_string when it's necessary to access and manipulate
+    (e.g. append to)
+    a contiguous string of primitive values (bytes, integers, floats etc.)
+    in more than one binary module.
+    Sizing factor in automatic place reserving is 2.
+
   cpparray_t: wrapper around C-style array.
     Based on _carray_base_t.
     Assumes that elements require C++-style construction and/or destruction.
+    (Note: The array remembers (only) memory allocation / deallocation
+      function pointers from original module where it has been created.
+      When particular array instance resizing, copying, destruction may happen
+      in different binary modules, the element constructors and destructor
+      must be compatible or trivial.
+    To cover another case (element constructors, destructor are semi- or
+      incompatible, but the elements are not required to be kept contiguously in memory),
+      cpparray_t<unity> or vec2_t<T> may be used
+      instead of cpparray_t<T>.)
     In other respects, cpparray_t is similar to carray_t.
     Size: 24 or 32 depending on pointer size.
 
   arrayref_t: weak reference to contiguous array of elements.
     Contains a pointer and a number of elements.
-    Basically, may be constructed from T*, carray_t, cpparray_t, basic_string.
+    Basically, may be constructed from T*, carray_t, carray_r_t, cpparray_t, basic_string.
     (See also _arrayref_adapter_t.)
     Size: 16.
 
-6. struct unity
+6. struct cref_t
 
-  Polymorphic value: number, string, array, map, hash-list, object wrapper.
+  Template class for strong/weak shared referencing an object, completely thread-safe.
+  May be passed between binary modules by value, or by reference as output parameter.
+  By default, the contained object is considered constant, but the client
+  may optionally call non-const functions through additional API (ref_ts, _pnonc_u).
+  Compatibility of the contained object is responsibility of the client.
+  Size: 3 pointers (12 or 24 bytes).
+
+7. struct unity
+
+  Polymorphic non-template value: character, number, string, date, array, map, hash-list,
+  object wrapper.
   May be created/destroyed/copied/modified in different binary modules.
   Uses built-in compatibility checks and static methods redirection for all types.
   Size: 16 or 32 depending on pointer size.
 
-7. struct unity::mod_handle
+8. struct unity::mod_handle
 
   Wraps system-dependent shared library handle type.
   mod_handle may be freely passed between modules,
@@ -282,20 +311,20 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
     invoking unity::mod to load library has been itself loaded/unloaded in other way.)
   Size: 16 or 24 depending on pointer size.
 
-8. struct unity::o_api
+9. struct unity::o_api
 
   Functions to operate on an object, wrapped (strong- or weak-referenced) into unity object.
   o_api should be always created and called locally, it automatically redirects
     any requested operation into the native module of the referenced object.
   Size: 12 or 24 depending on pointer size.
 
-9. struct unity::o_api::critsec_rc
+10. struct unity::o_api::critsec_rc
 
-  Critical section object to protect several interconnected operations
+  Critical section object to protect concurrent operations
     on o_api and around it.
   Size: 40.
 
-10. struct o_type_info, o_ref_info
+11. struct o_type_info, o_ref_info
 
   Information on type and reference count of an object,
     wrapped (strong- or weak-referenced) into unity object.
@@ -303,13 +332,13 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
     o_type_info 28 or 56 depending on pointer size.
     o_ref_info 12.
 
-11. struct i_dispatcher_mt
+12. struct i_dispatcher_mt
 
-  Interface to message dispatcher proxy object.
+  Thread-safe interface to message dispatcher proxy object.
   Proxy objects (wrapped into unity object) are created with dispatcher_mt::new_proxy.
   Access: via unity::pinterface.
 
-12. struct o_proxy, o_interfaces, o_ibind, o_iimpl etc.
+13. struct o_proxy, o_interfaces, o_ibind, o_iimpl etc.
 
   Several structures for dynamic attaching interfaces+implementations
     to an object wrapped into unity object.
@@ -319,9 +348,10 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
 
 
 
+
 [B] Conditionally compatible objects.
 
-1. struct vecm
+14. struct vecm
 
   Polymorphic multipart vector.
   Performs operations on elements by calling static functions
@@ -334,34 +364,25 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
     2) vecm structure and size may (potentially) vary.
       The client checks this with special function (compatibility()).
 
-2. struct hashx
+15. struct hashx
 
   High-performance hash-map.
   Keeps elements in the order of insertion if only inserted.
   Allows for array-like access by numeric index as well as iterators.
   Based on vecm, so inherits all its compatibility specifics.
 
-3. struct vec2_t
+16. struct vec2_t
 
   Analogous to std::vector template + support for cross-module use.
   Based on vecm, so inherits all its compatibility specifics.
 
-4. struct ordhs_t
+17. struct ordhs_t
 
-  Hashed ordered map.
+  Hashed ordered map, with access time O(1), insertion/removal time O(N^0.5).
   Allows for array-like access by numeric index as well as iterators.
   Based on hashx, vecm, so inherits all their compatibility specifics.
 
-5. struct cref_t
-
-  Strong/weak reference to an object.
-  May be passed between binary modules itself by reference,
-    because of simplicity
-    (1 pointer to ref. cnt. structure + 1 pointer to object),
-    but must be deleted or copied exactly in the module where it's created.
-  NOTE Complete cross-module obj. reference API is implemented in struct unity.
-
-6. struct file_io
+18. struct file_io
 
   Wrapper around file handle (FILE).
   May be passed between modules, if their C library file functions,
@@ -382,8 +403,16 @@ Dispatcher is an object+thread, assisting multiple threads
   For each thread, message slots are created, based on the initial text config.
   At run time, threads and slots may be created/deleted as necessary.
 
-NOTE The dispatcher is evolving feature.
-  Currently, only in-process message sending is implemented.
+NOTE The dispatcher is evolving. Implemented features:
+  - in-process message sending (incl. between executable and shared libraries),
+  - dynamic adding/removing slots and message threads.
+  Planned features:
+  - integrating shared memory message queue (for accessing in- and inter-process addresses
+    through one API),
+  - in-process passing objects directly without serialization,
+  - interfaces for custom message exchange protocols.
+
+The below topics cover dispatcher_mt functioning and formats of addresses and messages.
 
 Slot name:
   <slot type>_<name root>
@@ -400,9 +429,10 @@ Slot types.
     po -- output-only pin, message goes directly to the receiver.
     pi -- input-only pin, messages may be overwritten if not popped.
     pbo -- strong-bound call (command) pin, keeps sequence
-      "sender pushes cmd, receiver pops cmd, receiver pushes response, sender pops response".
-    pbi -- strong-bound call input pin on the receiver side,
-      only one command at a time may be processed.
+      "sender pushes cmd, receiver pops cmd and executes command, receiver pushes response,
+      sender pops response".
+    pbi -- strong-bound call input pin on the receiver side.
+      Only one command at a time may be processed.
   Queues:
     qi -- non-blocking input queue for values; on overflow, the new value cannot be pushed
       (local sender receives an error code, remote sender is not notified).
@@ -413,7 +443,7 @@ Slot types.
     qs -- queue for broadcasting (multiple senders, multiple receivers).
 
 Message format on sender side.
-  1. For client, messages are paramline-encoded strings. (See also struct paramline.)
+  1. For client, messages are paramline-encoded strings. (See struct paramline.)
     Internally, message may have up to 2 parts (client message + associated binary data),
     with part length fields.
   2. Message format on sender side:
@@ -430,10 +460,10 @@ Message format on sender side.
         (not implemented) |RMA|<host name or address:port>|<qs slot name>
         (not implemented) |RPA|<host name or address:port>|<process name>|<qs slot name>
     T - arbitrary data. May be empty.
-  NOTE Process name is supplied by the client program. The client program is responsible for
-    name uniqueness in process, machine or network.
+  NOTE Process name is supplied by the client program.
+    For successful dispatcher_mt creation, the name should be unique in the local machine.
   NOTE Threads are created/named by the program. One dispatcher instance accepts
-    only unique thread names. The program is responsible for possible name conflicts
+    only unique thread names. The client program is responsible for possible name conflicts
     beyond that one instance.
   NOTE For dispatcher, "process" and "thread" may be different from
     CPU-related items. One CPU process may create several dispatcher instances,
@@ -455,7 +485,7 @@ Message format on the receiver side.
     "trg0" appears in messages delivered by subscription or from external source.
       It is the target slot address specified by primary sender.
 
-Matching of slot names between sender and receiver.
+Slot names matching between sender and receiver.
   1. Allowed slot types correspondence:
     po --> pi, qi, qs
     qs --> pi, qi
@@ -493,9 +523,7 @@ Overview of slots and threads locking.
       before clients using thread proxy objects.
     NOTE On the client side, thread proxy object may be shared
       between threads in the form of strong reference (copying the wrapping unity object).
-      In the good design, sharing simply by pointer should be avoided
-      to minimize possibility of erroneous releasing the last strong reference
-      to session data object concurrently with i_dispatcher_mt calling by other thread.
+      For safer functioning, sharing simply by pointer should be avoided.
 
   4. cref_t<cch_slot, dispatcher_mt> - strong reference to slot object.
     Its copying/destruction is protected by a lock.
@@ -559,6 +587,7 @@ dispatcher_mt threads configuration structure.
       size = <N>
         N >= 3 - specific queue size. If not specified,
           all queues have default size 10, except qi_char with default size 200.
+          In the current implementations, the queue does not grow or make any reallocations.
     pi, qi, qs, qbi (all inputs):
       input all = <true (default) | false>
         true - allow all threads to write messages directly (not via subscription) to this slot.

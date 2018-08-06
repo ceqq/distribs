@@ -1,7 +1,7 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2018-04-29
-// Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2017)
+// rev. 2018-06-01
+// Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2018)
 // Project website: hashx.dp.ua
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // See also "Guidelines for using this file" at its end.
@@ -27,6 +27,11 @@
   #pragma GCC diagnostic ignored "-Wunused-parameter"
   #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
+  #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic ignored "-Wint-in-bool-context"
+#endif
+#ifdef _MSC_VER
+  #pragma warning(disable:4290)
 #endif
 
 #if __APPLE__ && __MACH__
@@ -466,8 +471,8 @@ struct bytes
     template<class L> struct _lock_base_t<L, typename L::t_target>
     {
       enum { can_lock = true, _nq = sizeof(L) }; union { meta::s_ll __1[6]; char _stc[_nq + 1]; };
-      inline bool is_lckinit() const throw() { return bool(_stc[_nq]); }
-      inline bool is_locked() const throw() { return bool(_stc[_nq]); }
+      inline bool is_lckinit() const throw() { return !!_stc[_nq]; }
+      inline bool is_locked() const throw() { return !!_stc[_nq]; }
       inline _lock_base_t() throw() { _stc[_nq] = 0; try { new (reinterpret_cast<L*>(_stc)) L(); _stc[_nq] = 1; } catch (...) { return; } }
       inline ~_lock_base_t() throw() { if (_stc[_nq]) { try { L* p = reinterpret_cast<L*>(_stc); p->~L(); } catch (...) {} _stc[_nq] = 0; } }
     };
@@ -719,8 +724,8 @@ protected:
   static const s_long _xsh = 8, _xd = 1 << _xsh, _fm = _xd - 1, _xm = ~_fm;
 
   inline s_long _nxf_default() const throw() { return 0x1; }
-  inline bool _f_can_shrink() const throw() { return bool(_nxf & 0x1); }
-  inline bool _f_unsafe() const throw() { return bool(_nxf & 0x2); }
+  inline bool _f_can_shrink() const throw() { return !!(_nxf & 0x1); }
+  inline bool _f_unsafe() const throw() { return !!(_nxf & 0x2); }
 
   inline void _setf_can_shrink(bool x) throw() { x ? _nxf |= 0x1 : _nxf &= ~s_long(0x1); }
   inline void _setf_unsafe(bool x) const throw() { x ? _nxf |= 0x2 : _nxf &= ~s_long(0x2); }
@@ -733,7 +738,7 @@ protected:
 
     // Access to user flags. i = [0.._uf_n-1].
     //  NOTE vecm_clear and all vecm constructors set all flags to 0.
-  inline bool _uf(s_long i) const throw() { return bool(_nxf & _uf_m & (_uf_1 << i)); }
+  inline bool _uf(s_long i) const throw() { return !!(_nxf & _uf_m & (_uf_1 << i)); }
   inline void _set_uf(s_long i, bool x) const throw() { x ? _nxf |= (_uf_m & (_uf_1 << i)) : _nxf &= ~(_uf_m & (_uf_1 << i)); }
 
     // Allocates the first column. May be called only on _pj == 0. Sets _pj and _nj according to the results of allocation (!0 and 1, or 0 and 0). Returns the new _pj.
@@ -2967,7 +2972,7 @@ public:
     inline link1_t(const link1_t<T, !is_const, _bs>& l) throw() : _pv(l._pv), _px(l._px), _i(l._i), _i0(l._i0), _i2(l._i2) { } // NOTE const to non-const conv. does not compile
     inline link1_t(const link1_t& l) throw() : _pv(l._pv), _px(l._px), _i(l._i), _i0(l._i0), _i2(l._i2) { }
 
-    inline bool is_valid() const throw() { return bool(_pv); }
+    inline bool is_valid() const throw() { return !!_pv; }
     inline bool is_out() const throw() { return !_px; }
     inline t_ctnr* pcontainer() const throw() { return _pv; } // t_ctnr is either vecm or const vecm
     inline t_x* pval() const throw() { return _px; } // t_x is either T or const T
@@ -3122,7 +3127,7 @@ namespace
     // Local static functions for whole container.
   void _vecm_tu_aux::_ls_destroy(const vecm* p) throw() { static_cast<const __vecm_x*>(p)->_l_destroy(); }
   s_long _vecm_tu_aux::_ls_delete(const vecm* p) throw() { try { delete p; return 1; } catch (...) { return 0; } }
-  s_long _vecm_tu_aux::_ls_copy(vecm* pdest, const vecm* psrc, s_long is_tr) throw() { return static_cast<__vecm_x*>(pdest)->_l_copy(psrc, is_tr); }
+  s_long _vecm_tu_aux::_ls_copy(vecm* pdest, const vecm* psrc, s_long is_tr) throw() { return static_cast<__vecm_x*>(pdest)->_l_copy(psrc, !!is_tr); }
   s_long _vecm_tu_aux::_ls_clear(vecm* p) throw() { return static_cast<__vecm_x*>(p)->_l_clear(); }
 
   struct _vecm_tu_cmreg
@@ -3298,11 +3303,13 @@ struct hashx_common
             // 7 - any known 8-byte integer type
             // 8 - float
             // 9 - long double
+            // 10 - bool
 
         _k8 = 8 * meta::same_t<T, float>::result,
         _k9 = _k8 ? _k8 : 9 * meta::same_t<T, long double>::result,
+        _k10 = _k9 ? _k9 : 10 * meta::same_t<T, bool>::result,
 
-        _k4 = _k9 ? _k9 : 4 * (meta::is_ptr<T>::result && sizeof(T) <= sizeof(s_long)),
+        _k4 = _k10 ? _k10 : 4 * (meta::is_ptr<T>::result && sizeof(T) <= sizeof(s_long)),
         _k5 = _k4 ? _k4 : 5 * (meta::is_ptr<T>::result && sizeof(T) > sizeof(s_long) && sizeof(T) <= 8),
         _k6 = _k5 ? _k5 : 6 * meta::is_ptr<T>::result,
         _k7 = _k6 ? _k6 : 7 * (sizeof(T) == 8 && bytes::config0_t<T>::isKnown1),
@@ -3328,6 +3335,7 @@ struct hashx_common
 
     template<class T> struct _hashf_t<T, 8> { s_long F(float key) { return _hashf_t<T, 1>().F(key); } };
     template<class T> struct _hashf_t<T, 9> { s_long F(long double key) { if (key == 0. || !(key == key)) { return 0; } int order = 0; int sign = key > 0 ? 1 : -1; if (sign < 0) { key = -key; } const long double d1 = 1.e150; while (key < d1 / 1.e50) { key *= d1; order -= 25; } while (key > 1.e200) { key /= d1; order += 25; } const int d2 = 1000000; while (key > 1000000000) { key /= d2; ++order; } return _hashf_t<T, 1>().F(double(int(key + 0.5)) * 0.097) ^ _hashf_t<T, 2>().F(order * 4 + (sign + 1)); } };
+    template<class T> struct _hashf_t<T, 10> { s_long F(bool key) { return key ? 37 : 0; } };
 
   public:
     inline s_long operator () (s_long key) const { return key >> 17 ^ key * 37; }
@@ -3669,8 +3677,8 @@ struct hashx : protected vecm
     //  Returns:
     //      a) a reference to the value, corresponding to the newly inserted or existing key.
     //      b) throws hoxOpFailed when failed to insert (e.g. memory allocation / object construction error).
-  inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::hoxOpFailed; } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::hoxOpFailed; }
-  inline t_v& opsub(const t_k& k __vecm_noarg) throw (hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::hoxOpFailed; } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::hoxOpFailed; }
+  inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
+  inline t_v& opsub(const t_k& k __vecm_noarg) throw (hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
 
     // The number of entries in the hash.
   inline s_long n() const throw() { return _n; } // >=0
@@ -4139,7 +4147,7 @@ template<class T1, class T2, class T3, class T4> bool hashx<T1, T2, T3, T4>::_ff
   if (p->_pz) { _ff_mc3_p<__vecm_tu_selector>()->Fd_destroy(p); }
   p->_base = _base_min; p->_mask = _base_min - 1; p->_rhdir = 0; p->_pz = Fz_new(p->_ht.ptd());
   if (p->_pz) { if (p->_ht.template el_append_m<s_long>(_base_min, no_elem) != _base_min) { Fd_destroy(p); } }
-  return bool(p->_pz);
+  return !!p->_pz;
 }
 template<class T1, class T2, class T3, class T4> void hashx<T1, T2, T3, T4>::_ff_mc3_impl::Fd_destroy(t_hashx* p)
 {

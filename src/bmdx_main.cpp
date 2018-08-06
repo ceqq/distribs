@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-04-29
+// rev. 2018-06-01
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -21,6 +21,9 @@
 #include "bmdx_main.h"
 using namespace bmdx_str::words;
 using namespace bmdx_str::conv;
+
+//#include <iostream>
+//using std::cerr;
 
 #include <iomanip>
 #include <sstream>
@@ -44,6 +47,40 @@ namespace
   // const std::wstring& __wBSCRLF() { static const std::wstring x(L"\\\r\n"); return x; }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OS-dependent code. Part 1. Common library.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace bmdx
+{
+  #ifdef _bmdxpl_Wnds
+    s_long wsbs_lkp() { return -1; } // ws/bs functions do not change locale, locking is not needed
+  #endif
+  #ifdef _bmdxpl_Psx
+      s_long wsbs_lkp() { return 10; } // ws/bs functions change locale, locking is needed
+  #endif
+  #ifdef _bmdxpl_OS_NAME_HERE
+      s_long wsbs_lkp() { }
+  #endif
+  struct setlocale_locked
+  {
+    int cat;
+    const char* name;
+    t_critsec_locale __lock;
+    setlocale_locked(int _Category, const char* _Locale)
+      : cat(LC_CTYPE), name(0), __lock(wsbs_lkp(), -1)
+    {
+      #if defined(__BORLANDC__)
+        cat = LC_ALL; // this value works well, while others (at least LC_CTYPE) lead to permanent malfunctioning of std. out
+      #else
+        cat = _Category;
+      #endif
+      name = std::setlocale(cat, _Locale);
+    }
+    ~setlocale_locked() { std::setlocale(cat, name); }
+  };
+}
+
 namespace bmdx
 {
 
@@ -51,7 +88,7 @@ namespace bmdx
 // Internal utilities.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // NOTE This cannot trim \0 char.
+    // NOTE This cannot trim \0 char, but more efficient since does not create additional string argument.
   template<class Char>
   static std::basic_string<Char> _trim(const std::basic_string<Char>& s, const Char* pwhat, bool b_left = true, bool b_right = true)
   {
@@ -60,8 +97,8 @@ namespace bmdx
     meta::s_ll ls = meta::s_ll(s.length());
     if (ls == 0 || ls < lw) { return s; }
     meta::s_ll pos1(0); meta::s_ll pos2(ls);
-    if (b_left) { while (pos1 <= ls - lw) { if (s.substr(_t_sz(pos1), _t_sz(lw)) == pwhat) { pos1 += lw; } else { break; } } }
-    if (b_right) { while (pos2 > pos1 + lw) { if (s.substr(_t_sz(pos2 - lw), _t_sz(lw)) == pwhat) { pos2 -= lw; } else { break; } } }
+    if (b_left) { while (pos1 <= ls - lw) { if (0 == std::memcmp(s.c_str() + pos1, pwhat, size_t(lw) * sizeof(Char))) { pos1 += lw; } else { break; } } }
+    if (b_right) { while (pos2 > pos1 + lw) { if (0 == std::memcmp(s.c_str() + pos2 - lw, pwhat, size_t(lw) * sizeof(Char))) { pos2 -= lw; } else { break; } } }
     if (pos2 - pos1 == meta::s_ll(s.length())) { return s; }
     if (pos2 <= pos1) { return std::basic_string<Char>(); }
     return s.substr(_t_sz(pos1), _t_sz(pos2 - pos1));
@@ -70,12 +107,12 @@ namespace bmdx
   template<class Char>
   static std::basic_string<Char> _trim_s(const std::basic_string<Char>& s, const std::basic_string<Char>& what, bool b_left = true, bool b_right = true)
   {
-    meta::s_ll lw = meta::s_ll(s.length()); if (!lw) { return s; }
+    meta::s_ll lw = meta::s_ll(what.length()); if (!lw) { return s; }
     meta::s_ll ls = meta::s_ll(s.length());
     if (ls == 0 || ls < lw) { return s; }
     meta::s_ll pos1(0); meta::s_ll pos2(ls);
-    if (b_left) { while (pos1 <= ls - lw) { if (s.substr(_t_sz(pos1), _t_sz(lw)) == what) { pos1 += lw; } else { break; } } }
-    if (b_right) { while (pos2 > pos1 + lw) { if (s.substr(_t_sz(pos2 - lw), _t_sz(lw)) == what) { pos2 -= lw; } else { break; } } }
+    if (b_left) { while (pos1 <= ls - lw) { if (0 == std::memcmp(s.c_str() + pos1, what.c_str(), size_t(lw) * sizeof(Char))) { pos1 += lw; } else { break; } } }
+    if (b_right) { while (pos2 > pos1 + lw) { if (0 == std::memcmp(s.c_str() + pos2 - lw, what.c_str(), size_t(lw) * sizeof(Char))) { pos2 -= lw; } else { break; } } }
     if (pos2 - pos1 == meta::s_ll(s.length())) { return s; }
     if (pos2 <= pos1) { return std::basic_string<Char>(); }
     return s.substr(_t_sz(pos1), _t_sz(pos2 - pos1));
@@ -83,8 +120,8 @@ namespace bmdx
   std::wstring trim(const std::wstring& s, const std::wstring& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
   std::string trim(const std::string& s, const std::string& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
 
-  std::string lcase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(tolower(s[pos])); } return s2; }
-  std::string ucase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(toupper(s[pos])); } return s2; }
+  std::string lcase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(std::tolower(s[pos])); } return s2; }
+  std::string ucase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(std::toupper(s[pos])); } return s2; }
   std::wstring lcase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towlower(s[pos])); } return s2; }
   std::wstring ucase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towupper(s[pos])); } return s2; }
 
@@ -240,7 +277,7 @@ private:
 struct cv_ff
 {
   template<class T, class _ = __vecm_tu_selector>
-  struct _pdyn_t { _pdyn_t(T* p_) : _p(p_) {} ~_pdyn_t() { if (_p) { try { delete _p;  } catch (...) {} _p = 0; } } operator bool() const { return bool(_p); } T* ptr() const { return _p; } T* take() { T* p2 = _p; _p = 0; return p2; } private: T* _p; void operator=(const _pdyn_t&); _pdyn_t(const _pdyn_t&); };
+  struct _pdyn_t { _pdyn_t(T* p_) : _p(p_) {} ~_pdyn_t() { if (_p) { try { delete _p;  } catch (...) {} _p = 0; } } operator bool() const { return !!_p; } T* ptr() const { return _p; } T* take() { T* p2 = _p; _p = 0; return p2; } private: T* _p; void operator=(const _pdyn_t&); _pdyn_t(const _pdyn_t&); };
 
     // Returns string representation of the dimensions.
     //  "" on error.
@@ -367,7 +404,7 @@ struct cv_ff
       // NOTE Fless12 ignores fkcmpRevOrder.
     template<class A, class B> static inline bool Fless12(const B* p1, const A* p2, s_long flags)
     {
-      return _Fless12(p1, p2, flags);
+      return !!_Fless12(p1, p2, flags);
 //      if (flags & unity::fkcmpRevOrder) { return _Fless12(p2, p1, flags); }
 //        else { return _Fless12(p1, p2, flags); }
     }
@@ -417,7 +454,7 @@ struct cv_ff
       if (a.n() == 0) { return b.n() > 0; } if (b.n() == 0) { return false; }
       vecm::link1_t<C1, true, __vecm_tu_selector> la(a.link1_cbegin()); vecm::link1_t<C2, true, __vecm_tu_selector> lb(b.link1_cbegin());
       do {
-        _yk_reg const C1* p1 = la.pval(); _yk_reg const C2* p2 = lb.pval(); if (!p1) { return bool(p2); } if (!p2) { return false; }
+        _yk_reg const C1* p1 = la.pval(); _yk_reg const C2* p2 = lb.pval(); if (!p1) { return !!p2; } if (!p2) { return false; }
         if (_Fless12(p1, p2, flags)) { return true; } if (_Fless12(p2, p1, flags)) { return false; }
         la.incr(); lb.incr();
       } while (true);
@@ -431,7 +468,7 @@ struct cv_ff
       for (s_long i = 0; i < m; ++i)
       {
         _yk_reg const typename M::entry *e1 = a(i), *e2 = b(i);
-        if (!e1) { return bool(e2); } if (!e2) { return false; }
+        if (!e1) { return !!e2; } if (!e2) { return false; }
         if (_kfx<unity>::_Fless12(&e1->k, &e2->k, flags)) { return true; } if (_kfx<unity>::_Fless12(&e2->k, &e1->k, flags)) { return false; }
         if (_kfx<unity>::_Fless12(&e1->v, &e2->v, flags)) { return true; } if (_kfx<unity>::_Fless12(&e2->v, &e1->v, flags)) { return false; }
       }
@@ -720,7 +757,7 @@ template<int utt_, class _> struct cv_ff::cv_delete::_del_t  {    static s_long 
 template<class _> struct cv_ff::cv_delete::_del_t<utEmpty, _> { static s_long F(void * p, s_long uttf) { return 1; } };
 template<class _> struct cv_ff::cv_delete::_del_t<utObject, _> { static s_long F(void * p, s_long uttf) {
   if (!p) { return 1; }
-  unity::o_api a(p, uttf & unity::xfObjItfsList);
+  unity::o_api a(p, !!(uttf & unity::xfObjItfsList));
   s_long res =  a._ref_del((uttf & unity::xfObjStrongRef) ? 1 : 2);
     if (res > 0) { return 2; }
   return 0;
@@ -1129,7 +1166,7 @@ void unity_common::_ls_psm_set(const char* piname, unity_common::__Psm pf) throw
   svf_m_t<t_hipsm, unity_common>::L __lock; if (!__lock.b_valid()) { return; }
       svf_m_t<t_hipsm, unity_common> rsth; if (rsth.b_noinit()) { rsth.init0(1); }
       t_hipsm* ph = rsth.px(); if (!ph) { return; }
-  try { (*ph)[piname] = pf; } catch (...) {}
+  try { ph->opsub(piname) = pf; } catch (...) {}
 }
 void* _ls_obj_pi(void*, const char*) throw() { return 0; }
 void* _ls_obj_cpvoid(void*, s_long) throw() { return 0; }
@@ -1186,6 +1223,7 @@ void* unity_common::ls_modsm(s_long ind)
 
   return ind >= 0 && ind < size ? smt[ind] : 0;
 }
+unity_common::f_ls_modsm unity_common::pls_modsm() { return &ls_modsm; }
 
 struct _static_conv
 {
@@ -1866,13 +1904,13 @@ void _static_conv::conv_String_CharVector(s_long fc, const std::wstring& x, std:
 
 //========================================================================
 
-void _static_conv::conv_Object_Int(s_long fc, char& x0, meta::s_ll& retval) {  unity::o_api a(&x0, fc & unity::xfObjItfsList); retval = (char*)a.pvoid(false)-(char*)0; }
-void _static_conv::conv_Object_Float(s_long fc, char& x0, double& retval) {  unity::o_api a(&x0, fc & unity::xfObjItfsList); retval = double(meta::s_ll((char*)a.pvoid(false)-(char*)0)); }
+void _static_conv::conv_Object_Int(s_long fc, char& x0, meta::s_ll& retval) {  unity::o_api a(&x0, !!(fc & unity::xfObjItfsList)); retval = (char*)a.pvoid(false)-(char*)0; }
+void _static_conv::conv_Object_Float(s_long fc, char& x0, double& retval) {  unity::o_api a(&x0, !!(fc & unity::xfObjItfsList)); retval = double(meta::s_ll((char*)a.pvoid(false)-(char*)0)); }
 void _static_conv::conv_Object_Date(s_long fc, char& x0, _unitydate& retval) { retval.set(0); }
 void _static_conv::conv_Object_String(s_long fc, char& x0, std::wstring& retval)
 {
   try {
-    unity::o_api a(&x0, fc & unity::xfObjItfsList);
+    unity::o_api a(&x0, !!(fc & unity::xfObjItfsList));
     unity::o_api::critsec_rc __lock(a.prc);
     o_ref_info ri = a.ref_info();
     o_type_info ti = a.type_info(1+8);
@@ -1894,10 +1932,10 @@ void _static_conv::conv_Object_String(s_long fc, char& x0, std::wstring& retval)
   } catch (...) { if ((fc & cs_mask) != csLazy) { throw; } }
   retval.clear();
 }
-void _static_conv::conv_Object_Char(s_long fc, char& x0, _unitychar& retval) { unity::o_api a(&x0, fc & unity::xfObjItfsList); retval = bool(a.pvoid(true)); }
+void _static_conv::conv_Object_Char(s_long fc, char& x0, _unitychar& retval) { unity::o_api a(&x0, !!(fc & unity::xfObjItfsList)); retval = !!a.pvoid(true); }
 void _static_conv::conv_Object_Unity(s_long fc, char& x0, unity& retval)
 {
-  unity::o_api a(&x0, fc & unity::xfObjItfsList);
+  unity::o_api a(&x0, !!(fc & unity::xfObjItfsList));
   unity::o_api a2 = a._ref_newcp(retval.pmsm, (fc & unity::xfObjStrongRef) ? 1 : 2);
   if (!a2.prc)
   {
@@ -2850,8 +2888,8 @@ void _static_conv::conv_utStringArray_CharVector(s_long fc, const unity& x, std:
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 // unity impl.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 //enum { _trace_cnv_n = 256 };
@@ -3174,9 +3212,59 @@ s_long cv_ff::u_clear::Fu_clear(unity* p, s_long flags)
 unity* unity::_path_u(const std::wstring& keylist, bool forced) throw()
 {
   try {
-    std::wstring s2 = _trim(keylist, L" ", true, false); if (s2.length() == 0) { s2 = L"=|"; } else if (s2[0] == L'=') {} else if (s2[0] == L'|') { s2 = L"=" + keylist; } else { s2 = L"=|" + keylist; }
-    unity k; k = paramline().decode(s2, false).hash(L"");
-    if (!k.isArray()) { return 0; }
+    unity k;
+    if (1)
+    {
+      _t_wz possc = keylist.find(L';');
+      if (possc == nposw)
+      {
+        _t_wz pos1 = keylist.find_first_not_of(L' ');
+        if (pos1 != nposw)
+        {
+          if (keylist[pos1] == '=')
+          {
+            _t_wz posv = keylist.find(L'|', pos1);
+            std::wstring s2 = keylist; s2[pos1] = posv == nposw ? L'|' : L' '; paramline().decode1v(s2, k);
+          }
+          else if (keylist[pos1] == '|') { paramline().decode1v(keylist, k); }
+          else
+          {
+            _t_wz posv = keylist.find(L'|', pos1);
+            if (posv == nposw) { paramline().decode1v(keylist, k); }
+            else if (pos1 > 0) { std::wstring s2 = keylist; s2[pos1 - 1] = L'|'; paramline().decode1v(s2, k); }
+            else { std::wstring s2 = L"|"; s2 += keylist; paramline().decode1v(s2, k); }
+          }
+        }
+        else { paramline().decode1v(keylist, k); }
+      }
+      else
+      {
+        std::wstring s2 = _trim(keylist, L" ", true, false); if (s2.length() == 0) { s2 = L"=|"; } else if (s2[0] == L'=') {} else if (s2[0] == L'|') { s2 = L"=" + keylist; } else { s2 = L"=|" + keylist; }
+        k = paramline().decode(s2, false).hash(L"");
+      }
+    }
+    if (!k.isArray())
+    {
+      if (this->isHash())
+      {
+        if (this->hash_locate(k) || forced) { return &this->hash(k); } else { return 0; }
+      }
+      else if (this->isMap())
+      {
+        if (this->map_locate(k) || forced) { return &this->map(k); } else { return 0; }
+      }
+      else if (this->utype() == utUnityArray)
+      {
+        meta::s_ll ind(0); try { if (k.utype() == utEmpty || k.utype() == utInt || k.utype() == utFloat) { ind = k.vint(); } else { return 0; } } catch (...) { return 0; }
+        if (s_long(ind) != ind) { return 0; }
+        if (this->ua_has(s_long(ind)) || forced) { return &this->ua(s_long(ind)); } else { return 0; }
+      }
+      else if (!forced) { return 0; }
+      bool b(false);
+      meta::s_ll ind(0); try { b = k.utype() == utEmpty || k.utype() == utInt || k.utype() == utFloat; if (b) { ind = k.vint(); } } catch (...) { return 0; }
+      if (b) { return &this->ua(s_long(ind)); }
+      return &this->hash(k);
+    }
     unity* node = this;
     for (int j = k.arrlb(); j <= k.arrub(); ++j)
     {
@@ -3541,8 +3629,8 @@ bool unity::k_eq(const unity& x, s_long flags) const
         case utObject:
           { if (x.utype() == utObject) { return cpvoidkey() == x.cpvoidkey(); } return false; }
 
-        case utMap: { if (x.utype() == utMap) { return cv_ff::_kfx<t_map_tu>::Feq(_m(), x._m(), flags); } return false; }
-        case utHash: { if (x.utype() == utHash) { return cv_ff::_kfx<t_hash>::Feq(_h(), x._h(), flags); } return false; }
+        case utMap: { if (x.utype() == utMap) { return !!cv_ff::_kfx<t_map_tu>::Feq(_m(), x._m(), flags); } return false; }
+        case utHash: { if (x.utype() == utHash) { return !!cv_ff::_kfx<t_hash>::Feq(_h(), x._h(), flags); } return false; }
 
         case utIntArray:
             switch (x.utype())
@@ -3717,6 +3805,12 @@ bool unity::k_less(const unity& x, s_long flags) const
 const unity unity::_0;
 unity unity::_0nc;
 
+unity& unity::array0( _rcu x1, _rcu x2, _rcu x3, _rcu x4, _rcu x5, _rcu x6, _rcu x7, _rcu x8, _rcu x9, _rcu x10, _rcu x11, _rcu x12, _rcu x13, _rcu x14, _rcu x15, _rcu x16, _rcu x17, _rcu x18, _rcu x19, _rcu x20, _rcu x21, _rcu x22, _rcu x23, _rcu x24, _rcu x25, _rcu x26, _rcu x27, _rcu x28, _rcu x29, _rcu x30 )
+{
+  arr_init<utUnity>(0);
+  if (&x1!=&_0 && &x1!=this) arr_append(x1); if (&x2!=&_0 && &x2!=this) arr_append(x2); if (&x3!=&_0 && &x3!=this) arr_append(x3); if (&x4!=&_0 && &x4!=this) arr_append(x4); if (&x5!=&_0 && &x5!=this) arr_append(x5); if (&x6!=&_0 && &x6!=this) arr_append(x6); if (&x7!=&_0 && &x7!=this) arr_append(x7); if (&x8!=&_0 && &x8!=this) arr_append(x8); if (&x9!=&_0 && &x9!=this) arr_append(x9); if (&x10!=&_0 && &x10!=this) arr_append(x10); if (&x11!=&_0 && &x11!=this) arr_append(x11); if (&x12!=&_0 && &x12!=this) arr_append(x12); if (&x13!=&_0 && &x13!=this) arr_append(x13); if (&x14!=&_0 && &x14!=this) arr_append(x14); if (&x15!=&_0 && &x15!=this) arr_append(x15); if (&x16!=&_0 && &x16!=this) arr_append(x16); if (&x17!=&_0 && &x17!=this) arr_append(x17); if (&x18!=&_0 && &x18!=this) arr_append(x18); if (&x19!=&_0 && &x19!=this) arr_append(x19); if (&x20!=&_0 && &x20!=this) arr_append(x20); if (&x21!=&_0 && &x21!=this) arr_append(x21); if (&x22!=&_0 && &x22!=this) arr_append(x22); if (&x23!=&_0 && &x23!=this) arr_append(x23); if (&x24!=&_0 && &x24!=this) arr_append(x24); if (&x25!=&_0 && &x25!=this) arr_append(x25); if (&x26!=&_0 && &x26!=this) arr_append(x26); if (&x27!=&_0 && &x27!=this) arr_append(x27); if (&x28!=&_0 && &x28!=this) arr_append(x28); if (&x29!=&_0 && &x29!=this) arr_append(x29); if (&x30!=&_0 && &x30!=this) arr_append(x30);
+  return *this;
+}
 unity& unity::array( _rcu x1, _rcu x2, _rcu x3, _rcu x4, _rcu x5, _rcu x6, _rcu x7, _rcu x8, _rcu x9, _rcu x10, _rcu x11, _rcu x12, _rcu x13, _rcu x14, _rcu x15, _rcu x16, _rcu x17, _rcu x18, _rcu x19, _rcu x20, _rcu x21, _rcu x22, _rcu x23, _rcu x24, _rcu x25, _rcu x26, _rcu x27, _rcu x28, _rcu x29, _rcu x30 )
 {
   arr_init<utUnity>(1);
@@ -3958,7 +4052,7 @@ void unity::mapFlags_set(s_long fk_reset, s_long fk_set)
     rm.__rev_inds();
     rm.pkf()->_set_flags(fk); return;
   }
-  bool b_ro = bool((fk0 ^ fk) & fkcmpRevOrder);
+  bool b_ro = !!((fk0 ^ fk) & fkcmpRevOrder);
   unity z0; z0.pmsm = pmsm; z0._ensure_m(); _mx& rm2 = *static_cast<_mx*>(z0._m()); rm2.pkf()->_set_flags(fk);
   for (s_long i = 0; i < rm.n(); ++i) { const t_map::entry* e = rm(i); if (rm2.__append(b_ro, e->k, e->v, true) < 0) { throw XUExec("mapFlags_set.1"); } }
   _xu_move_p1(z0);
@@ -3975,7 +4069,7 @@ bool unity::map_locate(const unity& k, bool insert)
 {
   _ensure_m();
   if (insert) { s_long res = _m()->insert(k); if (res >= 0) { return res > 0; } throw XUExec("map_locate.1"); }
-  return _m()->find(k);
+  return !!_m()->find(k);
 }
 bool unity::map_locate(const unity& k, bool insert, s_long& ind)
 {
@@ -3983,7 +4077,7 @@ bool unity::map_locate(const unity& k, bool insert, s_long& ind)
   if (k.isEmpty())
   {
     _mx& rm = *static_cast<_mx*>(_m());
-    bool b_ro = bool(rm.pkf()->flags() & fkcmpRevOrder);
+    bool b_ro = !!(rm.pkf()->flags() & fkcmpRevOrder);
     if (rm.find(k)) { ind = b_ro ? rm.n() : 1; return !insert; }
     if (!insert) { ind = b_ro ? rm.n() + 1 : 1; return false; }
     s_long res = rm.__append(!b_ro, k, unity(), false);
@@ -3992,7 +4086,7 @@ bool unity::map_locate(const unity& k, bool insert, s_long& ind)
   }
   s_long ind2; s_long res;
   if (insert) { res = _m()->insert(k, 0, &ind2); if (res >= 0) { ind = ind2 + 1; return res > 0; } throw XUExec("map_locate.2"); }
-  res = _m()->find(k, &ind2) ? 1 : 0; ind = res ? ind2 + 1 : map_noel(); return bool(res);
+  res = _m()->find(k, &ind2) ? 1 : 0; ind = res ? ind2 + 1 : map_noel(); return !!res;
 }
 
 unity& unity::map(const unity& k)        { _ensure_m(); return (*_m())[k]; }
@@ -4187,11 +4281,11 @@ const unity* unity::path(const std::string& keylist, const unity& x_dflt) const 
 const unity* unity::path(const char* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
 const unity* unity::path(const unity& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
 
-unity* unity::path_w(const std::wstring& keylist) throw() { return _path_u(keylist, true); }
-unity* unity::path_w(const wchar_t* keylist) throw() { try { return _path_u(keylist, true); } catch (...) { return 0; } }
-unity* unity::path_w(const std::string& keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
-unity* unity::path_w(const char* keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
-unity* unity::path_w(const unity& keylist) throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.ref<utString>(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const std::wstring& keylist) throw() { return _path_u(keylist, true); }
+unity* unity::_path_w(const wchar_t* keylist) throw() { try { return _path_u(keylist, true); } catch (...) { return 0; } }
+unity* unity::_path_w(const std::string& keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const char* keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const unity& keylist) throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.ref<utString>(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
 
 
 std::ostream& operator<<(std::ostream& s, const unity::iofmt& f) { unity::write_fmt(s, *f.px, f, false); return s; }
@@ -4252,7 +4346,7 @@ bool unity::hash_locate(const unity& k, bool insert)
 {
   _ensure_h();
   if (insert) { s_long res = _h()->insert(k); if (res >= 0) { return res > 0; } throw XUExec("hash_locate.1"); }
-  return _h()->find(k);
+  return !!_h()->find(k);
 }
 unity& unity::hash(const unity& k)        { _ensure_h(); return (*_h())[k]; }
 bool unity::hash_set(const unity& k, const unity& v, bool keep_first, s_long pos_before)
@@ -4304,8 +4398,8 @@ bool unity::u_has(const unity& ki, s_long tt) const
     if (!(ind >= cv_ff::cv_array::Llb_u(this) && ind <= cv_ff::cv_array::Lub_u(this))) { return false; }
     return true;
   }
-  if ((tt & 2) != 0 && utype() == utMap) { return _m()->find(ki); }
-  if ((tt & 4) != 0 && utype() == utHash) { return _h()->find(ki); }
+  if ((tt & 2) != 0 && utype() == utMap) { return !!_m()->find(ki); }
+  if ((tt & 4) != 0 && utype() == utHash) { return !!_h()->find(ki); }
   if ((tt & 8) != 0 && utype() == utObject) { const unity* p = objPtr_c<unity>(); if (p) { return p->u_has(ki, tt); } }
   return false;
 }
@@ -4561,8 +4655,8 @@ void unity::write_fmt(std::wostream& s, const unity& x, const iofmt& f, bool bsp
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 // Utilities
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem); // platform-dependent
 std::string _wsToBsUtf8(const wchar_t* ps, meta::s_ll n);
@@ -4699,21 +4793,23 @@ std::string replace(const std::string& s, const std::string& from, const std::st
     pos=0;
     if (ignoreCase)
     {
-      t_critsec_locale __lock(wsbs_lkp(), -1); if (sizeof(__lock)) {}
-      const char* prevlocn = std::setlocale(LC_CTYPE, "");
-        std::string s_l = lcase(s);
-        std::string from_l = lcase(from);
-        do
-        {
-          if (n >= nmax) { break; }
-          pos2 = s_l.find(from_l, pos);
-          if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos); }
-            else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
-          pos = pos2;
-        }
-        while(pos < s.length());
-        if (pos < s.length()) { dest += s.substr(pos); }
-      std::setlocale(LC_CTYPE, prevlocn);
+      std::string s_l, from_l;
+      if (1)
+      {
+        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
+        s_l = lcase(s);
+        from_l = lcase(from);
+      }
+      do
+      {
+        if (n >= nmax) { break; }
+        pos2 = s_l.find(from_l, pos);
+        if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos); }
+          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
+        pos = pos2;
+      }
+      while(pos < s.length());
+      if (pos < s.length()) { dest += s.substr(pos); }
     }
     else
     {
@@ -4744,21 +4840,23 @@ std::wstring replace(const std::wstring& s, const std::wstring& from, const std:
     pos=0;
     if (ignoreCase)
     {
-      t_critsec_locale __lock(wsbs_lkp(), -1); if (sizeof(__lock)) {}
-      const char* prevlocn = std::setlocale(LC_CTYPE, "");
-        std::wstring s_l = lcase(s);
-        std::wstring from_l = lcase(from);
-        do
-        {
-          if (n >= nmax) { break; }
-          pos2 = s_l.find(from_l, pos);
-          if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos); }
-            else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
-          pos = pos2;
-        }
-        while(pos < s.length());
-        if (pos < s.length()) { dest += s.substr(pos); }
-      std::setlocale(LC_CTYPE, prevlocn);
+      std::wstring s_l, from_l;
+      if (1)
+      {
+        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
+        s_l = lcase(s);
+        from_l = lcase(from);
+      }
+      do
+      {
+        if (n >= nmax) { break; }
+        pos2 = s_l.find(from_l, pos);
+        if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos); }
+          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
+        pos = pos2;
+      }
+      while(pos < s.length());
+      if (pos < s.length()) { dest += s.substr(pos); }
     }
     else
     {
@@ -5476,10 +5574,14 @@ void* unity::o_api::pvoid(bool b_checked) const throw()
 }
   // Same as pvoid(true), + dereference cref_t<T, L> into T.
   //  Does not check compat. of T and cref_t<T> with the current binary module.
+  // tname:
+  //    b) typeid(T).name().
+  //    c) If T is any of cref_t<R>, thname == "|cref_t|" + typeid(R).name().
   // t_size:
-  //    -1 - sizeof(T) is not checked.
-  //    >=0 - sizeof(T) is checked for == t_size in case if tname == typeid(T).name() in the module of T.
+  //    a, b, c) -1 - sizeof(T) is not checked.
+  //    b) >=0 - sizeof(T) is checked for == t_size in case if tname == typeid(T).name() in the module of T.
   //      (For t_ind matching, t_size is ignored.)
+  //    c) >= 0 - sizeof(R), assuming T is a cref_t<R>.
 void* unity::o_api::prefo(const char* tname, s_long t_ind, s_long t_size) const throw()
 {
   if (!prc) { return 0; } if (!prc->rc_posm) { return 0; }
@@ -5812,7 +5914,7 @@ unity& paramline::decode_tree(const std::wstring& ssrc0, unity& mh, s_long flags
 {
   try {
     std::wstring pterm2 = pterm_0.length() == 0 ? wCRLF : pterm_0;
-    bool b_map = bool(flags & 0x1); bool b_clear = (flags & 0x4) == 0; bool b_keep = (flags & 0x2) == 0; bool b_skipslc = bool(flags & 0x8); bool b_convcr(flags & 0x10); bool b_noinclpath = (flags & 0x20) == 0; bool b_braces(flags & 0x40);
+    bool b_map = !!(flags & 0x1); bool b_clear = (flags & 0x4) == 0; bool b_keep = (flags & 0x2) == 0; bool b_skipslc = !!(flags & 0x8); bool b_convcr = !!(flags & 0x10); bool b_noinclpath = (flags & 0x20) == 0; bool b_braces = !!(flags & 0x40);
       if (!b_clear && mh.isMap()) { b_map = true; }
       if (b_map) { if (b_clear || !mh.isMap()) { mh.map_clear(true); } } else { if (b_clear || !mh.isHash()) { mh.hash_clear(true); } }
     const unity k_empty_str = L"";
@@ -6469,8 +6571,8 @@ unity paramline::list_hx
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Common library OS-dependent code
+// OS-dependent code. Part 2. Common library.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _bmdxpl_Wnds
 
@@ -6486,7 +6588,6 @@ unity paramline::list_hx
 
 namespace bmdx
 {
-  s_long wsbs_lkp() { return -1; } // ws/bs functions do not change locale, locking is not needed
   std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem) // n < 0: autodetect length based on null char.
   {
     try {
@@ -6565,39 +6666,6 @@ namespace bmdx
       static bool initDone(false); static wchar_t buf[500] = { L'\0' };
       if (!initDone) { critsec_t<static_init_lks> __lock(10,-1); if (sizeof(__lock)) {} GetModuleFileNameW(0,buf,500); initDone = true;  }
       return buf;
-    }
-      // command line, without executable path/filename
-    std::wstring cmd_string()
-    {
-      std::wstring s;
-      std::wstring scl = GetCommandLineW();
-      if (scl.size() > 0)
-      {
-        _t_wz pos2;
-        if (scl[0] == L'\"')
-        {
-          pos2 = scl.find(L"\"", 1);
-          if (pos2 == nposw) { pos2 = scl.size(); }
-          else
-          {
-            pos2 = scl.find_first_not_of(L" \t", pos2 + 1);
-            if (pos2 == nposw) { pos2 = scl.size(); }
-          }
-          s = scl.substr(pos2);
-        }
-        else
-        {
-          pos2 = scl.find_first_of(L" \t");
-          if (pos2 == nposw) { pos2 = scl.size(); }
-          else
-          {
-            pos2 = scl.find_first_not_of(L" \t", pos2);
-            if (pos2 == nposw) { pos2 = scl.size(); }
-          }
-        }
-        s = scl.substr(pos2);
-      }
-      return s;
     }
 
     bool __cl2argv(const wchar_t* cl, std::vector<std::wstring>& retv) throw()
@@ -6707,6 +6775,48 @@ namespace bmdx
       return false;
     }
 
+      // command line, without executable path/filename
+    std::wstring cmd_string(bool b_quoting)
+    {
+      std::wstring s;
+      if (b_quoting)
+      {
+        std::wstring scl = GetCommandLineW();
+        if (scl.size() > 0)
+        {
+          _t_wz pos2;
+          if (scl[0] == L'\"')
+          {
+            pos2 = scl.find(L"\"", 1);
+            if (pos2 == nposw) { pos2 = scl.size(); }
+            else
+            {
+              pos2 = scl.find_first_not_of(L" \t", pos2 + 1);
+              if (pos2 == nposw) { pos2 = scl.size(); }
+            }
+            s = scl.substr(pos2);
+          }
+          else
+          {
+            pos2 = scl.find_first_of(L" \t");
+            if (pos2 == nposw) { pos2 = scl.size(); }
+            else
+            {
+              pos2 = scl.find_first_not_of(L" \t", pos2);
+              if (pos2 == nposw) { pos2 = scl.size(); }
+            }
+          }
+          s = scl.substr(pos2);
+        }
+      }
+      else
+      {
+        std::vector<std::wstring> argv;
+        if (__cl2argv(GetCommandLineW(), argv)) { for (size_t i = 1; i < argv.size(); ++i) { if (i >= 2) { s += L' '; } s += argv[i]; } }
+      }
+      return s;
+    }
+
       // argv (0-based string array of command line arguments, size >= 1; 0 - program name (not exactly executable name/path), 1..* - dequoted arguments)
     unity cmd_array()
     {
@@ -6795,7 +6905,6 @@ static char __buf_argv[65000] = "_\0\0";
 namespace bmdx
 {
     namespace { struct _tcnvchk { static bool _test_mbrtowc() { char cc[MB_LEN_MAX+1]; size_t res; wchar_t c; cc[0] = 'A'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'A') { return false; } cc[0] = '1'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'1') { return false; } cc[0] = ';'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L';') { return false; } cc[0] = ' '; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L' ') { return false; } return true; } static bool _test_wcrtomb() { char cc[MB_LEN_MAX+1]; size_t res; res = wcrtomb(cc, L'A', 0); if (res != 1 || cc[0] != 'A') { return false; } res = wcrtomb(cc, L'1', 0); if (res != 1 || cc[0] != '1') { return false; } res = wcrtomb(cc, L';', 0); if (res != 1 || cc[0] != ';') { return false; } res = wcrtomb(cc, L' ', 0); if (res != 1 || cc[0] != ' ') { return false; } return true; } }; }
-    s_long wsbs_lkp() { return 1; } // ws/bs functions change locale, locking is needed
     std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem) // n < 0: autodetect length based on null char.
     {
       try {
@@ -6811,12 +6920,11 @@ namespace bmdx
 
         std::string s;
         char cc[MB_LEN_MAX+1];
-        t_critsec_locale __lock(10, -1); if (sizeof(__lock)) {}
-        const char* prevlocn = std::setlocale(LC_CTYPE, "");
+        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
         if (__wctomb(0, 0)) {}
 
         if (!_mb) { _mb = 2 + (int)_tcnvchk::_test_wcrtomb(); }
-        if (_mb == 2) { std::setlocale(LC_CTYPE, prevlocn); return _wsToBsUtf8(ps, n); }
+        if (_mb == 2) { return _wsToBsUtf8(ps, n); }
 
         meta::s_ll nrsv = n; s.reserve(_t_sz(nrsv));
         for(meta::s_ll pos = 0; pos < n; ++pos)
@@ -6825,7 +6933,6 @@ namespace bmdx
             else { int cnt = __wctomb(cc, ps[pos]); if (cnt <= -1) { s += '?'; } else { cc[cnt] = 0; s += cc; } }
           if ((pos & 0xfff) == 0) { meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
         }
-        std::setlocale(LC_CTYPE, prevlocn);
         return s;
       }
       catch (_XUBase&) { throw; }
@@ -6847,11 +6954,10 @@ namespace bmdx
         if (n < 0) { n = 0; const char* p = ps; while (*p++) { ++n; } }
         std::wstring s;
         if (n <= 0) { return s; }
-        t_critsec_locale __lock(10, -1); if (sizeof(__lock)) {}
-        const char* prevlocn = std::setlocale(LC_CTYPE, "");
+        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
 
         if (!_mb) { _mb = 2 + (int)_tcnvchk::_test_mbrtowc(); }
-        if (_mb == 2) { std::setlocale(LC_CTYPE, prevlocn); return _bsUtf8ToWs(ps, n); }
+        if (_mb == 2) { return _bsUtf8ToWs(ps, n); }
 
         meta::s_ll pos(0), rsvpos(0);
         if (__mbtowc(0, 0, 0)) {}
@@ -6868,7 +6974,6 @@ namespace bmdx
           }
           if (pos - rsvpos > 0xfff) { rsvpos = pos; meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
         }
-        std::setlocale(LC_CTYPE, prevlocn);
         return s;
       }
       catch (_XUBase&) { throw; }
@@ -7022,7 +7127,7 @@ namespace bmdx
 
 
         // command line, without executable path/filename
-      std::wstring cmd_string()
+      std::wstring cmd_string(bool b_quoting)
       {
         static bool initDone(false); static std::wstring s;
         if (!initDone)
@@ -7034,7 +7139,7 @@ namespace bmdx
           {
             if (i > 1) { s += L' '; }
             s2 = args[i];
-            if (s2.empty() || s2.find_first_of(" \t\r\n\f\v;'\"\\$[](){}^?*") != nposc)
+            if (b_quoting && (s2.empty() || s2.find_first_of(" \t\r\n\f\v;'\"\\$[](){}^?*") != nposc))
             {
               if (s2.find("'") != nposc) { s2 = replace(s2, "'", "'\\''"); }
               s2 = "'" + s2 + "'";
@@ -7102,7 +7207,7 @@ namespace bmdx
       }
 
         // command line, without executable path/filename
-      std::wstring cmd_string()
+      std::wstring cmd_string(bool b_quoting)
       {
         static bool initDone(false); static std::wstring s;
         if (!initDone)
@@ -7118,7 +7223,7 @@ namespace bmdx
               if (j > 1) { s += L' '; }
               if (j > 0)
               {
-                if (s2.empty() || s2.find_first_of(" \t\r\n\f\v;'\"\\$[](){}^?*") != nposc)
+                if (b_quoting && (s2.empty() || s2.find_first_of(" \t\r\n\f\v;'\"\\$[](){}^?*") != nposc))
                 {
                   if (s2.find("'") != nposc) { s2 = replace(s2, "'", "'\\''"); }
                   s2 = "'" + s2 + "'";
@@ -7162,7 +7267,6 @@ namespace bmdx
 #ifdef _bmdxpl_OS_NAME_HERE
 namespace bmdx
 {
-    s_long wsbs_lkp() { }
     std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem) { } // n < 0: autodetect length based on null char.
     std::wstring _bsToWs(const char* ps, meta::s_ll n) { } // n < 0: autodetect length based on null char.
     s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case) { }
@@ -7173,7 +7277,7 @@ namespace bmdx
     std::string cpathsep2() { }
     std::wstring wpathsep2() { }
     std::wstring cmd_myexe() { }
-    std::wstring cmd_string() { }
+    std::wstring cmd_string(bool b_quoting) { }
     unity cmd_array() { }
 }
 #endif
@@ -7192,8 +7296,8 @@ namespace bmdx
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// File utils OS-dependent code
+// OS-dependent code. Part 3. File utils.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 #ifdef _bmdxpl_Wnds
@@ -8165,6 +8269,7 @@ struct dispatcher_mt::cch_session
 {
   cch_session();
 
+  bmdx_shm::critsec_gn gm; // interprocess lock to ensure unique process name
   int exitmode;
   volatile int ses_state; // -1 during initialization, 1 during the current session, 0 after the session
 
@@ -8380,7 +8485,7 @@ public:
     bool cch_slot::qs_output_fixed() const { return (ccfgflags & 0x10) != 0; }
 cch_slot::cch_slot() : phase(0), ccfgflags(0) {}
 cch_thread::cch_thread() : b_disp(false), mst(0) {}
-dispatcher_mt::cch_session::cch_session() : exitmode(1), ses_state(-1), frqperm(0x1f), nprx(0), qsdt(-1), qsd_prio(4) {}
+dispatcher_mt::cch_session::cch_session() : gm(0), exitmode(1), ses_state(-1), frqperm(0x1f), nprx(0), qsdt(-1), qsd_prio(4) {}
 
 
   // m_* ask for possibility of thread adding/removal, or slots collection modification (slots adding/removal),
@@ -10492,9 +10597,18 @@ dispatcher_mt::dispatcher_mt(const std::wstring& process_name, const unity& _cfg
     if (!thread_proxy::pnchk(process_name)) { b = false; break; }
     rses.name_pr = process_name;
 
+
     if (1) { int e = +cfg / kg_exitmode / 1; if (!(e >= 0 && e <=2)) { b = false; break; } rses.exitmode = e; }
     if (1) { meta::s_ll dt = +cfg / kg_qsdt / -1; if (!(dt >= -1)) { b = false; break; } rses.qsdt = dt; }
 
+
+      // Lock to make process name unique in the system.
+    std::string pnutf("bmdxdmt\t"); pnutf += wsToBsUtf8(process_name);
+    rses.gm.~critsec_gn(); new (&rses.gm) bmdx_shm::critsec_gn(pnutf.c_str());
+    if (!rses.gm.lock()) { b = false; break; }
+
+
+      // Initialize threads and slots.
     thread_proxy::t_hsubs hsubs;
     for (s_long i = cfg.assocl_first(); i != cfg.assocl_noel(); i = cfg.assocl_next(i))
     {
@@ -10524,8 +10638,16 @@ dispatcher_mt::dispatcher_mt(const std::wstring& process_name, const unity& _cfg
   } } catch (...) { b = false; }
   if (1)
   {
-    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_nprx); if (sizeof(__lock)) {}
-    if (!b) { rses.nprx -= 1; _r_ths.clear(); return; }
+    if (!b) 
+    { 
+      if (1)
+      {
+        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_nprx); if (sizeof(__lock)) {}
+        rses.nprx -= 1; 
+      }
+      _r_ths.clear(); 
+      return; 
+    }
     rses.ses_state = 1;
   }
 }

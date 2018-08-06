@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-04-29
+// rev. 2018-06-01
 // See bmdx_main.h for description.
 
 // LIBRARY CONFIGURATION HEADER
@@ -11,7 +11,7 @@
 
 
 
-  // Enables (1) DLL/shared libraries loader functionality. 0 to disable.
+  // bmdx_part_dllmgmt 1 enables DLL/shared libraries loader functionality. 0 to disable.
   //  NOTE In Linux, compiling may require additional library (-ldl).
   //  NOTE Even if the part is disabled, the library can operate on an existing handle
   //    created in any module where the part is enabled.
@@ -19,9 +19,20 @@
   #define bmdx_part_dllmgmt 1
 #endif
 
-  // Enables (1) message dispatcher functionality. 0 to disable.
+  // bmdx_part_dispatcher_mt 1 enables message dispatcher functionality. 0 to disable.
 #ifndef bmdx_part_dispatcher_mt
   #define bmdx_part_dispatcher_mt 1
+#endif
+
+  // bmdx_part_shm 1 enables shared memory and global locks.
+  // This is optional part, used in the library itself only by dispatcher.
+#if bmdx_part_dispatcher_mt
+  #undef bmdx_part_shm
+  #define bmdx_part_shm 1
+#else
+  #ifndef bmdx_part_shm
+    #define bmdx_part_shm 0
+  #endif
 #endif
 
 
@@ -61,8 +72,8 @@
 //  #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #endif
 #ifdef _MSC_VER
+  #pragma warning(disable:4100)
 //  #pragma warning(disable:4800)
-//  #pragma warning(disable:4290)
 //  #pragma warning(disable:4355)
 //  #pragma warning(disable:4345)
 //  #pragma warning(disable:4996)
@@ -81,7 +92,7 @@
 
 
 namespace yk_c { struct bytes; }
-namespace
+namespace __bmdx_config
 {
   struct nothing {}; template<bool cond, class _ = nothing> struct assert { typedef bool t_false; };  template<class _> struct assert<true, _> { enum { result = true }; typedef bool t_true; };
   template<class L, class _> struct _check_isdef { enum { b = false }; }; template<class L> struct _check_isdef<L, typename L::_t_is_defined> { enum { b = true }; };
@@ -90,7 +101,6 @@ namespace
     //  Include bmdx_config.h before or instead of any inclusion of vecm_hashx.h.
   typedef assert<_check_isdef<yk_c::bytes, bool>::b>::t_false __check1;
 }
-
 
 
   // Required
