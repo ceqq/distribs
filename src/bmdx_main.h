@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-06-01
+// rev. 2018-08-15
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -3046,7 +3046,7 @@ namespace bmdx
     }
     typedef unity::_deref1_t<Obj> D;
     typedef typename D::t_obj R;
-    const char* t1 = "|cref_t|"; const size_t nt1 = 8;
+    const char* t1 = "|cref_t|"; (void)t1; const size_t nt1 = 8;
     if (!!D::is_cref_t && 0 == std::strncmp(tname, t1, nt1))
     {
       bool b1 = 0 == std::strcmp(typeid(R).name(), tname + nt1) && (t_size < 0 || s_long(sizeof(R)) == t_size);
