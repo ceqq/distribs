@@ -1,4 +1,4 @@
-// rev. 2018-08-15
+// rev. 2018-08-16
 ====================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 ====================================================
@@ -390,6 +390,17 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
   file_io contains a family of static functions (load_bytes, save_bytes)
     for loading/saving file as single object
     (basic_string, char*, carray_t, cpparray_t, arrayref_t).
+
+
+
+
+====================
+=== KNOWN ISSUES ===
+====================
+
+1. Locale usage by bmdx_main on POSIX systems: all related string conversion functions
+(wsToBs, lcase, unity to/from std::string etc.) irreversibly set the current program locale
+to the current user-preferred locale in the system (i.e. call setlocale(LC_CTYPE, "")).
 
 
 

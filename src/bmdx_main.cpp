@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-08-15
+// rev. 2018-08-16
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -62,22 +62,34 @@ namespace bmdx
   #ifdef _bmdxpl_OS_NAME_HERE
       s_long wsbs_lkp() { }
   #endif
+//~!!! fix for POSIX systems: avoid irreversible modification of program locale
+  _fls75 __locname_du;
+  bool __b_locname_du(false);
   struct setlocale_locked
   {
     int cat;
-    const char* name;
+    _fls75 name0;
     t_critsec_locale __lock;
-    setlocale_locked(int _Category, const char* _Locale)
-      : cat(LC_CTYPE), name(0), __lock(wsbs_lkp(), -1)
+    setlocale_locked(int cat_, const char* locname_)
+      : cat(-1), name0(), __lock(wsbs_lkp(), -1)
     {
-      #if defined(__BORLANDC__)
-        cat = LC_ALL; // this value works well, while others (at least LC_CTYPE) lead to permanent malfunctioning of std. out
-      #else
-        cat = _Category;
-      #endif
-      name = std::setlocale(cat, _Locale);
-    }
-    ~setlocale_locked() { std::setlocale(cat, name); }
+      if (!locname_) { return; }
+      const bool b_du = *locname_ == 0;
+      if (b_du && __b_locname_du) { locname_ = __locname_du.c_str(); }
+      name0 = std::setlocale(cat_, 0);
+      if (_fls75(locname_) != name0)
+      {
+        #if defined(__BORLANDC__)
+          (void)cat_;
+          cat = LC_ALL; // this value works well, while others (at least LC_CTYPE) lead to permanent malfunctioning of std. out
+        #else
+          cat = cat_;
+        #endif
+        const char* p = std::setlocale(cat, locname_);
+        if (p && b_du && !__b_locname_du) { __locname_du = p; __b_locname_du = true; }
+      }
+    }    
+//    ~setlocale_locked() { if (cat >= 0) { std::setlocale(cat, name0.c_str()); } }
   };
 }
 
