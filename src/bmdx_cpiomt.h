@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-08-16
+// rev. 2018-09-05
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -3422,7 +3422,7 @@ namespace bmdx
       // The reference, returned by ref(), may be unsafe at the time
       //  when cref_t object is overwritten by another thread.
     const t_value& ref() const        throw(exc_ref) { t_value* p = const_cast<t_value*>(_p); if (!p) { throw exc_ref(); } return *p; }
-    const t_value* ptr() const        throw() { return _p; }
+    const t_value* ptr() const        throw() { return const_cast<const t_value*>(_p); }
 
       // ref_ts():
       //  same as ref, but the target object reference (ref_ts()() or ref_ts().xnc)

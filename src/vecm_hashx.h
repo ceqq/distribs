@@ -1,6 +1,6 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2018-08-16
+// rev. 2018-09-05
 // Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2018)
 // Project website: hashx.dp.ua
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -1442,7 +1442,11 @@ protected:
       //  other >0: treat same as 0.
       //  other <-1: treat same as -1.
     template<class cfg, int dmode = cfg::dmode> struct destroyer_t { static inline s_long Fdestroy_1(void* p) throw() { return 0; } };
-    template<class cfg> struct destroyer_t<cfg, 1> { static inline s_long Fdestroy_1(void* p) throw() { typedef typename cfg::t_value __t_v;                                                                                    try { reinterpret_cast<__t_v*>(p)->~__t_v(); return 0; } catch (...) { return -1; } } };
+    #ifdef __CUDACC__
+      template<class cfg> struct destroyer_t<cfg, 1> { static inline s_long Fdestroy_1(void* p) throw() { typedef typename cfg::t_value __t_v;                                                                                    try { struct __t_v2 : __t_v{}; static_cast<__t_v2*>(reinterpret_cast<__t_v*>(p))->~__t_v2(); return 0; } catch (...) { return -1; } } };
+    #else
+      template<class cfg> struct destroyer_t<cfg, 1> { static inline s_long Fdestroy_1(void* p) throw() { typedef typename cfg::t_value __t_v;                                                                                    try { reinterpret_cast<__t_v*>(p)->~__t_v(); return 0; } catch (...) { return -1; } } };
+    #endif
     template<class cfg> struct destroyer_t<cfg, 2> { static inline s_long Fdestroy_1(void* p) throw() { typedef typename cfg::t_value __t_v;                                                                                    try { delete *reinterpret_cast<__t_v*>(p); return 0; } catch (...) { return -1; } } };
     template<class cfg> struct destroyer_t<cfg, 3> { static inline s_long Fdestroy_1(void* p) throw() { typedef typename cfg::t_value __t_v; typedef typename cfg::ta_meta_destroy __ta; try { meta::destroy_t<__ta>::F(reinterpret_cast<__t_v*>(p)); return 0; } catch (...) { return -1; } } };
 
@@ -3165,7 +3169,7 @@ namespace
     {
       if (!p) { return 0; } if (p->psig == __vecm_x::__psig_i<>::F()) { return p; }
       if (!_bytes_tu::is_eq_str<s_long>(p->psig, __vecm_x::__psig_i<>::F(), -1, -1)) { return 0; }
-      const vecm::type_descriptor* p2(0); find_cm(allow_t ? p->t_ind : 0, allow_ta ? p->ta_ind : 0, true, &p2, p_); return p2;
+      const vecm::type_descriptor* p2(0); find_cm(allow_t ? p->t_ind : 0, allow_ta ? p->ta_ind : 0, true, &p2, p_);
       return p2;
     }
 
@@ -3219,7 +3223,7 @@ template<class _> const vecm::type_descriptor* vecm::_ff_mc2_impl<_>::_get_compa
 template<class TA, s_long y, s_long m, s_long d, s_long h, s_long size_> struct bytes::uind_t
 {
   typedef typename vecm::specf<TA>::t_value t_value;
-  static const s_long size = size_ == -1 ? sizeof(t_value) : size_; // dflt. size will be sizeof(T)
+  static const s_long size = size_ == -1 ? s_long(sizeof(t_value)) : size_; // dflt. size will be sizeof(T)
   static const s_long x = - (m << 27 | ((y - 2015) & 0x7f) << 20 | d << 15 | h << 10 | (size & 0x3ff));
   enum { __check = meta::assert<(size >= 1 && size <= 1024)>::result
     + meta::assert<(y >= 2015 && m >= 1 && m <= 12 && d >= 1 && d <= 31 && h >= 0 && h <= 23)>::result };
@@ -3268,6 +3272,9 @@ struct hashx_common
 
     // dkind: 0x1 == needs destructor for key, 0x2 == needs destructor for value.
   template<class KA, class VA, int kind, int dkind> struct _entry_da { };
+
+  template<class E, class D> struct __aux1_t : vecm::config_aux<E> { typedef D ta_meta_destroy; };
+  template<class H> struct __aux2_t : vecm::config_aux<H> { };
 
   template<class KA, class VA> struct _select_entry
   {
@@ -4187,7 +4194,6 @@ template<class T1, class T2, class T3, class T4> void hashx<T1, T2, T3, T4>::_ff
   // NOTE For special allocation or alignment of particular key/value combinations,
   //    vecm::spec<entry> may be specialized more, as necessary.
   // NOTE Any entry configuration must have transactional == true.
-
 template<class KA, class VA, int kind> struct vecm::spec<hashx_common::entry<KA, VA, kind> >
 {
   typedef hashx_common::entry<KA, VA, kind> E; typedef specf<KA> cfgk; typedef specf<VA> cfgv;
@@ -4199,11 +4205,11 @@ template<class KA, class VA, int kind> struct vecm::spec<hashx_common::entry<KA,
     _mq = (_mk == 4 && _mv == 4 ? 4 : (_gmk && _gmv ? 3 : 2 * (_mk && _mv)))
   };
   typedef hashx_common::_entry_da<KA, VA, kind, (_dk == 0 ? 0 : 1) | (_dv == 0 ? 0 : 2)> D;
-  struct aux : vecm::config_aux<E> { typedef D ta_meta_destroy; };
+  typedef hashx_common::__aux1_t<E, D> aux;
   typedef config_t<E, _dq,  _mq, _cq, aux> config;
 };
 
-template<class KA, class VAF, class Kf> struct vecm::spec<hashx<KA, VAF, Kf> > { typedef hashx<KA, VAF, Kf> H; struct aux : vecm::config_aux<H> { }; typedef config_t<H, 1, 4, 2, aux> config; };
+template<class KA, class VAF, class Kf> struct vecm::spec<hashx<KA, VAF, Kf> > { typedef hashx<KA, VAF, Kf> H; typedef hashx_common::__aux2_t<H> aux; typedef config_t<H, 1, 4, 2, aux> config; };
 
 template<class KA, class VAF, class Kf> struct meta::copy_t<hashx<KA, VAF, Kf> > { typedef hashx<KA, VAF, Kf> H; struct exc_copy {}; static inline void F(H* pdest, const H* psrc) { new (pdest) H(*psrc); if (pdest->nexc() != 0) { pdest->~H(); throw exc_copy(); } } };
 
