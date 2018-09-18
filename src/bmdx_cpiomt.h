@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-09-05
+// rev. 2018-09-09
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -43,6 +43,7 @@
 #endif
 #ifdef _MSC_VER
   #pragma warning(disable:4290)
+  #pragma warning(disable:4099)
 #endif
 
   // Rough platform selector
@@ -3297,7 +3298,7 @@ namespace bmdx
   {
     typedef bmdx_meta::nothing t_impl;
     _cref_lock_t(bool b_wait)        { (void)b_wait; }
-    template<class T> _cref_lock_t(cref_t<T, cref_nonlock>&)        {}
+    template<class T> _cref_lock_t(const cref_t<T, cref_nonlock>&)        {}
     bool try_lock()       { return true; }
     operator bool() const        { return true; }
   };
@@ -3424,13 +3425,20 @@ namespace bmdx
     const t_value& ref() const        throw(exc_ref) { t_value* p = const_cast<t_value*>(_p); if (!p) { throw exc_ref(); } return *p; }
     const t_value* ptr() const        throw() { return const_cast<const t_value*>(_p); }
 
-      // ref_ts():
-      //  same as ref, but the target object reference (ref_ts()() or ref_ts().xnc)
+      // ref_ts()():
+      //  same as ref(), but the wrapped object reference
       //  remains valid and thread-safe until one of
       //    a) safe_refnc object, returned by ref_ts(), is destroyed,
       //    b) originating cref_t is destroyed.
-      // ref_ts().xnc supplies the valid non-const reference to the target object,
+      // ref_ts().xnc supplies the valid non-const reference to the wrapped object,
       //    for case of using cref_t as non-const reference handler.
+      //    NOTE Original meaning of cref_t is "reference to constant object".
+      //      Treating constant as variable is an agreement and may be unsafe.
+      //      Only the client is responsible for logically correct modifications.
+      // NOTE Accessing T with ref_ts()() or ref_ts().xnc holds the object lock
+      //  until the current expression ends. If the method called is long operation,
+      //  all other threads that access it via ref_ts() or manipulate cref_t of the same type
+      //  will block until safe_refnc is destroyed and the lock it holds is released.
     struct safe_refnc
     {
       t_lock __lock;
@@ -3452,9 +3460,26 @@ namespace bmdx
 
 
       // Non-const pointer to object, returned without any locking.
-      // NOTE Treating constant as variable may be unsafe.
-      //    Only the client is responsible for logically correct and synchronized modifications.
+      // NOTE Original meaning of cref_t is "reference to constant object".
+      //   Treating constant as variable is an agreement and may be unsafe.
+      //   Only the client is responsible for logically correct and synchronized modifications.
     t_value* _pnonc_u() const        throw() { return const_cast<t_value*>(_p); }
+
+
+      // Smart pointer functionality.
+      //   Allows to call the wrapped object's methods. If cref_t is empty, generates an exception.
+      // NOTE Original meaning of cref_t is "reference to constant object".
+      //   Treating constant as variable is an agreement and may be unsafe.
+      //   Only the client is responsible for logically correct and synchronized modifications.
+      // NOTE If cref_t may be concurrently overwritten, use p--->method() notation.
+      //   See operator--.
+    t_value* operator->() const        { t_value* p = const_cast<t_value*>(_p); if (!p) { throw exc_ref(); } return p; }
+
+
+      // Returns a copy of this cref_t. Useful to safely call the wrapped object,
+      // when the original cref_t may be concurrently modified.
+      // cref_t<T> p; ... p--->method(); ... p--.ref().constant_method();
+    cref_t operator--(int) const        throw() { return *this; }
 
 
       // false only if
@@ -4996,7 +5021,7 @@ namespace _api
         // May be used if a new object is created with another set of locks than some other existing one.
       void swap(shared_lock& x __bmdx_noarg) throw()        { bmdx_str::words::swap_bytes(*this, x); }
 
-    private: cref_t<_shm_sems> r; s_ll vlk1, vlk2; shared_lock(const shared_lock&); void operator=(const shared_lock&); friend struct _shm_sems;
+    private: friend struct _shm_sems; cref_t<_shm_sems> r; s_ll vlk1, vlk2; shared_lock(const shared_lock&); void operator=(const shared_lock&);
     };
 
 
