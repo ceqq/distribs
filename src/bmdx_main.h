@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2018-09-09
+// rev. 2019-01-13
 //
 // Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -1949,7 +1949,7 @@ namespace bmdx
           if (pmsm != unity_common::pls_modsm()) { _x_asg(x, 0x1); return *this; }
           unity x2(x); if (!x2.isByPtr()) { _x_asg(x2, 0x1); return *this; }
             void* _pn = (ut & xfPtr) ? _data.p2 : 0; if (_pn) { _data.p2 = 0; }
-          clear(); _data.p1 = x2._data.p1; ut = x2.utype() | xfPtr; x2._data.p1 = 0; x2.ut = utEmpty; return *this;
+          clear(); _data.p1 = x2._data.p1; ut = x2.utype() | xfPtr; x2._data.p1 = 0; x2.ut = utEmpty;
             if (_pn) { _data.p2 = _pn; }
         }
         else { return (*this = x); }

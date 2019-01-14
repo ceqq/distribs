@@ -1,6 +1,6 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2018-09-09
+// rev. 2019-01-13
 // Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2018)
 // Project website: hashx.dp.ua
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -15,6 +15,12 @@
   #define _yk_reg
 #else
   #define _yk_reg register
+#endif
+#undef _vecm_hashx_hdfd
+#ifdef __CUDACC__
+  #define _vecm_hashx_hdfd __host__ __device__
+#else
+  #define _vecm_hashx_hdfd
 #endif
 #if defined(__clang__)
   #pragma clang diagnostic push
@@ -3288,6 +3294,8 @@ struct hashx_common
     };
   };
 
+    // _kf_0 represents basic hashing and comparison functions for trivial types.
+    //  It can be used to quickly implement a customized hash map.
   template<class K, class _ = meta::nothing>
   struct _kf_0
   {
@@ -3331,32 +3339,32 @@ struct hashx_common
 
     template<class T, int __vkind = _valkind<T>::result> struct _hashf_t { };
 
-    template<class T> struct _hashf_t<T, 1> { s_long F(double key) { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; } };
-    template<class T> struct _hashf_t<T, 2> { s_long F(s_long key) { return key >> 17 ^ key * 37; } };
-    template<class T> struct _hashf_t<T, 3> { s_long F(const T& key) { const T k[1] = { key }; _yk_reg s_long h = 0; _yk_reg const char* p = reinterpret_cast<const char*>(&k[0]); _yk_reg s_long n = sizeof(T); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= 53970; return h; } };
+    template<class T> struct _hashf_t<T, 1> { _vecm_hashx_hdfd s_long F(double key) { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; } };
+    template<class T> struct _hashf_t<T, 2> { _vecm_hashx_hdfd s_long F(s_long key) { return key >> 17 ^ key * 37; } };
+    template<class T> struct _hashf_t<T, 3> { _vecm_hashx_hdfd s_long F(const T& key) { const T k[1] = { key }; _yk_reg s_long h = 0; _yk_reg const char* p = reinterpret_cast<const char*>(&k[0]); _yk_reg s_long n = sizeof(T); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= 53970; return h; } };
 
-    template<class T> struct _hashf_t<T, 4> { s_long F(const void* p) { return _hashf_t<T, 2>().F(reinterpret_cast<const char*>(p)-static_cast<const char*>(0)); } };
-    template<class T> struct _hashf_t<T, 6> { s_long F(const void* p) { return _hashf_t<T, 3>().F(p); } };
-    template<class T> struct _hashf_t<T, 7> { s_long F(meta::s_ll key) { _yk_reg s_long h = s_long(key); h = h >> 17 ^ h * 37; _yk_reg s_long h2 = s_long(key >> 32); h2 = h2 >> 15 ^ h2 * 23; return h ^ h2; } };
-    template<class T> struct _hashf_t<T, 5> { s_long F(const void* p) { return _hashf_t<T, 7>().F(reinterpret_cast<const char*>(p)-static_cast<const char*>(0)); } };
+    template<class T> struct _hashf_t<T, 4> { _vecm_hashx_hdfd s_long F(const void* p) { return _hashf_t<T, 2>().F(reinterpret_cast<const char*>(p)-static_cast<const char*>(0)); } };
+    template<class T> struct _hashf_t<T, 6> { _vecm_hashx_hdfd s_long F(const void* p) { return _hashf_t<T, 3>().F(p); } };
+    template<class T> struct _hashf_t<T, 7> { _vecm_hashx_hdfd s_long F(meta::s_ll key) { _yk_reg s_long h = s_long(key); h = h >> 17 ^ h * 37; _yk_reg s_long h2 = s_long(key >> 32); h2 = h2 >> 15 ^ h2 * 23; return h ^ h2; } };
+    template<class T> struct _hashf_t<T, 5> { _vecm_hashx_hdfd s_long F(const void* p) { return _hashf_t<T, 7>().F(reinterpret_cast<const char*>(p)-static_cast<const char*>(0)); } };
 
-    template<class T> struct _hashf_t<T, 8> { s_long F(float key) { return _hashf_t<T, 1>().F(key); } };
-    template<class T> struct _hashf_t<T, 9> { s_long F(long double key) { if (key == 0. || !(key == key)) { return 0; } int order = 0; int sign = key > 0 ? 1 : -1; if (sign < 0) { key = -key; } const long double d1 = 1.e150; while (key < d1 / 1.e50) { key *= d1; order -= 25; } while (key > 1.e200) { key /= d1; order += 25; } const int d2 = 1000000; while (key > 1000000000) { key /= d2; ++order; } return _hashf_t<T, 1>().F(double(int(key + 0.5)) * 0.097) ^ _hashf_t<T, 2>().F(order * 4 + (sign + 1)); } };
-    template<class T> struct _hashf_t<T, 10> { s_long F(bool key) { return key ? 37 : 0; } };
+    template<class T> struct _hashf_t<T, 8> { _vecm_hashx_hdfd s_long F(float key) { return _hashf_t<T, 1>().F(key); } };
+    template<class T> struct _hashf_t<T, 9> { _vecm_hashx_hdfd s_long F(long double key) { if (key == 0. || !(key == key)) { return 0; } int order = 0; int sign = key > 0 ? 1 : -1; if (sign < 0) { key = -key; } const long double d1 = 1.e150; while (key < d1 / 1.e50) { key *= d1; order -= 25; } while (key > 1.e200) { key /= d1; order += 25; } const int d2 = 1000000; while (key > 1000000000) { key /= d2; ++order; } return _hashf_t<T, 1>().F(double(int(key + 0.5)) * 0.097) ^ _hashf_t<T, 2>().F(order * 4 + (sign + 1)); } };
+    template<class T> struct _hashf_t<T, 10> { _vecm_hashx_hdfd s_long F(bool key) { return key ? 37 : 0; } };
 
   public:
-    inline s_long operator () (s_long key) const { return key >> 17 ^ key * 37; }
+    _vecm_hashx_hdfd inline s_long operator () (s_long key) const { return key >> 17 ^ key * 37; }
 
       // NOTE (!) floating point conversions may give incorrect results,
       //    influencing key hashing and comparisons.
       //  Consider the following code:
       //      long n = 3, n2 = 30; do { double x = n, y = n2 * 0.1; std::cout << (x == y ? "EQ" : "NEQ") << ' '; --n; n2 -= 10; } while (n);
       //  It prints EQ NEQ NEQ on certain compilers.
-    inline s_long operator () (double key) const { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; }
+    _vecm_hashx_hdfd inline s_long operator () (double key) const { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; }
 
-    template<class T> inline s_long operator() (const T& key) const { return _hashf_t<T>().F(key); }
+    template<class T> _vecm_hashx_hdfd inline s_long operator() (const T& key) const { return _hashf_t<T>().F(key); }
 
-    inline bool operator () (const K& x1, const K& x2) const { return x1 == x2; }
+    _vecm_hashx_hdfd inline bool operator () (const K& x1, const K& x2) const { return x1 == x2; }
   };
 
 
@@ -3621,12 +3629,15 @@ struct hashx : protected vecm
     //          integrity() == 0.
   hashx(const hashx& x __vecm_noarg) throw() : vecm(typer<entry, _bs>, 0), _ht(typer<s_long, _bs>, 0), _pz(0)
   {
-    _d_reinit(); if (!_pz || x.integrity() < 0) { _nxf = (_nxf & _fm) | _xd; return; } if (cfge::cmode == 0) { return; }
-    t_dyndata* _pz2 = _ff_mc3_p<__vecm_tu_selector>()->Fz_new_copy(_ht.ptd(), x._pz); if (!_pz2) { _nxf = (_nxf & _fm) | _xd; return; }
-    if (_ht.vecm_copy(x._ht, true) != 1) { _ff_mc3_p<__vecm_tu_selector>()->Fz_del(_ht.ptd(), _pz2, _nxf); return; }
-    if (vecm_copy(x, true) != 1) { _ht.el_expand_n(_base_min); for (vecm::link1_t<s_long, false, _bs> l = _ht.link1_begin<s_long, _bs>(); !l.is_aend(); l.incr()) { *l.pval() = no_elem; } _ff_mc3_p<__vecm_tu_selector>()->Fz_del(_ht.ptd(), _pz2, _nxf); return; }
-    _base = x._base; _mask = x._mask; _base2 = x._base2; _mask2 = x._mask2; _rhdir = x._rhdir; _rhind = x._rhind;
-    s_long bc(0); _ff_mc3_p<__vecm_tu_selector>()->Fz_del(_ht.ptd(), _pz, bc); _pz = _pz2;
+    _d_reinit(); if (!_pz || x.integrity() < 0) { _nxf = (_nxf & _fm) | _xd; return; }
+    if (cfge::cmode != 0)
+    {
+      t_dyndata* _pz2 = _ff_mc3_p<__vecm_tu_selector>()->Fz_new_copy(_ht.ptd(), x._pz); if (!_pz2) { _nxf = (_nxf & _fm) | _xd; return; }
+      if (_ht.vecm_copy(x._ht, true) != 1) { _ff_mc3_p<__vecm_tu_selector>()->Fz_del(_ht.ptd(), _pz2, _nxf); return; }
+      if (vecm_copy(x, true) != 1) { _ht.el_expand_n(_base_min); for (vecm::link1_t<s_long, false, _bs> l = _ht.link1_begin<s_long, _bs>(); !l.is_aend(); l.incr()) { *l.pval() = no_elem; } _ff_mc3_p<__vecm_tu_selector>()->Fz_del(_ht.ptd(), _pz2, _nxf); return; }
+      _base = x._base; _mask = x._mask; _base2 = x._base2; _mask2 = x._mask2; _rhdir = x._rhdir; _rhind = x._rhind;
+      s_long bc(0); _ff_mc3_p<__vecm_tu_selector>()->Fz_del(_ht.ptd(), _pz, bc); _pz = _pz2;
+    }
   }
 
     // Copying x to *this.
