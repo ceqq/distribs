@@ -1,4 +1,4 @@
-// rev. 2019-01-13
+// rev. 2019-07-25
 ====================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 ====================================================
@@ -229,7 +229,7 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
   Per-type lock.
   May be created per-object if passed a pointer to individual crit. sec. data structure.
   May be created/destroyed/copied in different binary modules.
-  Size: 12 or 16 depending on pointer size.
+  Size: 12 or 24 depending on pointer size.
 
 3. struct threadctl
 
@@ -346,12 +346,24 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
     where the interfaces are called, new attached, and any removed as necessary.
   Proxy implementation is based on static function calls.
 
+14. struct pcos
+
+  Interface to process' common objects storage. One storage hash { unity, cref_t<unity> } is associated
+    with each loaded binary module of the process. The storage in main executable is the default one.
+    The storage is created on first client request.
+    Any binary module may put a value into the storage or get a reference to existing value by its key.
+    References are based on cref_t and designed in such way that shared library, hosting the executable code
+    of an object in the storage, is unloaded anyway after the last such object is destroyed.
+    (The client has only to avoid situations of library self-unloading.)
+  Size:
+    same as cref_t.
+
 
 
 
 [B] Conditionally compatible objects.
 
-14. struct vecm
+15. struct vecm
 
   Polymorphic multipart vector.
   Performs operations on elements by calling static functions
@@ -364,25 +376,25 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
     2) vecm structure and size may (potentially) vary.
       The client checks this with special function (compatibility()).
 
-15. struct hashx
+16. struct hashx
 
   High-performance hash-map.
   Keeps elements in the order of insertion if only inserted.
   Allows for array-like access by numeric index as well as iterators.
   Based on vecm, so inherits all its compatibility specifics.
 
-16. struct vec2_t
+17. struct vec2_t
 
   Analogous to std::vector template + support for cross-module use.
   Based on vecm, so inherits all its compatibility specifics.
 
-17. struct ordhs_t
+18. struct ordhs_t
 
   Hashed ordered map, with access time O(1), insertion/removal time O(N^0.5).
   Allows for array-like access by numeric index as well as iterators.
   Based on hashx, vecm, so inherits all their compatibility specifics.
 
-18. struct file_io
+19. struct file_io
 
   Wrapper around file handle (FILE).
   May be passed between modules, if their C library file functions,
@@ -401,6 +413,13 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
 1. Locale usage by bmdx_main on POSIX systems: all related string conversion functions
 (wsToBs, lcase, unity to/from std::string etc.) irreversibly set the current program locale
 to the current user-preferred locale in the system (i.e. call setlocale(LC_CTYPE, "")).
+
+2. Certain compilers delay shared library unloading (i.e. C++ objects static deinitialization)
+until after main executable deinitialization.
+This may cause problems with unloading libraries, holding objects of each other
+in static variables. To minimize chance of problems, all strong references
+to cross-module objects, passed between binary modules,
+should be cleared in application-specific way right before the application exits.
 
 
 

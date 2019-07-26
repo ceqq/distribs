@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-01-13
+// rev. 2019-07-25
 // See bmdx_main.h for description.
 
 // LIBRARY CONFIGURATION HEADER
@@ -12,11 +12,21 @@
 
 
   // bmdx_part_dllmgmt 1 enables DLL/shared libraries loader functionality. 0 to disable.
+  //  NOTE Even if disabled, only unity::mod() (i.e. loader) becomes non-functional, but
+  //    mod_handle objects as such continue to work properly, if they have been created
+  //    in some other binary module, having bmdx_part_dllmgmt 1.
   //  NOTE In Linux, compiling may require additional library (-ldl).
   //  NOTE Even if the part is disabled, the library can operate on an existing handle
   //    created in any module where the part is enabled.
 #ifndef bmdx_part_dllmgmt
   #define bmdx_part_dllmgmt 1
+#endif
+
+  // Always expose single function, returning, as public symbol, all bmdx_main static methods.
+  //  NOTE If 0, bmdx_part_dllmgmt does the same (because the part requires this).
+  //  NOTE Do not set to 0 if common objects storage (PCOS) is used by this module in any way.
+#ifndef bmdx_expose_ls_modsm
+  #define bmdx_expose_ls_modsm 1
 #endif
 
   // bmdx_part_dispatcher_mt 1 enables message dispatcher functionality. 0 to disable.

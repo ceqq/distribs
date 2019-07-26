@@ -1,8 +1,8 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-01-13
+// rev. 2019-07-25
 //
-// Copyright 2004-2018 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -24,7 +24,6 @@
 //    String manipulation and other utility functions.    (bmdx::  split, trim, replace, array etc.)
 //
 //    Asynchronous message dispatcher.    (bmdx::  dispatcher_mt)
-
 
 #ifndef bmdx_main_H
 #define bmdx_main_H
@@ -169,7 +168,7 @@ namespace bmdx
 
       // Static methods of the module.
     static void* ls_modsm(s_long ind);
-    typedef void* (*f_ls_modsm)(s_long);
+    typedef unity_common::__Psm f_ls_modsm;
     static f_ls_modsm pls_modsm(); // returns real address of ls_modsm
     enum Emod_method
     {
@@ -223,6 +222,19 @@ namespace bmdx
       msm_rl_cp_handle,
       msm_rl_sym,
       msm_rl_rq,
+      msm_pcos_cons,
+      msm_pcos_cons_rl,
+      msm_pcos_oppar,
+      msm_pcos_setref,
+      msm_pcos_setmv,
+      msm_pcos_setcp,
+      msm_pcos_clearstg,
+      msm_pcos_makemv,
+      msm_pcos_makecp,
+      msm_pcos_makecref,
+      msm_pcos_makecrefcp,
+      msm_cv_recreate,
+      msm_rl_init_by_pmsm,
       sizeof_msm
     };
     enum Eobject_method
@@ -380,22 +392,34 @@ namespace bmdx
     //==  Wrapper for static varibles.
     //    Ensures exact 1:1 correspondence of a variable to its binary module instance,
     //    independent of binding ruleset used by compiler.
-    // Notable differences from C++ language static varialbles:
-    //    1) Variable storage access may fail under number of conditions, for any type.
-    //    2) By default, all types except basic fundamental (like int, double, T*, see bytes::config0_t isKnown1 in vecm_hashx.h)
-    //      are subject to destructor call, after which the value is inaccessible.
-    //      Destructor type is specified by vecm::spec<TA>::config::dmode.
-    //      If 0, the destructor is not executed, and the value, if initialized at all,
-    //      remains accessible during whole static deinitialization.
-    //    3) The variable may be accessed from any place (or multiple places) in the program.
-    //      Its identity is determined only by Fi (field index),  Fs (field selector), C (associated class),
-    //      and binary module instance of the client function.
+    // Important differences from C++ language static varialbles:
+    //    1) Variable's storage initialization is not done or attempted automatically
+    //      during static initialization of the module.
+    //      The client must explicitly initialize the storage with help of init*() or rxai*().
+    //      To find out if the storage needs initialization, the client should check b_noinit().
+    //    2) On static deinitialization, by default, for all types except basic fundamental
+    //      (like int, double, T*, see bytes::config0_t isKnown1 in vecm_hashx.h)
+    //      their destructor is called. The storage keeps track of the variable being destroyed,
+    //      and may automatically limit access to the object, as the client specifies with flags (see px(), rx()).
+    //    3) Non-default destructor behavior can be statically set via vecm::spec<TA>::config::dmode.
+    //      If 0, the destructor is not executed, and the variable, if initialized at all,
+    //      remains accessible during whole static deinitialization of the module.
+    //      In this case, the client is responsible for releasing any resources, associated with non-destroyed variable.
+    //    4) The variable may be accessed, without additional declarations,
+    //      from any place or multiple places in the program.
+    //      Its identity is determined by 4 items:
+    //          C (associated class),
+    //          Fi (field index),
+    //          Fs (field selector),
+    //          binary module instance of the client function.
     //      NOTE function binding is subject to compiler used.
     //        With default compiler settings, on most systems,
     //          1) non-inline C functions,
     //          2) non-inline non-template class functions,
     //          3) functions in anonymous classes and namespaces
     //          are bound to their own binary module.
+    //    5) Variable storage access may fail (end with C++ exception or returning error code)
+    //      under number of conditions, for any type, though this is not normal or frequent situation.
   template<class TA, class C = void, int Fi = 0, class Fs = void, meta::s_ll Lcp_mcs = 50, s_long Lto_ms = -1, class _ = __vecm_tu_selector>
   struct svf_m_t
   {
@@ -437,6 +461,9 @@ namespace bmdx
     inline t_value& rx(s_long flags = 2)        { t_value* p = px(flags); if (p) { return *p; } if (!_pst_m) { throw XUExec("rx.1", typeid(t_svf).name()); } throw XUExec("rx.2", typeid(t_svf).name()); }
 
       // Initialization.
+      //    init* may be called many times, it makes all checks and does initialization only once.
+      // Returns:
+      //    true if the variable is currently valid, false if not (already destroyed or failed to initialize).
     inline bool init0(bool no_exc)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init0.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init0.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
     template<class Arg1>
       inline bool init1(bool no_exc, const Arg1& x1)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init1.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init1.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
@@ -1439,8 +1466,10 @@ namespace bmdx
     inline t_map* _pmap() const { typedef t_map& R; return isMap() ? &R(*_m()) : 0; }
     t_hash* _phash() const { return isHash() ? _h() : 0; }
 
-      // unity_common::pls_modsm() of the binary module instance where the current object is created.
-    inline unity_common::__Psm _pmsm() const { return pmsm; }
+      // Pointer to function, returning pointers to private static methods (of BMDX) in the binary module
+      //    that has created the current object. Value same as _pmsm() is returned by  unity_common::pls_modsm()
+      //    of that binary module (main executable or shared library instance).
+    unity_common::f_ls_modsm _pmsm() const throw() { return pmsm; }
 
 
       // Construction.
@@ -1492,19 +1521,20 @@ namespace bmdx
       // Correctly deleting the current object from within binary module where it was dynamically constructed.
       //    true - the object is deleted successfully.
       //    false - the object deleted, but generated an exception during op. delete.
-      // NOTE unity_delete() is equivalent to operator delete.
-      //    Do not use it if the object was created in other way than dynamic construction (new unity(...)).
+      // NOTE unity_delete() is equivalent to operator delete, executed in the original module on *this.
+      //    1. Do not use it if the object was created in other way than dynamic construction (new unity(...)).
+      //    2. Do not use it after the object was recreated (see recreate(), recreate_as()).
     bool unity_delete() throw();
 
       // Destroys previous contents and initializes the storage
       //    as an empty value created in the current binary module.
-      // NOTE Do not use recreate() if *this is dynamically constructed in another module,
-      //    this causes undefined behavior on later object deletion.
-      //    For other types of storage allocation, result of recreate() is always stable.
+      // NOTE If unity is dynamically constructed (new unity(...)) in binary module A, and "recreated" in module B,
+      //    it still must be deleted in module A in usual way ("delete p"). Do not use unity_delete().
     unity& recreate() throw();
 
       // Destroys previous contents and initializes the storage
       //    as an empty value created in the binary module of modsrc.
+      // See also recreate().
     unity& recreate_as(const unity& modsrc) throw();
 
       // NOTE all assignments are transactional (on failure, the target object is not modified).
@@ -2446,11 +2476,16 @@ namespace bmdx
       typedef void (*__Pitfs_type_info)(o_itfset_base* p_itfs, o_type_info* pret, s_long flags);
       typedef s_long (*__Prc_incdec)(_o_refcnt* prc, s_long flags);
 
-        // Same lock is used for object ref. counting and interfaces add/rem./search.
-        //  If the object was wrapped into unity object without creating a lock, critsec_rc does nothing (see also set_obj and objt).
-        //  NOTE The lock may be created by the client to lock >=2 operations related to object.
-        //    (!) The wrapping unity object may not be cleared, deleted or assigned another value
-        //    during any other thread using its obj* api, even if calls are under lock.
+        // The lock that is used for all operations on unity/utObject,
+        //    mainly to protect object ref. counting and interfaces add/rem./search.
+        //    If the object was wrapped into unity object without locking,
+        //    critsec_rc on such object will do nothing (see also set_obj and objt).
+        //  NOTE The lock critsec_rc may be created by the client (from o_api::prc)
+        //    to ensure sequence of >=2 operations on unity/utObject in one thread
+        //    being not mixed with calls on the same unity/utObject from other threads.
+        //    (!) Even under critsec_rc, the wrapping unity
+        //    may NOT be cleared, deleted or assigned another value
+        //    by any other thread than one that has set this lock.
       struct critsec_rc
       {
         enum { n = 4 }; // based on sizeof(critsec_t) + reserve.
@@ -2465,6 +2500,8 @@ namespace bmdx
           // NOTE Ret. vals. 0..2 are same as unity::objt lkt parameter.
         s_long state() const;
 
+          // If the client has unity x, containing an object, the lock is initialized this way:
+          //  o_api __a(&x); critsec_rc __lock(__a.prc);
         critsec_rc(_o_refcnt* prc);
         ~critsec_rc();
       private: critsec_rc(const critsec_rc&); void operator=(const critsec_rc&);
@@ -2553,6 +2590,11 @@ namespace bmdx
 
     //==  ACCESS TO SHARED LIBRARIES
     struct _mod_exhandle;
+      // NOTE Concurrent access:
+      //  1. Non-const methods of one mod_handle instance (operator=, swap, clear)
+      //  are NOT thread-safe.
+      //  2. mod_handle::request arguments must not be modified by client during method call.
+      //  3. Simultaneous calls to different mod_handle objects are safe.
     struct mod_handle
     {
       mod_handle() throw();
@@ -2569,8 +2611,9 @@ namespace bmdx
         typedef void* t_nativehandle;
       #endif
 
-      bool is_valid() const throw();
+      bool is_valid() const throw(); // true if this handle is valid
       operator bool() const throw(); // == is_valid()
+      bool is_mainexe() const throw(); // true if this handle is valid and references the main executable
       t_nativehandle native() const throw(); // native shared library or main executable handle (platform-dependent)
       bool operator==(const mod_handle& x) const throw();
       bool operator!=(const mod_handle& x) const throw();
@@ -2588,8 +2631,13 @@ namespace bmdx
         // retval: value, returned by the reuest.
         //    Input and output contents are determined by the client and requested module relationships.
         //  flags: 0x1 - ignore native handle, search for name in the main executable.
-        // The request is done under global lock, which may block up to 60 s.
+        // The request is done under global lock, which may block up to 60 s,
+        //  after which the blocked thread cancels the request.
         //  (In multithreaded program, requests should take small time, <= milliseconds.)
+        // NOTE Defining bmdx_mod_request in the shared library is optional.
+        //    The client may use any other functions and means on communication between executable
+        //    and library, or between libraries. For example, via BMDX:
+        //    a) global memory (shmobj2s_t), b) process' common objects storage (unity::pcos).
         // Returns:
         //  1 - success.
         //  -1 - the requested module is not compatible.
@@ -2599,6 +2647,39 @@ namespace bmdx
         //  -5 - module-side exception.
         //  <= -10 - module-side error.
       s_long request(const unity& para, unity& retval) const throw();
+
+        // Pointer to function, returning pointers to private static methods (of BMDX) in the binary module
+        //    that is held by the current handle. Value same as _pmsm() is returned by  unity_common::pls_modsm()
+        //    of that binary module (main executable or shared library instance).
+        // NOTE _pmsm() may return 0:
+        //    a) if the handle holds a library that is compiled without BMDX at all or maybe with bmdx_part_dllmgmt 0.
+        //    b) same as (a) if the handle addresses the main executable - this may occur in shared library,
+        //      when it uses bmdx_part_dllmgmt 1, but main executable does not.
+        //    c) if the handle is null.
+      unity_common::f_ls_modsm _pmsm() const throw();
+
+        // Same as _pmsm, but for root loader of the shared library (the topmost loaded module with BMDX,
+        //    that has loaded directly or indirectly all other such modules).
+      unity_common::f_ls_modsm _pmsm_rl() const throw();
+
+        // Returns a handle to the current module.
+        //  b_autounload:
+        //    true - allows to unload the library when this handle is destroyed, if it's the last one,
+        //      associated with the library.
+        //    false - unconditionally disables library unloading regardless of other handles settings.
+        //  NOTE The returned handle is valid only a) for executable, b) for shared library, loaded with unity::mod().
+        //    The result depends also on compile-time constants
+        //    (any of bmdx_part_dllmgmt, bmdx_expose_ls_modsm should be 1).
+        //  NOTE In multithreaded shared library, the client must avoid situation
+        //    when autounloadable "handle to itself" remains the last one holding the library.
+        //    If this occurs, the library may be unloaded before exiting from its own code, which causes system exception.
+        //    It does not matter if the handle to itself is got with hself() or passed from other module.
+        //    The correct cleanup sequence may be:
+        //      1. The library is notified, by strong call, in application-specific way, right before being unloaded.
+        //      2. On that notification, the library destroys all handles to itself that are kept inside the library.
+        //      3. On the same notification, the library stops all its threads, or at least threads
+        //          that may call hself() as part of their working.
+      static mod_handle hself(bool b_autounload) throw();
 
       struct _stg_mh { enum { n = 8 }; void* _d[n]; _stg_mh(); ~_stg_mh(); _mod_exhandle& operator()() const; };
       private: friend struct unity; friend struct cv_ff; cref_t<_stg_mh> _rex; meta::s_ll __rsv1;
@@ -2689,9 +2770,10 @@ namespace bmdx
         //    left in memory when the module is unloaded.
     #if bmdx_part_dllmgmt
       static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) throw();
+    #else
+        // With bmdx_part_dllmgmt 0, mod() returns a null handle.
+      static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) throw() { return mod_handle(); }
     #endif //bmdx_part_dllmgmt
-
-
 
 
         // unity object structure signature for binary comatibility check.
@@ -2706,6 +2788,219 @@ namespace bmdx
       //  <0 - the current object is not compatible with the current module.
       //  Only clear() and destructor may be called safely.
     s_long compatibility() const throw ();
+
+
+    //==  PROCESS' COMMON OBJECTS STORAGE (PCOS)
+    private: struct _pcos_d_base { mod_handle hhost; virtual ~_pcos_d_base() {} }; friend struct cv_ff_pcos;
+    public:
+
+    //  PCOS associates one hash map { unity, cref_t<unity> } with each binary module of the process
+    //    (by dflt. main executable, and optionally, any shared library, compiled together with bmdx_main.cpp).
+    //  Objects in the map may be set and read concurrently in any binary module of the process.
+    //  With each object, its own module handle is kept, until the object is destroyed, to protect object code
+    //    from untimely unloading from the process.
+    //  Together with messaging system, PCOS ensures transparent access to high-level user objects
+    //    anywhere in multi-module application.
+
+    // NOTE Cross-moduleness. Build options.
+    //    pcos object may be freely passed (by value or by reference) through binary modules threshold.
+    //      If pcos references the storage in a shared library, the library is not unloded at least until pcos is destroyed,
+    //      because pcos internally contains a handle to that library.
+    //    For common storage, it's recommended to compile main executable
+    //      including bmdx_main.cpp with bmdx_part_dllmgmt 1 (see in bmdx_config.h).
+    //    Any pcos object,
+    //      a) created in binary module that is compiled with bmdx_part_dllmgmt 1, or
+    //      b) given handle to such module on creation, regardless of place of creation,
+    //      is fully functional in any module.
+    //    In contrary, pcos object, being created by default in a module that is compiled
+    //      with bmdx_part_dllmgmt 0, is *non-functional*,
+    //      because starts with null handle instead of executable's handle.
+
+    // NOTE Concurrent access: pcos.
+    //    All methods of any pcos instance are thread-safe (equiv. to cref_t).
+    //    This implies that arguments of any method are not modified or overwritten during pcos method call.
+    //    pcos object itself may be safely overwritten at any time, even during method call.
+
+    // NOTE Concurrent access: the wrapped user value or object.
+    //      In case of concurrent (modifying) access to particular value, where non-blocking access cannot be ensured,
+    //        the client is responsible for synchronization. This should be done by client-defined lock.
+    //      Certain specific locks are created automatically, but they are not suitable to protect custom object:
+    //        1. cref_t<unity>::t_lock(cref_t from makecp, makemv, operator=) - locks the reference counting of the object.
+    //          This lock automatically protects reference counting and object deletion on ref. count == 0.
+    //        2. unity::o_api::critsec_rc - locks operations on unity/utObject, in case of wrapping the custom object.
+    //          When custom object is stored in pcos, pcos may temporarily lock the object this way for checking.
+    //          During unity/utObject lifetime in pcos, the client must not overwrite or clear it directly.
+    //          Instead, the client should use unity::o_api normally, i.e. add/remove interfaces, get pointer to the wrapped object,
+    //          call the wrapped object, copy the wrapping unity object etc.,
+    //          and also manipulate the outer cref_t (get with pcos::operator(), copy, store as necessary, pass to setref etc.).
+
+    // NOTE Ownership on objects.
+    //      PCOS ensures safe handling of objects from any binary modules.
+    //      Unless special actions taken by the client, the following constraints always apply:
+    //      1. A user value (scalar, string, array or user object) is wrapped into struct unity,
+    //          which is in turn wrapped into the outer cref_t object.
+    //      2. Wrapping into unity has the only purpose of keeping polymorhic values from multiple modules
+    //          in the storage hash.
+    //      3. Wrapping into the outer cref_t solves three problems:
+    //          1) Together with user value, a handle to the binary module (main executable or shared library)
+    //              is kept in aux. object of cref_t.
+    //            By design of cref_t, this handle is destroyed anyway later than the user value,
+    //              and the library, containing the code of the user value, cannot be occasionally
+    //              unloaded until the user value is destroyed.
+    //          2) cref_t itself belongs to the root loader of the library (the topmost loaded module with BMDX,
+    //              that has loaded directly or indirectly all other such modules).
+    //            Most often, main executable is the root loader, unless a shared library that uses BMDX
+    //              has been loaded in some way different from unity::mod() call.
+    //              Thus, code and critical section data of cref_t itself, are released long after the user value it held,
+    //              namely when root loader library is unloaded (or process exits).
+    //            In rarer case, when the root loader and the user value code are in the same shared library,
+    //              the library is not unloaded until the last pcos object is destroyed, which normally occurs
+    //              in code that is outside that library.
+    //          3) cref_t<unity> is lightweight concurrency-safe reference to unity object,
+    //              so its copying costs approx. 1 lock/unlock,
+    //              and copying unity object by value (which is costly for strings, arrays and sometimes user objects)
+    //              is not required.
+    //      4. PCOS checks the modules to which cref_t, contained unity, and its contained user object (if any)
+    //            belong.
+    //          For example, if a shared library does not own the storage (e.g. executable's storage),
+    //              but wants to put its own value into the storage, it can use setcp or makecp+setref.
+    //            By default, the value will be copied and belong to executable's storage.
+    //              In this case, the library may be unloaded, but the value remains in the storage.
+    //            If the value must be moved (setmv or makemv+setref), or if it is custom object (stored as unity/utObject),
+    //              the library must supply mod_handle to itself (e.g. see mod_handle::hself()), otherwise the call fails,
+    //              because ownership on object cannot be changed to other binary module
+    //              because of object's code placement inside the library.
+    //              In this case, the library cannot be unloaded until all such objects are removed from the storage.
+    //          For 2nd example, main executable never needs to supply a handle to put its value therein,
+    //            because default pcos itself already contains main executable's handle.
+    //          More generally, if a module that wants to put into a storage (represented by pcos)
+    //            a value that is from module other than that storage, value's module handle must be supplied,
+    //            or a value must be already in the form cref_t<unity>, created with makemv, makecp,
+    //            or taken from a storage with operator().
+
+    struct pcos
+    {
+    private:
+      typedef cref_t<_pcos_d_base> t_d; typedef unity_common em; typedef unity_common::f_ls_modsm t_msm; friend struct cv_ff_pcos;
+      t_d _d;
+      typedef s_long (*f_pcos_cons)(cref_t<_pcos_d_base>* pd, const unity::mod_handle* ph);
+      typedef s_long (*f_pcos_oppar)(cref_t<_pcos_d_base>* pd, const unity* pk, cref_t<unity>* prv);
+      typedef s_long (*f_pcos_setref)(const cref_t<_pcos_d_base>* pd, const unity* pk, const cref_t<unity>* pxr);
+      typedef s_long (*f_pcos_setmv)(const cref_t<_pcos_d_base>* pd, const unity* pk, unity* pxm, unity::mod_handle* phx);
+      typedef s_long (*f_pcos_setcp)(const cref_t<_pcos_d_base>* pd, const unity* pk, const unity* pxc, unity::mod_handle* phx);
+      typedef s_long (*f_pcos_clearstg)(const cref_t<_pcos_d_base>* pd);
+      typedef s_long (*f_pcos_makemv)(const cref_t<_pcos_d_base>* pd, unity* pxm, unity::mod_handle* phx, cref_t<unity>* prv);
+      typedef s_long (*f_pcos_makecp)(const cref_t<_pcos_d_base>* pd, const unity* pxc, unity::mod_handle* phx, cref_t<unity>* prv);
+    public:
+
+        // Creates a pcos object, referencing certain process' common object storage.
+        //    By default, main executable is the module, servicing the common storage.
+        //    Usually it has longer lifetime than any shared library instance.
+        //    The client may pas a handle (h) to any loaded shared library,
+        //    to address the storage of that library, or null handle to create non-functional pcos,
+        //    which is not associated with any storage.
+      pcos(unity::mod_handle h = unity::mod("", 1)) throw()        { if (!h) { return; } unity_common::f_ls_modsm pmsm = h._pmsm(); if (!pmsm) { return; } typedef f_pcos_cons tf; tf f = (tf)pmsm(em::msm_pcos_cons); if (!f) { return; } try { f(&_d, &h); } catch (...) {} }
+
+        // Binary module handle of the current storage.
+        // May be:
+        //  a) by default, the main executable.
+        //  b) a shared library, loaded into the process.
+        //  c) null handle (if pcos constructor was given a null handle).
+      unity::mod_handle hhost() const throw()        { t_d d = _d; return d ? d->hhost : unity::mod_handle(); }
+
+        // True if this pcos addresses a normally functioning storage (in the main executable, or in a shared library).
+      operator bool() const throw()        { return _d; }
+
+        // True if this pcos addresses a normally functioning storage in the main executable.
+        //  NOTE The common storage of the main executable is regarded the single storage
+        //    that should be used by default by all clients.
+        //    Usually it has longer lifetime than any shared library instance.
+        //    Storages of shared library instances should be used for private purposes or if main executable
+        //    does not support common storage.
+      bool b_mainexe() const throw()        { t_d d = _d; return d && d->hhost.is_mainexe(); }
+
+      // === === === === === === === ===
+
+        // Get a reference to the value with key k, from the current storage.
+        //    (The reference is not removed from the storage, so the value may be accessed again by any client.)
+        // The result code and returned value:
+        //    1 - the value exists. A ref. to valid object is returned.
+        //  An empty cref_t is returned with the following result codes:
+        //    0 - the value does not exist.
+        //    -2 - op. failed.
+        //    -3 - pcos object is non-functional.
+      cref_t<unity> operator()(const unity& k, s_long* pres = 0) throw()        {  cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; }  typedef f_pcos_oppar tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_oppar); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &k, &rv); } catch (...) {}  if (pres) { *pres = res; } return rv; }
+
+        // Set the new value into the current storage, or remove the existing one (setref only).
+        //    xc, xm: the value is moved (xm) or copied (xc) into the storage.
+        //      The value is associated (by handle) with binary module in which it's factually created.
+        //      By default, this is binary module of the current storage (pcos::hhost()).
+        //      Otherwise, it's hx (if specified).
+        //      See the above note "Ownership on objects" for explanation when and which hx is neccessary to specify.
+        //      The correctness of the association is checked in setmv, setcp.
+        //      Relaxation for xc: unity object itself may be associated with any module,
+        //        because it's automatically copied by setcp on the side, represented by handle.
+        //      Anyway, if xm or xc contains a user object (unity/utObject),
+        //        the user object must have been created by the client on the side, represented by handle.
+        //    xr:
+        //      a) valid object reference, must have been created with makemv, makecp, or got from any pcos with operator().
+        //        Validity is checked by setref.
+        //      b) default empty "cref_t<unity>()": removes existing value with key k from the storage.
+        // The resut code and actions done:
+        //  a) For setmv, setcp, and setref with non-empty cref_t:
+        //      2 - successfully added new value. The prev. value with k did not exist.
+        //      1 - successfully replaced the prev. existing value with k.
+        //      NOTE setmv on success (1 or 2): xm contents are moved into the storage, xm itself is cleared.
+        //  b) Only for setref with empty cref_t (for removing the value with k):
+        //      1 - successfully removed the existing value with k.
+        //      0 - the prev. value with k did not exist, nothing done.
+        //  -1 - bad argument.
+        //      Possible cause:
+        //        a) xr must have been created with makemv, makecp, or got from any pcos with operator().
+        //        b) xm or the wrapped object (unity/utObject in xm, xc) is from other binary module than hx or pcos (if hx is not specified).
+        //  -2 - op. failed.
+        //  -3 - pcos object is non-functional.
+      s_long setref(const unity& k, cref_t<unity> xr) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xr); } catch (...) {} return res; }
+      s_long setmv(const unity& k, unity& xm, unity::mod_handle hx = unity::mod_handle()) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setmv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setmv); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xm, &hx); } catch (...) {} return res; }
+      s_long setcp(const unity& k, const unity& xc, unity::mod_handle hx = unity::mod_handle()) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setcp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setcp); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xc, &hx); } catch (...) {} return res; }
+
+        // Clear the referenced storage.
+        //    Removes all objects, so that all references and shared library handles, associated with values,
+        //    are released. This may produce cascaded library unloads in some cases.
+        //  Timely clearing the storage is responsibility of the client module (e.g. main executable).
+        //    This is necessary before quitting the process, to allow for unloading all libraries
+        //    involved into application-specific objects interchange.
+        // The result code:
+        //    1 - success. All objects are removed from the storage.
+        //    0 - the storage is not initialized, no objects, nothing done.
+        //    -2 - op. failed.
+        //    -3 - pcos object is non-functional.
+      s_long clearstg() throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_clearstg tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_clearstg); if (!f) { return -2; } s_long res = -2; try { res = f(&d); } catch (...) {} return res; }
+
+        // Create a strong multi-functional reference to the given value.
+        //    The value is moved (xm) or copied (xc) into the reference.
+        //    The returned cref_t object may passed into setref of any pcos, or used directly, as strong reference.
+        //    xc, xm: the value is moved (xm) or copied (xc) into the new reference.
+        //      The value is associated (by handle) with binary module in which it's factually created.
+        //      By default, this is binary module of the current storage (pcos::hhost()).
+        //      Otherwise, it's hx (if specified).
+        //      The correctness of the association is checked by makemv, makecp.
+        //      Relaxation for xc: unity object itself may be associated with any module,
+        //      because it's automatically copied by makecp on the side, represented by handle.
+        //      Anyway, if xm or xc contains a user object (unity/utObject),
+        //      the user object must have been created by the client on the side, represented by handle.
+        // The result code and returned value:
+        //  1 - success. A ref. to valid new object is returned.
+        //    NOTE makemv on success: xm contents are moved into the returned object, xm itself is cleared.
+        //  An empty cref_t is returned with the following result codes:
+        //    -1 - bad argument.
+        //    Possible cause: xm or the wrapped object (if unity/utObject in xm, xc)
+        //      is from other binary module than hx or pcos (if hx is not specified).
+        //    -2 - op. failed.
+        //    -3 - pcos object is non-functional.
+      cref_t<unity> makemv(unity& xm, unity::mod_handle hx = unity::mod_handle(), s_long* pres = 0) throw()        { cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; } typedef f_pcos_makemv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_makemv); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &xm, &hx, &rv); } catch (...) {} if (pres) { *pres = res; } return rv; }
+      cref_t<unity> makecp(const unity& xc, unity::mod_handle hx = unity::mod_handle(), s_long* pres = 0) throw()        { cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; } typedef f_pcos_makecp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_makecp); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &xc, &hx, &rv); } catch (...) {} if (pres) { *pres = res; } return rv; }
+    };
 
   private:
     unity_common::__Psm pmsm;
@@ -4508,11 +4803,13 @@ namespace yk_c
   template<> struct bytes::type_index_t<bmdx::unity> : cmti_base_t<bmdx::unity, 2015, 6, 1, 12, -1> {};
   template<int i> struct bytes::type_index_t<hashx_common::entry<bmdx::unity, bmdx::unity, i> > : cmti_base_t<hashx_common::entry<bmdx::unity, bmdx::unity, i>, 2015, 6, 10, 17 + i, -1> {};
   template<> struct bytes::type_index_t<bmdx::_unitydate> : cmti_base_t<bmdx::_unitydate, 2017, 6, 20, 20, -1> {};
+  template<> struct bytes::type_index_t<bmdx::unity::pcos> : cmti_base_t<bmdx::unity::pcos, 2019, 7, 24, 17, -1> {};
   namespace
   {
     bytes::type_index_t<bmdx::unity> __cmti_inst_unity;
     bytes::type_index_t<hashx<bmdx::unity, bmdx::unity>::entry> __cmti_inst_unity_h_entry;
     bytes::type_index_t<bmdx::_unitydate> __cmti_inst__unitydate;
+    bytes::type_index_t<bmdx::unity::pcos> __cmti_inst_unity_pcos;
   }
 }
 

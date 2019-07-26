@@ -1,9 +1,10 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-01-13
+// rev. 2019-07-25
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
+
 
 #if defined(__clang__)
   #pragma clang diagnostic ignored "-Wunknown-pragmas"
@@ -21,9 +22,6 @@
 #include "bmdx_main.h"
 using namespace bmdx_str::words;
 using namespace bmdx_str::conv;
-
-//#include <iostream>
-//using std::cerr;
 
 #include <iomanip>
 #include <sstream>
@@ -502,6 +500,12 @@ struct cv_ff
     static void Fclear(unity* x);
   };
 
+  struct cv_recreate
+  {
+    typedef s_long (*PF)(unity* x);
+    static s_long Frecreate(unity* x);
+  };
+
   struct cv_array
   {
     typedef s_long (*PFlb_u)(const unity* pv);
@@ -752,12 +756,38 @@ struct cv_ff
     typedef s_long (*PFcopy_handle)(const unity::mod_handle* pmhsrc, unity::mod_handle* pmhdest);
     static s_long Fcopy_handle(const unity::mod_handle* pmhsrc, unity::mod_handle* pmhdest);
 
+    typedef s_long (*PFinit_by_pmsm)(unity_common::f_ls_modsm pmsm, s_long b_au, unity::mod_handle* pmhdest);
+    static s_long Finit_by_pmsm(unity_common::f_ls_modsm pmsm, s_long b_au, unity::mod_handle* pmhdest);
+
     typedef void* (*PFsym)(const unity::mod_handle* pmh, const char* name);
     static void* Fsym(const unity::mod_handle* pmh, const char* name);
 
     typedef s_long (*PFrequest)(const unity::mod_handle* pmh, const unity* para, unity* retval);
     static s_long Frequest(const unity::mod_handle* pmh, const unity* para, unity* retval);
-  };
+  };  
+};
+
+struct cv_ff_pcos
+{
+  typedef unity_common t_uc;
+  typedef unity_common::f_ls_modsm t_msm;
+  static s_long Fcons(cref_t<unity::_pcos_d_base>* pd, const unity::mod_handle* ph);
+  static s_long Fcons_rl(cref_t<unity::_pcos_d_base>* pd, const unity::mod_handle* ph);
+  static s_long Foppar(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, cref_t<unity>* prv);
+  static s_long Fsetref(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, cref_t<unity>* pxr);
+  static s_long Fsetmv(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, unity* pxm, const unity::mod_handle* phx);
+  static s_long Fsetcp(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, const unity* pxc, const unity::mod_handle* phx);
+  static s_long Fclearstg(const cref_t<unity::_pcos_d_base>* pd);
+  static s_long Fmakemv(const cref_t<unity::_pcos_d_base>* pd, unity* pxm, const unity::mod_handle* phx, cref_t<unity>* prv);
+  static s_long Fmakecp(const cref_t<unity::_pcos_d_base>* pd, const unity* pxc, const unity::mod_handle* phx, cref_t<unity>* prv);
+
+  static s_long Fmakepcoscref(const unity::mod_handle* phx, cref_t<unity>* prv);
+  static s_long Fmakepcoscrefcp(const unity::mod_handle* phx, const unity* psrc, cref_t<unity>* prv);
+
+  typedef s_long (*f_makepcoscref)(const unity::mod_handle* phx, cref_t<unity>* prv);
+  typedef s_long (*f_makepcoscrefcp)(const unity::mod_handle* phx, const unity* psrc, cref_t<unity>* prv);
+
+  typedef cv_ff::cv_recreate::PF f_recreate;
 };
 
 std::string cv_ff::vecm_strdim(const vecm& x) { try { std::string s; s += "["; s += ntocs(x.nbase()); s += ".."; s += ntocs(x.nbase() + x.n() - 1); s += "]"; return s; } catch (...) {} return std::string(); }
@@ -822,6 +852,7 @@ s_long cv_ff::cv_obj2::Litfslist_del(unity_common::__Psm pmsm, void* p) { if (pm
 
 void cv_ff::cv_reg::Freg(unity* px, s_long flags) {} // not impl.
 void cv_ff::cv_clear::Fclear(unity* x) { x->clear(); }
+s_long cv_ff::cv_recreate::Frecreate(unity* x) { if (!x) { return 0; } x->recreate(); return 1; }
 
 s_long cv_ff::cv_array::Flb_u(const unity* pv) { return pv->_drf_q()->nbase(); }
 s_long cv_ff::cv_array::Fub_u(const unity* pv) { return pv->_drf_q()->nbase() + pv->_drf_q()->n() - 1; }
@@ -1150,6 +1181,7 @@ s_long cv_ff::cv_ver::Fver_hl() { return 0x101; } // &0xff part may differ for c
   //    0x2 - rootldr is just assigned with the current call.
   //    0x4 - the current module is rootldr (i.e. *ret_rootmodsm == the current unity_common::ls_modsm,
   //      so the module should not be unloaded until program exits).
+  //    NOTE If offer != 0, the returned value anyway != 0.
 s_long cv_ff::cv_rootldr::Frootldr(unity_common::__Psm offer, unity_common::__Psm* ret_rootmodsm)
 {
   critsec_t<static_init_lks> __lock(10,-1); if (sizeof(__lock)) {}
@@ -1167,8 +1199,8 @@ unity_common::__Psm _ls_psm_find(const char* piname) throw()
   if (!piname) { return 0; }
   svf_m_t<t_hipsm, unity_common>::L __lock; if (!__lock.b_valid()) { return 0; }
       svf_m_t<t_hipsm, unity_common> rsth; if (rsth.b_noinit()) { rsth.init0(1); }
-      t_hipsm* ph = rsth.px(); if (!ph) { return 0; }
-  const hashx<std::string, unity_common::__Psm>::entry* e = ph->find(piname);
+      t_hipsm* phi = rsth.px(); if (!phi) { return 0; }
+  const hashx<std::string, unity_common::__Psm>::entry* e = phi->find(piname);
   unity_common::__Psm pf = e ? e->v : 0;
   return pf;
 }
@@ -1177,8 +1209,8 @@ void unity_common::_ls_psm_set(const char* piname, unity_common::__Psm pf) throw
   if (!piname) { return; }
   svf_m_t<t_hipsm, unity_common>::L __lock; if (!__lock.b_valid()) { return; }
       svf_m_t<t_hipsm, unity_common> rsth; if (rsth.b_noinit()) { rsth.init0(1); }
-      t_hipsm* ph = rsth.px(); if (!ph) { return; }
-  try { ph->opsub(piname) = pf; } catch (...) {}
+      t_hipsm* phi = rsth.px(); if (!phi) { return; }
+  try { phi->opsub(piname) = pf; } catch (...) {}
 }
 void* _ls_obj_pi(void*, const char*) throw() { return 0; }
 void* _ls_obj_cpvoid(void*, s_long) throw() { return 0; }
@@ -1231,6 +1263,19 @@ void* unity_common::ls_modsm(s_long ind)
     (void*)cv_ff::cv_rootldr::Fcopy_handle,
     (void*)cv_ff::cv_rootldr::Fsym,
     (void*)cv_ff::cv_rootldr::Frequest,
+    (void*)cv_ff_pcos::Fcons,
+    (void*)cv_ff_pcos::Fcons_rl,
+    (void*)cv_ff_pcos::Foppar,
+    (void*)cv_ff_pcos::Fsetref,
+    (void*)cv_ff_pcos::Fsetmv,
+    (void*)cv_ff_pcos::Fsetcp,
+    (void*)cv_ff_pcos::Fclearstg,
+    (void*)cv_ff_pcos::Fmakemv,
+    (void*)cv_ff_pcos::Fmakecp,
+    (void*)cv_ff_pcos::Fmakepcoscref,
+    (void*)cv_ff_pcos::Fmakepcoscrefcp,
+    (void*)cv_ff::cv_recreate::Frecreate,
+    (void*)cv_ff::cv_rootldr::Finit_by_pmsm,
   };
 
   return ind >= 0 && ind < size ? smt[ind] : 0;
@@ -3965,7 +4010,8 @@ unity& unity::ua_fill(s_long utt, const unity& v) { s_long res = cv_ff::cv_array
 
 
 
-namespace {
+namespace
+{
 struct _mx : unity::t_map_tu
 {
   typedef meta::assert<(no_elem == -1)>::t_true __check1;
@@ -7832,8 +7878,17 @@ int file_utils::save_cstr(const char* fnp, const char* pdata, meta::s_ll n, bool
 
 bool file_utils::xHasCurDirShortCut(const std::wstring& sPath) { return sPath==L"." || sPath.substr(0,1+pslen)==L"."+wpathsep(); }
 bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath=="." || sPath.substr(0,1+pslen)=="."+cpathsep(); }
+}
 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Binary module handle.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace bmdx
+{
+
+s_long unity::compatibility() const throw() { return _compatibility(); }
 s_long unity::sig_struct() throw()
 {
   unity x;
@@ -7845,134 +7900,144 @@ s_long unity::sig_struct() throw()
    ^ s_long(((const char*)&x._data.p2 - (const char*)&x._data.p1));
 }
 
-s_long unity::compatibility() const throw() { return _compatibility(); }
+#ifdef _bmdxpl_Wnds
+  struct unity::_mod_exhandle
+  {
+    typedef s_long (*prequest)(s_long, s_long, const unity*, unity*);
+    typedef unity_common::__Psm (*pget_modsm)();
 
-}
+    unity_common::__Psm pmsm_rl; prequest prq; union { meta::s_ll __2; HMODULE handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
 
-namespace bmdx
-{
-  #ifdef _bmdxpl_Wnds
-    struct unity::_mod_exhandle
-    {
-      typedef s_long (*prequest)(s_long, s_long, const unity*, unity*);
-      typedef unity_common::__Psm (*pget_modsm)();
+    _mod_exhandle(bool b_autounload = true) throw() { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
 
-      unity_common::__Psm pmsm; prequest prq; union { meta::s_ll __2; HMODULE handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
+    bool b_h() const throw() { return f.htype > 0; }
+    bool b_msm() const throw() { return b_h() && pmsm_rl; }
+    bool b_rq() const throw() { return b_h() && prq; }
+    bool b_gms() const throw() { return b_h() && pgms; }
+    bool b_mainexe() const throw() { return f.htype == 2; }
 
-      _mod_exhandle(bool b_autounload = true) throw() { __2 = 0; __3 = 0; pmsm = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
+    #if bmdx_part_dllmgmt
+      ~_mod_exhandle() throw() { if (f.b_au) { mod_unload(); } }
 
-      bool b_h() const throw() { return f.htype > 0; }
-      bool b_rq() const throw() { return prq ? true : false; }
+        // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
+      s_long mod_load(const char* name, s_long flags) throw()
+      {
+        if (f.htype > 0) { return 0; } if (!name) { return -1; }
 
-      #if bmdx_part_dllmgmt
-        ~_mod_exhandle() throw() { if (f.b_au) { mod_unload(); } }
+        HMODULE h = 0;
+        if (*name == '\0') { h = GetModuleHandleA(0); f.htype = 2; }
+          else { h = LoadLibraryA(name); if (!h) { return -1; } f.htype = 1; }
+        handle = h;
 
-          // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
-        s_long mod_load(const char* name, s_long flags) throw()
+        prq = (prequest)sym("bmdx_mod_request");
+        pgms = (pget_modsm)sym("__bmdx_ls_modsm");
+        return 1;
+      }
+      void mod_unload() throw()
+      {
+        if (f.htype == 1) { FreeLibrary(handle); }
+        if (f.htype > 0) { handle = 0; f.htype = 0; }
+        prq = 0;
+        pgms = 0;
+      }
+      void* sym(const char* name) const throw() { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)GetProcAddress(handle, name); }
+    #endif
+  private: _mod_exhandle(const _mod_exhandle&); void operator=(const _mod_exhandle&);
+  };
+#endif
+
+#ifdef _bmdxpl_Psx
+  struct unity::_mod_exhandle
+  {
+    typedef s_long (*prequest)(s_long, s_long, const unity*, unity*);
+    typedef unity_common::__Psm (*pget_modsm)();
+
+    unity_common::__Psm pmsm_rl; prequest prq; union { meta::s_ll __2; void* handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
+
+    bool b_h() const throw() { return f.htype > 0; }
+    bool b_msm() const throw() { return b_h() && pmsm_rl; }
+    bool b_rq() const throw() { return b_h() && prq; }
+    bool b_gms() const throw() { return b_h() && pgms; }
+    bool b_mainexe() const throw() { return f.htype == 2; }
+
+    _mod_exhandle(bool b_autounload = true) throw() { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
+
+
+    #if bmdx_part_dllmgmt
+      ~_mod_exhandle() throw() { if (f.b_au) { mod_unload(); } }
+
+        // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
+      s_long mod_load(const char* name, s_long flags) throw()
+      {
+        if (f.htype > 0) { return 0; } if (!name) { return -1; }
+
+        int mode = RTLD_NOW|RTLD_LOCAL;
+        #ifndef __ANDROID__
+          mode |= RTLD_NOLOAD;
+        #endif
+        #ifdef RTLD_DEEPBIND
+          if ((flags & 3) == 1) { mode |= RTLD_DEEPBIND; } // set on
+            else if ((flags & 3) == 0) { } // leave deepb. off by dflt.
+            else // enable only for g++ (detect based on __GNUC__)
+            {
+              #if defined(__clang__)
+              #elif defined(__GNUC__)
+                  mode |= RTLD_DEEPBIND;
+              #else
+              #endif
+            }
+        #endif
+        #ifdef RTLD_FIRST
+          mode |= RTLD_FIRST;
+        #endif
+        #ifdef RTLD_NODELETE
+          if (!f.b_au) { mode |= RTLD_NODELETE; }
+        #endif
+        void* h = 0;
+        if (*name == '\0')
         {
-          if (f.htype > 0) { return 0; } if (!name) { return -1; }
-
-          HMODULE h = 0;
-          if (*name == '\0') { h = GetModuleHandleA(0); f.htype = 2; }
-            else { h = LoadLibraryA(name); if (!h) { return -1; } f.htype = 1; }
-          handle = h;
-
-          prq = (prequest)sym("bmdx_mod_request");
-          pgms = (pget_modsm)sym("__bmdx_ls_modsm");
-          return 1;
-        }
-        void mod_unload() throw()
-        {
-          if (f.htype == 1) { FreeLibrary(handle); }
-          if (f.htype > 0) { handle = 0; f.htype = 0; }
-          prq = 0;
-        }
-        void* sym(const char* name) const throw() { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)GetProcAddress(handle, name); }
-      #endif
-    private: _mod_exhandle(const _mod_exhandle&); void operator=(const _mod_exhandle&);
-    };
-  #endif
-  #ifdef _bmdxpl_Psx
-    struct unity::_mod_exhandle
-    {
-      typedef s_long (*prequest)(s_long, s_long, const unity*, unity*);
-      typedef unity_common::__Psm (*pget_modsm)();
-
-      unity_common::__Psm pmsm; prequest prq; union { meta::s_ll __2; void* handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
-
-      bool b_h() const throw() { return f.htype > 0; }
-      bool b_rq() const throw() { return prq ? true : false; }
-
-      _mod_exhandle(bool b_autounload = true) throw() { __2 = 0; __3 = 0; pmsm = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
-
-
-      #if bmdx_part_dllmgmt
-        ~_mod_exhandle() throw() { if (f.b_au) { mod_unload(); } }
-
-          // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
-        s_long mod_load(const char* name, s_long flags) throw()
-        {
-          if (f.htype > 0) { return 0; } if (!name) { return -1; }
-
-          int mode = RTLD_NOW|RTLD_LOCAL;
-          #ifndef __ANDROID__
-            mode |= RTLD_NOLOAD;
-          #endif
-          #ifdef RTLD_DEEPBIND
-            if ((flags & 3) == 1) { mode |= RTLD_DEEPBIND; } // set on
-              else if ((flags & 3) == 0) { } // leave deepb. off by dflt.
-              else // auto sel. dep. on compiler type
-              {
-                #if defined(__clang__) // leave deepb. off (not optimal only if the loaded .so is GCC, and linked statically to C and C++ lib.)
-                #elif defined(__GNUC__)
-                    //~!!! NOTE RTLD_DEEPBIND may be bad choice for g++ executable built with dynamic C lib.
-                    mode |= RTLD_DEEPBIND;
-                #else
-                #endif
-              }
-          #endif
-          #ifdef RTLD_FIRST
-            mode |= RTLD_FIRST;
-          #endif
-          #ifdef RTLD_NODELETE
-            if (!f.b_au) { mode |= RTLD_NODELETE; }
-          #endif
-          void* h = 0;
-          if (*name == '\0')
-          {
-            #ifdef RTLD_MAIN_ONLY
-              h = RTLD_MAIN_ONLY;
-            #else
-              h = dlopen(0, mode);
-            #endif
-            f.htype = 2;
-          }
-          else
-          {
-            h = dlopen(name, mode);
-            #ifndef __ANDROID__
-              if (!h) { mode &= ~RTLD_NOLOAD; h = dlopen(name, mode); }
-            #endif
+          #ifdef RTLD_MAIN_ONLY
+            h = RTLD_MAIN_ONLY;
+          #else
+            h = dlopen(0, mode);
             if (!h) { return -1; }
-            f.htype = 1;
-          }
-          handle = h;
-
-          prq = (prequest)sym("bmdx_mod_request");
-          pgms = (pget_modsm)sym("__bmdx_ls_modsm");
-          return 1;
+          #endif
+          f.htype = 2;
         }
-        void mod_unload() throw() { if (f.htype == 1) { dlclose(handle); } if (f.htype > 0) { handle = 0; f.htype = 0; } prq = 0; }
-        void* sym(const char* name) const throw() { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)dlsym(handle, name); }
-      #endif
-    private: _mod_exhandle(const _mod_exhandle&); void operator=(const _mod_exhandle&);
-    };
-  #endif
-    // _stg_mh() may be called only in root loader.
-    // ~_stg_mh() may be called only in the same root loader + pre-set b_au = 0 if the referenced module is itself root loader.
-  unity::mod_handle::_stg_mh::_stg_mh() { for (int i = 0; i < n; ++i) { _d[i] = 0; } new (&_d[0]) _mod_exhandle(); }
-  unity::mod_handle::_stg_mh::~_stg_mh() { (*this)().~_mod_exhandle(); }
-  unity::_mod_exhandle& unity::mod_handle::_stg_mh::operator()() const { return *(_mod_exhandle*)&_d[0]; }
+        else
+        {
+          h = dlopen(name, mode);
+          #ifndef __ANDROID__
+            if (!h) { mode &= ~RTLD_NOLOAD; h = dlopen(name, mode); }
+          #endif
+          if (!h) { return -1; }
+          f.htype = 1;
+        }
+        handle = h;
+
+        prq = (prequest)sym("bmdx_mod_request");
+        pgms = (pget_modsm)sym("__bmdx_ls_modsm");
+        return 1;
+      }
+      void mod_unload() throw()
+      {
+        #ifdef RTLD_MAIN_ONLY
+        #else
+          if (f.htype == 2) { dlclose(handle); }
+        #endif
+        if (f.htype == 1) { dlclose(handle); }
+        if (f.htype > 0) { handle = 0; f.htype = 0; }
+        prq = 0; pgms = 0;
+      }
+      void* sym(const char* name) const throw() { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)dlsym(handle, name); }
+    #endif
+  private: _mod_exhandle(const _mod_exhandle&); void operator=(const _mod_exhandle&);
+  };
+#endif
+  // _stg_mh(), ~_stg_mh() may be called only in root loader.
+unity::mod_handle::_stg_mh::_stg_mh() { for (int i = 0; i < n; ++i) { _d[i] = 0; } new (&_d[0]) _mod_exhandle(); }
+unity::mod_handle::_stg_mh::~_stg_mh() { (*this)().~_mod_exhandle(); }
+unity::_mod_exhandle& unity::mod_handle::_stg_mh::operator()() const { return *(_mod_exhandle*)&_d[0]; }
 }
 
 namespace yk_c
@@ -7984,13 +8049,22 @@ namespace yk_c
 namespace bmdx
 {
 
-typedef hashx<unity::mod_handle::t_nativehandle, cref_t<unity::mod_handle::_stg_mh> > t_hmods;
+struct t_hmods
+{
+  hashx<unity::mod_handle::t_nativehandle, cref_t<unity::mod_handle::_stg_mh> > hmods;
+  hashx<void*, unity::mod_handle::t_nativehandle> hmsm; // ls_modsm --> mod. handle; may be shorter than hmods, because sometimes ls_modsm is not accessible
+
+  typedef hashx<unity::mod_handle::t_nativehandle, cref_t<unity::mod_handle::_stg_mh> > t_hmods1;
+  typedef hashx<void*, unity::mod_handle::t_nativehandle> t_hmsm;
+};
 typedef svf_m_t<t_hmods, unity, 0, void, 100, 60000> t_hmods_svf;
 
 bool unity::mod_handle::is_valid() const throw()
   { return _rex && _rex.ref()().b_h(); } // implementation-independent
 unity::mod_handle::operator bool() const throw()
   { return _rex && _rex.ref()().b_h(); } // implementation-independent
+bool unity::mod_handle::is_mainexe() const throw()
+  { return _rex && _rex.ref()().b_mainexe(); } // implementation-independent
 unity::mod_handle::t_nativehandle unity::mod_handle::native() const throw()
   { if (!_rex) { return 0; } return _rex.ref()().handle; } // implementation-independent
 bool unity::mod_handle::operator==(const mod_handle& x) const throw()
@@ -8009,7 +8083,7 @@ unity::mod_handle::mod_handle(const mod_handle& h1) throw()
   __rsv1 = 0;
   if (!h1._rex) { return; } // OK
   unity::_mod_exhandle& h = h1._rex.ref()();
-  cv_ff::cv_rootldr::PFcopy_handle f_ch = (cv_ff::cv_rootldr::PFcopy_handle)h.pmsm(unity_common::msm_rl_cp_handle);
+  cv_ff::cv_rootldr::PFcopy_handle f_ch = (cv_ff::cv_rootldr::PFcopy_handle)h.pmsm_rl(unity_common::msm_rl_cp_handle);
     if (!f_ch) { return; } // this is not expected to occur (see ls_modsm).
   try { f_ch(&h1, this); } catch (...) {}
 }
@@ -8023,8 +8097,8 @@ void unity::mod_handle::clear() throw()
   do
   {
     unity::_mod_exhandle& h = _rex.ref()();
-    if (!h.pmsm) { break; } // this is not expected to occur because pmsm is set at once after _rex object creation (see Finit_handle).
-    cv_ff::cv_rootldr::PFdestroy_handle f_dh = (cv_ff::cv_rootldr::PFdestroy_handle)h.pmsm(unity_common::msm_rl_des_handle);
+    if (!h.pmsm_rl) { break; } // this is not expected to occur because pmsm_rl is set at once after _rex object creation (see Finit_handle).
+    cv_ff::cv_rootldr::PFdestroy_handle f_dh = (cv_ff::cv_rootldr::PFdestroy_handle)h.pmsm_rl(unity_common::msm_rl_des_handle);
       if (!f_dh) { break; } // this is not expected to occur (see ls_modsm).
     try { f_dh(this); } catch (...) {}
     return;
@@ -8036,8 +8110,8 @@ void* unity::mod_handle::sym(const char* name) const throw()
 {
   if (!_rex) { return 0; }
   unity::_mod_exhandle& h = _rex.ref()();
-    if (!h.pmsm) { return 0; }
-  cv_ff::cv_rootldr::PFsym f1 = (cv_ff::cv_rootldr::PFsym)h.pmsm(unity_common::msm_rl_sym);
+    if (!h.pmsm_rl) { return 0; }
+  cv_ff::cv_rootldr::PFsym f1 = (cv_ff::cv_rootldr::PFsym)h.pmsm_rl(unity_common::msm_rl_sym);
     if (!f1) { return 0; } // this is not expected to occur (see ls_modsm).
   try { return f1(this, name); } catch (...) {}
   return 0;
@@ -8047,17 +8121,62 @@ s_long unity::mod_handle::request(const unity& para, unity& retval) const throw(
 {
   if (!_rex) { return -4; }
   unity::_mod_exhandle& h = _rex.ref()();
-    if (!h.pmsm) { return -2; }
-  cv_ff::cv_rootldr::PFrequest f1 = (cv_ff::cv_rootldr::PFrequest)h.pmsm(unity_common::msm_rl_rq);
+    if (!h.pmsm_rl) { return -2; }
+  cv_ff::cv_rootldr::PFrequest f1 = (cv_ff::cv_rootldr::PFrequest)h.pmsm_rl(unity_common::msm_rl_rq);
     if (!f1) { return -2; } // this is not expected to occur (see ls_modsm).
   try { return f1(this, &para, &retval); } catch (...) {}
   return -2;
 }
+unity_common::f_ls_modsm unity::mod_handle::_pmsm() const throw()
+{
+  if (!_rex) { return 0; }
+  unity::_mod_exhandle& h = _rex.ref()();
+    if (!h.b_gms()) { return 0; }
+  return h.pgms();
+}
+unity_common::f_ls_modsm unity::mod_handle::_pmsm_rl() const throw()
+{
+  if (!_rex) { return 0; }
+  unity::_mod_exhandle& h = _rex.ref()();
+    if (!h.b_msm()) { return 0; }
+  return h.pmsm_rl;
+}
+unity::mod_handle unity::mod_handle::hself(bool b_autounload) throw()
+{
+  unity::mod_handle h;
+  unity_common::f_ls_modsm pmsm = unity_common::pls_modsm();
+  #if bmdx_part_dllmgmt
+    unity_common::f_ls_modsm offer = pmsm;
+  #else
+    unity_common::f_ls_modsm offer = 0;
+  #endif
+  unity_common::f_ls_modsm pmsm_rl = 0;
+  cv_ff::cv_rootldr::Frootldr(offer, &pmsm_rl);
+  if (pmsm_rl)
+  {
+    cv_ff::cv_rootldr::PFinit_by_pmsm f_ibp = (cv_ff::cv_rootldr::PFinit_by_pmsm)pmsm_rl(unity_common::msm_rl_init_by_pmsm);
+    if (f_ibp) { try { f_ibp(pmsm, b_autounload, &h); } catch (...) {} }
 
+      // If handle is not found, but the current module is root loader, check if it's main executable
+      //  (can be done because exe's handle can be got without knowing its name).
+      // ~!!! Later, this can be replaced by system-dependent getting shared object handle.
+    if (!h && pmsm_rl == pmsm)
+    {
+      mod_handle he;
+      cv_ff::cv_rootldr::PFinit_handle f_ih = (cv_ff::cv_rootldr::PFinit_handle)pmsm_rl(unity_common::msm_rl_init_handle);
+      if (f_ih)
+      {
+        try { f_ih(&he, "", 1, (bmdx_mod_load_def_flags & 0)); } catch (...) {}
+        if (he._pmsm() == pmsm) { h = he; }
+      }
+    }
+  }
+  return h;
+}
 
 }
 
-#if bmdx_part_dllmgmt
+#if bmdx_part_dllmgmt || bmdx_expose_ls_modsm
   extern "C" __BMDX_DLLEXPORT bmdx::unity_common::__Psm __bmdx_ls_modsm() { return bmdx::unity_common::ls_modsm; }
 #endif
 
@@ -8068,15 +8187,14 @@ namespace bmdx
   {
     unity::mod_handle mh;
 
-    unity_common::__Psm prlmsm = 0;
-    cv_ff::cv_rootldr::Frootldr(unity_common::ls_modsm, &prlmsm); // init own rootldr pointer if necessary
-      if (!prlmsm) { return mh; }
+    unity_common::__Psm pmsm_rl = 0;
+    cv_ff::cv_rootldr::Frootldr(unity_common::ls_modsm, &pmsm_rl); // init own rootldr pointer if necessary
+      if (!pmsm_rl) { return mh; }
 
-    cv_ff::cv_rootldr::PFinit_handle f_ih = (cv_ff::cv_rootldr::PFinit_handle)prlmsm(unity_common::msm_rl_init_handle);
+    cv_ff::cv_rootldr::PFinit_handle f_ih = (cv_ff::cv_rootldr::PFinit_handle)pmsm_rl(unity_common::msm_rl_init_handle);
       if (!f_ih) { return mh; }
 
-    s_long res = 0; try { res = f_ih(&mh, name, b_au ? 1 : 0, flags); } catch (...) {}
-    if (sizeof(res)) {}
+    try { f_ih(&mh, name, b_au ? 1 : 0, flags); } catch (...) {}
     return mh;
   }
 
@@ -8089,32 +8207,43 @@ namespace bmdx
 
     cref_t<unity::mod_handle::_stg_mh> rd;
       if (!rd.create0(true)) { return -2; }
-    rd.ref()().pmsm = unity_common::ls_modsm;
+    rd.ref()().pmsm_rl = unity_common::ls_modsm;
 
     t_hmods_svf::L __lock; if (!__lock.is_locked()) { return -3; }
         t_hmods_svf rsth; if (rsth.b_noinit()) { rsth.init0(1); }
-        t_hmods* ph = rsth.px(); if (!ph) { return -4; }
+        t_hmods* phm = rsth.px(); if (!phm) { return -4; }
 
     char b_au = flags0 & 1;
     rd.ref()().f.b_au = b_au;
     if (rd.ref()().mod_load(name, flags) < 0) { return -5; } // +1 load if successful
 
-    const t_hmods::entry* e(0);
-    int res = ph->insert(rd.ref()().handle, &e);
-    if (res == 1) { e->v = rd; }
-      else if (res == 0) { rd = e->v; } // rd is overwritten, so 1 unload is called (this does not close DLL, because e->v exists)
-      else { return -6; }
-
-    if (rd.ref()().pgms)
+    unity::_mod_exhandle::pget_modsm pgms = rd.ref()().pgms;
+    unity_common::f_ls_modsm pmsm = pgms ? pgms() : 0;
+    if (pmsm)
     {
-      PFrootldr f_rl = (PFrootldr)rd.ref()().pgms()(unity_common::msm_rootldr);
+      PFrootldr f_rl = (PFrootldr)pgms()(unity_common::msm_rootldr);
       if (f_rl)
       {
         s_long f = 0;
         try { f = f_rl(unity_common::ls_modsm, 0); } catch (...) {}
-        if (!f) { return -7; }
-        if (f & 4) { b_au = 0; }
+        if (!f) { return -7; } // this is not expected to occur, because Frootldr does not fail on offer != 0
+
+          //~!!! This disables autounloading shared library - rootldr on last ref. des., for case when it has loaded itself at least once.
+          //  May be replaced with check "if root loader still contains any other libraries handles, which cannot be immediately released".
+        if ((f & 4) && *name != '\0') { b_au = 0; }
       }
+    }
+
+    unity::mod_handle::t_nativehandle handle = rd.ref()().handle;
+    const t_hmods::t_hmods1::entry* e(0);
+    int res = phm->hmods.insert(handle, &e);
+    if (res == 1) { e->v = rd; }
+      else if (res == 0) { rd = e->v; } // rd is overwritten, so 1 unload is called (this does not close DLL, because e->v exists)
+      else { return -6; }
+
+    if (pmsm)
+    {
+      try { phm->hmsm[(void*)pmsm] = handle; } catch (...) {} // if this fails, it's not critical (no need to unload the library)
     }
 
     if (!b_au) { e->v.ref()().f.b_au = 0; }
@@ -8128,15 +8257,18 @@ namespace bmdx
     unity::_mod_exhandle& h = pmh->_rex.ref()();
     if (!h.b_h() || !h.f.b_au) { pmh->_rex.clear(); return 1; }
     t_hmods_svf::L __lock;
-      if (!__lock.is_locked()) { h.f.b_au = 0; pmh->_rex.clear(); return -1; }
+      if (!__lock.is_locked()) { pmh->_rex.clear(); return -1; }
       t_hmods_svf rsth; if (rsth.b_noinit()) { rsth.init0(1); }
-      t_hmods* ph = rsth.px(); if (!ph) { h.f.b_au = 0; pmh->_rex.clear(); return -2; }
-    const t_hmods::entry* e = ph->find(h.handle); if (!e) { h.f.b_au = 0; pmh->_rex.clear(); return -3; }
-    if (e->v.ref()().f.b_au && e->v.n_refs() <= 2) { ph->remove_e(e); }
+      t_hmods* phm = rsth.px(); if (!phm) { pmh->_rex.clear(); return -2; }
+    const t_hmods::t_hmods1::entry* e = phm->hmods.find(h.handle); if (!e) { pmh->_rex.clear(); return -3; }
+    if (e->v.ref()().f.b_au && e->v.n_refs() <= 2)
+    {
+      phm->hmods.remove_e(e);
+      if (h.b_gms()) { phm->hmsm.remove((void*)h.pgms()); }
+    }
     pmh->_rex.clear();
     return 1;
   }
-    // NOTE Fdestroy_handle assumes that it's called in root loader module (see also unity::mod).
   s_long cv_ff::cv_rootldr::Fcopy_handle(const unity::mod_handle* pmhsrc, unity::mod_handle* pmhdest)
   {
     if (!(pmhsrc && pmhdest)) { return 0; }
@@ -8144,6 +8276,27 @@ namespace bmdx
     pmhdest->_rex = pmhsrc->_rex; // does not fail
     pmhdest->__rsv1 = 0;
     return 1;
+  }
+  s_long cv_ff::cv_rootldr::Finit_by_pmsm(unity_common::f_ls_modsm pmsm, s_long b_au, unity::mod_handle* pmhdest)
+  {
+    if (!pmhdest) { return -1; }
+    if (!pmsm) { pmhdest->clear(); return 0; }
+    try {
+      do { // once
+        t_hmods_svf::L __lock; if (!__lock.is_locked()) { break; }
+          t_hmods_svf rsth; if (rsth.b_noinit()) { rsth.init0(1); }
+          t_hmods* phm = rsth.px(); if (!phm) { break; }
+        const t_hmods::t_hmsm::entry* e = phm->hmsm.find((void*)pmsm);
+          if (!e) { break; }
+        const t_hmods::t_hmods1::entry* e1 = phm->hmods.find(e->v);
+          if (!e1) { break; }
+        pmhdest->_rex = e1->v; // does not fail
+        pmhdest->__rsv1 = 0;
+        if (!b_au) { pmhdest->_rex.ref()().f.b_au = 0; }
+        return 1;
+      } while (0);
+    } catch (...) {}
+    return -2;
   }
   void* cv_ff::cv_rootldr::Fsym(const unity::mod_handle* pmh, const char* name)
   {
@@ -8160,8 +8313,8 @@ namespace bmdx
 
     t_hmods_svf::L __lock; if (!__lock.is_locked()) { return -2; }
         t_hmods_svf rsth; if (rsth.b_noinit()) { rsth.init0(1); }
-        t_hmods* ph = rsth.px(); if (!ph) { return -2; }
-    const t_hmods::entry* e = ph->find(pmh->_rex.ref()().handle); if (!e) { return -2; }
+        t_hmods* phm = rsth.px(); if (!phm) { return -2; }
+    const t_hmods::t_hmods1::entry* e = phm->hmods.find(pmh->_rex.ref()().handle); if (!e) { return -2; }
 
     unity::_mod_exhandle& h = e->v.ref()(); if (!h.b_rq()) { return -3; }
 
@@ -8173,14 +8326,328 @@ namespace bmdx
   s_long cv_ff::cv_rootldr::Finit_handle(unity::mod_handle* pmh, const char* name, s_long flags0, s_long flags) { return -10; }
   s_long cv_ff::cv_rootldr::Fdestroy_handle(unity::mod_handle* pmh) { return -10; }
   s_long cv_ff::cv_rootldr::Fcopy_handle(const unity::mod_handle* pmhsrc, unity::mod_handle* pmhdest) { return -10; }
+  s_long cv_ff::cv_rootldr::Finit_by_pmsm(unity_common::f_ls_modsm pmsm, s_long b_au, unity::mod_handle* pmhdest) { return -10; }
   void* cv_ff::cv_rootldr::Fsym(const unity::mod_handle* pmh, const char* name) { return 0; }
   s_long cv_ff::cv_rootldr::Frequest(const unity::mod_handle* pmh, const unity* para, unity* retval) { return -2; }
 #endif // bmdx_part_dllmgmt
 }
 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Common objects storage.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace bmdx
+{
+  #define __PCOS_VER_MIN 1
+  #define __PCOS_VER_CURRENT 1
+  #define __PCOS_VER_MAX_COMPAT 100
+  namespace
+  {
+    typedef hashx<unity, cref_t<unity> > t_hpcos;
+    typedef svf_m_t<t_hpcos, cv_ff_pcos>::L t_lock_hpcos;
+    svf_m_t<t_hpcos, cv_ff_pcos> hpcos;
+    struct pcos_aux_v1
+    {
+      s_long sig; s_long ver;
+      unity::mod_handle hmc; // handle of the module that created the contained object of cref_t of which *this is aux. object
+
+      pcos_aux_v1(const unity::mod_handle& hmc_) : hmc(hmc_) { sig = sig_pcos_aux(); ver = __PCOS_VER_CURRENT; }
+
+      bool b_ver_match() { return sig == sig_pcos_aux() && ver >= __PCOS_VER_MIN && ver <= __PCOS_VER_MAX_COMPAT; }
+      static s_long sig_pcos_aux() { return yk_c::bytes::uind_t<char, 2019, 07, 21, 18, 8 + sizeof(unity::mod_handle)>::x; }
+    };
+      // The lock data for all new pcos objects, created in this module.
+    critsec_t<unity>::csdata* pcsd_pcos_obj() { return (critsec_t<unity>::csdata*)critsec_t<t_hpcos>::ff_mc().pdefcsd(); }
+
+  }
+
+    // 1 - success, *pd contains valid object, created in the root loader of *ph,
+    //  0 - success, *pd is cleared in-place (*ph is null),
+    //  -2 - failure, *pd is cleared in-place (*ph is non-null but not valid, or object creation failed),
+    //  -4 - failure, nothing modified (bad args).
+  s_long cv_ff_pcos::Fcons(cref_t<unity::_pcos_d_base>* pd, const unity::mod_handle* ph)
+  {
+    if (!(pd && ph)) { return -4; }
+    pd->clear();
+    t_msm pmsm_rl = ph->_pmsm_rl();
+      if (!pmsm_rl) { return -2; }
+    typedef unity::pcos::f_pcos_cons tf; tf f = (tf)pmsm_rl(t_uc::msm_pcos_cons_rl);
+      if (!f) { return -2; }
+    s_long res = -2;
+    try { res = f(pd, ph); } catch (...) {}
+    return res;
+  }
+  s_long cv_ff_pcos::Fcons_rl(cref_t<unity::_pcos_d_base>* pd, const unity::mod_handle* ph)
+  {
+    if (!(pd && ph)) { return -4; }
+    pd->clear();
+    if (!ph->_pmsm()) { return -2; }
+    cref_t<unity::_pcos_d_base> r = cref_t<unity::_pcos_d_base>::iref2<>::create0(1);
+      if (!r) { return -2; }
+    r->hhost = *ph;
+    bmdx_str::words::swap_bytes(r, *pd);
+    return 1;
+  }
+  s_long cv_ff_pcos::Foppar(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, cref_t<unity>* prv)
+  {
+    if (!(pd && pk && prv)) { return -2; }
+    try {
+      cref_t<unity> z; // will be deleted later than __lock
+      t_lock_hpcos __lock; if (sizeof(__lock)) {}
+      t_hpcos& h = hpcos.rxai0();
+      const t_hpcos::entry* e = h.find(*pk);
+      if (e && e->v) { z = e->v; }
+      bmdx_str::words::swap_bytes(z, *prv);
+      return *prv ? 1 : 0;
+    } catch (...) {}
+    return -2;
+  }
+  s_long cv_ff_pcos::Fsetref(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, cref_t<unity>* pxr)
+  {
+    if (!(pd && pk && pxr)) { return -2; }
+    cref_t<unity>& xr = *pxr;
+    if (xr)
+    {
+      pcos_aux_v1* pa = (pcos_aux_v1*)xr.paux(); unity* pu = xr._pnonc_u(); s_long fl = s_long(xr.flags());
+      if (!(pa && pu && (fl & iref2_flags::use_hst) && (fl & iref2_flags::use_aux) && (fl & iref2_flags::use_critsec) && ((char*)pu-(char*)pa) >= s_ll(sizeof(pcos_aux_v1)) && pa->b_ver_match())) { return -1; }
+      if (!(pa->hmc && pa->hmc._pmsm() == pu->_pmsm())) { return -1; }
+      if (pu->isObject())
+      {
+        unity::o_api a(pu); if (!a.prc) { return -1; }
+        unity::o_api::critsec_rc(a.prc);
+        t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
+        if (pmsmo != pa->hmc._pmsm()) { return -1; }
+      }
+    }
+    try {
+      if (xr)
+      {
+        t_lock_hpcos __lock; if (sizeof(__lock)) {}
+        t_hpcos& h = hpcos.rxai0();
+        const t_hpcos::entry* e = 0; s_long res = h.insert(*pk, &e);
+        if (res < 0) { return -2; }
+        bmdx_str::words::swap_bytes(xr, e->v); // z will be deleted later than __lock
+        return res == 1 ? 2 : 1;
+      }
+      else
+      {
+        cref_t<unity> z0; // will be deleted later than __lock
+        t_lock_hpcos __lock; if (sizeof(__lock)) {}
+        t_hpcos& h = hpcos.rxai0();
+        const t_hpcos::entry* e = h.find(*pk);
+        if (!e) { return 0; }
+        bmdx_str::words::swap_bytes(z0, e->v);
+        s_long res = h.remove_e(e);
+        if (res == 1) { return 1; }
+        bmdx_str::words::swap_bytes(z0, e->v);
+        return -2;
+      }
+    } catch (...) {}
+    return -2;
+  }
+  s_long cv_ff_pcos::Fsetmv(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, unity* pxm, const unity::mod_handle* phx)
+  {
+    if (!(pd && pk && pxm && phx)) { return -2; }
+    // form handle
+    // get handle pmsm
+    // check if *pxm and its object (if utObject) is same pmsm as handle
+    // create a non-local empty object o1
+    // create an empty unity object z
+    //
+    // set lock on storage
+    // find entry, create if not exists
+    // swap o1 with entry
+    // swap z with entry
+    // swap *pxm entry
+    // ret. success
+    try {
+      const unity::mod_handle& hxm = *phx ? *phx : (*pd)->hhost;
+      t_msm pmsm = hxm._pmsm();
+      t_msm pmsm_rl = hxm._pmsm_rl();
+        if (!(pmsm && pmsm_rl)) { return -2; }
+        if (pxm->_pmsm() != pmsm) { return -1; }
+        if (pxm->isObject())
+        {
+          unity::o_api a(pxm); if (!a.prc) { return -2; }
+          unity::o_api::critsec_rc(a.prc);
+          t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
+          if (pmsmo != pmsm) { return -1; }
+        }
+      typedef f_makepcoscref fmcr; fmcr f = (fmcr)pmsm_rl(t_uc::msm_pcos_makecref);
+        if (!f) { return -2; }
+      cref_t<unity> o1;
+        if (f(&hxm, &o1) < 1) { return -2; }
+      unity* pu1 = o1._pnonc_u();
+        if (!pu1) { return -2; } // pu1 is not expected to be 0 here
+      unity z; // has local pmsm == that of the storage
+      t_lock_hpcos __lock; if (sizeof(__lock)) {}
+      t_hpcos& h = hpcos.rxai0();
+      const t_hpcos::entry* e = 0;
+      s_long res = h.insert(*pk, &e);
+        if (res < 0) { return -2; }
+      bmdx_str::words::swap_bytes(o1, e->v);
+      bmdx_str::words::swap_bytes(z, *pu1);
+      bmdx_str::words::swap_bytes(*pxm, *pu1);
+      return res == 1 ? 2 : 1;
+    } catch (...) {}
+    return -2;
+  }
+  s_long cv_ff_pcos::Fsetcp(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, const unity* pxc, const unity::mod_handle* phx)
+  {
+    if (!(pd && pk && pxc && phx)) { return -2; }
+    // form handle
+    // get handle pmsm
+    // check if *pxc's object (if utObject) is same pmsm as handle
+    // create a non-local copy of *pxc: o1
+    //
+    // set lock on storage
+    // find entry, create if not exists
+    // swap o1 with entry
+    // ret. success
+    try {
+      const unity::mod_handle& hxc = *phx ? *phx : (*pd)->hhost;
+      t_msm pmsm = hxc._pmsm();
+      t_msm pmsm_rl = hxc._pmsm_rl();
+        if (!(pmsm && pmsm_rl)) { return -2; }
+        if (pxc->isObject())
+        {
+          unity::o_api a(pxc); if (!a.prc) { return -2; }
+          unity::o_api::critsec_rc(a.prc);
+          t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
+          if (pmsmo != pmsm) { return -1; }
+        }
+      typedef f_makepcoscrefcp fmcr; fmcr f = (fmcr)pmsm_rl(t_uc::msm_pcos_makecrefcp);
+        if (!f) { return -2; }
+      cref_t<unity> o1;
+        if (f(&hxc, pxc, &o1) < 1) { return -2; }
+      t_lock_hpcos __lock; if (sizeof(__lock)) {}
+      t_hpcos& h = hpcos.rxai0();
+      const t_hpcos::entry* e = 0;
+      s_long res = h.insert(*pk, &e);
+        if (res < 0) { return -2; }
+      bmdx_str::words::swap_bytes(o1, e->v);
+      return res == 1 ? 2 : 1;
+    } catch (...) {}
+    return -2;
+  }
+  s_long cv_ff_pcos::Fclearstg(const cref_t<unity::_pcos_d_base>* pd)
+  {
+    if (!pd) { return -2; }
+    try {
+      t_lock_hpcos __lock; if (sizeof(__lock)) {}
+      if (!hpcos.b_valid()) { return 0; }
+      hpcos.rx().hashx_clear();
+      return 1;
+    } catch (...) {}
+    return -2;
+  }
+  s_long cv_ff_pcos::Fmakemv(const cref_t<unity::_pcos_d_base>* pd, unity* pxm, const unity::mod_handle* phx, cref_t<unity>* prv)
+  {
+    if (!(pd && pxm && phx && prv)) { return -2; }
+    try {
+      const unity::mod_handle& hxm = *phx ? *phx : (*pd)->hhost;
+      t_msm pmsm = hxm._pmsm();
+      t_msm pmsm_rl = hxm._pmsm_rl();
+        if (!(pmsm && pmsm_rl)) { return -2; }
+        if (pxm->_pmsm() != pmsm) { return -1; }
+        if (pxm->isObject())
+        {
+          unity::o_api a(pxm); if (!a.prc) { return -2; }
+          unity::o_api::critsec_rc(a.prc);
+          t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
+          if (pmsmo != pmsm) { return -1; }
+        }
+      typedef f_makepcoscref fmcr; fmcr f = (fmcr)pmsm_rl(t_uc::msm_pcos_makecref);
+        if (!f) { return -2; }
+      cref_t<unity> o1;
+        if (f(&hxm, &o1) < 1) { return -2; }
+      unity* pu1 = o1._pnonc_u();
+        if (!pu1) { return -2; } // pu1 is not expected to be 0 here
+      unity z; // has local pmsm == that of the storage
+      bmdx_str::words::swap_bytes(z, *pxm);
+      bmdx_str::words::swap_bytes(z, *pu1);
+      *prv = o1;
+      return 1;
+    } catch (...) {}
+    return -2;
+  }
+  s_long cv_ff_pcos::Fmakecp(const cref_t<unity::_pcos_d_base>* pd, const unity* pxc, const unity::mod_handle* phx, cref_t<unity>* prv)
+  {
+    if (!(pd && pxc && phx && prv)) { return -2; }
+    try {
+      const unity::mod_handle& hxc = *phx ? *phx : (*pd)->hhost;
+      t_msm pmsm = hxc._pmsm();
+      t_msm pmsm_rl = hxc._pmsm_rl();
+        if (!(pmsm && pmsm_rl)) { return -2; }
+        if (pxc->isObject())
+        {
+          unity::o_api a(pxc); if (!a.prc) { return -2; }
+          unity::o_api::critsec_rc(a.prc);
+          t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
+          if (pmsmo != pmsm) { return -1; }
+        }
+      typedef f_makepcoscrefcp fmcr; fmcr f = (fmcr)pmsm_rl(t_uc::msm_pcos_makecrefcp);
+        if (!f) { return -2; }
+      cref_t<unity> o1;
+        if (f(&hxc, pxc, &o1) < 1) { return -2; }
+      *prv = o1;
+      return 1;
+    } catch (...) {}
+    return -2;
+  }
+
+    // Creates cref_t<unity> in *prv, such that all is true:
+    //    1) cref_t belongs to the current module.
+    //    2) cref_t contains an empty unity object, belonging to the module of *phx.
+    // *phx must be valid module handle.
+    // The current module must be the root module of *phx.
+    // Returns:
+    //  On success,  1 and *prv, containing unity/utEmpty, with pmsm of the current module.
+    //  On failure: -2, *prv is not modified.
+  s_long cv_ff_pcos::Fmakepcoscref(const unity::mod_handle* phx, cref_t<unity>* prv)
+  {
+    if (!(phx && prv)) { return -2; }
+    if (phx->_pmsm_rl() != t_uc::pls_modsm()) { return -2; }
+    t_msm pmsm = phx->_pmsm(); if (!pmsm) { return -2; }
+    f_recreate fre = (f_recreate)pmsm(t_uc::msm_cv_recreate); if (!fre) { return -2; }
+    typedef cref_t<unity>::iref2<unity, pcos_aux_v1> t_iref;
+    cref_t<unity> o1 = t_iref::create0(1, pcsd_pcos_obj(), 0x14 | iref2_flags::use_aux, t_iref::handler_dflt, iref2_args_t<pcos_aux_v1>::args(*phx));
+      if (!o1) { return -2; }
+    s_long res = -2;
+    try { res = fre(o1._pnonc_u()); } catch (...) {}
+      if (res < 1) { return -2; }
+    bmdx_str::words::swap_bytes(o1, *prv);
+    return 1;
+  }
+
+    // Creates cref_t<unity> in *prv, such that all is true:
+    //    1) cref_t belongs to the current module.
+    //    2) cref_t contains a unity object, belonging to the module of *phx, with copy of *psrc.
+    //    3) if *psrc is unity/utObject, the wrapped object may be from any module (this is not checked here).
+    // *phx must be valid module handle.
+    // The current module must be the root module of *phx.
+    // Returns:
+    //  On success,  1 and *prv, containing a copy of psrc, but  with pmsm of the current module.
+    //  On failure: -2, *prv is not modified.
+  s_long cv_ff_pcos::Fmakepcoscrefcp(const unity::mod_handle* phx, const unity* psrc, cref_t<unity>* prv)
+  {
+    if (!(phx && psrc && prv)) { return -2; }
+    cref_t<unity> o1;
+    s_long res = Fmakepcoscref(phx, &o1);
+      if (res < 1) { return res; }
+    res = -2;
+    try { *o1._pnonc_u() = *psrc; bmdx_str::words::swap_bytes(o1, *prv); res = 1; } catch (...) {}
+    return res;
+  }
+}
 
 
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Message dispatcher.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if bmdx_part_dispatcher_mt
 
