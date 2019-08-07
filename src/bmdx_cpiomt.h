@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-07-29
+// rev. 2019-08-07
 //
 // Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -249,7 +249,7 @@ namespace bmdx_str
         }
       }
       _s_long i = _s_long(x2);
-      _s_long n_int = 0; if (true) { _s_long i2 = i; do { ++n_int; i2 /= 10; } while (i2); }
+      _s_long n_int = 0; _s_ll round_mult = 1; if (true) { _s_long i2 = i; do { ++n_int; i2 /= 10; round_mult *= 10; } while (i2); }
       if (n_int > ndmmax)
       {
         _s_long n0 = 0; _s_long n2 = 7; while (n2 - n0 > 1) { _s_long n = (n2 + n0) / 2; if (x2 < cmp1[n]) { n2 = n; } else if (x2 >= cmp1[n]) { n0 = n; } }
@@ -271,7 +271,7 @@ namespace bmdx_str
       if (n_frac > 0)
       {
         if (i) { x2 -= double(i); } if (x2 < 0.) { x2 = 0.; } else if (x2 >= 0.9999999999999) { x2 = 0.9999999999999; }
-        _s_ll fr = _s_ll(x2 * 1.e13 + 0.5), mult = 1000000000000ll;
+        _s_ll fr = _s_ll(x2 * 1.e13 + 0.05 * round_mult), mult = 1000000000000ll;
         _s_ll fr_min = _pow10[nfrac_mm - n_frac];
         while (n_frac && fr >= fr_min) { buf[pos++] = char((fr / mult) + '0'); fr %= mult; mult /= 10; --n_frac; ++q; }
       }
