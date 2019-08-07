@@ -1,4 +1,4 @@
-// rev. 2019-07-25
+// rev. 2019-07-29
 ====================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 ====================================================
@@ -385,8 +385,13 @@ bcc64  -tR -tD -Wall  -O0 -o test1_bcc.dll path\test1.cpp path\bmdx_main.cpp
 
 17. struct vec2_t
 
-  Analogous to std::vector template + support for cross-module use.
-  Based on vecm, so inherits all its compatibility specifics.
+  Partial analog of std::vector<T>, with interesting differences:
+  1. Can be safely passed across binary module boundary, same as vecm.
+  2. vec2_t, same as vecm, is multi-part.
+    It does not copy or move existing elements, when anything is appended or removed at the end.
+  3. If T does heavy resource allocations so that T() and/or T(const T&) are semantically non-sense,
+    they are not required to be defined at all.
+    It's enough to specialize struct construct_f for T and pass it into vec2_t for elements appending.
 
 18. struct ordhs_t
 

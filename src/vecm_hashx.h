@@ -1,6 +1,6 @@
 // vecm_hashx.h 1.6
 // High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2019-07-25
+// rev. 2019-07-29
 // Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2019)
 // Project website: hashx.dp.ua
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -86,6 +86,8 @@ struct meta
 
     // Getting non-const type + converting an array to pointer.
   template<class T, int __s = 0> struct nonc_t { typedef T t; }; template<class T> struct nonc_t<const T, 0> { typedef T t; }; template<class T> struct nonc_t<const T*, 0> { typedef T* t; }; template<class T> struct nonc_t<const T[], 0> { typedef T* t; }; template<class T, int __s> struct nonc_t<const T[__s], 0> { typedef T* t; }; template<class T, int __s> struct nonc_t<T[__s], 0> { typedef T* t; }; template<class T> struct nonc_t<const T&, 0> { typedef T& t; };
+  template<class T, int __s = 0> struct nonv_t { typedef T t; }; template<class T> struct nonv_t<volatile T, 0> { typedef T t; }; template<class T> struct nonv_t<volatile T*, 0> { typedef T* t; }; template<class T> struct nonv_t<volatile T[], 0> { typedef T* t; }; template<class T, int __s> struct nonv_t<volatile T[__s], 0> { typedef T* t; }; template<class T, int __s> struct nonv_t<T[__s], 0> { typedef T* t; }; template<class T> struct nonv_t<volatile T&, 0> { typedef T& t; };
+  template<class T, int __s = 0> struct noncv_t { typedef typename nonv_t<typename nonc_t<T, __s>::t, __s>::t t; };
 
     // Remove reference (&) from the type.
   template<class T, int _ = 0> struct nonr_t { typedef T t; }; template<class T> struct nonr_t<T&, 0> { typedef T t; };

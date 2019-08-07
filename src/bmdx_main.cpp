@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-07-25
+// rev. 2019-07-29
 // See bmdx_main.h for description.
 
 #ifndef bmdx_main_H
@@ -780,6 +780,7 @@ struct cv_ff_pcos
   static s_long Fclearstg(const cref_t<unity::_pcos_d_base>* pd);
   static s_long Fmakemv(const cref_t<unity::_pcos_d_base>* pd, unity* pxm, const unity::mod_handle* phx, cref_t<unity>* prv);
   static s_long Fmakecp(const cref_t<unity::_pcos_d_base>* pd, const unity* pxc, const unity::mod_handle* phx, cref_t<unity>* prv);
+  static s_long Fcheckref(const cref_t<unity::_pcos_d_base>* pd, cref_t<unity>* pxr);
 
   static s_long Fmakepcoscref(const unity::mod_handle* phx, cref_t<unity>* prv);
   static s_long Fmakepcoscrefcp(const unity::mod_handle* phx, const unity* psrc, cref_t<unity>* prv);
@@ -1276,6 +1277,7 @@ void* unity_common::ls_modsm(s_long ind)
     (void*)cv_ff_pcos::Fmakepcoscrefcp,
     (void*)cv_ff::cv_recreate::Frecreate,
     (void*)cv_ff::cv_rootldr::Finit_by_pmsm,
+    (void*)cv_ff_pcos::Fcheckref,
   };
 
   return ind >= 0 && ind < size ? smt[ind] : 0;
@@ -3008,6 +3010,7 @@ s_long unity::_compatibility() const throw()
     return 1;
   }
   if (isArray()) { return _drf_q()->compatibility(); }
+  if (isObject()) { return 0; }
   return -1;
 }
 
@@ -8406,21 +8409,10 @@ namespace bmdx
   s_long cv_ff_pcos::Fsetref(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, cref_t<unity>* pxr)
   {
     if (!(pd && pk && pxr)) { return -2; }
-    cref_t<unity>& xr = *pxr;
-    if (xr)
-    {
-      pcos_aux_v1* pa = (pcos_aux_v1*)xr.paux(); unity* pu = xr._pnonc_u(); s_long fl = s_long(xr.flags());
-      if (!(pa && pu && (fl & iref2_flags::use_hst) && (fl & iref2_flags::use_aux) && (fl & iref2_flags::use_critsec) && ((char*)pu-(char*)pa) >= s_ll(sizeof(pcos_aux_v1)) && pa->b_ver_match())) { return -1; }
-      if (!(pa->hmc && pa->hmc._pmsm() == pu->_pmsm())) { return -1; }
-      if (pu->isObject())
-      {
-        unity::o_api a(pu); if (!a.prc) { return -1; }
-        unity::o_api::critsec_rc(a.prc);
-        t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
-        if (pmsmo != pa->hmc._pmsm()) { return -1; }
-      }
-    }
+    s_long res1 = Fcheckref(pd, pxr);
+    if (res1 < 0) { return res1; }
     try {
+      cref_t<unity>& xr = *pxr;
       if (xr)
       {
         t_lock_hpcos __lock; if (sizeof(__lock)) {}
@@ -8445,6 +8437,25 @@ namespace bmdx
       }
     } catch (...) {}
     return -2;
+  }
+  s_long cv_ff_pcos::Fcheckref(const cref_t<unity::_pcos_d_base>* pd, cref_t<unity>* pxr)
+  {
+    if (!(pd && pxr)) { return -2; }
+    cref_t<unity>& xr = *pxr;
+    if (!xr) { return 0; }
+
+    pcos_aux_v1* pa = (pcos_aux_v1*)xr.paux(); unity* pu = xr._pnonc_u(); s_long fl = s_long(xr.flags());
+    if (!(pa && pu && (fl & iref2_flags::use_hst) && (fl & iref2_flags::use_aux) && (fl & iref2_flags::use_critsec) && ((char*)pu-(char*)pa) >= s_ll(sizeof(pcos_aux_v1)) && pa->b_ver_match())) { return -1; }
+    if (!(pa->hmc && pa->hmc._pmsm() == pu->_pmsm())) { return -1; }
+    if (pu->isObject())
+    {
+      unity::o_api a(pu); if (!a.prc) { return -1; }
+      unity::o_api::critsec_rc(a.prc);
+      t_msm pmsmo = (t_msm)a.prc->rc_posm(t_uc::osm_modsm);
+      if (pmsmo != pa->hmc._pmsm()) { return -1; }
+    }
+
+    return 1;
   }
   s_long cv_ff_pcos::Fsetmv(const cref_t<unity::_pcos_d_base>* pd, const unity* pk, unity* pxm, const unity::mod_handle* phx)
   {
@@ -9703,7 +9714,8 @@ s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _
 
       //  Det. exact slot name.
     std::wstring ssln1, ssln_r;
-    s_long res = __recode_slotname(slotname, ssln_r, &ssln1); if (res != 1) { return res == -1 ? -1 : -2; }
+    s_long res = __recode_slotname(slotname, ssln_r, &ssln1);
+      if (res != 1) { return res == -1 ? -1 : -2; }
 
       // Check if slot exists / get ref.
     cref_t<cch_slot, dispatcher_mt> ri_sl;

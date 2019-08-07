@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-07-25
+// rev. 2019-07-29
 //
 // Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -235,6 +235,7 @@ namespace bmdx
       msm_pcos_makecrefcp,
       msm_cv_recreate,
       msm_rl_init_by_pmsm,
+      msm_pcos_checkref,
       sizeof_msm
     };
     enum Eobject_method
@@ -465,28 +466,40 @@ namespace bmdx
       // Returns:
       //    true if the variable is currently valid, false if not (already destroyed or failed to initialize).
     inline bool init0(bool no_exc)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init0.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init0.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
-    template<class Arg1>
-      inline bool init1(bool no_exc, const Arg1& x1)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init1.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init1.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
-    template<class Arg1, class Arg2>
-      inline bool init2(bool no_exc, const Arg1& x1, const Arg2& x2)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init2.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init2.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
-    template<class Arg1, class Arg2, class Arg3>
-      inline bool init3(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init3.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init3.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2, x3); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4>
-      inline bool init4(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init4.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init4.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2, x3, x4); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+    template<class A1> inline bool init1(bool no_exc, const A1& x1)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init1.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init1.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+    template<class A1, class A2> inline bool init2(bool no_exc, const A1& x1, const A2& x2)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init2.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init2.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+    template<class A1, class A2, class A3> inline bool init3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init3.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init3.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2, x3); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+    template<class A1, class A2, class A3, class A4> inline bool init4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init4.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init4.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2, x3, x4); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+    template<class A1, class A2, class A3, class A4, class A5> inline bool init5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init5.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init5.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2, x3, x4, x5); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> inline bool init6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init6.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init5.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value(x1, x2, x3, x4, x5, x6); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+
+          // Same as init#(), but args. are cast to non-const when passed to constructor.
+        template<class A1> inline bool init1nc(bool no_exc, const A1& x1)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init1.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init1.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value((A1&)x1); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+        template<class A1, class A2> inline bool init2nc(bool no_exc, const A1& x1, const A2& x2)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init2.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init2.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value((A1&)x1, (A2&)x2); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+        template<class A1, class A2, class A3> inline bool init3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init3.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init3.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+        template<class A1, class A2, class A3, class A4> inline bool init4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init4.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init4.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+        template<class A1, class A2, class A3, class A4, class A5> inline bool init5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init5.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init5.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> inline bool init6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (b_valid()) { return true; } L __lock; if (!_pst_m || !__lock.b_valid()) { if (no_exc) { return false; } throw XUExec("init6.1", typeid(t_svf).name()); } if (b_valid()) { return true; } if (b_destroyed()) { if (no_exc) { return false; } throw XUExec("init5.2", typeid(t_svf).name()); } try { new (&_pst_m->stg[0]) t_value((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) { if (!no_exc) { throw; } return false; } _pst_m->init = 1; return true; }
 
       // Returning ref. to valid value with automatic initialization if necessary.
       //    If the value is not valid or storage can't be accessed, functions throw exceptions.
       //    This may occur even for trivial types like int.
       // NOTE Set lock L if the value must be accessed in multithreaded context during static deinitialization.
     inline t_value& rxai0()        { if (b_noinit()) { init0(0); } return rx(); }
-    template<class Arg1>
-      inline t_value& rxai1(const Arg1& x1)        { if (b_noinit()) { init1(0, x1); } return rx(); }
-    template<class Arg1, class Arg2>
-      inline t_value& rxai2(const Arg1& x1, const Arg2& x2)        { if (b_noinit()) { init2(0, x1, x2); } return rx(); }
-    template<class Arg1, class Arg2, class Arg3>
-      inline t_value& rxai3(const Arg1& x1, const Arg2& x2, const Arg3& x3)        { if (b_noinit()) { init3(0, x1, x2, x3); } return rx(); }
-    template<class Arg1, class Arg2, class Arg3, class Arg4>
-      inline t_value& rxai4(const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { if (b_noinit()) { init4(0, x1, x2, x3, x4); } return rx(); }
+    template<class A1> inline t_value& rxai1(const A1& x1)        { if (b_noinit()) { init1(0, x1); } return rx(); }
+    template<class A1, class A2> inline t_value& rxai2(const A1& x1, const A2& x2)        { if (b_noinit()) { init2(0, x1, x2); } return rx(); }
+    template<class A1, class A2, class A3> inline t_value& rxai3(const A1& x1, const A2& x2, const A3& x3)        { if (b_noinit()) { init3(0, x1, x2, x3); } return rx(); }
+    template<class A1, class A2, class A3, class A4> inline t_value& rxai4(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (b_noinit()) { init4(0, x1, x2, x3, x4); } return rx(); }
+    template<class A1, class A2, class A3, class A4, class A5> inline t_value& rxai5(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (b_noinit()) { init5(0, x1, x2, x3, x4, x5); } return rx(); }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> inline t_value& rxai6(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (b_noinit()) { init6(0, x1, x2, x3, x4, x5, x6); } return rx(); }
+
+          // Same as rxai#(), but args. are cast to non-const when passed to constructor.
+        template<class A1> inline t_value& rxai1nc(const A1& x1)        { if (b_noinit()) { init1nc(0, x1); } return rx(); }
+        template<class A1, class A2> inline t_value& rxai2nc(const A1& x1, const A2& x2)        { if (b_noinit()) { init2nc(0, x1, x2); } return rx(); }
+        template<class A1, class A2, class A3> inline t_value& rxai3nc(const A1& x1, const A2& x2, const A3& x3)        { if (b_noinit()) { init3nc(0, x1, x2, x3); } return rx(); }
+        template<class A1, class A2, class A3, class A4> inline t_value& rxai4nc(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (b_noinit()) { init4nc(0, x1, x2, x3, x4); } return rx(); }
+        template<class A1, class A2, class A3, class A4, class A5> inline t_value& rxai5nc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (b_noinit()) { init5nc(0, x1, x2, x3, x4, x5); } return rx(); }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> inline t_value& rxai6nc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (b_noinit()) { init6nc(0, x1, x2, x3, x4, x5, x6); } return rx(); }
   };
   template<class T, class C, int Fi, class Fs, meta::s_ll Lcp_mcs, s_long Lto_ms, class _> typename svf_m_t<T,C,Fi,Fs,Lcp_mcs,Lto_ms,_>::t_storage svf_m_t<T,C,Fi,Fs,Lcp_mcs,Lto_ms,_>::_storage = { { 0 }, 0 };
   template<class T, class C, int Fi, class Fs, meta::s_ll Lcp_mcs, s_long Lto_ms, class _> typename svf_m_t<T,C,Fi,Fs,Lcp_mcs,Lto_ms,_>::t_deinit svf_m_t<T,C,Fi,Fs,Lcp_mcs,Lto_ms,_>::_deinit;
@@ -740,19 +753,32 @@ namespace bmdx
     o_proxy() : __psm(0), __pi(0) {}
     I* __pci() const { return 0; }
     I* __psi() const { return 0; }
-    void __set_pp(unity_common::__Psm psm, I* pi) { __psm = psm; __pi = pi; }
+    void __set_pp(unity_common::__Psm psm, I* pi) throw () { __psm = psm; __pi = pi; }
   };
+    // NOTE o_iptr_t is only for in-module use. Its structure for different I may be different.
+    //  Pass the original unity object between binary modules if necessary.
   template<class I, class _ = __vecm_tu_selector> struct o_iptr_t
   {
     typedef I __I; typedef o_proxy<__I, _> __Proxy;
-
     struct exc_null_ptr {};
+
+
 
     __I* operator->() const        throw (exc_null_ptr) { return _p_checked(); }
     __I& operator*() const        throw (exc_null_ptr) { return *_p_checked(); }
 
-    bool b_local() const { return !__isProxy; }
+      // true if o_iptr_t object is non-null, and its referenced object is local.
+    bool b_local() const { return !!_p; }
 
+      // true if o_iptr_t object is non-null, and its referenced object is from other binary module.
+    bool b_nonlocal() const { return _f && prx().__pci(); }
+
+      // Conversion to client-side pointer.
+    operator const void*() const { return _p_u(); }
+
+      // Client-side pointer for calling interface functions.
+      //  Checked version: ptr().
+      //  Unchecked version: ptr_u().
     __I* ptr()        throw(exc_null_ptr) { return _p_checked(); }
     const __I* ptr() const        throw(exc_null_ptr) { return _p_checked(); }
     __I* ptr_u()        throw() { return _p_u(); }
@@ -764,41 +790,54 @@ namespace bmdx
     __I* psi_u()        throw () { return _psi_u(); }
     const __I* psi_u() const        throw () { return _psi_u(); }
 
-    operator const void*() const { return _p_u(); }
 
-    o_iptr_t()        throw () : __p(0), __isProxy(false) {}
-    ~o_iptr_t()        throw () { if (__isProxy) { try { delete (__Proxy*)__p; } catch (...) {} __p = 0; } else { __p = 0; } }
 
-    o_iptr_t(__I* pi, unity_common::__Psm pmsm)        throw ()
-      : __p(0), __isProxy(false)
+      // NOTE In case of proxy, client-side interface pointers are compared.
+    bool operator == (const o_iptr_t& x) const        throw () { return _p_u() == x._p_u(); }
+    bool operator != (const o_iptr_t& x) const        throw () { return _p_u() != x._p_u(); }
+    bool operator == (const __I* x) const        throw () { return _p_u() == x; }
+    bool operator != (const __I* x) const        throw () { return _p_u() != x; }
+
+
+
+    void clear()        throw () { this->~o_iptr_t(); new (this) o_iptr_t(); }
+
+    o_iptr_t()        throw () : _p(0), _f(0) {}
+    ~o_iptr_t()        throw () { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
+
+      // NOTE Construction does not generate exceptions.
+      //    If no proxy defined by the client, or the client-defined __Proxy() fails,
+      //    o_iptr_t will be null (== false).
+    o_iptr_t(__I* pi, unity_common::__Psm pmsm)        throw () : _p(0), _f(0)
     {
-      if (pmsm == unity_common::pls_modsm()) { __p = pi; return; }
-      if (!pi || !pmsm) { return; }
+      if (pmsm == unity_common::pls_modsm()) { _p = pi; return; }
+        if (!(pi && pmsm)) { return; }
       unity_common::__Pipsm f_get_ism = (unity_common::__Pipsm)pmsm(unity_common::msm_obj_ipsm);
-      unity_common::__Psm psm = f_get_ism(__Proxy::__iname()); if (!psm) { return; }
-      try { __p = new __Proxy(); __isProxy = true; ((__Proxy*)__p)->__set_pp(psm, pi); } catch (...) {}
+        if (!f_get_ism) { return; }
+      unity_common::__Psm psm = f_get_ism(__Proxy::__iname());
+        if (!psm) { return; }
+      try { new (&prx()) __Proxy(); prx().__set_pp(psm, pi); _f = 1; } catch (...) {}
     }
 
       // NOTE Copying does not generate exceptions.
-      //  If copying fails, ptr_u() == 0.
-      //  If copying succeeds, bool(ptr_u()) == bool(x.ptr_u()).
-    o_iptr_t(const o_iptr_t& x)         throw () : __p(0), __isProxy(false) { if (x.__isProxy) { try { __p = new __Proxy(*(__Proxy*)x.__p); __isProxy = true; } catch (...) {} } else { __p = x.__p; } }
+      //    If copying fails, ptr_u() == 0.
+      //    If copying succeeds, bool(ptr_u()) == bool(x.ptr_u()).
+      //    If the client-defined __Proxy copy constructor does not fail anyway, copying always succeeds as well.
+    o_iptr_t(const o_iptr_t& x)         throw () : _p(x._p), _f(0) { if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} } }
 
       // NOTE Assignment does not generate exceptions.
-      //  If assignment fails, ptr_u() == 0.
-      //  If assignment succeeds, bool(ptr_u()) == bool(x.ptr_u()).
+      //    If assignment fails, ptr_u() == 0.
+      //    If assignment succeeds, bool(ptr_u()) == bool(x.ptr_u()).
+      //    If the client-defined __Proxy copy constructor does not fail anyway, assignment always succeeds as well.
     o_iptr_t& operator=(const o_iptr_t& x)        throw () { this->~o_iptr_t(); new (this) o_iptr_t(x); return *this; }
 
-      // NOTE In case of proxy, client-side interface pointers are compared.
-    bool operator == (const o_iptr_t& x) const { return _p_u() == x._p_u(); }
-    bool operator != (const o_iptr_t& x) const { return _p_u() != x._p_u(); }
-    bool operator == (const __I* x) const { return _p_u() == x; }
-    bool operator != (const __I* x) const { return _p_u() != x; }
 
-  private: void* __p; bool __isProxy;
-    inline __I* _p_checked() const { if (__isProxy) { if (__p) { __I* p = ((__Proxy*)__p)->__pci(); if (p) { return p; } } } else if (__p) { return (__I*)__p; } throw exc_null_ptr(); }
-    inline __I* _p_u() const { if (__isProxy) { if (!__p) { return 0; } return ((__Proxy*)__p)->__pci(); } else { return (__I*)__p; } }
-    inline __I* _psi_u() const { if (__isProxy) { if (!__p) { return 0; } return ((__Proxy*)__p)->__psi(); } else { return (__I*)__p; } }
+
+  private: __I* _p; char _sprx[sizeof(__Proxy)]; s_long _f;
+    inline __I* _p_checked() const { if (_p) { return _p; } else if (_f && prx().__pci()) { return prx().__pci(); } throw exc_null_ptr(); }
+    inline __I* _p_u() const { if (_p) { return _p; } else if (_f) { return prx().__pci(); } return 0; }
+    inline __I* _psi_u() const { if (_p) { return _p; } else if (_f) { return prx().__psi(); } return 0; }
+    __Proxy& prx() const { return *(__Proxy*)&_sprx[0]; }
   };
   struct o_itfset_base
   {
@@ -1335,8 +1374,8 @@ namespace bmdx
     template<class Ts> void _x_asgvec(const std::vector<Ts>& src, bool keep_name, meta::noarg_tu_t<Ts> = meta::noarg_tu_t<Ts>())        { typedef typename trivconv_t<typename meta::nonc_t<Ts>::t>::t_target Td; enum { utt = reference_t<Td>::utt | utArray }; _stg_u st; if (_Lcreate(&st, utt | xfPtr, 0) > 0) { vec2_t<Td>* pv = reference_t<vec2_t<Td> >::deref(st, true); if (_x_vecadap<vec2_t<Td>, std::vector<Ts> >::copy(*pv, src)) { void* _pn(0); if (keep_name && isNamed()) { _pn = _data.p2; _data.p2 = 0; } clear(); _data.p1 = st.p1; _data.p2 = _pn; ut = utt | xfPtr; return; } _Ldestroy(&st, utt | xfPtr, 0); } throw XUExec("_x_asgvec", "src: " + _tname0(utt)); }
     template<class Ts> void _x_asgvec(const vec2_t<Ts>& src, bool keep_name, meta::noarg_tu_t<Ts> = meta::noarg_tu_t<Ts>())        { typedef typename trivconv_t<typename meta::nonc_t<Ts>::t>::t_target Td; enum { utt = reference_t<Td>::utt | utArray }; _stg_u st; if (_Lcreate(&st, utt | xfPtr, 0) > 0) { vec2_t<Td>* pv = reference_t<vec2_t<Td> >::deref(st, true); if (_x_vecadap<vec2_t<Td>, vec2_t<Ts> >::copy(*pv, src)) { void* _pn(0); if (keep_name && isNamed()) { _pn = _data.p2; _data.p2 = 0; } clear(); _data.p1 = st.p1; _data.p2 = _pn; ut = utt | xfPtr; return; } _Ldestroy(&st, utt | xfPtr, 0); } throw XUExec("_x_asgvec", "src: " + _tname0(utt)); }
 
-    template<class T, class _ = __vecm_tu_selector> struct _deref1_t { typedef T t_obj; enum { is_cref_t = 0 }; static void* ptr(void* pobj) { return reinterpret_cast<typename meta::nonc_t<T>::t*>(pobj); } };
-    template<class T, class L, class _> struct _deref1_t<cref_t<T, L>, _> { typedef T t_obj; enum { is_cref_t = 1 }; static void* ptr(void* pobj) { return const_cast<typename meta::nonc_t<T>::t*>(reinterpret_cast<cref_t<T, L>* >(pobj)->_pnonc_u()); } };
+    template<class T, class _ = __vecm_tu_selector> struct _deref1_t { typedef T t_obj; enum { is_cref_t = 0 }; static void* ptr(void* pobj) { return reinterpret_cast<typename meta::noncv_t<T>::t*>(pobj); } };
+    template<class T, class L, class _> struct _deref1_t<cref_t<T, L>, _> { typedef T t_obj; enum { is_cref_t = 1 }; static void* ptr(void* pobj) { return const_cast<typename meta::noncv_t<T>::t*>(reinterpret_cast<cref_t<T, L>* >(pobj)->_pnonc_u()); } };
 
     template<class T> T& _rnonc(meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const
     {
@@ -2311,12 +2350,24 @@ namespace bmdx
       unity& x; bool ne; s_long lkt;
       objt_binder_t(unity& x_, bool ne_, s_long lkt_) : x(x_), ne(ne_), lkt(lkt_) {}
       bool operator()() { T* p(0); try { p = new T(); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(0)"); } return false; }
-      template<class Arg1> bool operator()(const Arg1& x1)        { T* p(0); try { p = new T(x1); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
-      template<class Arg1, class Arg2> bool operator()(const Arg1& x1, const Arg2& x2)        { T* p(0); try { p = new T(x1, x2); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
-      template<class Arg1, class Arg2, class Arg3> bool operator()(const Arg1& x1, const Arg2& x2, const Arg3& x3)        { T* p(0); try { p = new T(x1, x2, x3); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4> bool operator()(const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { T* p(0); try { p = new T(x1, x2, x3, x4); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> bool operator()(const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> bool operator()(const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
+      template<class A1> bool operator()(const A1& x1)        { T* p(0); try { p = new T(x1); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
+      template<class A1, class A2> bool operator()(const A1& x1, const A2& x2)        { T* p(0); try { p = new T(x1, x2); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
+      template<class A1, class A2, class A3> bool operator()(const A1& x1, const A2& x2, const A3& x3)        { T* p(0); try { p = new T(x1, x2, x3); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
+      template<class A1, class A2, class A3, class A4> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { T* p(0); try { p = new T(x1, x2, x3, x4); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6, x7); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(7)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6, x7, x8); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(8)"); } return false; }
+
+            // Same as operator(), but args. are cast to non-const when passed to constructor.
+          template<class A1> bool createnc(const A1& x1)        { T* p(0); try { p = new T((A1&)x1); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
+          template<class A1, class A2> bool createnc(const A1& x1, const A2& x2)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
+          template<class A1, class A2, class A3> bool createnc(const A1& x1, const A2& x2, const A3& x3)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
+          template<class A1, class A2, class A3, class A4> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(7)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(8)"); } return false; }
     };
 
       // Object creation with 0..6 arguments. The object will be strong-referenced.
@@ -2340,7 +2391,7 @@ namespace bmdx
 
       // Returns object pointer !=0:
       //    a) b_checked == true: if unity references a valid (not deleted) object of the same static type as Obj.
-      //    b) b_checked == false: same as cpvoidkey() cast to Obj* (if unity references an object
+      //    b) b_checked == false: same as cpvoidkey() cast to Obj* (if unity references any object
       //      or still contains a pointer to the deleted object).
     template<class Obj> Obj*
       objPtr(bool b_checked = true, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>())
@@ -2784,7 +2835,8 @@ namespace bmdx
       //  1 - the current object is compatible with the current module.
       //  0 - the current object may be safely copied to an object, created in the current module.
       //    For strings, 0 means that direct reference to string may not be got by the client.
-      //    Still, strings may be copied and assigned.
+      //      Still, strings may be copied and assigned.
+      //    For wrapped objects, 0 means that the object has been created in other binary module.
       //  <0 - the current object is not compatible with the current module.
       //  Only clear() and destructor may be called safely.
     s_long compatibility() const throw ();
@@ -2886,6 +2938,7 @@ namespace bmdx
       typedef s_long (*f_pcos_cons)(cref_t<_pcos_d_base>* pd, const unity::mod_handle* ph);
       typedef s_long (*f_pcos_oppar)(cref_t<_pcos_d_base>* pd, const unity* pk, cref_t<unity>* prv);
       typedef s_long (*f_pcos_setref)(const cref_t<_pcos_d_base>* pd, const unity* pk, const cref_t<unity>* pxr);
+      typedef s_long (*f_pcos_checkref)(const cref_t<_pcos_d_base>* pd, const cref_t<unity>* pxr);
       typedef s_long (*f_pcos_setmv)(const cref_t<_pcos_d_base>* pd, const unity* pk, unity* pxm, unity::mod_handle* phx);
       typedef s_long (*f_pcos_setcp)(const cref_t<_pcos_d_base>* pd, const unity* pk, const unity* pxc, unity::mod_handle* phx);
       typedef s_long (*f_pcos_clearstg)(const cref_t<_pcos_d_base>* pd);
@@ -2963,6 +3016,16 @@ namespace bmdx
       s_long setref(const unity& k, cref_t<unity> xr) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xr); } catch (...) {} return res; }
       s_long setmv(const unity& k, unity& xm, unity::mod_handle hx = unity::mod_handle()) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setmv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setmv); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xm, &hx); } catch (...) {} return res; }
       s_long setcp(const unity& k, const unity& xc, unity::mod_handle hx = unity::mod_handle()) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setcp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setcp); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xc, &hx); } catch (...) {} return res; }
+
+        // Check if the given reference is correct for passing into setref,
+        //    i.e. made with makemv, makecp, or returned by pcos operator().
+        //    The check is identical to one that setref() does before modifying the storage.
+        //  1 - xr is non-empty and fit for passing into setref().
+        //  0 - xr is empty.
+        //  -1 - bad xr structure, module or version: xr won't be accepted by setref().
+        //  -2 - op. failed.
+        //  -3 - pcos object is non-functional.
+      s_long checkref(cref_t<unity> xr) throw()        { if (!xr) { return 0; } t_d d = _d; if (!d) { return -3; } typedef f_pcos_checkref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_checkref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &xr); } catch (...) {} return res; }
 
         // Clear the referenced storage.
         //    Removes all objects, so that all references and shared library handles, associated with values,
@@ -3413,7 +3476,7 @@ namespace bmdx
 
     _o_refcnt* z_rc = _rrc._pnonc_u(); _rrc._detach_u();
     z_rc->rc_flags = 0;
-    z_rc->rc_pobj = const_cast<typename meta::nonc_t<Obj>::t*>(pobj);
+    z_rc->rc_pobj = const_cast<typename meta::noncv_t<Obj>::t*>(pobj);
     z_rc->rc_posm = &_o_sm_t<Obj>::sm;
     if (b_strong) { z_rc->rc_strong = 1; }
       else { z_rc->rc_weak = 1; }
@@ -3547,10 +3610,37 @@ namespace bmdx
     return ind >= 0 && ind < size ? smt[ind] : 0;
   }
 
-  template<class I, class _ = __vecm_tu_selector> struct o_proxy_base : I
+    // When b_noinherit == false:
+    //    the o_proxy<I> specialization should define:
+    //      1) static const char* __iname() { return "developer / program_or_library_name / interface_name / version"; }
+    //      2) Override I's virtual functions, to return __call<__method_name>()(__psi(), method args ... ).
+    //      3) For each each method,
+    //        struct __method_name {
+    //          typedef method_ret_type (*PF)(__Interface* __pi,  method args ... );
+    //          method_ret_type F(__Interface* __pi,  method args...) { return __pi->method_name(method args ... ); }
+    //        };
+    //      4) typedef unity_common::fn_list<__method1_name, __method2_name ... > __Methods;
+    //
+    // When b_noinherit == true and Prx is a custom class:
+    //    For other binary modules, remaps some interface X with name given by Prx::__iname()
+    //    to I in custom way, defined in Prx. X is not needed to be declared in the current module at all.
+    //    Neither X, nor I are inherited by o_proxy_base.
+    //    Prx contains only non-trivial static methods (__method_name::F, __Methods typedef),
+    //    implementing X in the current module. X should be correctly emulated by means of I.
+    //    The number, type of args., and ret. val. of methods, listed in __Methods, must be exactly same as declared
+    //    by usual o_proxy<X> in other modules.
+    //  NOTE Such remapping may solve two tasks:
+    //    1. Interface versioning. E.g. let I is the newer improved version of X, and still may somehow function as X,
+    //      but the developer doesn't want to attach both I and X to all objects for backward compatibility.
+    //      It is enough to at once redefine o_proxy<I>::__iname() to return smth. different
+    //      from the former value (version "2.0" or such),
+    //      + define custom Prx for X with original X iname, as described above.
+    //    2. Interface emulation as such. Same as (1), but for case when interface pointer I
+    //      and its object are quite different from interface X, used in other binary module's context.
+  template<class I, class Prx = o_proxy<I>, bool b_noinherit = false, class _ = __vecm_tu_selector> struct o_proxy_base : meta::if_t<b_noinherit, meta::nothing, I>::result
   {
     typedef I __Interface;
-    typedef o_proxy<__Interface> __Proxy;
+    typedef Prx __Proxy;
 
     o_proxy_base() : __psm(0), __pi(0) { __smt(); }
     virtual ~o_proxy_base() {}
@@ -3679,13 +3769,13 @@ namespace
 
       // Using objPtr, retrieves T* (without const) from the referenced object.
       //  Returns T* on success, 0 on failure.
-    template<class T> operator T*()         throw() { typedef typename meta::nonc_t<T>::t t; return _p ? _pnonc()->objPtr<t>() : 0; }
-    template<class T> operator const T*() const         throw() { typedef typename meta::nonc_t<T>::t t; return _p ? _pnonc()->objPtr_c<t>() : 0; }
+    template<class T> operator T*()         throw() { typedef typename meta::nonc_t<T>::t t; t* px = 0; if (_p) { px = _pnonc()->objPtr<t>(); if (!px) { px = (t*)_pnonc()->objPtr_c<const T>(); } } return px; }
+    template<class T> operator const T*() const         throw() { typedef typename meta::nonc_t<T>::t t; const T* px = 0; if (_p) { px = _pnonc()->objPtr_c<t>(); if (!px) { px = _pnonc()->objPtr_c<const T>(); } } return px; }
 
       // Using objPtr, retrieves T* (without const) from the referenced object.
       //  Returns T& on success, or generates an exception if T* is 0.
-    template<class T> operator T&() { typedef typename meta::nonc_t<T>::t t; return *unity::checked_ptr<t>(_p ? _pnonc()->objPtr<t>() : (t*)0); }
-    template<class T> operator const T&() const { typedef typename meta::nonc_t<T>::t t; return *unity::checked_ptr<t>(_p ? _pnonc()->objPtr_c<t>() : (const t*)0); }
+    template<class T> operator T&()        { typedef typename meta::nonc_t<T>::t t; t* px = 0; if (_p) { px = _pnonc()->objPtr<t>(); if (!px) { px = (t*)_pnonc()->objPtr_c<const T>(); } } return *unity::checked_ptr<T>(px); }
+    template<class T> operator const T&() const        { typedef typename meta::nonc_t<T>::t t; const T* px = 0; if (_p) { px = _pnonc()->objPtr_c<t>(); if (!px) { px = _pnonc()->objPtr_c<const T>(); } } return *unity::checked_ptr<const T>(px); }
 
     void check() const throw(XUExec) { if (!_p) { throw XUExec("unitypc.p == 0"); } }
     template<class T> inline _unitypc2 operator/ (const T& path) const;
@@ -4369,9 +4459,9 @@ namespace
       // Take a new message out of the slot.
       //  slotname: must be string (utString).
       //  Allowed reciever slots:
-      //      pi, qi - read common message
-      //      pbi, qbi - read command
-      //      pbo - read response to previously sent command
+      //      pi_*, qi_* - read common message
+      //      pbi_*, qbi_* - read command
+      //      pbo_* - read response to previously sent command
       //  retmsg: on success, overwritten by message string.
       //  retbuf (optional, may be 0): receiving container for binary data,
       //    associated with the message.
@@ -4408,7 +4498,11 @@ namespace
       //    -6 - slot does not exist or inaccessible.
       //    -7 - thread does not exist.
       //    -20 - (pbo only) waiting for command completion, still command target sent no response.
-      //    -21 - (pbi, qbi only) waiting for the client responding to the current command (i.e. the client must call write() first).
+      //    -21 - (pbi, qbi only, i.e. for commands) waiting for the client responding to the current command
+      //      (i.e. the client must call write() first, to reply to prev. command).
+      //      This may occur if, in the past, the client occasionally lost the control after popping the command,
+      //      now the control is regained, and the other side still waits for response.
+      //      If the client cannot handle such situation, the recommended behavior is: send a message, containing "text; _e_retry;".
       //    -22 - input message decoding failed. The client should discard the message (re-pop with (flags & 2) != 0).
     virtual s_long pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw() = 0;
 

@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-07-25
+// rev. 2019-07-29
 //
 // Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -516,19 +516,19 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     char& operator[] (_s_long i) { return _x[i]; }
     const char& operator[] (_s_long i) const { return _x[i]; }
 
-    bool operator == (const t_string& s) const        throw() { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    bool operator < (const t_string& s) const        throw() { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    bool operator <= (const t_string& s) const        throw() { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
-    bool operator != (const t_string& s) const        throw() { return !operator==(s); }
-    bool operator > (const t_string& s) const        throw() { return !operator<(s); }
-    bool operator >= (const t_string& s) const        throw() { return !operator<=(s); }
+    bool operator == (const t_string& s) const throw()        { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
+    bool operator < (const t_string& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    bool operator <= (const t_string& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    bool operator != (const t_string& s) const throw()        { return !operator==(s); }
+    bool operator > (const t_string& s) const throw()        { return !operator<(s); }
+    bool operator >= (const t_string& s) const throw()        { return !operator<=(s); }
 
-    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const        throw() { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const        throw() { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const        throw() { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
-    template<_s_long n2> bool operator != (const flstr_t<n2>& s) const        throw() { return !operator==(s); }
-    template<_s_long n2> bool operator > (const flstr_t<n2>& s) const        throw() { return !operator<(s); }
-    template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const        throw() { return !operator<=(s); }
+    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const throw()        { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
+    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    template<_s_long n2> bool operator != (const flstr_t<n2>& s) const throw()        { return !operator==(s); }
+    template<_s_long n2> bool operator > (const flstr_t<n2>& s) const throw()        { return !operator<(s); }
+    template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const throw()        { return !operator<=(s); }
 
     template<class T> t_string& operator << (const T& x) { *this += x; return *this; }
 
@@ -783,7 +783,7 @@ namespace bmdx
     }
 
       // Reallocate storage. Copy, destroy, initialize elements as specified.
-      //  n >= 0: the new number of elements of type T.
+      //  n2 >= 0: the new number of elements of type T.
       //  dmode: 1 - use local destructor, 0 - do not call destructor.
       //  imode: 4 - copy existing elems. with std::memcpy, 1 - copy with local T(const T&), 0 - no copying (new allocation only + initialize all bytes to 0).
       //  px:
@@ -791,57 +791,59 @@ namespace bmdx
       //    == 0 with imode == 0, 4 - initialize all bytes to 0.
       //    == 0 with imode == 1 - initialize as T().
       // Returns: true - success, false - failure, no changes.
-      // NOTE realloc() proceeds with realloc/copy/init even if n == n().
-    bool realloc(_s_ll n, int dmode, int imode, const t_value* px) throw()
+      // NOTE realloc() proceeds with realloc/copy/init even if n2 == n().
+    bool realloc(_s_ll n2, int dmode, int imode, const t_value* px) throw()
     {
-      if (!(n >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
+      if (!(n2 >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
+      if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
       T* pd2 = 0;
-      if (n > 0)
+      if (n2 > 0)
       {
-        pd2 = (T*)_alloc(n * sizeof(T)); if (!pd2) { return false; }
-        _t_size n0 = _t_size(n < _n ? n : _n); _t_size i0 = 0;
+        pd2 = (T*)_alloc(n2 * sizeof(T)); if (!pd2) { return false; }
+        _t_size n0 = _t_size(n2 < _n ? n2 : _n); _t_size i0 = 0;
         if (imode == 1)
         {
           try { for (; i0 < n0; ++i0) { _carr_asgx_t<T>::try_cc(pd2 + i0, _data[i0]); } } catch (...) {}
             if (i0 < n0) { if (dmode == 1) { _destroy(pd2, 0, i0); } _free(pd2); return false; }
-          if (n > _n)
+          if (n2 > _n)
           {
-            if (px) { try { for (; i0 < _t_size(n); ++i0) { _carr_asgx_t<T>::try_cc(pd2 + i0, *px); } } catch (...) {} }
-              else { try { for (; i0 < _t_size(n); ++i0) { new (pd2 + i0) T(); } } catch (...) {} }
-            if (i0 < _t_size(n)) { if (dmode == 1) { _destroy(pd2, 0, i0); } _free(pd2); return false; }
+            if (px) { try { for (; i0 < _t_size(n2); ++i0) { _carr_asgx_t<T>::try_cc(pd2 + i0, *px); } } catch (...) {} }
+              else { try { for (; i0 < _t_size(n2); ++i0) { new (pd2 + i0) T(); } } catch (...) {} }
+            if (i0 < _t_size(n2)) { if (dmode == 1) { _destroy(pd2, 0, i0); } _free(pd2); return false; }
           }
         }
         else if (imode == 4)
-          { if (n0) { std::memcpy(pd2, _data, n0 * sizeof(T)); } if (px && n > _n) { for (i0 = n0; i0 < _t_size(n); ++i0) { std::memcpy(pd2 + i0, px, sizeof(T)); } } }
+          { if (n0) { std::memcpy(pd2, _data, n0 * sizeof(T)); } if (px && n2 > _n) { for (i0 = n0; i0 < _t_size(n2); ++i0) { std::memcpy(pd2 + i0, px, sizeof(T)); } } }
       }
       if (_n > 0) { if (dmode == 1) { _destroy(_data, 0, _t_size(_n)); } _free(_data); }
-      _data = pd2; _n = n;
+      _data = pd2; _n = n2;
       return true;
     }
       // Same as realloc, only uses x to initialize array elements. t_value may have no default constructor.
-    bool realloc_cp(_s_ll n, int dmode, int imode, const t_value& x) throw()
+    bool realloc_cp(_s_ll n2, int dmode, int imode, const t_value& x) throw()
     {
-      if (!(n >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
+      if (!(n2 >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
+      if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
       T* pd2 = 0;
-      if (n > 0)
+      if (n2 > 0)
       {
-        pd2 = (T*)_alloc(n * sizeof(T)); if (!pd2) { return false; }
-        _t_size n0 = _t_size(n < _n ? n : _n); _t_size i0 = 0;
+        pd2 = (T*)_alloc(n2 * sizeof(T)); if (!pd2) { return false; }
+        _t_size n0 = _t_size(n2 < _n ? n2 : _n); _t_size i0 = 0;
         if (imode == 1)
         {
           try { for (; i0 < n0; ++i0) { _carr_asgx_t<T>::try_cc(pd2 + i0, _data[i0]); } } catch (...) {}
             if (i0 < n0) { if (dmode == 1) { _destroy(pd2, 0, i0); } _free(pd2); return false; }
-          if (n > _n)
+          if (n2 > _n)
           {
-            try { for (; i0 < _t_size(n); ++i0) { _carr_asgx_t<T>::try_cc(pd2 + i0, x); } } catch (...) {}
-            if (i0 < _t_size(n)) { if (dmode == 1) { _destroy(pd2, 0, i0); } _free(pd2); return false; }
+            try { for (; i0 < _t_size(n2); ++i0) { _carr_asgx_t<T>::try_cc(pd2 + i0, x); } } catch (...) {}
+            if (i0 < _t_size(n2)) { if (dmode == 1) { _destroy(pd2, 0, i0); } _free(pd2); return false; }
           }
         }
         else if (imode == 4)
-          { if (n0) { std::memcpy(pd2, _data, n0 * sizeof(T)); } if (n > _n) { for (i0 = n0; i0 < _t_size(n); ++i0) { std::memcpy(pd2 + i0, &x, sizeof(T)); } } }
+          { if (n0) { std::memcpy(pd2, _data, n0 * sizeof(T)); } if (n2 > _n) { for (i0 = n0; i0 < _t_size(n2); ++i0) { std::memcpy(pd2 + i0, &x, sizeof(T)); } } }
       }
       if (_n > 0) { if (dmode == 1) { _destroy(_data, 0, _t_size(_n)); } _free(_data); }
-      _data = pd2; _n = n;
+      _data = pd2; _n = n2;
       return true;
     }
       // Same as realloc, but only for clearing the container.
@@ -915,7 +917,7 @@ namespace bmdx
     bool resize(_s_ll n) throw() { if (n == this->_n) { return true; } return this->realloc(n, 0, 4, 0); }
     void clear() throw() { this->realloc(0, 0, 4, 0); }
     bool operator=(const carray_t& x)
-      { if (this == &x) { return true; } carray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; } if (x.n()) { std::memcpy(x2._data, x._data, size_t(x.n()) * sizeof(T)); } this->move(x2); return true; }
+      { if (this == &x) { return true; } carray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; } if (x.n()) { std::memcpy(x2._data, x._data, _t_size(x.n()) * sizeof(T)); } this->move(x2); return true; }
 
     template<bool _ne> inline bool operator==(const carray_t<t_value, _ne>& x) const { return this->is_eq(x); }
     template<bool _ne> inline bool operator!=(const carray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
@@ -981,6 +983,7 @@ namespace bmdx
     //    1. Default constructor does not generate exceptions in principle.
     //    2. The object may be used in other binary module (not where it was created).
     //    3. To create C-string, use ensure_cstr(). This reserves 1 elem. and sets it to T().
+    //      This will be valid till the next modification.
     //  Difference from carray_t, cpparray_t:
     //    1. The object is automatically resizable.
     //      May be appended with single element (T) or some number of elements (from T*).
@@ -1006,7 +1009,7 @@ namespace bmdx
 
     carray_r_t() throw() : _nrsv(0) {}
       // NOTE on copying, new nrsv() == x.n().
-    carray_r_t(const t_a& x) : carray_t<T, no_exc_asg>(), _nrsv(0) { if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return; } if (x.n()) { std::memcpy(this->_data, x._data, size_t(x.n()) * sizeof(T)); } }
+    carray_r_t(const t_a& x) : carray_t<T, no_exc_asg>(), _nrsv(0) { if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return; } if (x.n()) { std::memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
     carray_r_t(_s_ll n, const t_value& x) : _nrsv(0) { if (!append_nx(n, x)) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     carray_r_t(const t_value* px, _s_ll n) : _nrsv(0) { if (!append_n(px, n)) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     carray_r_t(const arrayref_t<t_value>& x) : _nrsv(0) { if (!append_n(x.pd(), x.n())) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
@@ -1018,14 +1021,14 @@ namespace bmdx
     void clear() throw() { this->resize(0, false, true); } // deallocate the array (nrsv() becomes 0)
       // NOTE On assignment, if old reserve is enough to hold values, no memory reallocation occurs.
       //    Otherwise, new nrsv() == x.n(). Exact behavior: see also resize() with b_minimize_rsv true.
-    bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { std::memcpy(this->_data, x._data, size_t(x.n()) * sizeof(T)); } return true; }
+    bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { std::memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } return true; }
 
-    std::basic_string<t_value> str() const { const T z = T(); return std::basic_string<T>(this->_data ? this->_data : &z, size_t(this->_n)); }
+    std::basic_string<t_value> str() const { const T z = T(); return std::basic_string<T>(this->_data ? this->_data : &z, _t_size(this->_n)); }
 
       // Resize to n2.
       //  b_copy (acts only if the array is reallocated):
-      //    true: copy all elements from the old array,
-      //    false: leave filled with zero bytes.
+      //    true: copy (or preserve) min(n2, n()) elements from the old array,
+      //    false: ensure min(n2, n()) elements to be zero-filled.
       //  b_minimize_rsv true:
       //    - if n2 == 0, the array is completely deallocated, and carray_r_t occupies totally only sizeof(carray_r_t) bytes of memory.
       //    - if n2 < min(n(), nrsv() / 2), new nrsv = n2. (But if reallocation fails, the reserve is not shrunk, and the function returns true (success).)
@@ -1040,22 +1043,37 @@ namespace bmdx
       //    For finer control over the reserve, consider using reserve() together with resize().
       //  px
       //    != 0: if resizing to larger size, write *px to the newly added positions.
-      //    == 0: leave the added or created poisitions zero-initialized:
+      //    == 0: keep the added or created poisitions zero-initialized:
       //      a) If reallocation occurs due to reserve change,
       //        1) whole the new array is filled with zero bytes,
       //        2) b_copy true copies elements from the prev. array.
-      //      b) If no reallocation done, the existing array is not modified in any way.
+      //      b) If the array grows for the account of reserve, w/o reallocation,
+      //        the existing values are kept on b_copy == true, otherwise zeroed,
+      //        and the new positions are anyway zeroed.
       // NOTE If new size is within the current reserve, the function always succeeds.
     bool resize(_s_ll n2, bool b_copy, bool b_minimize_rsv, const t_value* px = 0) throw()
     {
       if (n2 < 0) { return false; }
+      if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
       T* pd2 = this->_data; _s_ll nrsv2 = _nrsv;
       if (n2 == 0 && b_minimize_rsv) { pd2 = 0; nrsv2 = 0; }
         else if (n2 > _nrsv || (b_minimize_rsv && n2 < _nrsv / 2 && n2 < this->_n)) { nrsv2 = n2; if (n2 > _nrsv && !b_minimize_rsv) { nrsv2 = 2 * n2; } pd2 = (T*)this->_alloc(nrsv2 * sizeof(T)); if (!pd2) { if (n2 > _nrsv) { return false; } nrsv2 = _nrsv; pd2 = this->_data; } }
-      const _t_size ncp = _t_size(n2 < this->_n ? n2 : this->_n);
-      if (b_copy && ncp && pd2 != this->_data) { std::memcpy(pd2, this->_data, ncp * sizeof(T)); }
-      if (px && n2 > this->_n) { for (_t_size i0 = ncp; i0 < _t_size(n2); ++i0) { std::memcpy(pd2 + i0, px, sizeof(T)); } }
-      if (pd2 != this->_data) { if (this->_data) { this->_free(this->_data); } this->_data = pd2; _nrsv = nrsv2; }
+      const _s_ll ncp = n2 < this->_n ? n2 : this->_n;
+      if (pd2 != this->_data) // reallocation done, all is 0 now
+      {
+        if (b_copy && ncp) { std::memcpy(pd2, this->_data, _t_size(ncp) * sizeof(T)); }
+        if (this->_data) { this->_free(this->_data); }
+        this->_data = pd2; _nrsv = nrsv2;
+      }
+      else // no reallocation
+      {
+        if (pd2 && !b_copy) { std::memset(pd2, 0, ncp * sizeof(T)); } // erase existing values if !b_copy
+      }
+      if (n2 > this->_n) // init. new positions
+      {
+        if (px) { for (_s_ll i0 = this->_n; i0 < n2; ++i0) { std::memcpy(pd2 + _t_size(i0), px, sizeof(T)); } }
+          else { std::memset(pd2 + this->_n, 0, (n2  - this->_n) * sizeof(T)); }
+      }
       this->_n = n2;
       return true;
     }
@@ -1068,8 +1086,9 @@ namespace bmdx
     bool reserve(_s_ll nrsv2) throw()
     {
       if (nrsv2 < 0) { return false; }
-      if (nrsv2 < this->_n) { nrsv2 = this->_n; }
       if (nrsv2 == _nrsv) { return true; }
+      if (nrsv2 > this->_nrsv) { _s_ll q = nrsv2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != nrsv2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
+      if (nrsv2 < this->_n) { nrsv2 = this->_n; }
       T* pd2 = this->_data;
       if (nrsv2 == 0) { pd2 = 0; }
         else { pd2 = (T*)this->_alloc(nrsv2 * sizeof(T)); if (!pd2) { if (nrsv2 > _nrsv) { return false; } nrsv2 = _nrsv; pd2 = this->_data; } }
@@ -1099,9 +1118,10 @@ namespace bmdx
       if (n > 0 && !px) { return false; }
       if (n < 0) { n = 0; }
       const _s_ll nr = this->_n + n + 1;
+      if (nr < 0) { return false; }
       if (nr > _nrsv && !reserve(2 * nr)) { return false; }
       T* p = this->_data + this->_n;
-      if (n > 0) { std::memcpy(p, px, size_t(n) * sizeof(T)); }
+      if (n > 0) { std::memcpy(p, px, _t_size(n) * sizeof(T)); }
       this->_n += n; p += n; *p = T();
       return true;
     }
@@ -1109,10 +1129,11 @@ namespace bmdx
     {
       if (n < 0) { n = 0; }
       const _s_ll nr = this->_n + n + 1;
+      if (nr < 0) { return false; }
       if (nr > _nrsv && !reserve(2 * nr)) { return false; }
       T* p = this->_data + this->_n;
       T* p2 = p + n;
-      if (sizeof(T) <= 8) { _s_ll z = 0; *(T*)&z = x; if (z == 0) { std::memset(p, 0, size_t(n) * sizeof(T)); *p2 = T(); this->_n += n; return true; } }
+      if (sizeof(T) <= 8) { _s_ll z = 0; *(T*)&z = x; if (z == 0) { std::memset(p, 0, _t_size(n) * sizeof(T)); *p2 = T(); this->_n += n; return true; } }
       while (p < p2) { *p++ = x; } *p2 = T(); this->_n += n;
       return true;
     }
@@ -2034,6 +2055,8 @@ namespace bmdx
 
     public:
         // Thread proc. must check this flag and return when it's true.
+        //  From thread side, b_stop() may be set to 1 with signal_stop(),
+        //  or to any value via *pflag().
       volatile _s_long& b_stop() const { return __dat.bs; }
         // Thread proc. must know the real type of data (T must match the real type).
       template<class T> T* pdata() const { return reinterpret_cast<T*>(__dat.pthdata); }
@@ -2219,11 +2242,11 @@ namespace bmdx
       return b;
     }
 
-      // Sets b_stop() flag of the target thread to 1.
+      // Sets b_stop() flag of the target thread to 1 (or to given v), only in case if the current flag value is 0.
       // Returns:
       //    true - successful, the client may wait until state() becomes != 2.
       //    false - could not set the flag, threadctl has no context. state() will return 0.
-    bool signal_stop() throw() { if (!_pctx) { return false; } if (!_pctx->__dat.bs) { _pctx->__dat.bs = 1; } return true; }
+    bool signal_stop(_s_long v = 1) throw() { if (!_pctx) { return false; } if (!_pctx->__dat.bs) { _pctx->__dat.bs = v; } return true; }
 
       // Returns a pointer to 4-byte flag variable available for r/w inside thread procedure.
       //    By default, signal_stop() sets the variable to 1 to ask thread to exit.
@@ -3360,20 +3383,24 @@ namespace bmdx
   {
     struct exc_ref : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::ref"; } };
     struct exc_ref_ts : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::ref_ts"; } };
-    struct exc_create0 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create0"; } };
-    struct exc_create1 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create1"; } };
-    struct exc_create2 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create2"; } };
-    struct exc_create3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create3"; } };
-    struct exc_create4 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create4"; } };
-    struct exc_create5 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create5"; } };
-    struct exc_create6 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::create6"; } };
-    struct exc_irefcr0 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create0"; } };
-    struct exc_irefcr1 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create1"; } };
-    struct exc_irefcr2 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create2"; } };
-    struct exc_irefcr3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create3"; } };
-    struct exc_irefcr4 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create4"; } };
-    struct exc_irefcr5 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create5"; } };
-    struct exc_irefcr6 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::create6"; } };
+    struct exc_create0 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create0"; } };
+    struct exc_create1 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create1"; } };
+    struct exc_create2 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create2"; } };
+    struct exc_create3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create3"; } };
+    struct exc_create4 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create4"; } };
+    struct exc_create5 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create5"; } };
+    struct exc_create6 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create6"; } };
+    struct exc_create7 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create7"; } };
+    struct exc_create8 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create8"; } };
+    struct exc_irefcr0 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create0"; } };
+    struct exc_irefcr1 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create1"; } };
+    struct exc_irefcr2 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create2"; } };
+    struct exc_irefcr3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create3"; } };
+    struct exc_irefcr4 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create4"; } };
+    struct exc_irefcr5 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create5"; } };
+    struct exc_irefcr6 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create6"; } };
+    struct exc_irefcr7 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create7"; } };
+    struct exc_irefcr8 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create8"; } };
     struct exc_assign : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::assign"; } };
     struct exc_copy : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::copy"; } };
     struct exc_cm_assign : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::cm_assign"; } };
@@ -3486,7 +3513,7 @@ namespace bmdx
       // d) On any construction failure, generate an exception.
     struct i_new { virtual T* operator()(T* p) const = 0; virtual ~i_new() {} };
 
-
+      // Trivial i_new impl. for constructors with different num. of args.
     struct args0_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(); return p; } else { return new T(); } } };
     template<class A1> struct args1_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1); return p; } else { return new T(a1); } } args1_t(const A1& a1_) : a1(a1_) {} const A1& a1; };
     template<class A1, class A2> struct args2_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1, a2); return p; } else { return new T(a1, a2); } } args2_t(const A1& a1_, const A2& a2_) : a1(a1_), a2(a2_) {} const A1& a1; const A2& a2; };
@@ -3494,6 +3521,8 @@ namespace bmdx
     template<class A1, class A2, class A3, class A4> struct args4_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1, a2, a3, a4); return p; } else { return new T(a1, a2, a3, a4); } } args4_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; };
     template<class A1, class A2, class A3, class A4, class A5> struct args5_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1, a2, a3, a4, a5); return p; } else { return new T(a1, a2, a3, a4, a5); } } args5_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; };
     template<class A1, class A2, class A3, class A4, class A5, class A6> struct args6_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1, a2, a3, a4, a5, a6); return p; } else { return new T(a1, a2, a3, a4, a5, a6); } } args6_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_, const A6& a6_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_), a6(a6_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; const A6& a6; };
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> struct args7_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1, a2, a3, a4, a5, a6, a7); return p; } else { return new T(a1, a2, a3, a4, a5, a6, a7); } } args7_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_, const A6& a6_, const A7& a7_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_), a6(a6_), a7(a7_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; const A6& a6; const A7& a7; };
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> struct args8_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(a1, a2, a3, a4, a5, a6, a7, a8); return p; } else { return new T(a1, a2, a3, a4, a5, a6, a7, a8); } } args8_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_, const A6& a6_, const A7& a7_, const A8& a8_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_), a6(a6_), a7(a7_), a8(a8_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; const A6& a6; const A7& a7; const A8& a8; };
 
     static args0_t args() { return args0_t(); }
     template<class A1> static args1_t<A1> args(const A1& a1) { return args1_t<A1>(a1); }
@@ -3502,6 +3531,28 @@ namespace bmdx
     template<class A1, class A2, class A3, class A4> static args4_t<A1, A2, A3, A4> args(const A1& a1, const A2& a2, const A3& a3, const A4& a4) { return args4_t<A1, A2, A3, A4>(a1, a2, a3, a4); }
     template<class A1, class A2, class A3, class A4, class A5> static args5_t<A1, A2, A3, A4, A5> args(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5) { return args5_t<A1, A2, A3, A4, A5>(a1, a2, a3, a4, a5); }
     template<class A1, class A2, class A3, class A4, class A5, class A6> static args6_t<A1, A2, A3, A4, A5, A6> args(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6) { return args6_t<A1, A2, A3, A4, A5, A6>(a1, a2, a3, a4, a5, a6); }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static args7_t<A1, A2, A3, A4, A5, A6, A7> args(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7) { return args7_t<A1, A2, A3, A4, A5, A6, A7>(a1, a2, a3, a4, a5, a6, a7); }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static args8_t<A1, A2, A3, A4, A5, A6, A7, A8> args(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7, const A8& a8) { return args8_t<A1, A2, A3, A4, A5, A6, A7, A8>(a1, a2, a3, a4, a5, a6, a7, a8); }
+
+
+          // Same as args(), but all arguments will be cast to non-const when passed to constructor by args#nc_t.
+        template<class A1> struct args1nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1); return p; } else { return new T((A1&)a1); } } args1nc_t(const A1& a1_) : a1(a1_) {} const A1& a1; };
+        template<class A1, class A2> struct args2nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2); return p; } else { return new T((A1&)a1, (A2&)a2); } } args2nc_t(const A1& a1_, const A2& a2_) : a1(a1_), a2(a2_) {} const A1& a1; const A2& a2; };
+        template<class A1, class A2, class A3> struct args3nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2, (A3&)a3); return p; } else { return new T((A1&)a1, (A2&)a2, (A3&)a3); } } args3nc_t(const A1& a1_, const A2& a2_, const A3& a3_) : a1(a1_), a2(a2_), a3(a3_) {} const A1& a1; const A2& a2; const A3& a3; };
+        template<class A1, class A2, class A3, class A4> struct args4nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4); return p; } else { return new T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4); } } args4nc_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; };
+        template<class A1, class A2, class A3, class A4, class A5> struct args5nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5); return p; } else { return new T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5); } } args5nc_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; };
+        template<class A1, class A2, class A3, class A4, class A5, class A6> struct args6nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5, (A6&)a6); return p; } else { return new T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5, (A6&)a6); } } args6nc_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_, const A6& a6_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_), a6(a6_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; const A6& a6; };
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> struct args7nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5, (A6&)a6, (A7&)a7); return p; } else { return new T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5, (A6&)a6, (A7&)a7); } } args7nc_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_, const A6& a6_, const A7& a7_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_), a6(a6_), a7(a7_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; const A6& a6; const A7& a7; };
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> struct args8nc_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5, (A6&)a6, (A7&)a7, (A8&)a8); return p; } else { return new T((A1&)a1, (A2&)a2, (A3&)a3, (A4&)a4, (A5&)a5, (A6&)a6, (A7&)a7, (A8&)a8); } } args8nc_t(const A1& a1_, const A2& a2_, const A3& a3_, const A4& a4_, const A5& a5_, const A6& a6_, const A7& a7_, const A8& a8_) : a1(a1_), a2(a2_), a3(a3_), a4(a4_), a5(a5_), a6(a6_), a7(a7_), a8(a8_) {} const A1& a1; const A2& a2; const A3& a3; const A4& a4; const A5& a5; const A6& a6; const A7& a7; const A8& a8; };
+        template<class A1> static args1nc_t<A1> argsnc(const A1& a1) { return args1nc_t<A1>(a1); }
+        template<class A1, class A2> static args2nc_t<A1, A2> argsnc(const A1& a1, const A2& a2) { return args2nc_t<A1, A2>(a1, a2); }
+        template<class A1, class A2, class A3> static args3nc_t<A1, A2, A3> argsnc(const A1& a1, const A2& a2, const A3& a3) { return args3nc_t<A1, A2, A3>(a1, a2, a3); }
+        template<class A1, class A2, class A3, class A4> static args4nc_t<A1, A2, A3, A4> argsnc(const A1& a1, const A2& a2, const A3& a3, const A4& a4) { return args4nc_t<A1, A2, A3, A4>(a1, a2, a3, a4); }
+        template<class A1, class A2, class A3, class A4, class A5> static args5nc_t<A1, A2, A3, A4, A5> argsnc(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5) { return args5nc_t<A1, A2, A3, A4, A5>(a1, a2, a3, a4, a5); }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> static args6nc_t<A1, A2, A3, A4, A5, A6> argsnc(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6) { return args6nc_t<A1, A2, A3, A4, A5, A6>(a1, a2, a3, a4, a5, a6); }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static args7nc_t<A1, A2, A3, A4, A5, A6, A7> argsnc(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7) { return args7nc_t<A1, A2, A3, A4, A5, A6, A7>(a1, a2, a3, a4, a5, a6, a7); }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static args8nc_t<A1, A2, A3, A4, A5, A6, A7, A8> argsnc(const A1& a1, const A2& a2, const A3& a3, const A4& a4, const A5& a5, const A6& a6, const A7& a7, const A8& a8) { return args8nc_t<A1, A2, A3, A4, A5, A6, A7, A8>(a1, a2, a3, a4, a5, a6, a7, a8); }
+
 
     typedef void* (*F_alloc)(_s_ll nb);
     typedef void (*F_free)(void* p);
@@ -3575,6 +3626,8 @@ namespace bmdx
     struct exc_create4 : _cref_t_exceptions::exc_create4 {};
     struct exc_create5 : _cref_t_exceptions::exc_create5 {};
     struct exc_create6 : _cref_t_exceptions::exc_create6 {};
+    struct exc_create7 : _cref_t_exceptions::exc_create7 {};
+    struct exc_create8 : _cref_t_exceptions::exc_create8 {};
     struct exc_irefcr0 : _cref_t_exceptions::exc_irefcr0 {};
     struct exc_irefcr1 : _cref_t_exceptions::exc_irefcr1 {};
     struct exc_irefcr2 : _cref_t_exceptions::exc_irefcr2 {};
@@ -3582,6 +3635,8 @@ namespace bmdx
     struct exc_irefcr4 : _cref_t_exceptions::exc_irefcr4 {};
     struct exc_irefcr5 : _cref_t_exceptions::exc_irefcr5 {};
     struct exc_irefcr6 : _cref_t_exceptions::exc_irefcr6 {};
+    struct exc_irefcr7 : _cref_t_exceptions::exc_irefcr7 {};
+    struct exc_irefcr8 : _cref_t_exceptions::exc_irefcr8 {};
     struct exc_assign : _cref_t_exceptions::exc_assign {};
     struct exc_copy : _cref_t_exceptions::exc_copy {};
     struct exc_cm_assign : _cref_t_exceptions::exc_cm_assign {};
@@ -3653,8 +3708,8 @@ namespace bmdx
       //  b) on has_ref() == false, generates an exception.
       // The reference, returned by ref(), may be unsafe at the time
       //  when cref_t object is overwritten by another thread.
-    const T& ref() const        throw(exc_ref) { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
-    const T* ptr() const        throw() { return const_cast<const T*>(_p); }
+    const T& ref() const throw(exc_ref)        { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+    const T* ptr() const throw()        { return const_cast<const T*>(_p); }
 
       // ref_ts()():
       //  same as ref(), but the wrapped object reference
@@ -3676,31 +3731,33 @@ namespace bmdx
       const cref_t& ref;
       T& xnc;
 
-      const T& operator()() const        throw() { return xnc; }
+      const T& operator()() const throw()        { return xnc; }
 
-      safe_refnc(const cref_t& r)        throw(exc_ref_ts) : __lock(r), ref(r), xnc(_ref(r)) {}
+      safe_refnc(const cref_t& r) throw(exc_ref_ts)        : __lock(r), ref(r), xnc(_ref(r)) {}
 
         // Copying and assignment do not generate exceptions,
         //  because the reference remains valid and locked.
-      safe_refnc(const safe_refnc& x)        throw() : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
-      void operator=(const safe_refnc& x)        throw() { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
+      safe_refnc(const safe_refnc& x) throw()        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
+      void operator=(const safe_refnc& x) throw()        { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
     private:
-      static T& _ref(const cref_t& r __bmdx_noarg)        throw(exc_ref_ts) { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
+      static T& _ref(const cref_t& r __bmdx_noarg) throw(exc_ref_ts)        { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
     };
-    safe_refnc ref_ts() const        throw(exc_ref_ts) { return *this; }
+    safe_refnc ref_ts() const throw(exc_ref_ts)        { return *this; }
 
 
       // Non-const pointer to object, returned without any locking.
       // NOTE Original meaning of cref_t is "reference to constant object".
       //   Treating constant as variable is an agreement and may be unsafe.
       //   Only the client is responsible for logically correct and synchronized modifications.
-    T* _pnonc_u() const        throw() { return const_cast<T*>(_p); }
+    T* _pnonc_u() const throw()        { return const_cast<T*>(_p); }
 
 
       // Smart pointer functionality.
       //   Allows to call the wrapped object's methods. If cref_t is empty, generates an exception.
       // NOTE Original meaning of cref_t is "reference to constant object".
       //   Treating constant as variable is an agreement and may be unsafe.
+      //   Accessing object methods and data via "->" is very fast and roughly equivalent to built-in pointer operation.
+      //   It does not make locks, allocations or other resource-costly operations.
       //   Only the client is responsible for logically correct and synchronized modifications.
       // NOTE If cref_t may be concurrently overwritten, use p--->method() notation.
       //   See operator--.
@@ -3708,48 +3765,55 @@ namespace bmdx
 
 
       // Returns a copy of this cref_t. Useful to safely call the wrapped object,
-      // when the original cref_t may be concurrently modified.
+      //  when the original cref_t may be concurrently modified.
       // cref_t<T> p; ... p--->method(); ... p--.ref().constant_method();
-    cref_t operator--(int) const        throw() { return *this; }
+      // NOTE Copying cref_t usually sets a lock for ref. counting,
+      //    also, the object may be destroyed right after the call, because the temporary reference became
+      //    the last one during call.
+      //    This can lead to unpredictable delays and cannot be used in time-critical routines, like drive callbacks.
+      //    I.e. in cref_t, "--->" action is quite different from "->".
+    cref_t operator--(int) const throw()        { return *this; }
 
 
       // false only if
-      //  a) no-exception construction failed,
+      //  a) no-exception construction from const T& failed,
       //  b) after cref_t().
-    bool has_ref() const        throw() { return !!_p; }
-    operator bool() const        throw() { return !!_p; }
+    bool has_ref() const throw()        { return !!_p; }
+    operator bool() const throw()        { return !!_p; }
 
-      // true if this object contains a strong reference, false - weak reference.
-    bool is_own() const        throw() { return !!_ph; }
+      // true if this object contains a strong reference, false - weak reference or empty.
+    bool is_own() const throw()        { return !!_ph; }
 
       // true if this object contains a strong reference in detached state (i.e. ref. counting continues, but object pointer is not deleted automatically, see _detach_u()).
-    bool is_detached() const        throw() { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_detached(); }
+    bool is_detached() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_detached(); }
 
-      // true if this object is strong-referenced and may be passed between binary modules
-      //  (ref. counting and destructor call, when needed, will be done correctly regardless of the module).
-    bool is_cm() const        throw() { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && !_ph->b_v0(); }
+      // true if cref_t contains a cross-module object, namely,
+      //  a) cross-module strong reference (i.e. type 1), or
+      //  b) multi-functional strong reference  (type 2).
+      // "if (is_cm()) { ... }" is equivalent of "int type; flags(&type); if (type == 1 || type ==2) { .... }".
+    bool is_cm() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && (_ph->b_v1() || _ph->b_v2()); }
 
       // n_refs():
       //  0 - unknown (weak ref., is_own() == false).
       //  >=1 - number of strong references (on is_own() == true).
-    t_cnt n_refs() const        throw() { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph ? _ph->cnt & _m : 0; }
+    t_cnt n_refs() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph ? _ph->cnt & _m : 0; }
 
       // Return a pointer to the crit. sec. data object, that is used by this cref_t for locking (if locking is not disabled).
       //  The returned pointer is non-0.
-    _critsec_data0_t<LockSelector>* pcsd0() const        throw() { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
-    typename critsec_t<LockSelector>::csdata* pcsd() const        throw() { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
+    _critsec_data0_t<LockSelector>* pcsd0() const throw()        { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
+    typename critsec_t<LockSelector>::csdata* pcsd() const throw()        { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
 
       // Returns true is this object actually uses locking, false otherwise.
     bool b_cs() const { if (!t_lock::does_locking()) { return false; } t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph && _ph->b_v2()) { return !!_ps; } return true; }
 
       // Return aux. object pointer or 0 if this cref_t does not contain aux. object.
       //  Only multi-functional cref_t may contain aux. object. See also struct iref2.
-    void* paux() const        throw() { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() && (_ph->flags & iref2_flags::use_aux) ? _s_paux(_s_ph2(_ph)) : 0; }
+    void* paux() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() && (_ph->flags & iref2_flags::use_aux) ? _s_paux(_s_ph2(_ph)) : 0; }
 
       // Multi-functional reference only: return the main pointer to the referenced object, that had been initially assigned
       //    to the first cref_t that holds this object. The object is deleted by the last destroyed cref_t by calling handler with this pointer.
       //  For all other ref. types: returns 0.
-    void* pobj() const        throw() { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() ? (_s_ph2(_ph))->pobj : 0; }
+    void* pobj() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() ? (_s_ph2(_ph))->pobj : 0; }
 
       // Returns flags of the object, and optionally, reference type.
       //  *ptype -2: null reference. flags == 0.
@@ -3758,7 +3822,7 @@ namespace bmdx
       //  *ptype 1: cross-module strong reference, with ref. counting, no other functions. flags may contain disable_des (0x2), use_critsec (0x4).
       //  *ptype 2: multi-functional strong reference, with ref. counting. flags may contain anything from iref2_flags.
       //  (not expected) *ptype -3: corrupted object. flags == 0.
-    t_cnt flags(int* ptype = 0) const        throw()
+    t_cnt flags(int* ptype = 0) const throw()
     {
       t_lock __lock(*this); if (sizeof(__lock)) {}
       if (!_ph) { if (ptype) { *ptype = _p ? -1 : -2; } return 0; }
@@ -3768,29 +3832,52 @@ namespace bmdx
       if (ptype) { *ptype = -3; } return 0;
     }
 
-      // Object creation with 0..6 arguments.
+      // Object creation with 0..8 arguments.
       //    On success, the previous object reference is correctly removed, and the new is set on its place.
       //    On failure, the previous object reference remains unchanged.
-      // NOTE create1 with Arg1 == T behaves same as copy().
+      // NOTE create1 with A1 == T behaves same as copy().
     bool create0(bool no_exc)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create0(); } return false; }
-    template<class Arg1> bool create1(bool no_exc, const Arg1& x1)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
-    template<class Arg1, class Arg2> bool create2(bool no_exc, const Arg1& x1, const Arg2& x2)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
-    template<class Arg1, class Arg2, class Arg3> bool create3(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4> bool create4(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> bool create5(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> bool create6(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1> bool create1(bool no_exc, const A1& x1)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
+    template<class A1, class A2> bool create2(bool no_exc, const A1& x1, const A2& x2)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
+    template<class A1, class A2, class A3> bool create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
+    template<class A1, class A2, class A3, class A4> bool create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
 
-      // Cross-module object creation with 0..6 arguments.
+          // Same as create#(), but calling T constructor with all arguments cast to non-const.
+        template<class A1> bool create1nc(bool no_exc, const A1& x1)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
+        template<class A1, class A2> bool create2nc(bool no_exc, const A1& x1, const A2& x2)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
+        template<class A1, class A2, class A3> bool create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
+        template<class A1, class A2, class A3, class A4> bool create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
+
+      // Cross-module object creation with 0..8 arguments.
       // pcsd, flags, no_exc: see cm_copy.
       // NOTE If flags contain disable_des, the client is responsible for deleting the object after the last reference destruction.
     bool cm_create0(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(); } catch (...) {} } else { try { p2 = new T(); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create0(); } return false; }
-    template<class Arg1> bool cm_create1(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1); } catch (...) {} } else { try { p2 = new T(x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
-    template<class Arg1, class Arg2> bool cm_create2(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2); } catch (...) {} } else { try { p2 = new T(x1, x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
-    template<class Arg1, class Arg2, class Arg3> bool cm_create3(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3); } catch (...) {} } else { try { p2 = new T(x1, x2, x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4> bool cm_create4(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> bool cm_create5(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> bool cm_create6(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1> bool cm_create1(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1); } catch (...) {} } else { try { p2 = new T(x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
+    template<class A1, class A2> bool cm_create2(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2); } catch (...) {} } else { try { p2 = new T(x1, x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
+    template<class A1, class A2, class A3> bool cm_create3(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3); } catch (...) {} } else { try { p2 = new T(x1, x2, x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
+    template<class A1, class A2, class A3, class A4> bool cm_create4(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool cm_create5(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
 
+          // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
+        template<class A1> bool cm_create1nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1); } catch (...) {} } else { try { p2 = new T((A1&)x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
+        template<class A1, class A2> bool cm_create2nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
+        template<class A1, class A2, class A3> bool cm_create3nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
+        template<class A1, class A2, class A3, class A4> bool cm_create4nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool cm_create5nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
 
     template<class I, class LS = I, class _ = __vecm_tu_selector> struct iref
     {
@@ -3800,12 +3887,24 @@ namespace bmdx
         //  (This works because particular object is held only by pointer of only one inteface type.)
         // NOTE LockSelector of the outer cref_t is ignored, critsec_t<LS>::csdata is used.
       static cref_t<I, LS> create0(bool no_exc)        { cref_t<I, LS> rx; try { I* pbase = new T(); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr0(); } return rx; }
-      template<class Arg1> static cref_t<I, LS> create1(bool no_exc, const Arg1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
-      template<class Arg1, class Arg2> static cref_t<I, LS> create2(bool no_exc, const Arg1& x1, const Arg2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3> static cref_t<I, LS> create3(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4> static cref_t<I, LS> create4(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> static cref_t<I, LS> create5(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> static cref_t<I, LS> create6(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+      template<class A1> static cref_t<I, LS> create1(bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+      template<class A1, class A2> static cref_t<I, LS> create2(bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+      template<class A1, class A2, class A3> static cref_t<I, LS> create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+      template<class A1, class A2, class A3, class A4> static cref_t<I, LS> create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
+
+            // Same as create#(), but calling T constructor with all arguments cast to non-const.
+          template<class A1> static cref_t<I, LS> create1nc(bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+          template<class A1, class A2> static cref_t<I, LS> create2nc(bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+          template<class A1, class A2, class A3> static cref_t<I, LS> create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+          template<class A1, class A2, class A3, class A4> static cref_t<I, LS> create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
 
         // Create cross-module object of type T, which is I or subclass of I. Assign it as strong reference to cref_t<I, LS>.
         //  Return the result. If creation failed, an empty cref_t is returned (or exception generated on no_exc == false).
@@ -3814,12 +3913,24 @@ namespace bmdx
         // NOTE LockSelector of the outer cref_t is ignored.
         // NOTE If flags contain disable_des, the client is responsible for deleting the object after the last reference destruction.
       static cref_t<I, LS> cm_create0(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc)        { cref_t<I, LS> rx; try { I* pbase = new T(); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr0(); } return rx; }
-      template<class Arg1> static cref_t<I, LS> cm_create1(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
-      template<class Arg1, class Arg2> static cref_t<I, LS> cm_create2(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3> static cref_t<I, LS> cm_create3(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4> static cref_t<I, LS> cm_create4(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> static cref_t<I, LS> cm_create5(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
-      template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> static cref_t<I, LS> cm_create6(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+      template<class A1> static cref_t<I, LS> cm_create1(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+      template<class A1, class A2> static cref_t<I, LS> cm_create2(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+      template<class A1, class A2, class A3> static cref_t<I, LS> cm_create3(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+      template<class A1, class A2, class A3, class A4> static cref_t<I, LS> cm_create4(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> cm_create5(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> cm_create6(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> cm_create7(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> cm_create8(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
+
+            // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
+          template<class A1> static cref_t<I, LS> cm_create1nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+          template<class A1, class A2> static cref_t<I, LS> cm_create2nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+          template<class A1, class A2, class A3> static cref_t<I, LS> cm_create3nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+          template<class A1, class A2, class A3, class A4> static cref_t<I, LS> cm_create4nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> cm_create5nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> cm_create6nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> cm_create7nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> cm_create8nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
     }; // end of struct iref
 
 
@@ -3926,6 +4037,18 @@ namespace bmdx
       template<class A1, class A2, class A3, class A4> static cref_t<I> create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4>(x1, x2, x3, x4), pcsd, flags, h, args_aux); }
       template<class A1, class A2, class A3, class A4, class A5> static cref_t<I> create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5>(x1, x2, x3, x4, x5), pcsd, flags, h, args_aux); }
       template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I> create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6>(x1, x2, x3, x4, x5, x6), pcsd, flags, h, args_aux); }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I> create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6, A7>(x1, x2, x3, x4, x5, x6, x7), pcsd, flags, h, args_aux); }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I> create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6, A7, A8>(x1, x2, x3, x4, x5, x6, x7, x8), pcsd, flags, h, args_aux); }
+
+            // Same as create#, but all args. are cast to non-const when passed into constructor.
+          template<class A1> static cref_t<I> create1nc(bool no_exc, const A1& x1, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1>(x1), pcsd, flags, h, args_aux); }
+          template<class A1, class A2> static cref_t<I> create2nc(bool no_exc, const A1& x1, const A2& x2, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2>(x1, x2), pcsd, flags, h, args_aux); }
+          template<class A1, class A2, class A3> static cref_t<I> create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3>(x1, x2, x3), pcsd, flags, h, args_aux); }
+          template<class A1, class A2, class A3, class A4> static cref_t<I> create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4>(x1, x2, x3, x4), pcsd, flags, h, args_aux); }
+          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I> create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5>(x1, x2, x3, x4, x5), pcsd, flags, h, args_aux); }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I> create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6>(x1, x2, x3, x4, x5, x6), pcsd, flags, h, args_aux); }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I> create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6, A7>(x1, x2, x3, x4, x5, x6, x7), pcsd, flags, h, args_aux); }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I> create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6, A7, A8>(x1, x2, x3, x4, x5, x6, x7, x8), pcsd, flags, h, args_aux); }
 
       private: struct _x_assigner;
       public:
@@ -4031,11 +4154,11 @@ namespace bmdx
 
 
       // NOTE The following 6 functions do not throw exceptions.
-    cref_t()         throw()
+    cref_t() throw()
       : _ph(0), _p(0), _ps(typename critsec_t<LockSelector>::ff_mc().pdefcsd())
       {}
 
-    cref_t(const cref_t& x)        throw()
+    cref_t(const cref_t& x) throw()
       : _ph(0), _p(0), _ps(0)
       {
         t_lock __lock(x); _ps = x._ps; if (sizeof(__lock)) {}
@@ -4048,22 +4171,13 @@ namespace bmdx
         _p = x._p;
       }
 
-    ~cref_t()        throw()
-      { if (!_ph) { _p = 0; return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    ~cref_t() throw()        { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
-    cref_t& operator=(const cref_t& x)        throw()
-    {
-      cref_t temp(x);
-      t_lock __lock(*this); if (sizeof(__lock)) {}
-      _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0;
-      _ps = temp._ps;
-      return *this;
-    }
+    cref_t& operator=(const cref_t& x) throw()        { cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
 
       // NOTE Clearing does not change the critical section used for object locking, only ensures it to be non-0.
       //  Assign another empty cref_t instead of clear(), for guaranteed setting the default critical section.
-    void clear()        throw()
-      { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    void clear() throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
       // Same as clear(), but does not delete the object if it's strongly referenced.
       //    The client becomes responsible for object lifetime.
@@ -4079,8 +4193,7 @@ namespace bmdx
       //    and ensure releasing the object correctly.
       //    For example, take into account that the object may be kept together with internal cref_t data (use_hst),
       //    in which case it's memory is freed automatically when the last reference is destroyed.
-    void _detach_u()        throw()
-      { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
+    void _detach_u() throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
 
 
       // Assigns x (by reference) to this cref_t, and/or changes ownership on x.
@@ -4829,7 +4942,7 @@ using namespace bmdx_str::words;
       //    -3 (only on t_retry_mcs < 0)  - name not found.
       //    -4 - search in progress, file descriptor is still unknown. On t_retry_mcs == 0, this means that curently no fd exposed by any process.
       //    -5 - file descriptor exists, but too large delay during transfer occured. The client must assume that the descriptor exists and call fd_search again later.
-    int fd_search(const t_name& name_orig, s_long t_retry_mcs, s_long n_role_expose)        throw() { return ((p_fd_search)pff[0])(*this, name_orig, t_retry_mcs, n_role_expose); }
+    int fd_search(const t_name& name_orig, s_long t_retry_mcs, s_long n_role_expose) throw()        { return ((p_fd_search)pff[0])(*this, name_orig, t_retry_mcs, n_role_expose); }
 
       // Try to share a duplicate of the given *io_fd with other processes under the given name.
       //  fd:
@@ -4846,16 +4959,16 @@ using namespace bmdx_str::words;
       //  -1 - wrong fd (<= -3).
       //  -2 - failure (multiple cases).
       //  -3 (only on fd == -2) - failed to enable exposing - name not found.
-    int fd_expose(const t_name& name_orig, int fd, s_long n_role, bool b_overwrite, bool b_expose)        throw() { return ((p_fd_expose)pff[1])(*this, name_orig, fd, n_role, b_overwrite, b_expose); }
+    int fd_expose(const t_name& name_orig, int fd, s_long n_role, bool b_overwrite, bool b_expose) throw()        { return ((p_fd_expose)pff[1])(*this, name_orig, fd, n_role, b_overwrite, b_expose); }
 
       // Remove the name and all associated tasks, close file descriptor if it exists.
       //  1 - removed.
       //  0 - object with the given name does not exist.
       //  -2 - failure.
-    int fd_remove(const t_name& name_orig)        throw() { return ((p_fd_remove)pff[2])(*this, name_orig); }
+    int fd_remove(const t_name& name_orig) throw()        { return ((p_fd_remove)pff[2])(*this, name_orig); }
 
       // Remove all names and search tasks, stop (join with) service thread.
-    void reset(bool b_wait)        throw() { ((p_reset)pff[3])(*this, b_wait); }
+    void reset(bool b_wait) throw()        { ((p_reset)pff[3])(*this, b_wait); }
 
     _fd_sharing() { pff[0] = (void*)&_fd_search; pff[1] = (void*)&_fd_expose; pff[2] = (void*)&_fd_remove; pff[3] = (void*)&_reset; }
 private:
@@ -5488,12 +5601,24 @@ namespace _api
       //    false: otherwise.
       //    exception: only if no_exc == false, and T() generated an exception.
     bool obj_create0(bool no_exc) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class Arg1> bool obj_create1(bool no_exc, const Arg1& x1) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class Arg1, class Arg2> bool obj_create2(bool no_exc, const Arg1& x1, const Arg2& x2) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class Arg1, class Arg2, class Arg3> bool obj_create3(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4> bool obj_create4(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5> bool obj_create5(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class Arg1, class Arg2, class Arg3, class Arg4, class Arg5, class Arg6> bool obj_create6(bool no_exc, const Arg1& x1, const Arg2& x2, const Arg3& x3, const Arg4& x4, const Arg5& x5, const Arg6& x6) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1> bool obj_create1(bool no_exc, const A1& x1) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2> bool obj_create2(bool no_exc, const A1& x1, const A2& x2) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3> bool obj_create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4> bool obj_create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool obj_create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7, x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+
+          // Same as obj_create#(), but args. are cast to non-const when passed to constructor.
+        template<class A1> bool obj_create1nc(bool no_exc, const A1& x1) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2> bool obj_create2nc(bool no_exc, const A1& x1, const A2& x2) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3> bool obj_create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4> bool obj_create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool obj_create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
 
       // Explicitly call the destructor, if it can be done (!b_bad() && f_constructed() == 1).
       // If T is accessible and currently constructed, obj_destroy calls ~T(), and after, marks the object it destroyed.
