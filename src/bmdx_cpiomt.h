@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-08-07
+// rev. 2019-08-08
 //
 // Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -223,7 +223,7 @@ namespace bmdx_str
         { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000,
           100000000000, 1000000000000, 10000000000000, 100000000000000 };
       if (ndmmax < 1) { ndmmax = 1; } else if (ndmmax > ndm_mm) { ndmmax = ndm_mm; }
-      if (nfracmax < 1) { nfracmax = 1; } else if (nfracmax > nfrac_mm) { nfracmax = nfrac_mm; }
+      if (nfracmax < 0) { nfracmax = 0; } else if (nfracmax > nfrac_mm) { nfracmax = nfrac_mm; }
       #if defined(__ICC) || defined(__INTEL_COMPILER)
         _s_long n_neg = _s_long(std::signbit(x));
       #else
@@ -5153,8 +5153,7 @@ private:
 
 
 
-  // Implementation part, exposed into main namespace (bmdx_shm).
-namespace _api
+namespace _api // public declarations (merged into namespace bmdx_shm)
 {
 
     // Non-blocking, non-locking, by-reference queue for bytes, for two threads (sender, receiver).
