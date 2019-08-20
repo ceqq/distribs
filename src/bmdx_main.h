@@ -1,6 +1,6 @@
 // BMDX library 1.1 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-08-08
+// rev. 2019-08-12
 //
 // Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -757,58 +757,58 @@ namespace bmdx
   };
     // NOTE o_iptr_t is only for in-module use. Its structure for different I may be different.
     //  Pass the original unity object between binary modules if necessary.
-  template<class I, class _ = __vecm_tu_selector> struct o_iptr_t
+  template<class I> struct o_iptr_t
   {
-    typedef I __I; typedef o_proxy<__I, _> __Proxy;
+    typedef I __I; typedef o_proxy<__I, __vecm_tu_selector> __Proxy;
     struct exc_null_ptr {};
 
 
 
-    __I* operator->() const        throw (exc_null_ptr) { return _p_checked(); }
-    __I& operator*() const        throw (exc_null_ptr) { return *_p_checked(); }
+    __I* operator->() const        throw (exc_null_ptr __bmdx_noargt) { return _p_checked(); }
+    __I& operator*() const        throw (exc_null_ptr __bmdx_noargt) { return *_p_checked(); }
 
       // true if o_iptr_t object is non-null, and its referenced object is local.
-    bool b_local() const { return !!_p; }
+    bool b_local(__bmdx_noarg1) const { return !!_p; }
 
       // true if o_iptr_t object is non-null, and its referenced object is from other binary module.
-    bool b_nonlocal() const { return _f && prx().__pci(); }
+    bool b_nonlocal(__bmdx_noarg1) const { return _f && prx().__pci(); }
 
       // Conversion to client-side pointer.
-    operator const void*() const { return _p_u(); }
+    operator const void*() const        throw (__bmdx_noargt1) { return _p_u(); }
 
       // Client-side pointer for calling interface functions.
       //  Checked version: ptr().
       //  Unchecked version: ptr_u().
-    __I* ptr()        throw(exc_null_ptr) { return _p_checked(); }
-    const __I* ptr() const        throw(exc_null_ptr) { return _p_checked(); }
-    __I* ptr_u()        throw() { return _p_u(); }
-    const __I* ptr_u() const        throw() { return _p_u(); }
+    __I* ptr(__bmdx_noarg1)        throw(exc_null_ptr) { return _p_checked(); }
+    const __I* ptr(__bmdx_noarg1) const        throw(exc_null_ptr) { return _p_checked(); }
+    __I* ptr_u(__bmdx_noarg1)        throw() { return _p_u(); }
+    const __I* ptr_u(__bmdx_noarg1) const        throw() { return _p_u(); }
 
       // In case of local interface, returns local pointer.
       // In case of proxy, returns server-side interface pointer (same as source unity::objPtr()).
       //  NOTE server-side interface pointer may be unsafe to use directly (due to binary incompatibility).
-    __I* psi_u()        throw () { return _psi_u(); }
-    const __I* psi_u() const        throw () { return _psi_u(); }
+    __I* psi_u(__bmdx_noarg1)        throw () { return _psi_u(); }
+    const __I* psi_u(__bmdx_noarg1) const        throw () { return _psi_u(); }
 
 
 
       // NOTE In case of proxy, client-side interface pointers are compared.
-    bool operator == (const o_iptr_t& x) const        throw () { return _p_u() == x._p_u(); }
-    bool operator != (const o_iptr_t& x) const        throw () { return _p_u() != x._p_u(); }
-    bool operator == (const __I* x) const        throw () { return _p_u() == x; }
-    bool operator != (const __I* x) const        throw () { return _p_u() != x; }
+    bool operator == (const o_iptr_t& x) const        throw (__bmdx_noargt1) { return _p_u() == x._p_u(); }
+    bool operator != (const o_iptr_t& x) const        throw (__bmdx_noargt1) { return _p_u() != x._p_u(); }
+    bool operator == (const __I* x) const        throw (__bmdx_noargt1) { return _p_u() == x; }
+    bool operator != (const __I* x) const        throw (__bmdx_noargt1) { return _p_u() != x; }
 
 
 
-    void clear()        throw () { this->~o_iptr_t(); new (this) o_iptr_t(); }
+    void clear(__bmdx_noarg1)        throw () { this->~o_iptr_t(); new (this) o_iptr_t(); }
 
-    o_iptr_t()        throw () : _p(0), _f(0) {}
-    ~o_iptr_t()        throw () { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
+    o_iptr_t(__bmdx_noarg1)        throw () : _p(0), _f(0) {}
+    ~o_iptr_t()        throw (__bmdx_noargt1) { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
 
       // NOTE Construction does not generate exceptions.
       //    If no proxy defined by the client, or the client-defined __Proxy() fails,
       //    o_iptr_t will be null (== false).
-    o_iptr_t(__I* pi, unity_common::__Psm pmsm)        throw () : _p(0), _f(0)
+    o_iptr_t(__I* pi, unity_common::__Psm pmsm __bmdx_noarg)        throw () : _p(0), _f(0)
     {
       if (pmsm == unity_common::pls_modsm()) { _p = pi; return; }
         if (!(pi && pmsm)) { return; }
@@ -823,21 +823,21 @@ namespace bmdx
       //    If copying fails, ptr_u() == 0.
       //    If copying succeeds, bool(ptr_u()) == bool(x.ptr_u()).
       //    If the client-defined __Proxy copy constructor does not fail anyway, copying always succeeds as well.
-    o_iptr_t(const o_iptr_t& x)         throw () : _p(x._p), _f(0) { if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} } }
+    o_iptr_t(const o_iptr_t& x __bmdx_noarg)         throw () : _p(x._p), _f(0) { if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} } }
 
       // NOTE Assignment does not generate exceptions.
       //    If assignment fails, ptr_u() == 0.
       //    If assignment succeeds, bool(ptr_u()) == bool(x.ptr_u()).
       //    If the client-defined __Proxy copy constructor does not fail anyway, assignment always succeeds as well.
-    o_iptr_t& operator=(const o_iptr_t& x)        throw () { this->~o_iptr_t(); new (this) o_iptr_t(x); return *this; }
+    o_iptr_t& operator=(const o_iptr_t& x)        throw (__bmdx_noargt1) { this->~o_iptr_t(); new (this) o_iptr_t(x); return *this; }
 
 
 
   private: __I* _p; char _sprx[sizeof(__Proxy)]; s_long _f;
-    inline __I* _p_checked() const { if (_p) { return _p; } else if (_f && prx().__pci()) { return prx().__pci(); } throw exc_null_ptr(); }
-    inline __I* _p_u() const { if (_p) { return _p; } else if (_f) { return prx().__pci(); } return 0; }
-    inline __I* _psi_u() const { if (_p) { return _p; } else if (_f) { return prx().__psi(); } return 0; }
-    __Proxy& prx() const { return *(__Proxy*)&_sprx[0]; }
+    inline __I* _p_checked(__bmdx_noarg1) const { if (_p) { return _p; } else if (_f && prx().__pci()) { return prx().__pci(); } throw exc_null_ptr(); }
+    inline __I* _p_u(__bmdx_noarg1) const { if (_p) { return _p; } else if (_f) { return prx().__pci(); } return 0; }
+    inline __I* _psi_u(__bmdx_noarg1) const { if (_p) { return _p; } else if (_f) { return prx().__psi(); } return 0; }
+    __Proxy& prx(__bmdx_noarg1) const { return *(__Proxy*)&_sprx[0]; }
   };
   struct o_itfset_base
   {
