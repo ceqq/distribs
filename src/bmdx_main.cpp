@@ -1,15 +1,34 @@
-// BMDX library 1.1 RELEASE for desktop & mobile platforms
+// BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-08-12
-// See bmdx_main.h for description.
+// rev. 2020-04-09
+// See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
+  #include "bmdx_main.h"
+#else
+  #ifndef __bmdx_main_impl_skip
+    #define __bmdx_main_impl_skip
+  #endif
+#endif
 
+#ifndef bmdx_main_intl_lib_H
+#define bmdx_main_intl_lib_H
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// bmdx_main_intl_lib:
+//    Internal base library. May be included in the following way
+//      #include "bmdx_main.h"
+//      #include "bmdx_main.cpp"
+//    for testing purposes and as temporary utility.
+//    There are NO guarantees of any kind on bmdx_main_intl_lib API.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if defined(__clang__)
+  #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wunknown-pragmas"
   #pragma clang diagnostic ignored "-Wunused-parameter"
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
+  #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
@@ -19,7 +38,1912 @@
   #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #endif
 
-#include "bmdx_main.h"
+namespace bmdx_main_intl_lib
+{
+using namespace bmdx;
+
+template<class T> struct weakref_t;
+template<class T>
+struct refmaker_t
+{
+  struct t_lock;
+  struct ref_info { typename critsec_t<T>::csdata csd; union { s_long __1; volatile char b_ref_valid; }; ref_info() { __1 = 0; b_ref_valid = 0; } };
+
+  const cref_t<ref_info> info;
+  const cref_t<T> strongref;
+
+    // Returns true if strongref refers to an object.
+  bool b_nonempty() const { return strongref; }
+
+    // refmaker_t function:
+    //    uniquely holding object reference, which may have been created in another (client) binary module;
+    //    creating weak references to the object, which do not refer to client binary module's data or functions, except the target object pointer itself;
+    //    providing common lock on the target object, for all weak references being able to check the target object pointer before dereferencing,
+    //      and for safe clearing of the strong reference at any time.
+    // NOTEs:
+    //    after refmaker_t creation, check .info == true.
+  refmaker_t(const cref_t<T>& strongref_) throw() : info(), strongref(strongref_) { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; _info.create0(1); }
+  refmaker_t() {} // null ref., no critsec_t
+
+    // Sets this->info to the new object, created by dflt. If succeeds, returns true.
+  bool create_info(bool b_may_replace) throw() { if (info && !b_may_replace) { return false; } cref_t<ref_info> _info2; if (!_info2.create0(1)) { return false; } (cref_t<ref_info>&)info = _info2; return true; }
+  void set_ref(const cref_t<T>& strongref_) throw() { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; cref_t<T>& r = (cref_t<T>&)strongref; if (_info) { t_lock __lock(*this); if (sizeof(__lock)) {} r = strongref_; _info->b_ref_valid = 1; } else { r = strongref_; } }
+  void clear() throw() { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; cref_t<T>& r = (cref_t<T>&)strongref; if (_info) { t_lock __lock(*this); if (sizeof(__lock)) {} _info->b_ref_valid = 0; r.clear(); } else { r.clear(); } _info.clear(); }
+  void operator=(const refmaker_t& rm) throw() { if (this == &rm) { return; } clear(); new (this) refmaker_t(rm); }
+  ~refmaker_t() throw() { clear(); }
+
+  struct t_lock
+  {
+    critsec_t<T> __lock;
+    t_lock(const refmaker_t& rm) : __lock(rm.info ? 10 : -1, -1, rm.info ? &rm.info->csd : 0) {}
+    t_lock(const weakref_t<T>& w) : __lock(w.info ? 10 : -1, -1, w.info ? &w.info->csd : 0) {}
+  };
+};
+template<class T>
+struct weakref_t
+{
+  typedef typename refmaker_t<T>::t_lock t_lock;
+  cref_t<typename refmaker_t<T>::ref_info> info;
+    // Dereferencing sequence:
+    //  1) set a lock: weakref_t::t_lock __lock(weakref_t object),
+    //  2) check b_valid() (returns !!(info && info->b_ref_valid && pwk)),
+    //  3) use *pwk.
+  T* pwk;
+    // Returns true if this weakref contains valid non-null object pointer.
+  bool b_valid() const { return info && info->b_ref_valid && pwk; }
+  weakref_t(const refmaker_t<T>& rm) : info(rm.info), pwk(rm.strongref._pnonc_u()) {} // NOTE weakref_t() is not locked => rm must not be modified concurrently with weakref_t()
+  weakref_t() : pwk(0) {}
+  weakref_t(const weakref_t& w) : info(w.info), pwk(w.pwk) {} // NOTE weakref_t() is not locked => w must not be modified concurrently with weakref_t()
+    // NOTE assignment: both *this and x must not be modified concurrently with assignment *this = x
+  void operator=(const refmaker_t<T>& x) throw() { info = x.info; pwk = x.strongref._pnonc_u(); }
+  void operator=(const weakref_t<T>& x) throw() { info = x.info; pwk = x.pwk; }
+};
+} // namespace bmdx_main_intl_lib
+namespace yk_c
+{
+  template<class T> struct vecm::spec<bmdx_main_intl_lib::refmaker_t<T> > { typedef bmdx_main_intl_lib::refmaker_t<T> t; typedef config_t<t, 1, 4, 1> config; };
+  template<class T> struct vecm::spec<bmdx_main_intl_lib::weakref_t<T> > { typedef bmdx_main_intl_lib::weakref_t<T> t; typedef config_t<t, 1, 4, 1> config; };
+}
+namespace bmdx_main_intl_lib
+{
+
+#define __shmqueue_ms_nbytes_min (10 * 1024ll)
+#define __shmqueue_ms_buf_uid __bmdx_shmfifo_ver
+#define __shmqueue_ms_nbytes_overhead 12 // see all occurrences before any modification
+
+static s_long _shmqms_hash_len(s_ll __length) throw() { const s_ll e = __shmqueue_ms_buf_uid; return yk_c::hashx_common::kf_basic<s_ll>()(e * (e + 3 * __length)); }
+//static s_ll _lmsc_hash_pid_deriv(s_ll pid, s_ll key = 0) throw() { const s_ll e = __shmqueue_ms_buf_uid; return yk_c::hashx_common::kf_basic<s_ll>()(e * (e + 7 * (key + pid))); }
+
+  // 8 bytes
+struct _shmqms_header { s_long length; s_long lhash; _shmqms_header() { length = lhash = 0; } };
+
+template<class AuxData, class _bs = bmdx_meta::nothing>
+struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender side
+{
+  typedef arrayref_t<char> t_stringref;
+  struct _rso { AuxData auxd; bmdx_shm::rfifo_nbl11 ringbuf; };
+  typedef bmdx_shm::shmobj2s_t<_rso> t_so;
+
+  const bmdx_shm::t_name_shm qname;
+  bmdx_shm::shmobj2s_t<_rso> so;
+  vnnqueue_t<cref_t<t_stringref> > lq;
+
+  shmqueue_ms_sender_t(const bmdx_shm::t_name_shm& name_)
+    : qname(name_), so(name_.n() ? name_.c_str() : "_", false, __shmqueue_ms_nbytes_min , __shmqueue_ms_buf_uid)
+  { lq.set_cap_hints(-1, -2); }
+
+    // Attempts to connect to shared memory.
+    //  Does not ensure that the shared object is locked by the current sender.
+    //  Returns:
+    //    1 - success, the shared object is already initialized by receiver.
+    //    0 - the shared memory exists, but not yet accessible, or the contained object is not yet initialized by the receiver.
+    //    -2 - failure.
+    //    -3 - couldn't get the shared object side 2 lock.
+  s_long attempt_open() throw()
+  {
+    if (so.f_constructed() == 1) { return 1; }
+    if (qname.n() <= 0) { return -2; }
+    s_long res = so.prepare(false);
+    if (res == 1) { if (so.nb() < __shmqueue_ms_nbytes_min) { so.close(); return -2; } return so.f_constructed() == 1 ? 1 : 0; }
+    if (res == -3) { return -3; }
+    if (res == -4) { return 0; }
+    return -2;
+  }
+
+    // msend_1: locally queues msg, then sends all currently queued messages.
+    // msend_n: locally queues all msgs (transactionally), and if succeeds, sends all currently queued messages.
+    // msend_pending: tries to send part or all currently queued messages.
+    // b_immediately:
+    //      behavior when on failure to deliver the message during the current call:
+    //      true: 1) deliver queued messages, 2) deliver msg (msgs) and return 2, 3) on error: do not queue msg; return -3.
+    //        NOTE Immediate sending is faster, because it copies memory only once, and does not make any dynamic allocations.
+    //          But to succeed, the shared queue must currently have free space enough for
+    //            msg (or msgs) total length + __shmqueue_ms_nbytes_overhead bytes per each message.
+    //      false: 1) queue msg, 2) deliver all queued messages; return 2 or 1 on complete or partial delivery.
+    // Returns:
+    //  Success:
+    //      2 - msg has (all msgs have) been sent.
+    //      1 - msg is (part or all msgs are) queued.
+    //        The shared queue is valid, but currently has not enough place.
+    //        Call msend_pending() later.
+    //  Failure:
+    //    0 - the shared queue exists, but not yet initialized by the receiver.
+    //      No attempt made to queue message(s) locally.
+    //    -1 - invalid msg object (or any of msgs objects).
+    //    -2 - failure.
+    //    -3 (only b_immediately == true) - "try again later" - a) couldn't get the shared object side 2 lock, b) shared queue overflow.
+    //    -5 - size of msg or any of msgs is too large for the shared queue (in case of msgs, all msgs not sent and not queued).
+  s_long msend_1(t_stringref msg, bool b_immediately) throw()
+  {
+    if (!msg.is_valid()){ return -1; }
+    s_long res = attempt_open(); if (res < 1) { return res; }
+    if (b_immediately) { res = _try_deliver_lq(arrayref_t<t_stringref>(&msg, 1)); }
+    else
+    {
+      cref_t<t_stringref> rmsg;
+      res = _make_rmsg(msg, rmsg); if (res < 1) { return res; }
+      if (lq.push_1(rmsg) < 1) { return -2; }
+      res = _try_deliver_lq();
+    }
+    return res;
+  }
+  s_long msend_n(const arrayref_t<t_stringref>& msgs, bool b_immediately) throw()
+  {
+    if (!msgs.is_valid()) { return -1; } for (s_ll i = 0; i < msgs.n(); ++i) { if (!msgs[i].is_valid()) { return -1; } }
+    s_long res = attempt_open(); if (res < 1) { return res; }
+    if (b_immediately) { res = _try_deliver_lq(msgs); }
+    else
+    {
+      cpparray_t<cref_t<t_stringref> > rmm; if (!rmm.resize(msgs.n())) { return -2; }
+      for (s_ll i = 0; i < msgs.n(); ++i) { res = _make_rmsg(msgs[i], rmm[i]); if (res < 1) { return res; } }
+      if (lq.push_n(rmm.pd(), rmm.n()) < 1) { return -2; }
+      res = _try_deliver_lq();
+    }
+    return res;
+  }
+  s_long msend_pending() throw()
+  {
+    s_long res = attempt_open(); if (res < 1) { return res; }
+    if (lq.navl() <= 0) { return 2; }
+    res = _try_deliver_lq();
+    return res;
+  }
+
+private:
+
+    // If _check_for_make_md returns true, __make_md with same arguments will 100% succeed.
+  static bool __check_for_make_md(s_ll nbufavl, t_stringref msg)
+  {
+    if (!msg.is_valid()) { return false; }
+    const s_ll __length = __shmqueue_ms_nbytes_overhead + msg.n(); if (__length > 0x7fffff00ll) { return false; } if (__length > nbufavl) { return false; }
+    return true;
+  }
+
+  static bool __make_md(s_ll nbufavl, t_stringref msg, _shmqms_header& h, s_long& chs)
+  {
+    if (!__check_for_make_md(nbufavl, msg)) { return false; }
+    const s_ll __length = __shmqueue_ms_nbytes_overhead + msg.n();
+    bmdx_str::words::set_be4(&h.length, 0, s_long(__length));
+    bmdx_str::words::set_be4(&h.lhash, 0, _shmqms_hash_len(__length));
+    s_long x = 0; for (s_ll i = 0; i < msg.n(); ++i) { x += (unsigned char)msg[i]; }
+    bmdx_str::words::set_be4(&chs, 0, x);
+    return true;
+  }
+
+    // NOTE _make_rmsg succeeds only if this->so is currently valid.
+    // 1 - success (and rmsg contains valid ref.), -1 - bad msg, -2 - failure, -5 - msg is too long.
+  s_long _make_rmsg(t_stringref msg, cref_t<t_stringref>& rmsg) throw()
+  {
+    if (!msg.is_valid()){ return -1; }
+    if (so.f_constructed() != 1) { return -2; }
+    try {
+      _shmqms_header header; s_long checksum = 0;
+      if (!__make_md(so->ringbuf.n(), msg, header, checksum)) { return -5; }
+      rmsg = bmdx_shm::shmqueue_s::make_rba_mp(t_stringref((const char*)&header, 8), msg, t_stringref((const char*)&checksum, 4));
+      return rmsg ? 1 : -2;
+    } catch (...) {}
+    return -2;
+  }
+    // 2 - success, pushed all (local queue is now empty); 1 - success, pushed part of messages into the valid shared queue (local queue is still not empty); -2 - shared queue is not accessible (or other failure); -3 - added messages are not delivered
+    //  added are tried all at once after lq; they are not queued even on delivery failure.
+  s_long _try_deliver_lq(const arrayref_t<t_stringref>& added = arrayref_t<t_stringref>())
+  {
+    if (so.f_constructed() != 1) { return -2; }
+    if (!added.is_valid()) { return -2; }
+    try {
+      typename t_so::shared_lock __lock(so); if (!__lock.b_lk_any()) { return added.n() > 0 ? -3 : (lq.navl() > 0 ? 1 : 2); }
+      if (so.f_constructed() != 1) { return -2; }
+      bmdx_shm::rfifo_nbl11& rb = so->ringbuf;
+      while (lq.navl() > 0)
+      {
+        cref_t<t_stringref>& data = lq.front();
+        if (data && data->is_valid() && data->n() + __shmqueue_ms_nbytes_overhead <= rb.n()) { if (rb.nfree() < data->n()) { break; }  rb.push(data->pd(), data->n()); }
+        lq.pop_1();
+      }
+      if (added.n() > 0)
+      {
+        s_ll nb_added = added.n() * __shmqueue_ms_nbytes_overhead;
+        const s_ll nrb = rb.n();
+        for (s_ll i = 0; i < added.n(); ++i)
+        {
+          if (!__check_for_make_md(nrb, added[i])) { return -3; }
+          nb_added += added[i].n();
+        }
+        if (rb.nfree() < nb_added) { return -3; }
+        for (s_ll i = 0; i < added.n(); ++i)
+        {
+          _shmqms_header header; s_long checksum = 0;
+          __make_md(nrb, added[i], header, checksum); // will succeed, checked above (__check_for_make_md)
+          rb.push((const char*)&header, 8);
+          rb.push(added[i].pd(), added[i].n());
+          rb.push((const char*)&checksum, 4);
+        }
+        return 2;
+      }
+    } catch (...) {}
+    return lq.navl() > 0 ? 1 : 2;
+  }
+};
+
+template<class AuxData, class _bs = bmdx_meta::nothing>
+struct shmqueue_ms_receiver_t // shared memory queue for multiple senders - single receiver side
+{
+  typedef arrayref_t<char> t_stringref;
+  struct _rso { AuxData auxd; bmdx_shm::rfifo_nbl11 ringbuf; };
+
+  const bmdx_shm::t_name_shm qname;
+  bmdx_shm::shmobj2s_t<_rso> so;
+  vec2_t<cref_t<t_stringref> > dd;
+  AuxData auxd_init; // used to init _rso::auxd when shared memory becomes available
+
+  shmqueue_ms_receiver_t(const bmdx_shm::t_name_shm& name_, const s_ll nbdflt_ = -1, const AuxData& auxd_init_ = AuxData())
+    : qname(name_), so(name_.n() ? name_.c_str() : "_", true, bmdx_minmax::myllmax(__shmqueue_ms_nbytes_min, nbdflt_), __shmqueue_ms_buf_uid)
+  { std::memcpy(&auxd_init, &auxd_init_, sizeof(AuxData)); dd.vec2_setf_can_shrink(false); }
+
+    // Attempts to connect to shared memory,
+    //    permanently lock the shared object, and initialize it if not yet.
+    //  *auxd_init: used at auxd object construction.
+    //    bytewise copied into auxd field of the shared object .
+    //    If auxd_init == 0, all auxd field bytes of the shared object are set to 0 on initialization.
+    //  Returns:
+    //    2 - success, the shared object is available (just created), no checks needed.
+    //    1 - success, connected to existing shared object. The object was already initialized by someone.
+    //        The client should check shared object's compatibility before any use.
+    //        All succeeding calls to attempt_init() will return 2.
+    //        If b_close_if_unchecked == true, attempt_init will return -4 instead of 1 (for use in mpop_*).
+    //    -2 - failure.
+    //    -3 - couldn't get the shared object side 1 lock.
+    //    -4 - the shared queue exists, but not accessible yet - try again later.
+  s_long attempt_init(bool b_close_if_unchecked = false)
+  {
+    if (so.f_constructed() == 1) { return 2; }
+    if (qname.n() <= 0) { return -2; }
+    s_long res = so.prepare(true);
+    if (res == 1)
+    {
+      if (so.nb() < __shmqueue_ms_nbytes_min) { so.close(); return -2; }
+      s_long res2 = so.f_constructed();
+        if (res2 == 1) { if (b_close_if_unchecked) { so.close(); return -4; } return 1; }
+      so.p()->ringbuf.init_ref(so.nb() - s_ll(sizeof(_rso) - bmdx_shm::rfifo_nbl11::n0));
+      std::memcpy(&so.p()->auxd, &auxd_init, sizeof(AuxData));
+      so.set_f_constructed(1);
+      return 2;
+    }
+    if (res == -3 || res == -4) { return res; }
+    return -2;
+  }
+
+  void close_shm() { so.close(); }
+
+    //  mpop_1: pop one message if it exists - put into dd[0].
+    //  mpop_avl: pop max. possible number of existing messages.
+    //  Returns:
+    //    1 - success, got 1 message (mpop_1) or >= 1 msgs. (mpop_avl). dd contains the messages.
+    //    0 - the shared queue is available, but it's empty.
+    //    -2 - failure.
+    //    -3 - couldn't get the shared object side 1 lock.
+    //    -4 - the shared queue exists, but not accessible yet - try again later.
+  s_long mpop_1()
+  {
+    dd.clear();
+    s_long res = attempt_init(true); if (res < 1) { return res; }
+    res = _pop_next();
+    return res;
+  }
+  s_long mpop_avl()
+  {
+    dd.clear();
+    s_long res = attempt_init(true); if (res < 1) { return res; }
+    while (true) { res = _pop_next(); if (res < 1) { break; } }
+    if (dd.n() > 0) { return 1; }
+    return res;
+  }
+private:
+    // 1 - got one message, 0 - the queue is empty, -2 - failure, -3 - couldn't get side 1 lock, -4 - the queue is not accessible yet
+  s_long _pop_next()
+  {
+    if (so.f_constructed() != 1) { return -1; }
+    try {
+      bmdx_shm::rfifo_nbl11& rb = so->ringbuf;
+      const s_ll ipu = rb.ipush();
+      const s_ll ipo = rb.ipop();
+      if (ipu < ipo + __shmqueue_ms_nbytes_overhead) { return 0; }
+      _shmqms_header header;
+      rb.pop((char*)&header, 8, false);
+      header.length = bmdx_str::words::be4(&header.length, 0);
+      header.lhash = bmdx_str::words::be4(&header.lhash, 0);
+      if (!(header.length >= 0 && header.lhash == _shmqms_hash_len(header.length) && ipo + header.length <= ipu)) { rb._rcv_set_ipop(ipu); return -2; } // recovery: completely ignore all existing input, try to start later from the next input
+      const s_long nbdata = header.length - __shmqueue_ms_nbytes_overhead;
+      cref_t<t_stringref> rdata = bmdx_shm::shmqueue_s::make_rba_z(nbdata, 1); if (!rdata) { return -2; }
+      if (!dd.el_append(rdata)) { return -2; }
+      rb._rcv_set_ipop(ipo + 8);
+      char* pd = rdata->pd();
+      s_long checksum = 0, checksum2 = 0;
+      if (nbdata > 0) { rb.pop(pd, nbdata, true, &checksum); }
+      rb.pop((char*)&checksum2, 4, true); checksum2 = bmdx_str::words::be4(&checksum2, 0);
+      if (checksum2 != checksum) { dd.el_remove_last(); return -2; }
+      return 1;
+    } catch (...) {}
+    return -2;
+  }
+};
+
+
+#if bmdx_part_dispatcher_mt
+
+#define __bmdx_dispatcher_name_prefix "bmdx_disp"
+#define __bmdx_disp_lq_cleanup_dtms 1500
+
+#define __lm_slot_controller_name_prefix "bmdx_lmsc"
+#define __lm_slot_controller_user_msg_max_ver 1
+#define __lm_slot_controller_nbmax_peer_name_root 100 // should be less than ( min(MAX_PATH, capacity(bmdx_shm::t_name_shm))  - (8 + len(__lm_slot_controller_name_prefix)) ) / 2
+
+#define __lm_slot_controller_reinit_short_dtms 100
+#define __lm_slot_controller_reinit_long_dtms 400
+#define __lm_slot_controller_peer_reinit_dtms 250
+
+#define __lm_slot_controller_qum_send_avl_wait_toms 150
+#define __lm_slot_controller_qum_send_avl_chk_dtms 10
+#define __lm_slot_controller_peer_prc_hang_toms 3000 // should be much longer than single LMSC det_periodic() call on high load
+#define __lm_slot_controller_thread_hang_toms 3000 // -"-
+
+#define __lm_slot_controller_nb_rqum_min (__bmdx_shmfifo_nbytes_dflt / 10)
+#define __lm_slot_controller_nb_rqum_max (__bmdx_shmfifo_msg_nbytes_max)
+#define __lm_slot_controller_nb_rqum_dflt (100 * 1024) // a copy of __bmdx_shmfifo_nbytes_dflt
+
+#define __lm_slot_controller_nb_rqinfo_min (__shmqueue_ms_nbytes_min)
+#define __lm_slot_controller_nb_rqinfo_max (__bmdx_shmfifo_msg_nbytes_max / 10)
+#define __lm_slot_controller_nb_rqinfo_dflt (100 * 1024) // a copy of __bmdx_shmfifo_nbytes_dflt
+
+namespace
+{
+  static const s_long _fl_msend_anlo_msg = 0x10;
+  static const s_long _fl_msend_anlo_att = 0x20;
+  static const s_long _fl_msend_ignore_hanged = 0x40;
+  static const s_long _fl_msend_use_chsbin = 0x80;
+  static const s_long _fl_msend__mask_clt_msend = _fl_msend_ignore_hanged | _fl_msend_use_chsbin;
+}
+
+using yk_c::hashx;
+typedef hashx<s_ll, cref_t<i_dispatcher_mt::tracking_info> > t_htracking_proxy; // { msg. or subscription id, state }
+struct t_mtrk_sender_info
+{
+  weakref_t<t_htracking_proxy> rhtrprx;
+  s_ll ipush_shmlq;
+
+  t_mtrk_sender_info() : ipush_shmlq(-1) {}
+};
+struct t_mtrk_sender_info_id_list
+{
+  t_mtrk_sender_info si;
+  vec2_t<i_dispatcher_mt::tracking_info> tii;
+};
+struct t_mtrk_qipush_entry
+{
+  s_ll id_msg;
+  s_ll ipush_shmlq;
+  t_mtrk_qipush_entry() { id_msg = ipush_shmlq = -1; }
+  t_mtrk_qipush_entry(s_ll id_msg_, s_ll ipush_shmlq_) { id_msg = id_msg_; ipush_shmlq = ipush_shmlq_; }
+};
+} // namespace bmdx_main_intl_lib
+namespace yk_c
+{
+  template<> struct vecm::spec<bmdx_main_intl_lib::t_mtrk_sender_info> { typedef bmdx_main_intl_lib::t_mtrk_sender_info t; typedef config_t<t, 1, 4, 1> config; };
+  template<> struct vecm::spec<bmdx_main_intl_lib::t_mtrk_sender_info_id_list> { typedef bmdx_main_intl_lib::t_mtrk_sender_info_id_list t; typedef config_t<t, 1, 4, 1> config; };
+  template<> struct vecm::spec<bmdx_main_intl_lib::t_mtrk_qipush_entry> { typedef bmdx_main_intl_lib::t_mtrk_qipush_entry t; typedef config_t<t, 1, 4, 1> config; };
+}
+namespace bmdx_main_intl_lib
+{
+
+  // Creates the given name's representation, suitable for global objects (UTF-8-encoded, limited to bmdx_shm::t_name_shm capacity).
+static bmdx_shm::t_name_shm make_fixed_utf8_name(arrayref_t<wchar_t> name) throw() { return bmdx_shm::t_name_shm(name.pd(), name.n()); }
+static bool is_arch_le() throw() { s_long q = 1; return *(unsigned char*)&q == 1; }
+
+//========
+//Structure of plain bytearray, passed by dispatcher controllers via IPC and network:
+//  (header, data)
+//  header:
+//    uint2 parts:
+//      bit 0 (1) - metadata (md) and its checksum (chsmd) present
+//      bit 1 (2) - main (informational) message part (msg) and its checksum (chsmsg) present
+//      bit 2 (4) - optional custom part (cus) present
+//      bit 3 (8) - custom part checksum (chscus) present
+//      bit 4 (16) - optional binary attachment (bin) present
+//      bit 5 (32) - binary attachment checksum (chsbin) present
+//      bit 6 (64) - msg encoding: 1 - UTF-8, 0 - UTF-16LE
+//      bit 7 (128) - 1-byte padding is inserted between md and msg parts (even if any of them is absent)
+//      bit 8..15 - reserved, set to 0
+//    optional (length3 nmd, uint4 chsmd)
+//    optional (length5 nmsg, uint4 chsmsg) (NOTE normally, msg is expected to be 1 kB .. 10 MB long, max. len. 2^40-1 is expected to be technically limited)
+//    optional length5 ncus (NOTE max. len. 2^40-1 is expected to be technically limited)
+//    optional uint6 chscus
+//    optional length5 nbin (NOTE max. len. 2^40-1 is expected to be technically limited)
+//    optional uint6 chsbin
+//    uint2 - chshdr - checksum of whole header, i.e. [parts..chsnbin]
+//  data:
+//    optional md
+//    optional uchar padding1 = 0: if msg part is present, may (not must) be inserted to make UTF-16 msg start from even address
+//    optional msg
+//    optional uchar cus[ncus]
+//    optional uchar bin[nbin]
+//========
+//Types:
+//  uchar: 8-bit unsigned char
+//  length<N>: uchar[N], BE unsigned (8*N)-bit integer
+//  uint<N>: uchar[N], BE unsigned (8*N)-bit integer
+//========
+//md (list of chunks with extensible structure):
+//  uint4 mdt:
+//    bits 0..30: metadata type; a range of values may be defined to store short data in the type field
+//    bit 31: following metadata contents: 1 - present, 0 - absent
+//  optional (length3 ndata, uchar data[ndata]) - metadata contents, (ndata == nmd - 4 in single-part metadata, ndata < nmd - 4 in multipart metadata), data format depends on type
+//  optional (uint4 mdt2, (length3 ndata2, uchar data2[ndata2])) - next chunk of multipart metadata
+//  ...
+//========
+//Other parts:
+//  msg: uchar data[nmsg] - complete message wide string in paramline format, characters encoding is as header.parts bit 6
+//  cus: uchar data[ncus] - complete array of user-defined values
+//  bin: uchar data[nbin] - complete array of binary attachment
+struct netmsg_header
+{
+  typedef i_dispatcher_mt::t_stringref t_stringref;
+private:
+  template<class t_fld> void _fld_decode_dref(const char*& ph, t_stringref& z, s_ll& off, s_ll& ndleft, const char*& pd, const char* const orig_pd) const        { z.link(pd, ((t_fld*)ph)->value()); ph += sizeof(t_fld); off = pd - orig_pd; ndleft -= z.n(); pd += z.n(); }
+  template<class t_fld, class t_dest> void _fld_decode_value(const char*& ph, t_dest& z) const        { z = ((const t_fld*)ph)->value(); ph += sizeof(t_fld); }
+public:
+  typedef unsigned char uchar;
+  struct length3 { uchar n[3]; length3() { n[0] = 0; n[1] = 0; n[2] = 0; } bmdx_meta::u_long value() const { bmdx_meta::u_long q = n[0]; q <<= 8; q |= n[1]; q <<= 8; q |= n[2]; return q; } void set(bmdx_meta::u_long x) { n[2] = (uchar)x; x >>= 8; n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+  struct length5 { uchar n[5]; length5() { n[0] = 0; n[1] = 0; n[2] = 0; n[3] = 0; n[4] = 0; } bmdx_meta::u_ll value() const { bmdx_meta::u_ll q = n[0]; q <<= 8; q |= n[1]; q <<= 8; q |= n[2]; q <<= 8; q |= n[3]; q <<= 8; q |= n[4]; return q; } void set(bmdx_meta::u_ll x) { n[4] = (uchar)x; x >>= 8; n[3] = (uchar)x; x >>= 8; n[2] = (uchar)x; x >>= 8; n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+  struct uint1 { uchar n[1]; uint1() { n[0] = 0; }                            uchar value() const { return n[0]; } void set(bmdx_meta::u_long x) { n[0] = (uchar)x; } };
+  struct uint2 { uchar n[2]; uint2() { n[0] = 0; n[1] = 0; }                            bmdx_meta::u_long value() const { bmdx_meta::u_long q = n[0]; q <<= 8; q |= n[1]; return q; } void set(bmdx_meta::u_long x) { n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+  struct uint4 { uchar n[4]; uint4() { *(bmdx_meta::u_long*)this = 0; }                        bmdx_meta::u_long value() const { bmdx_meta::u_long q = n[0]; q <<= 8; q |= n[1]; q <<= 8; q |= n[2]; q <<= 8; q |= n[3]; return q; } void set(bmdx_meta::u_long x) { n[3] = (uchar)x; x >>= 8; n[2] = (uchar)x; x >>= 8; n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+  struct uint6 { uchar n[6]; uint6() { n[0] = 0; n[1] = 0; n[2] = 0; n[3] = 0; n[4] = 0; n[5] = 0; }   bmdx_meta::u_ll value() const { bmdx_meta::u_ll q = n[0]; q <<= 8; q |= n[1]; q <<= 8; q |= n[2]; q <<= 8; q |= n[3]; q <<= 8; q |= n[4]; q <<= 8; q |= n[5]; return q; } void set(bmdx_meta::u_ll x) { n[5] = (uchar)x; x >>= 8; n[4] = (uchar)x; x >>= 8; n[3] = (uchar)x; x >>= 8; n[2] = (uchar)x; x >>= 8; n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+  struct uint8 { uchar n[8]; uint8() { *(bmdx_meta::u_ll*)this = 0; }                                           bmdx_meta::u_ll value() const { bmdx_meta::u_ll q = n[0]; q <<= 8; q |= n[1]; q <<= 8; q |= n[2]; q <<= 8; q |= n[3]; q <<= 8; q |= n[4]; q <<= 8; q |= n[5]; q <<= 8; q |= n[6]; q <<= 8; q |= n[7]; return q; } void set(bmdx_meta::u_ll x) { n[7] = (uchar)x; x >>= 8; n[6] = (uchar)x; x >>= 8; n[5] = (uchar)x; x >>= 8; n[4] = (uchar)x; x >>= 8; n[3] = (uchar)x; x >>= 8; n[2] = (uchar)x; x >>= 8; n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+  struct sint8 { uchar n[8]; sint8() { *(s_ll*)this = 0; }                                           s_ll value() const { s_ll q = n[0]; q <<= 8; q |= n[1]; q <<= 8; q |= n[2]; q <<= 8; q |= n[3]; q <<= 8; q |= n[4]; q <<= 8; q |= n[5]; q <<= 8; q |= n[6]; q <<= 8; q |= n[7]; return q; } void set(s_ll x) { n[7] = (uchar)x; x >>= 8; n[6] = (uchar)x; x >>= 8; n[5] = (uchar)x; x >>= 8; n[4] = (uchar)x; x >>= 8; n[3] = (uchar)x; x >>= 8; n[2] = (uchar)x; x >>= 8; n[1] = (uchar)x; x >>= 8; n[0] = (uchar)x; } };
+
+  typedef uint2 t_parts; typedef uint2 t_chshdr;
+  typedef length3 t_nmd; typedef uint4 t_chsmd;
+  typedef length5 t_nmsg; typedef uint4 t_chsmsg;
+  typedef length5 t_ncus; typedef uint6 t_chscus;
+  typedef length5 t_nbin; typedef uint6 t_chsbin;
+
+  typedef uint4 t_md1_type;
+  typedef length3 t_nmd1;
+  struct t_md1_hdr_max { t_md1_type t; t_nmd1 n; };
+
+  enum Epart_flags { fpt_md = 1, fpt_msg = 2, fpt_cus = 4, fpt_chscus = 8, fpt_bin = 16, fpt_chsbin = 32, fl_msg_utf8 = 64, fl_padding1 = 128  };
+
+  s_long parts;
+    bool has_md() const { return !!(parts & fpt_md); }
+    bool has_msg() const { return !!(parts & fpt_msg); }
+    bool has_cus() const { return !!(parts & fpt_cus); }
+    bool has_chscus() const { return !!(parts & fpt_chscus); }
+    bool has_bin() const { return !!(parts & fpt_bin); }
+    bool has_chsbin() const { return !!(parts & fpt_chsbin); }
+    bool b_msg_utf8() const { return !!(parts & fl_msg_utf8); }
+    bool b_padding1() const { return !!(parts & fl_padding1); }
+  t_stringref md, msg, cus, bin;
+  bmdx_meta::u_long chshdr, chsmd, chsmsg;
+  s_ll chscus, chsbin, off_md, off_msg, off_cus, off_bin;
+
+  netmsg_header() { fields_clear(); }
+  void clear() { fields_clear(); }
+  void fields_clear() { parts = 0; md.clear(); msg.clear(); cus.clear(); bin.clear(); chshdr = chsmd = chsmsg = 0; chscus = chsbin = off_md = off_msg = off_cus = off_bin = 0; }
+  static inline s_long nbhdr(s_long fl_parts)
+  {
+    s_long nh = sizeof(t_parts) + sizeof(t_chshdr);
+      if (fl_parts & fpt_md) { nh += sizeof(t_nmd) + sizeof(t_chsmd); }
+      if (fl_parts & fpt_msg) { nh += sizeof(t_nmsg) + sizeof(t_chsmsg); }
+      if (fl_parts & fpt_cus) { nh += sizeof(t_ncus); }
+      if (fl_parts & fpt_chscus) { nh += sizeof(t_chscus); }
+      if (fl_parts & fpt_bin) { nh += sizeof(t_nbin); }
+      if (fl_parts & fpt_chsbin) { nh += sizeof(t_chsbin); }
+    return nh;
+  }
+    // Decodes orig's header and verifies checksums as necessary.
+    //  fl_chkdchs: bits are same a in .parts: if the bit set, verify data checksum if it's available (note that header checksum is verified anyway)
+    // Returns:
+    //    true - decoding successful, the specified checksums are OK
+    //    false - logical error during decoding, or any of the specified checksums does not match with that in orig; *this is not modified
+  bool fields_decode(const t_stringref& orig, s_long fl_chkdchs = fpt_md|fpt_msg|fpt_cus|fpt_bin)
+  {
+    netmsg_header h2; bool b = false;
+    do { // once
+      if (orig.n() < s_ll(sizeof(t_parts) + sizeof(t_chshdr))) { break; }
+      const char* ph = orig.pd();
+        if (1) { this->_fld_decode_value<t_parts>(ph, h2.parts); }
+      const s_long nh = nbhdr(h2.parts);
+      s_ll ndleft = orig.n() - nh;
+      if (ndleft < 0) { break; }
+
+      if (1) { const uchar* ph = (uchar*)orig.pd(); const uchar* const ph2 = ph + nh - sizeof(t_chshdr); bmdx_meta::u_long chs = 0; while (ph != ph2) { chs += *ph++; } h2.chshdr = ((const t_chshdr*)ph)->value(); if (chs != h2.chshdr) { break; } }
+      const char* pd = orig.pd() + nh;
+        if (h2.has_md()) { this->_fld_decode_dref<t_nmd>(ph, h2.md, h2.off_md, ndleft, pd, orig.pd()); }
+        if (h2.has_md()) { this->_fld_decode_value<t_chsmd>(ph, h2.chsmd); }
+        if (h2.b_padding1()) { pd += 1; ndleft -= 1; }
+        if (h2.has_msg()) { this->_fld_decode_dref<t_nmsg>(ph, h2.msg, h2.off_msg, ndleft, pd, orig.pd()); }
+        if (h2.has_msg()) { this->_fld_decode_value<t_chsmsg>(ph, h2.chsmsg); }
+        if (h2.has_cus()) { this->_fld_decode_dref<t_ncus>(ph, h2.cus, h2.off_cus, ndleft, pd, orig.pd()); }
+        if (h2.has_chscus()) { this->_fld_decode_value<t_chscus>(ph, h2.chscus); }
+        if (h2.has_bin()) { this->_fld_decode_dref<t_nbin>(ph, h2.bin, h2.off_bin, ndleft, pd, orig.pd()); }
+        if (h2.has_chsbin()) { this->_fld_decode_value<t_chsbin>(ph, h2.chsbin); }
+      if (ndleft < 0) { break; }
+
+      if ((fl_chkdchs & fpt_md) && h2.has_md() && !chkchs(h2.md, h2.chsmd)) { break; }
+      if ((fl_chkdchs & fpt_msg) && h2.has_msg() && !chkchs(h2.msg, h2.chsmsg)) { break; }
+      if ((fl_chkdchs & fpt_cus) && h2.has_cus() && h2.has_chscus() && !chkchs(h2.cus, h2.chscus)) { break; }
+      if ((fl_chkdchs & fpt_bin) && h2.has_bin() && h2.has_chsbin() && !chkchs(h2.bin, h2.chsbin)) { break; }
+      parts = h2.parts; md = h2.md; msg = h2.msg; cus = h2.cus; bin = h2.bin; chshdr = h2.chshdr; chsmd = h2.chsmd; chsmsg = h2.chsmsg; chscus = h2.chscus; chsbin = h2.chsbin; off_md = h2.off_md; off_msg = h2.off_msg; off_cus = h2.off_cus; off_bin = h2.off_bin;
+      b = true;
+    } while (false);
+    return b;
+  }
+
+  static bool chkchs(t_stringref x, s_ll chs) { if (!x.is_valid()) { return false; } const uchar* p = (uchar*)x.pd(); const uchar* const p2 = p + x.n(); s_ll chs2 = 0; while (p != p2) { chs2 += *p++; } return chs2 == chs; }
+  static s_ll calcchs(t_stringref x) { if (!x.is_valid()) { return 0; } const uchar* p = (uchar*)x.pd(); const uchar* const p2 = p + x.n(); s_ll chs2 = 0; while (p != p2) { chs2 += *p++; } return chs2; }
+  static s_ll calcchs(void* pd, s_ll n) { return calcchs(t_stringref((char*)pd, n)); }
+
+  struct msg_builder;
+  struct mdd_deliv_reply { enum  { stype = 51 }; uint8 id_object; sint8 res; uint1 flags; s_long type() const { return stype; } operator char*() { return (char*)this; } };
+  struct mdd_subs_request
+  {
+    enum  { stype = 52 };
+    s_long type() const { return stype; }
+
+    s_long rt; // valid value: 1..6, dflt. -1
+    s_ll id_trk;
+    s_long nb_qsa, nb_suba;
+    void* pmsg;
+
+    mdd_subs_request() { clear(); }
+    void clear() { rt = -1; id_trk = -1; nb_qsa = nb_suba = 0; pmsg = 0; }
+
+      // Message structure (influences is_valid, read_msg, pqsa_utf8, psuba_utf8, set_msg):
+      //        uint1 rt
+      //            1..3: type of query to qs, see _s_subscribe.
+      //            4..6: type of query to subscribed slot, analogous to (1..3) for qs.
+      //        uint8 id_trk
+      //        length3 nb_qsa
+      //        length3 nb_suba
+      //        uchar qsa_utf8[nb_qsa] - qs slot address (converted to LP type)
+      //        uchar suba[nb_suba] - subscribed slot address (converted to LM type)
+    enum { nb_fixed = sizeof(uint1) + sizeof(uint8) + 2 * sizeof(length3) };
+
+    bool is_valid() const { return rt >= 1 && rt <= 6 && id_trk != -1 && nb_qsa > 0 && nb_suba > 0 && (nb_fixed + nb_qsa + nb_suba) < (1 << sizeof(t_nmd) * 8) && !!pmsg; }
+
+    bool read_msg(t_stringref msg)
+    {
+      clear();
+      if (!(msg.is_valid() && msg.n() >= nb_fixed)) { return false; }
+      const char* p = msg.pd();
+      if (1) { typedef uint1 t_field; rt = ((t_field&)*p).value(); p += sizeof(t_field); }
+      if (1) { typedef uint8 t_field; id_trk = ((t_field&)*p).value(); p += sizeof(t_field); }
+      if (1) { typedef length3 t_field; nb_qsa = ((t_field&)*p).value(); p += sizeof(t_field); }
+      if (1) { typedef length3 t_field; nb_suba = ((t_field&)*p).value(); p += sizeof(t_field); }
+      if (nb_fixed + nb_qsa + nb_suba != msg.n()) { return false; }
+      pmsg = msg.pd();
+      return is_valid();
+    }
+      // != 0 on is_valid() == true.
+    uchar* pqsa_utf8() const { if (!pmsg) { return 0; } return (uchar*)pmsg + nb_fixed; }
+      // != 0 on is_valid() == true.
+    uchar* psuba_utf8() const { if (!pmsg) { return 0; } return (uchar*)pmsg + nb_fixed + nb_qsa; }
+
+      // rt:
+      //    1..3: type of query to qs, see _s_subscribe.
+      //    4..6: type of query to subscribed slot, analogous to (1..3) for qs.
+    static cref_t<netmsg_header::msg_builder> make_msg(s_long rt, s_ll id_trk, arrayref_t<wchar_t> qsa, arrayref_t<wchar_t> suba)
+    {
+      cref_t<netmsg_header::msg_builder> rmb;
+      if (!(rt >= 1 && rt <= 6)) { return rmb; }
+      if (!(qsa.is_valid() && qsa.n() > 0 && suba.is_valid() && suba.n() > 0)) { return rmb; }
+      carray_r_t<char> d;
+      try {
+        std::string qsa_s(bmdx_str::conv::wsbs_utf8(qsa.pd(), qsa.n()));
+        std::string suba_s(bmdx_str::conv::wsbs_utf8(suba.pd(), suba.n()));
+        if (!(qsa_s.size() > 0 && qsa_s.size() < 0x1fffff && suba_s.size() > 0 && suba_s.size() < 0x1fffff)) { return rmb; }
+        s_long nb_qsa = (s_long)qsa_s.size();
+        s_long nb_suba = (s_long)suba_s.size();
+        if (!d.resize(nb_fixed + nb_qsa + nb_suba, false, true)) { return rmb; }
+        char* p = d.pd();
+        if (1) { typedef uint1 t_field; ((t_field&)*p).set(rt); p += sizeof(t_field); }
+        if (1) { typedef uint8 t_field; ((t_field&)*p).set(id_trk); p += sizeof(t_field); }
+        if (1) { typedef length3 t_field; ((t_field&)*p).set(nb_qsa); p += sizeof(t_field); }
+        if (1) { typedef length3 t_field; ((t_field&)*p).set(nb_suba); p += sizeof(t_field); }
+        bmdx_str::words::memmove_t<char>::sf_memcpy(p, qsa_s.c_str(), nb_qsa); p += nb_qsa;
+        bmdx_str::words::memmove_t<char>::sf_memcpy(p, suba_s.c_str(), nb_suba); p += nb_suba;
+        qsa_s.clear(); suba_s.clear();
+        if (!(rmb.create2(1, fpt_md, sizeof(netmsg_header::t_md1_hdr_max) + d.n()) && rmb->set_md1(stype, d) && rmb->set_final())) { rmb.clear(); }
+      } catch (...) {}
+      return rmb;
+    }
+  };
+  struct mdd_subs_reply { enum  { stype = 53 }; uint8 id_object; sint8 res; s_long type() const { return stype; } operator char*() { return (char*)this; } };
+  struct mdd_id_msg { enum  { stype = 54 }; uint8 id_msg; uint1 flags; s_long type() const { return stype; } operator char*() { return (char*)this; } };
+  struct mdd_id_msg_cmd { enum  { stype = 55 }; uint8 id_msg; s_long type() const { return stype; } operator char*() { return (char*)this; } };
+
+  struct md_entry
+  {
+      // 31-bit metadata type.
+      //  If entry contains metadata, bit 31 == 0, i.e. type >= 0; dflt. type == -1 (no entry).
+      // Available types and their formats:
+      //  type (1, 2): request for making input queue for messages.
+      //      type 1 states that this is the first request from the peer process.
+      //      type 2 states that this request is a hint for shared queues ownership regaining (may appear after the current process restart).
+      //      data: uchar name_peerf[data.n()]: make_fixed_utf8_name of peer's dispatcher process name (one that has sent the current message)
+      //  type [3..50]: user message format version id; no data field
+      //  type 51: peer process returns user message receival status
+      //      data:
+      //        uint8 id_msg
+      //        sint8 result_code (one of related i_dispatcher_mt::msend result codes)
+      //        uint1 flags: see type 54
+      //  type 52: peer process requests _s_subscribe
+      //      data: see struct mdd_subs_request
+      //  type 53: peer process returns the result of _s_subscribe
+      //  type 54: user msg id with requirements for delivery report
+      //      data:
+      //        uint8 id_msg
+      //        uint1 ORed flags of delivery report requirements (1 - for tracking, 2 - for command slot phase change)
+      //  type 55: user command msg id (for being sent back as part of command response)
+      //      data: uint8 id_msg
+    s_long type;
+    t_stringref data;
+    md_entry() { type = -1; }
+    bool b_type(s_long t) const { return type == t; }
+    bool b_type(s_long t1, s_long t2) const { return type == t1 || type == t2; }
+    template<class T> bool b_valid_size() { return data.n() == sizeof(T); }
+  };
+    // Get metadata parts.
+    //    *this must be valid object, pointing to valid original data (see also fields_decode).
+    //    b_full_scan: true - count (loop through) all parts, false - count only parts, fitting into dest_mde.n().
+    // Returns:
+    //    >= 0 - the full number of parts available.
+    //      May be > dest_mde.n().
+    //      In dest_mde, min(dest_mde.n(), ret. val.) entries are set to parts data. The rest of them (if any) are not modified.
+    //    -2 - failure.
+  s_long get_mde(arrayref_t<md_entry> dest_mde, bool b_full_scan)
+  {
+    if (!dest_mde.is_valid()) { return -2; }
+    if (!has_md()) { return 0; }
+    if (!md.is_valid()) { return -2; }
+    const char* pd = md.pd(); s_ll n = md.n();
+    s_long imde = 0;
+    while (n >= s_ll(sizeof(t_md1_type)))
+    {
+      if (!b_full_scan && imde >= dest_mde.n()) { break; }
+      bmdx_meta::u_long t = ((const t_md1_type*)pd)->value();
+      pd += sizeof(t_md1_type); n -= sizeof(t_md1_type);
+      const char* pdata = 0; s_long ndata = 0;
+      if (t & 0x80000000l)
+      {
+        t &= 0x7fffffffl;
+        if (n < s_ll(sizeof(t_nmd1))) { break; }
+        ndata = ((const t_nmd1*)pd)->value();
+        pd += sizeof(t_nmd1); n -= sizeof(t_nmd1);
+        if (n < ndata) { break; }
+        pdata = pd;
+        pd += ndata; n -= ndata;
+      }
+      if (imde < dest_mde.n())
+      {
+        dest_mde[imde].type = t;
+        if (pdata) { dest_mde[imde].data.link(pdata, ndata); } else { dest_mde[imde].data.clear(); }
+      }
+      ++imde;
+    }
+    return imde;
+  }
+
+  struct msg_builder
+  {
+    cref_t<t_stringref> msg;
+
+    typedef carray_r_t<char> t_rstr_ct;
+
+    msg_builder(s_long fl_parts, s_ll nbrsv = 0) { reset(fl_parts, nbrsv); }
+
+    bool b_valid() const { return msg && pa; } // returns true if the object is valid and contains incomplete or complete message
+    bool b_complete() const { return b_valid() && !!msg->pd(); } // returns true if complete message exists in msg
+    bmdx_meta::u_long parts() const { return pparts ? pparts->value() : 0; }
+
+      // true if reset successfully, false if failed (in this case, b_nem() == false).
+      //  nbrsv > 0 reserves in data array, in addition to header, nbrsv bytes, to later faultless message parts adding.
+    bool reset(s_long fl_parts, s_ll nbrsv = 0)
+    {
+      msg.clear();
+      pa = 0; pparts = 0; pchshdr = 0; pnmd = 0; pnmsg = 0; pncus = 0; pnbin = 0;
+      _nbhdr = nbhdr(fl_parts);
+      max_part = 0; chsmd = 0;
+
+      typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
+      msg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), sizeof(t_rstr_ct));
+      pa = (t_rstr_ct*)msg.paux();
+      if (!pa) { msg.clear(); return false; }
+      if (nbrsv > 0 && !pa->reserve(_nbhdr + nbrsv)) { pa = 0; msg.clear(); return false; }
+      if (!pa->resize(_nbhdr, false, false)) { pa = 0; msg.clear(); return false; }
+      pparts = (t_parts*)pa->pd();
+      pchshdr = (t_chshdr*)((char*)pa->pd() + _nbhdr - sizeof(t_chshdr));
+      char* ph = (char*)pparts + sizeof(t_parts);
+      if (fl_parts & fpt_md) { pnmd = (t_nmd*)ph; ph += sizeof(t_nmd); ph += sizeof(t_chsmd); }
+      if (fl_parts & fpt_msg) { pnmsg = (t_nmsg*)ph; ph += sizeof(t_nmsg); ph += sizeof(t_chsmsg); }
+//      if (fl_parts & fpt_cus) { pncus = (t_ncus*)ph; ph += sizeof(t_ncus); }
+//      if (fl_parts & fpt_chscus) { ph += sizeof(t_chscus); }
+      if (fl_parts & fpt_bin) { pnbin = (t_nbin*)ph; ph += sizeof(t_nbin); }
+      if (fl_parts & fpt_chsbin) { ph += sizeof(t_chsbin); }
+      pparts->set(fl_parts);
+      return true;
+    }
+
+      // Adds 1 metadata entry. May be called multiple times.
+      // NOTE according to metadata entry format, set_md1 allocates
+      //    1) sizeof(t_md1_type) for metadata type.
+      //    2) sizeof(t_nmd1) for storing data1.n() value, or 0 if data1.n() == 0.
+      //    3) data1.n() for copy of data1.
+    bool set_md1(s_long type, t_stringref data1 = t_stringref())
+    {
+      if (!data1.is_valid()) { return false; }
+      if (!(b_valid() && pnmd && max_part <= fpt_md)) { return false; }
+      const bool b_data = data1.n() > 0;
+      const s_ll n0 = pa->n();
+      const s_ll nmd1 = sizeof(t_md1_type) + (b_data ? sizeof(t_nmd1) + data1.n() : 0);
+      const s_ll nmd_total = n0 + nmd1 - _nbhdr;
+      if (nmd_total >> sizeof(t_nmd) * 8) { return false; } // total metadata size value may not exceed t_nmd field size (i.e. 24 bits)
+      if (!_pa_resize(n0 + nmd1)) { return false; }
+      uchar* p0 = (uchar*)(pa->pd() + n0);
+      ((t_md1_type*)p0)->set(bmdx_meta::u_long(type) | (b_data ? 0x80000000l : 0)); p0 += sizeof(t_md1_type);
+      if (b_data) { ((t_nmd1*)p0)->set(bmdx_meta::u_long(data1.n())); p0 += sizeof(t_nmd1); }
+      if (b_data) { bmdx_str::words::memmove_t<char>::sf_memcpy(p0, data1.pd(), data1.n()); p0 += data1.n(); }
+
+      chsmd += s_long(calcchs(pa->pd() + n0, nmd1));
+      pnmd[0].set(bmdx_meta::u_long(nmd_total));
+      ((t_chsmd&)pnmd[1]).set(chsmd);
+      max_part = fpt_md;
+      return true;
+    }
+      // Adds user message.
+    bool set_umsg(arrayref_t<wchar_t> data)
+    {
+      if (!data.is_valid()) { return false; }
+      if (!(b_valid() && pnmsg && max_part < fpt_msg)) { return false; }
+      if (data.n() >> (sizeof(t_nmsg) * 8 - 4)) { return false; } // fact. msg. length in bytes is limited here to 37-bit unsigned integer.
+      s_ll off = pa->n(), nb_add = 0; // both values are adjusted later
+      s_long chsmsg = 0;
+
+      if (is_arch_le() && sizeof(wchar_t) == 2) // direct copy of data into message, as UTF-16LE
+      {
+        bool b_pad = false;
+        const s_ll nbmsg = 2 * data.n();
+        nb_add = nbmsg;
+        if (off & 1) { off += 1; nb_add += 1; b_pad = true; }
+        if (!_pa_resize(pa->n() + nb_add)) { return false; }
+        if (data.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(pa->pd() + off, data.pd(), nbmsg, &chsmsg); }
+        if (b_pad) { pparts->set(pparts->value() | fl_padding1); }
+        pnmsg[0].set(nbmsg);
+      }
+      else
+      {
+        cref_t<std::string, cref_nonlock> s_utf8; bool b_lsb = true;
+        const wchar_t* pd = data.pd(); const wchar_t* const pd2 = pd + data.n();
+        while (pd != pd2) { uchar c1 = (uchar)*pd; uchar c2 = (uchar)(*pd>>8); chsmsg += c1; chsmsg += c2; if (c2 || (c1 & 128)) { b_lsb = false; } ++pd; }
+        if (!b_lsb) { try { s_utf8.create1(0, bmdx_str::conv::wsbs_utf8(data.pd(), data.n())); } catch (...) { return false; } }
+        if (s_utf8)
+        {
+          nb_add = s_utf8->size();
+          if (!_pa_resize(pa->n() + nb_add)) { return false; }
+          bmdx_str::words::memmove_t<char>::sf_memcpy(pa->pd() + off, s_utf8->c_str(), nb_add, &chsmsg); // NOTE checksum is recalculated, because data has been converted
+          pparts->set(pparts->value() | fl_msg_utf8);
+          pnmsg[0].set(s_utf8->size());
+        }
+        else // b_lsb == true: simple copy of LSB of each character
+        {
+          nb_add = data.n();
+          if (!_pa_resize(pa->n() + nb_add)) { return false; }
+          char* pdest = pa->pd() + off;
+          const wchar_t* pd = data.pd(); const wchar_t* const pd2 = pd + data.n();
+          while (pd != pd2) { *pdest++ = (char)(uchar)*pd++; }
+          pnmsg[0].set(data.n());
+        }
+      }
+
+      ((t_chsmsg&)pnmsg[1]).set(chsmsg);
+      max_part = fpt_msg;
+      return true;
+    }
+      // Sets info on binary attachment into the header (attachment itself is passed to shmfifo_s::msend as separate object, to avoid copying).
+    bool set_bin_info(t_stringref bin)
+    {
+      if (!bin.is_valid()) { return false; }
+      if (!(b_valid() && pnbin && max_part < fpt_bin)) { return false; }
+      if (bin.n() >> (sizeof(t_nbin) * 8 - 2)) { return false; } // fact. bin. data length is limited here to 38-bit unsigned integer.
+      pnbin[0].set(bin.n());
+      if (pparts->value() & fpt_chsbin)
+      {
+        s_ll chsbin = 0;
+        const char* pd = bin.pd(); const char* const pd2 = pd + bin.n();
+        while (pd != pd2) { chsbin += (uchar)*pd++; }
+        ((t_chsbin&)pnbin[1]).set(chsbin);
+      }
+      max_part = fpt_chsbin; // NOTE no parts can be added later
+      return true;
+    }
+      // Required: completes msg building; anyway succeeds if the message is already non-empty.
+      //  NOTE set_final() does not add new data (data array is not reallocated).
+      //    If succeeds anyway if b_valid() == true.
+    bool set_final()
+    {
+      if (!b_valid()) { return false; }
+      pchshdr->set(bmdx_meta::u_long(calcchs(pa->pd(), (char*)pchshdr - pa->pd())));
+      msg->link(pa->pd(), pa->n());
+      return true;
+    }
+  private:
+    t_rstr_ct* pa;
+      t_parts* pparts; t_chshdr* pchshdr;
+      t_nmd* pnmd;
+      t_nmsg* pnmsg;
+      t_ncus* pncus;
+      t_nbin* pnbin;
+      s_long _nbhdr, max_part; bmdx_meta::u_long chsmd;
+    bool _pa_resize(s_ll n2)
+    {
+      if (!pa) { return false; }
+      char* pd1 = pa->pd();
+      if (!pa->resize(n2, true, false)) { return false; }
+      const yk_c::meta::t_pdiff delta = pa->pd() - pd1;
+      if (delta != 0)
+      {
+        if (pparts) { *(char**)&pparts += delta; }
+        if (pchshdr) { *(char**)&pchshdr += delta; }
+        if (pnmd) { *(char**)&pnmd += delta; }
+        if (pnmsg) { *(char**)&pnmsg += delta; }
+        if (pncus) { *(char**)&pncus += delta; }
+        if (pnbin) { *(char**)&pnbin += delta; }
+      }
+      return true;
+    }
+  };
+};
+
+
+struct lm_slot_controller // IPC controller for dispatcher_mt
+{
+  typedef arrayref_t<char> t_stringref;
+  typedef i_dispatcher_mt::tracking_info tracking_info;
+
+  enum { fpt_md = netmsg_header::fpt_md, fpt_msg = netmsg_header::fpt_msg, fpt_bin = netmsg_header::fpt_bin, fpt_chsbin = netmsg_header::fpt_chsbin };
+  typedef  netmsg_header::mdd_deliv_reply mdd_deliv_reply;
+  typedef  netmsg_header::mdd_subs_request mdd_subs_request;
+  typedef  netmsg_header::mdd_subs_reply mdd_subs_reply;
+  typedef  netmsg_header::mdd_id_msg mdd_id_msg;
+  typedef  netmsg_header::mdd_id_msg_cmd mdd_id_msg_cmd;
+
+  struct i_callback
+  {
+      // See local_write "enc" arg. for comments on ret. val.
+    inline static s_long umsg_enc_type(bool b_utf8) throw() { if (b_utf8) { return 2; } if (is_arch_le() && sizeof(wchar_t) == 2) { return 1; } return 0; }
+
+      // Ensure calling dispatcher_mt::thread_proxy::_s_write with the correct reference to user message WCS.
+      //  umsg: user message in string form.
+      //  enc:
+      //    2: umsg refers to UTF-8 string, that must be additionally decoded.
+      //    1: umsg refers to (as byte array) UTF-16LE string (which is the type of wchar_t string), ready for use.
+      //    0: umsg refers to single-byte characters in range 0..127. They should be converted directly into wchar_t.
+      //    See also umsg_enc_type.
+      //  bin: is non-null, this is binary attachment to message, that should be returned to user as is.
+      //  id_msg_cmd: original command message id (for command messages)
+      // Returns:
+      //  a) result of _s_write,
+      //  b) -2 if additional allocations on umsg conversion have failed (before _s_write).
+    virtual s_long local_write(t_stringref umsg, s_long enc, const cref_t<t_stringref>& bin, s_ll id_msg, s_ll id_msg_cmd) = 0;
+
+      // mde references metadata entry of type 52 (mdd_subs_request).
+      // dm contains the valid decoded header of mde.
+      //    Impl. should 1) decode strings from mde, 2) check peer process name matching with name_peerf,
+      //      3) call _s_subscribe, and 4) return its result.
+    virtual s_long local_subscribe(t_stringref mde, const mdd_subs_request& dm, const bmdx_shm::t_name_shm& name_peerf) = 0;
+
+      // Find command slots for the given list of msg. ids. Set command slot state according to associated delivery state.
+      // Returns: 1 - success, -2 - failure.
+    virtual s_long cslph_update(vec2_t<tracking_info>& vtii) = 0;
+    virtual ~i_callback() {}
+  };
+
+    // name_pr: process_name arg. of dispatcher_mt ctor.
+  lm_slot_controller(arrayref_t<wchar_t> name_pr, s_ll nb_qum_, s_ll nb_qinfo_, const unity& apeer_names) throw()
+  :
+    _nb_qum(nb_qum_),
+    _fl_chs(fpt_md|fpt_msg),
+    _apns(apeer_names),
+    _name_prf(make_fixed_utf8_name(name_pr)),
+    _qinfo_rcv(make_name_onef(_name_prf), limit_nbqueue(nb_qinfo_, __lm_slot_controller_nb_rqinfo_min, __lm_slot_controller_nb_rqinfo_max, __lm_slot_controller_nb_rqinfo_dflt))
+  { _state = 0; _tms_next_init = 0; _qinfo_rcv_idd0 = 0; _hnew_name_peerf.hashx_setf_can_shrink(0); }
+  ~lm_slot_controller() throw() { _x_close(); }
+
+
+private:
+  struct _r_prc_uid
+  {
+    volatile s_ll sig, pid, pid_deriv, prc_inst_id, livecnt;
+    _r_prc_uid() throw() { sig = Fsig(); pid = pid_deriv = prc_inst_id = livecnt = 0; }
+    void cp_ids(const _r_prc_uid& src) { sig = src.sig; pid = src.pid; pid_deriv = src.pid_deriv; prc_inst_id = src.prc_inst_id; } // the order of copying takes into account the order of checking values in shm by peer
+    static inline s_long Fsig() { return yk_c::bytes::cmti_base_t<_r_prc_uid, 2020, 2, 28, 23>::ind(); }
+  };
+  static s_ll pid_deriv_v1(s_ll pid) { return pid; }
+  enum { nmdemax = 3 };
+  inline static s_ll limit_nbqueue(s_ll nb_orig, s_ll nbmin, s_ll nbmax, s_ll nbdflt) throw() { if (nb_orig < 0) { nb_orig = nbdflt; } return bmdx_minmax::myllrange(nb_orig, nbmin, nbmax); }
+public:
+    // Peer process activity tracker; one for each working dispatcher_mt in other processes, with which IPC occurs.
+  struct peer_tracker
+  {
+    inline peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) throw();
+    inline ~peer_tracker() throw() { _x_close(); }
+    inline s_long state() const throw() { return _state; }
+    inline s_ll id_peer() const throw() { return _id_peer; } // for local process use only
+
+  private:
+    //================================
+    critsec_t<lm_slot_controller>::csdata lkd_pt_access; // for locking 1) _qum_send read/modify/push, 2) mtrk_*_send modify, 3) inside _x_init, _cltpt_ensure_comm
+    //================================
+    const bmdx_shm::t_name_shm _name_prf, _name_peerf;
+    const bool b_self; // = _name_prf == _name_peerf
+    s_ll _id_peer;
+    double _tm_lastinit, _tm_mtrk_nem;
+    volatile s_long _state; // 1 ready; 0 not initialized yet; -2 init. failed, will be tried again later; -3 closing; -4 already closed
+    volatile bool _b_clt_mdsend_wait_once;
+    //================================
+    shmqueue_ms_sender_t<_r_prc_uid> _qinfo_send; // shared queue for sending informational messages to peer process
+    bmdx_shm::shmqueue_s _qum_rcv; // shared queue for input user messages from peer process; serviced in LMSC det_periodic()
+    bmdx_shm::shmqueue_s _qum_send; // shared queue for sending user messages to peer process; external client (dispatcher_mt) may only push messages in b_state() 1; locking: lkd_pt_access
+    //================================
+    s_ll _qinfo_inst_id, _qinfo_livecnt;
+    double _qinfo_livecnt_tm;
+    bool _qinfo_peer_conn_techmsg_sent;
+    //=================
+    hashx<s_ll, t_mtrk_sender_info> mtrk_htrk_send; // { msg or subscription id; weak refs. to tracking_info and its container }; locking: lkd_pt_access
+    vnnqueue_t<t_mtrk_qipush_entry> mtrk_qipush_send; // sequence of ids from mtrk_htrk_send; locking: lkd_pt_access
+    struct __msg_tr
+    {
+      cref_t<t_stringref> msg;
+      void swap_msg(cref_t<t_stringref>& x) { bmdx_str::words::swap_bytes(msg, x); }
+    };
+      // Queued tech. replies of various kinds, gathered and sent through _qum_send.
+      //  If sending fails, _lq_send_tr keeps the unsent msgs. till next LMSC the det_periodic() call,
+      //  so that their info is not lost for the peer unless the current process is terminated..
+    vnnqueue_t<__msg_tr> _lq_send_tr; // locking: none (LMSC thread use only)
+    bool _qum_send_avl;
+    double _qum_send_avl_tm_lastchk;
+    //=================
+    struct __tracking_info_reply
+    {
+      tracking_info ti;
+      unsigned char flags; // see md_entry type 54
+      __tracking_info_reply(const tracking_info& ti_, const unsigned char flags_) : ti(ti_), flags(flags_) {}
+    };
+      // Queue of received tracking results for msg. delivery and subscriptions.
+      //  Contains also hints (flags) on what actions should be done for each message.
+      //  If any of actions fails, _lq_recv_trk_res keeps the unprocessed msgs. till the next LMSC det_periodic() call,
+      //  so that their info is not lost unless the current process is terminated..
+    vnnqueue_t<__tracking_info_reply> _lq_recv_tr; // locking: none (LMSC thread use only)
+    s_ll _ipop_qum_rcv_fail; // ind. of the head msg. in _qum_rcv (ipop()), for which _s_write failed (returned -2)
+    //================================
+
+    friend struct lm_slot_controller;
+    struct lks_idgen {};
+    static s_ll idgen_peer() { static s_ll x(0); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
+    inline double tm_last_init_ms() { return _tm_lastinit; }
+    inline s_long _cltpt_ensure_comm(bool b_wait, bool b_force_check) throw();
+    inline s_long _x_qinfo_upd_prc_act_time();
+    inline void _x_init() throw();
+    inline void _x_close() throw();
+  };
+
+  // 1. Helper functions (for any thread).
+
+  static inline char make_identifier_char(wchar_t c0)  throw();
+  static inline bmdx_shm::t_name_shm __make_name_one_impl(arrayref_t<char> name) throw();
+  static inline bmdx_shm::t_name_shm __make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) throw();
+  static inline bmdx_shm::t_name_shm make_name_onef(const bmdx_shm::t_name_shm& name) throw() { return __make_name_one_impl(arrayref_t<char>(name.pd(), name.n())); }
+  static inline bmdx_shm::t_name_shm make_name_twof(const bmdx_shm::t_name_shm& name1, const bmdx_shm::t_name_shm& name2) throw() { return __make_name_two_impl(arrayref_t<char>(name1.pd(), name1.n()), arrayref_t<char>(name2.pd(), name2.n())); }
+//  static inline bmdx_shm::t_name_shm make_name_one(arrayref_t<char> name) throw() { return __make_name_one_impl(name); }
+//  static inline bmdx_shm::t_name_shm make_name_two(arrayref_t<char> name1, arrayref_t<char> name2) throw() { return __make_name_two_impl(name1, name2); }
+//  static inline bmdx_shm::t_name_shm make_name_one(arrayref_t<wchar_t> name) throw() { return make_name_onef(make_fixed_utf8_name(name)); }
+//  static inline bmdx_shm::t_name_shm make_name_two(arrayref_t<wchar_t> name1, arrayref_t<wchar_t> name2) throw() { return make_name_twof(make_fixed_utf8_name(name1), make_fixed_utf8_name(name2)); }
+
+  inline s_long state() const throw() { return _state; }
+
+    // NOTE This flag should be set before det_init is called first time.
+  inline void setparam_chsbin(bool b_enable) { s_long f = fpt_md | fpt_msg; if (b_enable) { f |= fpt_bin; } _fl_chs = f;}
+
+  // 2. For LM delivery thread: LMSC initializer and periodic task. (called from LMSC thread only).
+  inline void det_init() throw();
+  inline void det_periodic(i_callback& cb, bool& b_active) throw();
+
+  // 3. Special functions.
+
+  inline s_long clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) throw();
+  inline s_long clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) throw();
+  inline s_long clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw();
+
+private:
+  s_ll _nb_qum; volatile s_long _fl_chs;
+  unity _apns;
+  const bmdx_shm::t_name_shm _name_prf;
+  volatile s_long _state; // 1 ready; 0 not initialized yet; -2 init. failed, will be tried again later; -3 closing; -4 already closed
+  double _tms_next_init;
+
+  shmqueue_ms_receiver_t<_r_prc_uid> _qinfo_rcv; // shared queue for informational messages from multiple peer processes; associated 1:1 with owning dispatcher_mt instance; locking: none (LMSC thread use only)
+  s_long _qinfo_rcv_idd0; // index in _qinfo_rcv.dd, marks that all entries with index < _qinfo_rcv_idd0 are already processed; locking: none (LMSC thread use only)
+  hashx<bmdx_shm::t_name_shm, s_long> _hnew_name_peerf; // { shared queue name, 0 }; names for queues to create as requested by peer processes via _qinfo_rcv; locking: none (LMSC thread use only)
+
+  critsec_t<lm_slot_controller>::csdata lkd_peer_hpt; // for locking *_hpt* read/modify
+  hashx<bmdx_shm::t_name_shm, cref_t<peer_tracker> > _hpt; // grow-only { name_peerf (global), peer tracker }; locking: lkd_peer_hpt
+
+  inline bool _x_qinfo_rcv_init() throw();
+  inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_begin_comm);
+  inline void _x_close() throw();
+
+  struct _mtrk_fn_handler
+  {
+    peer_tracker& pt;
+    const weakref_t<t_htracking_proxy>& rhtrprx;
+    int state; // 0 - initial state or "do nothing", -1 mtrk prep. failed, 1 - mtrk prepared (cancel on des.), 2 - mtrk prepared (apply on des.)
+    s_ll id_msg, ipush_shmlq;
+    _mtrk_fn_handler(peer_tracker& pt_, s_ll id_msg_, const weakref_t<t_htracking_proxy>& rhtrprx_) : pt(pt_), rhtrprx(rhtrprx_), state(0), id_msg(id_msg_), ipush_shmlq(-1) {}
+    bool mtrk_prep()
+    {
+      if (state != 0) { return false; }
+      if (pt.mtrk_qipush_send.ncapeff() < 1 && pt.mtrk_qipush_send.set_rsv(10 + pt.mtrk_qipush_send.navl()) < 1) { state = -1; return false; }
+      const hashx<s_ll, t_mtrk_sender_info>::entry* e = 0;
+      if (pt.mtrk_htrk_send.insert(id_msg, &e) != 1) { state = -1; return false; }
+      e->v.ipush_shmlq = -1;
+      e->v.rhtrprx = rhtrprx;
+      state = 1;
+      return true;
+    }
+      // ipush_shmlq >= 0: apply on des.; < 0: cancel on des.
+    void mtrk_prep2(s_ll ipush_shmlq_) { ipush_shmlq = ipush_shmlq_; if (ipush_shmlq_ >= 0 && state == 1) { state = 2; } }
+    ~_mtrk_fn_handler() { if (state == 1) { _mtrk_cancel(); } else if (state == 2) { _mtrk_apply(); } }
+  private:
+    void _mtrk_apply()
+    {
+      pt.mtrk_qipush_send.push_1(t_mtrk_qipush_entry(id_msg, ipush_shmlq));
+      try { t_mtrk_sender_info& x = pt.mtrk_htrk_send[id_msg]; x.rhtrprx = rhtrprx; x.ipush_shmlq = ipush_shmlq; } catch (...) {}
+    }
+    void _mtrk_cancel() { pt.mtrk_htrk_send.remove(id_msg); }
+  };
+
+  struct new_mv_msg_tr { typedef cref_t<t_stringref> t_msg; typedef peer_tracker::__msg_tr t; t_msg& m; new_mv_msg_tr(t_msg& m_) : m(m_) {} void operator()(t* p) const { bmdx_str::words::swap_bytes(p->msg, m); new(&m) t_msg(); } };
+};
+
+  // Called by LMSC thread and client threads (as part of _cltpt_ensure_comm).
+  //  The call must be done under lkd_pt_access.
+  //  Updates cached _r_prc_uid object's data from _qinfo_send.
+  //  Returns:
+  //    1 -  the peer process has just started or restarted - should be informed on the current process activity.
+  //    0 - the peer process is available for normal communication, no special action needed.
+  //    -1 - the peer process is not available: a) hanged, b) terminated and not restarted yet, c) LMSC is not active in the peer process (e.g. peer's dispatcher_mt exited).
+  //    -2 - the peer process is available, but should not be used for communication (communication type or version is different).
+  //    -3 - the shared queue object is not available.
+s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
+{
+  if (_qinfo_send.attempt_open() != 1) // no system access to shared object
+    { return -3; }
+
+  const double t = clock_ms();
+  const _r_prc_uid& q = _qinfo_send.so->auxd;
+
+  if (this->b_self)
+  {
+    _qinfo_inst_id = q.prc_inst_id;
+    _qinfo_livecnt = q.livecnt;
+    _qinfo_livecnt_tm = t;
+    return 0;
+  }
+
+  if (q.sig != _r_prc_uid::Fsig()) // incompatible shared object
+  {
+    _qinfo_send.so.close();
+    return -2;
+  }
+  const s_ll cntinst = q.livecnt;
+  const s_ll idinst = q.prc_inst_id;
+  if (_qinfo_inst_id != idinst) // one of: a) just started new peer process, b) peer's LMSC exited
+  {
+    if (idinst == 0 || idinst == -1) { return -1; }
+    const s_ll der1 = q.pid_deriv;
+    const s_ll pidinst = q.pid;
+    const s_ll der2 = pid_deriv_v1(pidinst);
+    if (pidinst == 0 || der2 != der1) // incompatible agent in the peer process
+      { return -2; }
+    _qinfo_inst_id = idinst;
+    _qinfo_livecnt = cntinst;
+    _qinfo_livecnt_tm = t;
+    return 1;
+  }
+  if (cntinst != _qinfo_livecnt) // new livecnt value
+  {
+    _qinfo_livecnt = cntinst;
+    _qinfo_livecnt_tm = t;
+    return 0;
+  }
+  if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) // livecnt has stuck, but no timeout yet
+    { return 0; }
+  return -1; // timeout (the peer is hanged or terminated)
+}
+  // name_prf_: make_fixed_utf8_name of process name of the parent dispatcher_mt.
+  // name_peerf_: make_fixed_utf8_name of process peer's process name, taken from message destination address, supplied by client.
+lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) throw()
+:
+  _name_prf(name_prf_), _name_peerf(name_peerf_), b_self(name_peerf_ == name_prf_),
+  _qinfo_send(make_name_onef(name_peerf_)),
+  _qum_rcv(make_name_twof(_name_peerf, _name_prf), limit_nbqueue(nb_qum_, __lm_slot_controller_nb_rqum_min, __lm_slot_controller_nb_rqum_max, __lm_slot_controller_nb_rqum_dflt)),
+  _qum_send(make_name_twof(_name_prf, _name_peerf))
+{
+  _id_peer = idgen_peer();
+  _tm_lastinit = clock_ms() - 10000; _tm_mtrk_nem = clock_ms();
+  _state = 0;
+  _b_clt_mdsend_wait_once = true;
+
+  _qinfo_inst_id = 0; _qinfo_livecnt = -1; _qinfo_livecnt_tm = clock_ms();
+  _qinfo_peer_conn_techmsg_sent = false;
+
+  mtrk_qipush_send.set_cap_hints(-1, -2);
+  _lq_send_tr.set_cap_hints(-1, -2);
+
+  _lq_recv_tr.set_cap_hints(-1, -2);
+  _qum_send_avl = false; _qum_send_avl_tm_lastchk = clock_ms() - 2 * __lm_slot_controller_qum_send_avl_chk_dtms;
+  _ipop_qum_rcv_fail = -1;
+}
+  // b_wait:
+  //    false: for LMSC thread, to check state and perform non-blocking operations if necessary.
+  //    true: for LMSC clients (check + non-blocking operations + waiting for required state or timeout).
+  // b_force_check (only on b_wait == false):
+  //    true: anyway check _qum_rcv, _qum_send state.
+  //    false: check their state only if __lm_slot_controller_qum_send_avl_chk_dtms has passed after the last check.
+  // Returns:
+  //  1 - the peer process is communicable normally (all needed queues are working).
+  //  0 - the peer process appears hanged, lagging or terminated.
+  //  -1 - the peer process is not available.
+s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_force_check) throw()
+{
+  if (_state != 1)
+  {
+    _x_init();
+    if (_state != 1) { return -1; }
+  }
+
+
+  if (1)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+    const s_long state_peer = _x_qinfo_upd_prc_act_time(); // peer process hanging/termination/inactivity check
+    if (state_peer == -1) { return 0; } // peer process is not responding
+    if (state_peer < 0) { return -1; } // peer process is N/A
+    if (this->b_self)
+    {
+      _qinfo_peer_conn_techmsg_sent = true;
+      _qum_send_avl = 3 == _qum_send.bufstate(0);
+      return _qum_send_avl ? 1 : -1;
+    }
+    else if (state_peer == 1 || (state_peer == 0 && !_qinfo_peer_conn_techmsg_sent))
+    {
+      _qinfo_peer_conn_techmsg_sent = false;
+      netmsg_header::msg_builder mb(fpt_md, sizeof(netmsg_header::t_md1_hdr_max) + _name_prf.n());
+      if (!(mb.set_md1(1,  t_stringref(_name_prf.pd(), _name_prf.n())) && mb.set_final())) { return -1; }
+      if (2 != _qinfo_send.msend_1(mb.msg.ref(), true)) { return -1; }
+      _qinfo_peer_conn_techmsg_sent = true;
+    }
+  }
+
+  if (b_wait) // waiting for input msgs queue to be created by peer process
+  {
+    if (_qum_send_avl) { return 1; }
+    const double t0 = clock_ms();
+    bool bres = false;
+    while (clock_ms() - t0 < __lm_slot_controller_qum_send_avl_wait_toms)
+    {
+      critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+      const s_ll tsleep_mcs = 100;
+      if (!_qum_send_avl && 3 == _qum_send.bufstate(0)) { bres = true; break; }
+      sleep_mcs(tsleep_mcs);
+    }
+    _qum_send_avl = bres;
+    return bres ? 1 : -1;
+  }
+  else // non-blocking waiting (check only)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+    if (_qum_send_avl) { return 1; }
+    const double tnow = clock_ms();
+    if (tnow - _qum_send_avl_tm_lastchk < __lm_slot_controller_qum_send_avl_chk_dtms && !b_force_check) { return -1; }
+    _qum_send_avl_tm_lastchk = tnow;
+    bool bres = 3 == _qum_send.bufstate(0);
+    _qum_send_avl = bres;
+    return bres ? 1 : -1;
+  }
+}
+  // When x_init succeeds:
+  //  1) _qum_rcv is working (the shared object belongs to LMSC of the current process),
+  //  2) _qinfo_send is working (the shared object belongs to the peer process),
+  //  3) _qum_send is unavailable (or working, but only if the the peer is restarted).
+  //    To make _qum_send surely available, _cltpt_ensure_comm sends tech. msg.
+  //    via _qinfo_send, and waits until the peer reads it and creates its own _qum_rcv with the offered name;
+  //    it thus initializes the shared memory; if successful, _qum_send here is able to connect to the memory and thus comes into working state.
+void lm_slot_controller::peer_tracker::_x_init() throw()
+{
+  if (!(_state == 0 || _state == -2)) { return; }
+
+  critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+  if (!(_state == 0 || _state == -2)) { return; }
+
+  _tm_lastinit = clock_ms();
+  _qinfo_peer_conn_techmsg_sent = false;
+  _qum_send_avl = false;
+
+  s_long res2 = _qinfo_send.attempt_open();
+  s_long res3 = _qum_rcv.bufstate(3);
+  s_long res4 = _qum_send.bufstate(2);
+  if (!(res2 >= 1 && res3 == 3 && res4 >= 0 && res4 != 4)) { _state = -2; return; }
+
+  if (this->b_self) { _qinfo_peer_conn_techmsg_sent = true; } // self has already created all its structures and thus does not need any dialog with itself
+
+  _state = 1;
+}
+void lm_slot_controller::peer_tracker::_x_close() throw()
+{
+  _qum_send.lqstate(0, 0, 0, -1, __bmdx_disp_lq_cleanup_dtms);
+  // NOTE See also notes near cch_thread :: mtrk_htracking.
+}
+
+
+  // NOTE If init. fails, it will really retry only after some delay (see _x_qinfo_rcv_init).
+  //  b_active: is set to true by det_periodic each time it makes useful action.
+  //    If it did not set b_active for long, LMSC thread will make itself more sleepy.
+void lm_slot_controller::det_periodic(i_callback& cb, bool& b_active) throw()
+{
+  if (_state != 1) { return; }
+  if (!_x_qinfo_rcv_init()) { return; }
+
+  if (1) // servicing peer trackers (input messages etc.)
+  {
+    cpparray_t<netmsg_header::md_entry> __mdee2;
+    netmsg_header::md_entry __mdee1[nmdemax];
+
+    hashx<bmdx_shm::t_name_shm, cref_t<peer_tracker> > hpt2;
+    if (1) // copying the list of peer trackers + making certain updates
+    {
+      critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
+        //  - create peer_tracking objects in _hpeernm if not yet in hpt, move to hpt
+        //  - copy _hpt
+      while (_hnew_name_peerf.n() > 0)
+      {
+        b_active = true;
+        const bmdx_shm::t_name_shm& k = _hnew_name_peerf(0)->k;
+        if (_hpt.find(k)) { _hnew_name_peerf.remove(k); continue; }
+        cref_t<peer_tracker> pt = _x_pt_getcr(k, true);
+          if (!pt) { break; } // will retry on the next det_periodic() call
+          try { bmdx_str::words::swap_bytes(_hpt[k], pt); } catch (...) { break; } // will retry on the next det_periodic() call
+        _hnew_name_peerf.remove(k); // removal does not fail (both k, v are movable)
+      }
+      if (hpt2.hashx_copy(_hpt, false) < 1) { goto lBreak2; }
+      goto lCont2;
+lBreak2: return;
+lCont2:;
+    }
+
+    if (1) // working on each peer tracker (hpt2)
+    {
+      // - init. peer if not yet or dt has passed after prv. init. failure
+      // - detect peer process hanging/termination
+      // - detect peer process restart, send own name for reopening the pair of user msg. queues
+      // - for the currently avl. messages in the input queue:
+      //    - tracking msg: process msg. tracking; pop on success or break
+      //    - user. msg: decode, update src./trg. addresses, queue backw. tracking msg. if needed, _s_write; a) pop on _s_write success b) pop/break on 2nd decode failure c) break on other failure
+      //    - unknown msg: ignore (pop only)
+      // - for the currently unsent tracking msgs: send and pop from local queue
+      for (s_long i = 0; i < hpt2.n(); ++i)
+      { try {
+        peer_tracker& pt = hpt2(i)->v._rnonc();
+        if (pt._state != 1 && clock_ms() - pt.tm_last_init_ms() < __lm_slot_controller_peer_reinit_dtms) { continue; }
+        if (pt._cltpt_ensure_comm(false, false) < 1) { continue; }
+
+          // Sending tech. messages (subs. request results and tracking infos), possibly remaining from prev. det_periodic() calls.
+        if (pt._lq_send_tr.navl() > 0)
+        {
+          b_active = true;
+          critsec_t<lm_slot_controller> __lock(10, -1, &pt.lkd_pt_access); if (sizeof(__lock)) {}
+          while (pt._lq_send_tr.navl() > 0) { peer_tracker::__msg_tr& m = pt._lq_send_tr.front(); if (m.msg) { s_long res = pt._qum_send.msend(m.msg); if (res < 1) { break; } } pt._lq_send_tr.pop_1(); }
+        }
+
+        while (1)
+        {
+          s_long res_mget = pt._qum_rcv.mget(0, false); // peek
+          if (res_mget <= 0) { break; }
+          b_active = true;
+          if (pt._lq_send_tr.ncapeff() - pt._lq_send_tr.navl() <= 0 && pt._lq_send_tr.set_rsv(10 + pt._lq_send_tr.navl()) < 1) { break; } // failed to reserve place in tech. reply queue
+          bool b_pop = true;
+          do { // once
+            netmsg_header hdr; t_stringref orig = pt._qum_rcv.d._rnonc();
+            if (!hdr.fields_decode(orig, fpt_md|fpt_msg|_fl_chs)) { break; }
+
+            arrayref_t<netmsg_header::md_entry> mdee(__mdee1, hdr.get_mde(arrayref_t<netmsg_header::md_entry>(__mdee1, nmdemax), true));
+            if (mdee.n() > nmdemax)
+            {
+              if (__mdee2.n() < mdee.n() && !__mdee2.resize(mdee.n())) { b_pop = false; break; }
+              mdee.link(__mdee2.pd(), hdr.get_mde(arrayref_t<netmsg_header::md_entry>(__mdee2.pd(), mdee.n()), true));
+            }
+
+            if (hdr.has_msg()) // user message
+            {
+              unsigned char fl_deliv_rpt = 0; s_ll id_msg = -1, id_msg_cmd = -1; // fl_deliv_rpt != 0, id_msg is anyway set to valid id
+              s_long ver = 1;
+                // Analyze all available metadata entries in the current message.
+              for (s_ll i = mdee.n() - 1; i >= 0; --i)
+              {
+                const s_long t = mdee[i].type;
+                if (t >= 3 && t <= 50) { ver = t; }
+                else if (mdee[i].b_type(mdd_id_msg::stype)) { if (mdee[i].b_valid_size<mdd_id_msg>()) { mdd_id_msg* pmd = ((mdd_id_msg*)mdee[i].data.pd()); id_msg = pmd->id_msg.value(); fl_deliv_rpt = pmd->flags.value(); } }
+                else if (mdee[i].b_type(mdd_id_msg_cmd::stype)) { if (mdee[i].b_valid_size<mdd_id_msg_cmd>()) { mdd_id_msg_cmd* pmd = ((mdd_id_msg_cmd*)mdee[i].data.pd()); id_msg_cmd = pmd->id_msg.value(); } }
+                else {}
+              }
+
+              enum { res_dec_failed = -13, res_accepted = 3 }; // see i_dispatcher_mt::msend ret. codes
+              if (ver > __lm_slot_controller_user_msg_max_ver) // msg. version is not supported
+              {
+                if (fl_deliv_rpt) // reply with "message decoding failed" result
+                {
+                  typedef mdd_deliv_reply t_reply;
+                  netmsg_header::msg_builder mb(fpt_md, sizeof(netmsg_header::t_md1_hdr_max) + sizeof(t_reply)); t_reply dr; dr.id_object.set(id_msg); dr.res.set(res_dec_failed); dr.flags.set(fl_deliv_rpt);
+                  if (!(mb.set_md1(dr.type(), t_stringref(dr, sizeof(dr))) && mb.set_final())) { b_pop = false; break; }
+                  pt._lq_send_tr.push_1f(new_mv_msg_tr(mb.msg)); // push_1 succeeds because the place is pre-reserved
+                }
+                break;
+              }
+              cref_t<t_stringref> att;
+              if (hdr.has_bin() && hdr.bin.is_valid())
+              {
+                att = pt._qum_rcv.d;
+                att._rnonc() = hdr.bin;
+              }
+              if (!fl_deliv_rpt)
+              {
+                  // Calling the requested function. No backward sending for the result required.
+                cb.local_write(hdr.msg, i_callback::umsg_enc_type(hdr.b_msg_utf8()), att, id_msg, id_msg_cmd);
+              }
+              else
+              {
+                  // Pre-reserving storages for reply.
+                typedef mdd_deliv_reply t_reply;
+                if (pt._lq_send_tr.ncapeff() < 1 && pt._lq_send_tr.set_rsv(10 + pt._lq_send_tr.navl()) < 1) { b_pop = false; break; }
+                netmsg_header::msg_builder mb(fpt_md, sizeof(netmsg_header::t_md1_hdr_max) + sizeof(t_reply));
+                    if (!mb.b_valid()) { b_pop = false; break; }
+
+                  // Calling the requested function.
+                s_long res_s_write = cb.local_write(hdr.msg, i_callback::umsg_enc_type(hdr.b_msg_utf8()), att, id_msg, id_msg_cmd);
+
+                  // Checking for continuous failure (1st failure is ignored, after 2nd the message is discarded).
+                if (res_s_write == -2)
+                {
+                  s_ll ipop_lq = -1; pt._qum_rcv.lqstate(1, 0, &ipop_lq);
+                  if (ipop_lq != pt._ipop_qum_rcv_fail) { pt._ipop_qum_rcv_fail = ipop_lq; b_pop = false; break; }
+                }
+
+                    // Replying. The following sequence doesn't fail because all storages for data are pre-reserved.
+                if (res_s_write == -2) { res_s_write = res_dec_failed; }
+                  else if (res_s_write >= 0) { res_s_write = res_accepted; }
+                t_reply dr;
+                dr.id_object.set(id_msg); dr.res.set(res_s_write); dr.flags.set(fl_deliv_rpt);
+                mb.set_md1(dr.type(), t_stringref(dr, sizeof(dr)));
+                mb.set_final();
+                pt._lq_send_tr.push_1f(new_mv_msg_tr(mb.msg));
+              }
+              break;
+            }
+            else if (hdr.has_md()) // pure tech. message
+            {
+              for (s_long i = 0; i < mdee.n(); ++i)
+              {
+                const s_long t = mdee[i].type;
+                if (mdee[i].b_type(mdd_deliv_reply::stype)) // got tech. reply with result of peer's _s_write on user message
+                {
+                  if (!mdee[i].b_valid_size<mdd_deliv_reply>()) { continue; }
+                  mdd_deliv_reply* pmd = (mdd_deliv_reply*)mdee[i].data.pd();
+                  if (pt._lq_recv_tr.push_1(peer_tracker::__tracking_info_reply(tracking_info(pmd->id_object.value(), pmd->res.value()), pmd->flags.value())) < 1) { b_pop = false; break; }
+                }
+                else if (mdee[i].b_type(mdd_subs_reply::stype)) // got tech. reply with result of peer's _s_subscribe
+                {
+                  if (!mdee[i].b_valid_size<mdd_subs_reply>()) { continue; }
+                  mdd_subs_reply* pmd = (mdd_subs_reply*)mdee[i].data.pd();
+                  if (pt._lq_recv_tr.push_1(peer_tracker::__tracking_info_reply(tracking_info(pmd->id_object.value(), pmd->res.value()), 1)) < 1) { b_pop = false; break; }
+                }
+                else if (t == mdd_subs_request::stype) // peer process requests _s_subscribe
+                {
+                  mdd_subs_request dm;
+                  if (!dm.read_msg(mdee[i].data)) { continue; } // won't fail if the data is correct
+
+                    // Pre-reserving storages for reply.
+                  typedef mdd_subs_reply t_reply;
+                  if (pt._lq_send_tr.ncapeff() < 1 && pt._lq_send_tr.set_rsv(10 + pt._lq_send_tr.navl()) < 1) { b_pop = false; break; }
+                  netmsg_header::msg_builder mb(fpt_md, sizeof(netmsg_header::t_md1_hdr_max) + sizeof(t_reply));
+                    if (!mb.b_valid()) { b_pop = false; break; }
+
+                    // Calling the requested function.
+                  s_long res_s_subscribe = cb.local_subscribe(mdee[i].data, dm, pt._name_peerf);
+
+                    // Replying. The following sequence doesn't fail because all storages for data are pre-reserved.
+                  t_reply dr;
+                  dr.id_object.set(dm.id_trk); dr.res.set(res_s_subscribe);
+                  mb.set_md1(dr.type(), t_stringref(dr, sizeof(dr)));
+                  mb.set_final();
+                  pt._lq_send_tr.push_1f(new_mv_msg_tr(mb.msg));
+                }
+              }
+              break;
+            }
+          } while (false);
+          if (b_pop) { pt._qum_rcv.mget(); } // pop the message if successfully processed
+          pt._qum_rcv.d.clear(); // clear cached message, if any
+          if (!b_pop) { break; } // end msg. analysis for this peer (common-case failure); continue on the next call to det_periodic()
+        }
+
+          // Sending tech. messages (subs. request results and tracking infos), possibly created inside the above loop.
+          //  NOTE Queuing is used to minimize time, spend by the current thread on pt.lkd_pt_access,
+          //    because pt._qum_send may be freqently used by _s_write, called from a client thread.
+        if (pt._lq_send_tr.navl() > 0 || pt._lq_recv_tr.navl() > 0)
+        {
+          b_active = true;
+          hashx<t_htracking_proxy*, t_mtrk_sender_info_id_list> htrk2; // for user tracking_info updates; filled from pt.mtrk_htrk_send
+          vec2_t<tracking_info> vtrkcsl; // for command slot phase updates; filled from pt.mtrk_htrk_send
+          hashx<s_ll, int> hstop_trk; // set of msg. ids for which all types of tracking should be finished
+          bool b_failed = false;
+          if (1)
+          {
+            critsec_t<lm_slot_controller> __lock(10, -1, &pt.lkd_pt_access); if (sizeof(__lock)) {}
+
+              // independent operation 1 under pt.lkd_pt_access
+            while (pt._lq_send_tr.navl() > 0) { peer_tracker::__msg_tr& m = pt._lq_send_tr.front(); if (m.msg) { s_long res = pt._qum_send.msend(m.msg); if (res < 1) { b_failed = true; break; } } pt._lq_send_tr.pop_1(); }
+
+              // independent operation 2 under same pt.lkd_pt_access
+            if (!b_failed && pt.mtrk_htrk_send.n() > 0)
+            {
+              s_ll imax_shmlq = -1;
+              for (vnnqueue_t<peer_tracker::__tracking_info_reply>::const_iterator i = pt._lq_recv_tr.begin(); !i.b_aend(); ++i)
+              {
+                const peer_tracker::__tracking_info_reply& ti = *i;
+                if (ti.flags & 1) // user tracking_info object update required
+                {
+                  const hashx<s_ll, t_mtrk_sender_info>::entry* e = pt.mtrk_htrk_send.find(ti.ti.id);
+                  if (e)
+                  {
+                    const t_mtrk_sender_info& si = e->v;
+                    imax_shmlq = bmdx_minmax::myllmax(imax_shmlq, si.ipush_shmlq);
+                    try {
+                      t_mtrk_sender_info_id_list& silst = htrk2.opsub(si.rhtrprx.pwk);
+                      if (!silst.si.rhtrprx.pwk) { silst.si = si; }
+                      silst.tii.push_back(ti.ti);
+                    } catch (...) { b_failed = true; break; }
+                  }
+                }
+                if (ti.flags & 2) // command slot phase modification required
+                  { try { vtrkcsl.push_back(ti.ti); } catch (...) { b_failed = true; break; } }
+                try { hstop_trk.opsub(ti.ti.id); } catch (...) { b_failed = true; break; }
+              }
+              if (!b_failed)
+              {
+                  // If peer process has restarted, some part of messages may have been lost.
+                  //  Ids of lost messages are taken from full sequence of ids, for which tracking is required (mtrk_qipush_send).
+                  //  All messages with no "hope" already in getting valid tracking status, get tracking result code -12.
+                while (pt.mtrk_qipush_send.navl() > 0)
+                {
+                  t_mtrk_qipush_entry e_q = pt.mtrk_qipush_send.front();
+                  if (e_q.ipush_shmlq >= imax_shmlq) { break; }
+                  if (!hstop_trk.find(e_q.id_msg))
+                  {
+                    const hashx<s_ll, t_mtrk_sender_info>::entry* e = pt.mtrk_htrk_send.find(e_q.id_msg);
+                      if (!e) { pt.mtrk_qipush_send.pop_1(); continue; }
+                    const t_mtrk_sender_info& si = e->v;
+                    try { t_mtrk_sender_info_id_list& silst = htrk2.opsub(si.rhtrprx.pwk); if (!silst.si.rhtrprx.pwk) { silst.si = si; } silst.tii.push_back(tracking_info(e_q.id_msg, -12)); hstop_trk.opsub(e_q.id_msg); } catch (...) { b_failed = true; break; }
+                  }
+                  pt.mtrk_qipush_send.pop_1();
+                }
+              }
+            }
+          } // end lock on pt.lkd_pt_access
+
+          if (!b_failed)
+          {
+            b_failed = cb.cslph_update(vtrkcsl) < 1; // independent op.
+          }
+          if (!b_failed)
+          {
+            if (htrk2.n() > 0) // independent op.
+            {
+              for (s_long i = 0; i < htrk2.n(); ++i)
+              {
+                const t_mtrk_sender_info_id_list& silst = htrk2(i)->v;
+                weakref_t<t_htracking_proxy>::t_lock __lock(silst.si.rhtrprx); if (sizeof(__lock)) {}
+                if (silst.si.rhtrprx.b_valid())
+                {
+                  for (s_long i = 0; i < silst.tii.n(); ++i)
+                  {
+                    const tracking_info& ti = silst.tii[i];
+                    const t_htracking_proxy::entry* e = silst.si.rhtrprx.pwk->find(ti.id);
+                    if (e && e->v)
+                    {
+                      s_ll s = e->v->state;
+                      if (ti.state < 0) { s = ti.state; }
+                        else if (ti.state > 0) { if (ti.state > s) { s = ti.state; } }
+                        else { s = -2; }
+                      e->v->state = s;
+                    }
+                    silst.si.rhtrprx.pwk->remove(ti.id);
+                  }
+                }
+              }
+              htrk2.hashx_clear();
+            }
+            if (1) // remove the processed entries
+            {
+              if (hstop_trk.n() > 0)
+              {
+                critsec_t<lm_slot_controller> __lock(10, -1, &pt.lkd_pt_access); if (sizeof(__lock)) {}
+                for (s_long i = 0; i < hstop_trk.n(); ++i) { pt.mtrk_htrk_send.remove(hstop_trk(i)->k); }
+              }
+              pt._lq_recv_tr.pop_n(-1);
+            }
+          }
+        }
+      } catch (...) {} }
+    }
+
+    if (1) // cleanup (faster when done under single lock)
+    {
+      critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
+      hpt2.hashx_clear();
+    }
+  }
+}
+  // NOTE _x_qinfo_rcv_init depends on _tms_next_init.
+  //  After failure, it does real init. attempt only when pre-calculated _tms_next_init is reached.
+bool lm_slot_controller::_x_qinfo_rcv_init() throw()
+{
+  const double t = clock_ms();
+  if (t < _tms_next_init) { return false; }
+  s_long res = _qinfo_rcv.attempt_init();
+  if (res < 1) { _tms_next_init = t + __lm_slot_controller_reinit_short_dtms; return false; } // will try again later
+  if (res == 1) // check signature; update process info, because the object already exists
+  {
+    if (_qinfo_rcv.so->auxd.sig != _r_prc_uid::Fsig()) { _qinfo_rcv.so.close(); _tms_next_init = t + __lm_slot_controller_reinit_long_dtms; return false; }
+    _qinfo_rcv.so->auxd.cp_ids(_qinfo_rcv.auxd_init);
+  }
+  if (res == 1 || res == 2) // the shared queue is valid
+  {
+    cpparray_t<netmsg_header::md_entry> __mdee2;
+    netmsg_header::md_entry __mdee1[nmdemax];
+
+      // Update livecnt.
+    if (1) { _r_prc_uid& q = _qinfo_rcv.so->auxd; q.livecnt = q.livecnt + 1; }
+      // Pop and process all available tech. msgs.
+    if (_qinfo_rcv.dd.n() == 0) { _qinfo_rcv_idd0 = 0; _qinfo_rcv.mpop_avl(); }
+    if (_qinfo_rcv_idd0 < _qinfo_rcv.dd.n())
+    {
+      for (s_long i = _qinfo_rcv_idd0; i < _qinfo_rcv.dd.n(); ++i)
+      {
+        netmsg_header hdr; t_stringref orig = _qinfo_rcv.dd[i]._rnonc();
+        if (hdr.fields_decode(orig, fpt_md))
+        {
+          arrayref_t<netmsg_header::md_entry> mdee(__mdee1, hdr.get_mde(arrayref_t<netmsg_header::md_entry>(__mdee1, nmdemax), true));
+          if (mdee.n() > nmdemax)
+          {
+            if (__mdee2.n() < mdee.n() && !__mdee2.resize(mdee.n())) { goto lBreak1; }
+            mdee.link(__mdee2.pd(), hdr.get_mde(arrayref_t<netmsg_header::md_entry>(__mdee2.pd(), mdee.n()), true));
+          }
+          for (s_long imde = 0; imde < mdee.n(); ++imde)
+          {
+            netmsg_header::md_entry& e = mdee[imde];
+            if (e.type == 1 || e.type == 2) { if (_hnew_name_peerf.insert(bmdx_shm::t_name_shm(e.data.pd(), e.data.n())) < 0) { goto lBreak1; } }
+            else {}
+          }
+        }
+        _qinfo_rcv_idd0 = i + 1;
+      }
+lBreak1:;
+    }
+    if (_qinfo_rcv_idd0 >= _qinfo_rcv.dd.n()) { if (_qinfo_rcv.dd.n() > 0) { _qinfo_rcv.dd.clear(); } _qinfo_rcv_idd0 = 0; }
+  }
+  return true;
+}
+cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once)
+{
+  if (name_peerf.n() > 0)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
+    const hashx<bmdx_shm::t_name_shm, cref_t<peer_tracker> >::entry* e = _hpt.find(name_peerf);
+    do { // once
+      if (!e) { _hpt.insert(name_peerf, &e); }
+      if (!e) { break; }
+      cref_t<peer_tracker>& pt = e->v;
+      const bool b_newpt = !pt;
+      if (!pt) { pt.create3(1, this->_name_prf, name_peerf, _nb_qum); }
+      if (!pt) { break; }
+      if (b_newpt && b_comm_once) { pt->_cltpt_ensure_comm(false, true); }
+      return pt;
+    } while (false);
+  }
+  return cref_t<peer_tracker>();
+}
+  // NOTE If init. fails, it will really retry only after some delay (see _x_qinfo_rcv_init).
+void lm_slot_controller::det_init() throw()
+{
+  if (!(_state == 0 || _state == -2)) { return; }
+
+  if (_state == 0)
+  {
+    _r_prc_uid& q = _qinfo_rcv.auxd_init;
+    q.pid = (bmdx_meta::u_ll)processctl::ff_mc().pid_self();
+    q.pid_deriv = pid_deriv_v1(q.pid);
+    union { s_ll n; double t; }; n = 0; t = clock_ms();
+    q.prc_inst_id = n ^ q.pid;
+    q.livecnt = 0;
+  }
+  if (!_x_qinfo_rcv_init()) { _state = -2; return; }
+
+
+  try {
+    if (_apns.isArray())
+    {
+      for (s_long i = _apns.arrlb(); i <= _apns.arrub(); ++i)
+      {
+        std::wstring pn = _apns.vstr(i);
+        if (pn.empty()) { continue; }
+        _x_pt_getcr(make_fixed_utf8_name(pn), true);
+      }
+    }
+  } catch (...) { _state = -2; return; }
+
+  _state = 1;
+}
+  // mtrk_id_msg:
+  //    unique ID of the message being sent.
+  // id_msg_cmd_sender:
+  //    original command message id (sent from pbo, hbo), associated with the current response;
+  //    for dflt. and none: -1
+  // flags_mtrk: ORed flags, see also md_entry type 54:
+  //    1 - user message tracking is required,
+  //    2 - command slot state update notification is required.
+  // flags_clt_msend:
+  //    same as _s_write (flags_msend & _fl_msend__mask_clt_msend).
+  //    See _fl_msend__mask_clt_msend.
+  // rhtrprx: should be valid ref. to mtrk_htracking object of the proxy that is the current clt_msend client.
+  // Returns:
+  //    1 - success.
+  //    -2 - common-case failure.
+  //    -14 - (only: with b_ignore_hanged == false): failed to send because peer process appears to be hanged or terminated.
+s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) throw()
+{
+  if (mtrk_id_msg == -1) { return -2; }
+  const bool b_ignore_hanged = !!(flags_clt_msend & _fl_msend_ignore_hanged);
+  const bool b_chsbin = bin && ((flags_clt_msend & _fl_msend_use_chsbin) || (_fl_chs & fpt_chsbin));
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false); if (!pt) { return -2; }
+  s_long res_comm = pt->_cltpt_ensure_comm(true, false);
+    if (res_comm < 0) { return -2; }
+    if (res_comm == 0 && !b_ignore_hanged) { return -14; }
+
+  netmsg_header::msg_builder mb(fpt_md | fpt_msg | (bin ? fpt_bin : 0) | (b_chsbin ? fpt_chsbin : 0));
+  if (1)
+  {
+    mdd_id_msg d; d.id_msg.set(mtrk_id_msg); d.flags.set(flags_mtrk);
+    if (!(mb.set_md1(d.type(), t_stringref(d, sizeof(d))))) { return -2; }
+  }
+  if (id_msg_cmd_sender >= 0)
+  {
+    mdd_id_msg_cmd d; d.id_msg.set(id_msg_cmd_sender);
+    if (!(mb.set_md1(d.type(), t_stringref(d, sizeof(d))))) { return -2; }
+  }
+  if (!mb.set_umsg(msg)) { return -2; }
+  if (bin && !mb.set_bin_info(bin.ref())) { return -2; }
+  if (!mb.set_final()) { return -2; }
+  if (1)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    _mtrk_fn_handler ha(pt._rnonc(), mtrk_id_msg, rhtrprx);
+    if (flags_mtrk != 0 && !ha.mtrk_prep()) { return -2; }
+    s_long res = 0;
+    s_ll ipush_lq = -1;
+    if (bin) { res = pt->_qum_send.msend(bin, 0, mb.msg, &ipush_lq); }
+      else { res = pt->_qum_send.msend(mb.msg, 0, cref_t<t_stringref>(), &ipush_lq); }
+    if (res < 1) { return -2; }
+    if (flags_mtrk != 0) { ha.mtrk_prep2(ipush_lq); }
+  }
+  return 1;
+}
+  // Sends pre-composed technical message, with tracking.
+  //    msg must 1) be complete, 2) contain metadata, 3) must not contain user message or binary part.
+  // mtrk_id: required tracking ID, must be != -1.
+  // rhtrprx: should be valid ref. to mtrk_htracking object of the proxy that is the current clt_msend client.
+  // comm_mode:
+  //    1: ensure peer being communicable (try and wait for it's reaction till timeout), and then send the message.
+  //    0: once for this peer, do same as comm_mode 1, all the next times do same as comm_mode -1.
+  //    -1: try comm. once. If peer is communicable, send the message. Otherwise return code -2 (don't wait).
+  // Returns:
+  //    1 - success.
+  //    -2 - common-case failure.
+  //    -14 - failed to send because peer process appears to be hanged or terminated.
+s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) throw()
+{
+  if (mtrk_id == -1) { return -2; }
+  if (!msg.b_complete()) { return -2; }
+  const s_long parts = msg.parts(); if ((parts & (fpt_msg | fpt_bin)) || !(parts & fpt_md)) { return -2; }
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false); if (!pt) { return -2; }
+  bool b_comm_wait = comm_mode == 1;
+  if (comm_mode == 0) { b_comm_wait = pt->_b_clt_mdsend_wait_once; }
+  s_long res_comm = pt->_cltpt_ensure_comm(b_comm_wait, false);
+    if (comm_mode == 0) { pt->_b_clt_mdsend_wait_once = false; }
+    if (res_comm < 0) { return -2; }
+    if (res_comm == 0) { return -14; }
+
+  if (1)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    _mtrk_fn_handler ha(pt._rnonc(), mtrk_id, rhtrprx);
+    if (!ha.mtrk_prep()) { return -2; }
+    s_ll ipush_lq = -1;
+    s_long res = pt->_qum_send.msend(msg.msg, 0, cref_t<t_stringref>(), &ipush_lq);
+    if (res < 1) { return -2; }
+    ha.mtrk_prep2(ipush_lq);
+  }
+  return 1;
+}
+
+  // Ensures creating peer_tracker and establishing the communication with that peer, as specified by comm_mode.
+  // comm_mode: see clt_mdsend.
+  // Returns:
+  //    1 - success.
+  //    -2 - common-case failure.
+  //    -3 - the peer process is not available.
+  //    -14 - peer process appears to be hanged or terminated.
+s_long lm_slot_controller::clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw()
+{
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false); if (!pt) { return -2; }
+  bool b_comm_wait = comm_mode == 1;
+  if (comm_mode == 0) { b_comm_wait = pt->_b_clt_mdsend_wait_once; }
+  s_long res_comm = pt->_cltpt_ensure_comm(b_comm_wait, false);
+    if (comm_mode == 0) { pt->_b_clt_mdsend_wait_once = false; }
+    if (res_comm < 0) { return -3; }
+    if (res_comm == 0) { return -14; }
+    return 1;
+}
+
+  // NOTE x_close() is called from ~lm_slot_controller().
+  //  This occurs in the last thread, releasing the dispatcher session object.
+  //  (But no concurrency with other functions.)
+void lm_slot_controller::_x_close() throw()
+{
+  if (_state != 1) { _state = -4; return; }
+  _state = -3;
+  while (1)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
+    if (_hpt.n() > 0) { for (s_long i = _hpt.n() - 1; i >= 0; --i) { if (_hpt(i)->v.n_refs() <= 1) { _hpt.remove_i(i); } } }
+    if (_hpt.n() <= 0) { break; }
+    sleep_mcs(1000);
+  }
+  try { if (_qinfo_rcv.so.f_constructed() == 1) { _qinfo_rcv.so->auxd.prc_inst_id = -1; } } catch (...) {}
+  _state = -4;
+}
+  // Converts any wchar_t to a char of subset of programmatic identifier: [a-zA-Z0-9_].
+char lm_slot_controller::make_identifier_char(wchar_t c0)  throw()
+{
+  static const char* const map = "abcdefghijklmnop0123456789abcdefgABCDEFGHIJKLMNOPQRSTUVWXYZhijk_labcdefghijklmnopqrstuvwxyzmnopq";
+  unsigned int c = (unsigned int)c0 & 0xffff; c ^= c >> 8; c &= 0x7f; if (c < 32) { c += '0'; } c -= 32;
+  return map[c];
+}
+  // Converts an arbitrary name (wide string) to fixed-length string, suitable for unique naming the corresponding shared object.
+  //  The resulting string consists of concatenated:
+  //    1) __lm_slot_controller_name_prefix,
+  //    2) 4-byte hash of the given name, converted with make_identifier_char() into symbolic form (also 4 characters),
+  //    3) characters of the given name itself, converted with make_identifier_char() into symbolic form, up to least of name length and t_name_shm capacity.
+bmdx_shm::t_name_shm lm_slot_controller::__make_name_one_impl(arrayref_t<char> name) throw()
+{
+  if (!name.is_valid()) { return bmdx_shm::t_name_shm(); }
+  t_stringref prefix(__lm_slot_controller_name_prefix);
+  s_long h = yk_c::hashx_common::_skf_pchars<char>().Fhash(name.pd(), name.n());
+  const s_long nc3 = (s_long)bmdx_minmax::myllmin(name.n(), __lm_slot_controller_nbmax_peer_name_root);
+  const s_long np = s_long(prefix.n());
+  const s_long i3 = s_long(np + 4);
+  //
+  bmdx_shm::t_name_shm x; x.resize(i3 + nc3);
+  for (s_long i = 0; i < np; ++i) { x[i] = prefix[i]; }
+  bmdx_str::words::set_be4(&x[np], 0, h); for (s_long i = 0; i < 4; ++i) { x[np + i] = make_identifier_char(x[np + i]); }
+  for (s_long i = 0; i < nc3; ++i) { x[i3 + i] = make_identifier_char(name[i]); }
+  return x;
+}
+  // Converts two names (wide strings) to fixed-length string, suitable for unique naming the shared object,
+  //    associated with combination of that names.
+  //  The resulting string consists of concatenated:
+  //    1) __lm_slot_controller_name_prefix,
+  //    2) 4-byte hash of name1, converted with make_identifier_char() into symbolic form (4 characters),
+  //    3) 4-byte hash of name2, converted with make_identifier_char() into symbolic form (4 characters),
+  //    4) characters of name1 (max. __lm_slot_controller_nbmax_peer_name_root, which is less than 1/2 of t_name_shm capacity),
+  //    5) characters of name2 (max. __lm_slot_controller_nbmax_peer_name_root, which is less than 1/2 of t_name_shm capacity).
+  // See also make_name_one().
+bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) throw()
+{
+  if (!(name1.is_valid() && name2.is_valid())) { return bmdx_shm::t_name_shm(); }
+  t_stringref prefix(__lm_slot_controller_name_prefix);
+  s_long h1 = yk_c::hashx_common::_skf_pchars<char>().Fhash(name1.pd(), name1.n());
+  s_long h2 = yk_c::hashx_common::_skf_pchars<char>().Fhash(name2.pd(), name2.n());
+  const s_long nc4 = (s_long)bmdx_minmax::myllmin(name1.n(), __lm_slot_controller_nbmax_peer_name_root);
+  const s_long nc5 = (s_long)bmdx_minmax::myllmin(name2.n(), __lm_slot_controller_nbmax_peer_name_root);
+  const s_long np = s_long(prefix.n());
+  const s_long i3 = s_long(np + 4);
+  const s_long i4 = s_long(i3 + 4);
+  const s_long i5 = s_long(i4 + nc4);
+  //
+  bmdx_shm::t_name_shm x; x.resize(i5 + nc5);
+  for (s_long i = 0; i < np; ++i) { x[i] = prefix[i]; }
+  bmdx_str::words::set_be4(&x[np], 0, h1); for (s_long i = 0; i < 4; ++i) { x[np + i] = make_identifier_char(x[np + i]); }
+  bmdx_str::words::set_be4(&x[i3], 0, h2); for (s_long i = 0; i < 4; ++i) { x[i3 + i] = make_identifier_char(x[i3 + i]); }
+  for (s_long i = 0; i < nc4; ++i) { x[i4 + i] = make_identifier_char(name1[i]); }
+  for (s_long i = 0; i < nc5; ++i) { x[i5 + i] = make_identifier_char(name2[i]); }
+  return x;
+}
+
+#endif // bmdx_part_dispatcher_mt
+} // namespace bmdx_main_intl_lib
+
+#if defined(__clang__)
+  #pragma clang diagnostic pop
+#endif
+
+#endif // bmdx_main_intl_lib_H
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#ifndef __bmdx_main_impl_skip
+
+#if defined(__clang__)
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Wunknown-pragmas"
+  #pragma clang diagnostic ignored "-Wunused-parameter"
+  #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
+  #pragma clang diagnostic ignored "-Wunused-function"
+#endif
+
+using namespace bmdx_main_intl_lib;
 using namespace bmdx_str::words;
 using namespace bmdx_str::conv;
 
@@ -29,9 +1953,15 @@ using namespace bmdx_str::conv;
 #include <algorithm>
 #include <limits>
 #include <clocale>
-#include <cctype>
+#include <locale.h>
+#include <ctype.h>
 #include <cwctype>
 #include <cerrno>
+
+// NOTE The below header is not used, because it does not supply wcsncasecmp_l together with other functions (like towlower_l).
+#if defined(__FreeBSD__)
+  #include <xlocale.h>
+#endif
 
 namespace
 {
@@ -51,25 +1981,148 @@ namespace
 
 namespace bmdx
 {
+  struct wsbs_lks {};
+  typedef critsec_t<wsbs_lks> t_critsec_locale;
+
   #ifdef _bmdxpl_Wnds
-    s_long wsbs_lkp() { return -1; } // ws/bs functions do not change locale, locking is not needed
+      #if defined(__BORLANDC__) || (defined(__GNUC__) && !defined(__clang__))
+        #define __bmdx_char_case_tables 1
+        #define __bmdx_use_locale_t 0
+      #else
+        #define __bmdx_char_case_tables 0
+        #define __bmdx_use_locale_t 1
+      #endif
+      #define __bmdx_use_wcrtomb_l 0
   #endif
+
   #ifdef _bmdxpl_Psx
-      s_long wsbs_lkp() { return 10; } // ws/bs functions change locale, locking is needed
+
+      // NOTE Both (__bmdx_use_locale_t, __bmdx_char_case_tables) 0 may be used only in Android.
+      // NOTE Defining __bmdx_char_case_tables 1 replaces certain part of usages, enabled by __bmdx_use_locale_t 1,
+      //    but does not completely suppress them all.
+
+      #if defined (__FreeBSD__)
+        #define __bmdx_char_case_tables 1
+        #define __bmdx_use_locale_t 1
+        #define __bmdx_use_wcrtomb_l 1
+      #elif (__APPLE__ && __MACH__)
+        #if defined(__clang__)
+          #define __bmdx_char_case_tables 0
+          #define __bmdx_use_locale_t 1
+          #define __bmdx_use_wcrtomb_l 1
+        #else
+          #define __bmdx_char_case_tables 1
+          #define __bmdx_use_locale_t 0
+          #define __bmdx_use_wcrtomb_l 0
+        #endif
+      #elif defined(__ANDROID__)
+        #define __bmdx_char_case_tables 0
+        #define __bmdx_use_locale_t 0
+        #define __bmdx_use_wcrtomb_l 0
+      #elif defined(__SUNPRO_CC) || defined (__sun)
+        #define __bmdx_char_case_tables 1
+        #define __bmdx_use_locale_t 0
+        #define __bmdx_use_wcrtomb_l 0
+      #else
+        #define __bmdx_char_case_tables 0
+        #define __bmdx_use_locale_t 1
+        #define __bmdx_use_wcrtomb_l 0
+      #endif
   #endif
-  #ifdef _bmdxpl_OS_NAME_HERE
-      s_long wsbs_lkp() { }
+
+  #if !__bmdx_use_locale_t
+      #define __bmdx_setlocale_name ""
+      s_long wsbs_lk_dt() { return 10; } // for _wsToBs, _bsToWs only
+      namespace{ bool ensure_loc(s_long loc_type) { return false;  } }
+  #else
+    #ifdef _bmdxpl_Wnds
+      s_long wsbs_lk_dt() { return -1; } // for _wsToBs, _bsToWs only
+
+      #define __bmdx_locale_t_null ((_locale_t)0)
+      #define __bmdx_tolower_l _tolower_l
+      #define __bmdx_towlower_l _towlower_l
+      #define __bmdx_toupper_l _toupper_l
+      #define __bmdx_towupper_l _towupper_l
+
+      struct _locale_t_base { _locale_t h; };
+      struct _locale_t_handle : _locale_t_base
+      {
+        void ensure_init(int cat, const char* loc) { if (!b_valid()) { t_critsec_locale __lock(10, -1); if (sizeof(__lock)) {} if (!b_valid()) { h = _create_locale(cat, loc); } } }
+        bool b_valid() const { return h != __bmdx_locale_t_null; }
+        _locale_t_handle() { _reset(); }
+        ~_locale_t_handle() { if (b_valid()) { t_critsec_locale __lock(10, -1); if (b_valid()) { _free_locale(h); _reset(); } } }
+        private:
+          _locale_t_handle(const _locale_t_handle&); void operator=(const _locale_t_handle&);
+          void _reset() { h = __bmdx_locale_t_null; }
+      };
+      namespace
+      {
+        static _locale_t_base __hlocale[3] = { { __bmdx_locale_t_null }, { __bmdx_locale_t_null }, { __bmdx_locale_t_null } };
+        inline _locale_t_handle* phloc(s_long lt) { return static_cast<_locale_t_handle*>(&__hlocale[lt]); }
+        bool ensure_loc(s_long loc_type)
+        {
+          if (loc_type == 0) { return false; } // this loc. is not created ever, because the current locale is not constant in the program
+            else if (loc_type == 1) { if (!phloc(1)->b_valid()) { phloc(1)->ensure_init(LC_ALL, ""); } }
+            else if (loc_type == 2) { if (!phloc(2)->b_valid()) { phloc(2)->ensure_init(LC_ALL, "C"); } }
+            else { return false; }
+          return phloc(loc_type)->b_valid();
+        }
+      }
+    #endif
+    #ifdef _bmdxpl_Psx
+      #if __bmdx_use_wcrtomb_l
+        #define __bmdx_setlocale_name 0
+        s_long wsbs_lk_dt() { return -1; } // for _wsToBs, _bsToWs only
+      #else
+        #define __bmdx_setlocale_name ""
+        s_long wsbs_lk_dt() { return 10; } // for _wsToBs, _bsToWs only
+      #endif
+
+      #define __bmdx_locale_t_null ((locale_t)0)
+      #define __bmdx_tolower_l tolower_l
+      #define __bmdx_towlower_l towlower_l
+      #define __bmdx_toupper_l toupper_l
+      #define __bmdx_towupper_l towupper_l
+
+      struct _locale_t_base { locale_t h; };
+      struct _locale_t_handle : _locale_t_base
+      {
+        void ensure_init(int cat, const char* loc) { if (!b_valid()) { t_critsec_locale __lock(10, -1); if (sizeof(__lock)) {} if (!b_valid()) { h = newlocale(cat, loc, __bmdx_locale_t_null); } } }
+        bool b_valid() const { return h != __bmdx_locale_t_null; }
+        _locale_t_handle() { _reset(); }
+        ~_locale_t_handle() { if (b_valid()) { t_critsec_locale __lock(10, -1); if (b_valid()) { freelocale(h); _reset(); } } }
+        private:
+          _locale_t_handle(const _locale_t_handle&); void operator=(const _locale_t_handle&);
+          void _reset() { h = __bmdx_locale_t_null; }
+      };
+      namespace
+      {
+        static _locale_t_base __hlocale[3] = { { __bmdx_locale_t_null }, { __bmdx_locale_t_null }, { __bmdx_locale_t_null } };
+        inline _locale_t_handle* phloc(s_long lt) { return static_cast<_locale_t_handle*>(&__hlocale[lt]); }
+        bool ensure_loc(s_long loc_type)
+        {
+          if (loc_type == 0) { return false; } // this loc. is not created ever, because the current locale is not constant in the program
+            else if (loc_type == 1) { if (!phloc(1)->b_valid()) { phloc(1)->ensure_init(LC_CTYPE_MASK | LC_COLLATE_MASK, ""); } }
+            else if (loc_type == 2) { if (!phloc(2)->b_valid()) { phloc(2)->ensure_init(LC_CTYPE_MASK | LC_COLLATE_MASK, "C"); } }
+            else { return false; }
+          return phloc(loc_type)->b_valid();
+        }
+      }
+    #endif
+    #ifdef _bmdxpl_OS_NAME_HERE
+        s_long wsbs_lk_dt() { } // for _wsToBs, _bsToWs only
+    #endif
   #endif
-//~!!! fix for POSIX systems: avoid irreversible modification of program locale
+
   _fls75 __locname_du;
   bool __b_locname_du(false);
-  struct setlocale_locked
+  struct t_lock_locale
   {
     int cat;
     _fls75 name0;
     t_critsec_locale __lock;
-    setlocale_locked(int cat_, const char* locname_)
-      : cat(-1), name0(), __lock(wsbs_lkp(), -1)
+    t_lock_locale(int cat_, const char* locname_, s_ll lk_dtmcs)
+      : cat(-1), name0(), __lock(lk_dtmcs, -1)
     {
       if (!locname_) { return; }
       const bool b_du = *locname_ == 0;
@@ -86,9 +2139,97 @@ namespace bmdx
         const char* p = std::setlocale(cat, locname_);
         if (p && b_du && !__b_locname_du) { __locname_du = p; __b_locname_du = true; }
       }
-    }    
-//    ~setlocale_locked() { if (cat >= 0) { std::setlocale(cat, name0.c_str()); } }
+    }
+    ~t_lock_locale() { if (cat >= 0) { std::setlocale(cat, name0.c_str()); } }
   };
+
+
+char __bmdx_tolower_c(char c) { enum { n = 256 }; static char d[n]; static bool b_init(0); if (!b_init) { t_lock_locale __lock(LC_ALL, "C", 10); if (sizeof(__lock)) {} for (int i = 0; i < n; ++i) { d[i] = char(tolower(char(i))); } b_init = 1; } return d[(unsigned char)c]; }
+char __bmdx_toupper_c(char c) { enum { n = 256 }; static char d[n]; static bool b_init(0); if (!b_init) { t_lock_locale __lock(LC_ALL, "C", 10); if (sizeof(__lock)) {} for (int i = 0; i < n; ++i) { d[i] = char(toupper(char(i))); } b_init = 1; } return d[(unsigned char)c]; }
+namespace { struct __init_char_case_tables1 { __init_char_case_tables1() { __bmdx_tolower_c(0); __bmdx_toupper_c(0); } }; __init_char_case_tables1 __inst___init_char_case_tables1; }
+#if __bmdx_char_case_tables
+  wchar_t __bmdx_towlower_sys(wchar_t c0)
+  {
+    s_long c1 = c0; c1 &= 0xffff;
+    if (wchar_t(c1) != c0) { return c0; }
+    enum { n = 65536 }; static bmdx_meta::s_short d[n]; static bool b_init(0);
+    if (!b_init) { t_lock_locale __lock(LC_ALL, "", 10); if (sizeof(__lock)) {} for (int i = 0; i < n; ++i) { d[i] = towlower(i & 0x8000 ? i | ~int(0xffff) : i); } b_init = 1; }
+    return wchar_t(d[c1]) & 0xffff;
+  }
+  wchar_t __bmdx_towupper_sys(wchar_t c0)
+  {
+    s_long c1 = c0; c1 &= 0xffff;
+    if (wchar_t(c1) != c0) { return c0; }
+    enum { n = 65536 }; static bmdx_meta::s_short d[n]; static bool b_init(0);
+    if (!b_init) { t_lock_locale __lock(LC_ALL, "", 10); if (sizeof(__lock)) {} for (int i = 0; i < n; ++i) { d[i] = towupper(i & 0x8000 ? i | ~int(0xffff) : i); } b_init = 1; }
+    return wchar_t(d[c1]) & 0xffff;
+  }
+
+  wchar_t __bmdx_towlower_c(wchar_t c0)
+  {
+    s_long c1 = c0; c1 &= 0x7f;
+    if (wchar_t(c1) != c0) { return c0; }
+    enum { n = 128 }; static bmdx_meta::s_short d[n]; static bool b_init(0);
+    if (!b_init) { t_lock_locale __lock(LC_ALL, "C", 10); if (sizeof(__lock)) {} for (int i = 0; i < n; ++i) { d[i] = towlower(i); } b_init = 1; }
+    return d[c1];
+  }
+  wchar_t __bmdx_towupper_c(wchar_t c0)
+  {
+    s_long c1 = c0; c1 &= 0x7f;
+    if (wchar_t(c1) != c0) { return c0; }
+    enum { n = 128 }; static bmdx_meta::s_short d[n]; static bool b_init(0);
+    if (!b_init) { t_lock_locale __lock(LC_ALL, "C", 10); if (sizeof(__lock)) {} for (int i = 0; i < n; ++i) { d[i] = towupper(i); } b_init = 1; }
+    return d[c1];
+  }
+  namespace { struct __init_char_case_tables2 { __init_char_case_tables2() { __bmdx_towlower_sys(0); __bmdx_towupper_sys(0); __bmdx_towlower_c(0); __bmdx_towupper_c(0); } }; __init_char_case_tables2 __inst___init_char_case_tables2; }
+#endif
+
+namespace {
+  static int __wcsncasecmp_curr(const wchar_t* s1, const wchar_t* s2, size_t n)
+  {
+    if (n == 0) { return 0; }
+    wchar_t c1, c2;
+    for (; *s1; s1++, s2++) { c1 = towlower(*s1); c2 = towlower(*s2); if (c1 != c2) { return (int)c1 - c2; } if (--n == 0) { return 0; } }
+    return -*s2;
+  }
+  #if __bmdx_char_case_tables
+    static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n, s_long loc_type)
+    {
+      if (loc_type == 0) { return __wcsncasecmp_curr(s1, s2, n); }
+      if (n == 0) { return 0; }
+      wchar_t c1, c2;
+      if (loc_type == 1) { for (; *s1; s1++, s2++) { c1 = __bmdx_towlower_sys(*s1); c2 = __bmdx_towlower_sys(*s2); if (c1 != c2) { return (int)c1 - c2; } if (--n == 0) { return 0; } } }
+        else if (loc_type == 2) { for (; *s1; s1++, s2++) { c1 = __bmdx_towlower_c(*s1); c2 = __bmdx_towlower_c(*s2); if (c1 != c2) { return (int)c1 - c2; } if (--n == 0) { return 0; } } }
+      return -*s2;
+    }
+  #elif __bmdx_use_locale_t
+    #ifdef _bmdxpl_Psx
+      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n, s_long loc_type)
+      {
+        if (loc_type == 0) { return __wcsncasecmp_curr(s1, s2, n); }
+        if (!(loc_type >= 1 && loc_type <= 2 && phloc(loc_type)->b_valid())) { return 0; } // NOTE the caller must not pass wrong loc_type
+        return wcsncasecmp_l(s1, s2, n, phloc(loc_type)->h);
+      }
+    #endif
+  #else
+    #ifdef _bmdxpl_Psx
+        // Android-specific.
+      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n, s_long)
+      {
+        wchar_t c1, c2;
+        if (n == 0) { return 0; }
+        for (; *s1; s1++, s2++)
+        {
+          c1 = wchar_t(towlower(*s1)); c2 = wchar_t(towlower(*s2));
+          if (c1 != c2) { return (int)c1 - c2; }
+          if (--n == 0) { return 0; }
+        }
+        return -*s2;
+      }
+    #endif
+  #endif
+}
+
 }
 
 namespace bmdx
@@ -130,12 +2271,85 @@ namespace bmdx
   std::wstring trim(const std::wstring& s, const std::wstring& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
   std::string trim(const std::string& s, const std::string& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
 
-  std::string lcase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(std::tolower(s[pos])); } return s2; }
-  std::string ucase(const std::string& s) { std::string s2; for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(std::toupper(s[pos])); } return s2; }
-  std::wstring lcase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towlower(s[pos])); } return s2; }
-  std::wstring ucase(const std::wstring& s) { std::wstring s2; for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(std::towupper(s[pos])); } return s2; }
+  std::string lcase_c(const std::string& s)
+  {
+    std::string s2; s2.reserve(s.size());
+    for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(__bmdx_tolower_c(s[pos])); }
+    return s2;
+  }
+  std::string ucase_c(const std::string& s)
+  {
+    std::string s2; s2.reserve(s.size());
+    for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(__bmdx_toupper_c(s[pos])); }
+    return s2;
+  }
+  #if __bmdx_char_case_tables
+    std::wstring lcase_la(const std::wstring& s, s_long loc_type)
+    {
+      std::wstring s2; s2.reserve(s.size());
+      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(towlower(s[pos])); } }
+        else if (loc_type == 1) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towlower_sys(s[pos]); } }
+        else if (loc_type == 2) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towlower_c(s[pos]); } }
+      return s2;
+    }
+    std::wstring ucase_la(const std::wstring& s, s_long loc_type)
+    {
+      std::wstring s2; s2.reserve(s.size());
+      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(towupper(s[pos])); } }
+        else if (loc_type == 1) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towupper_sys(s[pos]); } }
+        else if (loc_type == 2) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towupper_c(s[pos]); } }
+      return s2;
+    }
+  #elif __bmdx_use_locale_t
+    std::wstring lcase_la(const std::wstring& s, s_long loc_type)
+    {
+      std::wstring s2; s2.reserve(s.size());
+      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(towlower(s[pos])); } }
+      else
+      {
+        if (!ensure_loc(loc_type)) { throw XUExec("lcase_la.w.1"); }
+        for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(__bmdx_towlower_l(s[pos], phloc(loc_type)->h)); }
+      }
+      return s2;
+    }
+    std::wstring ucase_la(const std::wstring& s, s_long loc_type)
+    {
+      std::wstring s2; s2.reserve(s.size());
+      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(towupper(s[pos])); } }
+      else
+      {
+        if (!ensure_loc(loc_type)) { throw XUExec("ucase_la.w.1"); }
+        for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(__bmdx_towupper_l(s[pos], phloc(loc_type)->h)); }
+      }
+      return s2;
+    }
+  #else
+    std::wstring lcase_la(const std::wstring& s, s_long loc_type)
+    {
+      std::wstring s2; s2.reserve(s.size());
+      for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(towlower(s[pos])); }
+      return s2;
+    }
+    std::wstring ucase_la(const std::wstring& s, s_long loc_type)
+    {
+      std::wstring s2; s2.reserve(s.size());
+      for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(towupper(s[pos])); }
+      return s2;
+    }
+  #endif
 
-  static bool _wcsileftincl1(const wchar_t* ps1, const wchar_t* ps2) { if (!ps1 || !ps2) { return false; } while (*ps2) { if (!(*ps1 && std::towlower(*ps1) == std::towlower(*ps2))) { return false; } ++ps1; ++ps2; } return true; }
+  static bool _eq_wcs_ascii_nocase(const wchar_t* ps1, const wchar_t* ps2)
+  {
+    if (!ps1 || !ps2) { return false; }
+    while (1)
+    {
+      wchar_t a = *ps1++, b = *ps2++;
+      if (a >= L'A' && a <= L'Z') { a += L'a' - L'A'; }
+      if (b >= L'A' && b <= L'Z') { b += L'a' - L'A'; }
+      if (b != a) { return false; }
+      if (!a) { return true; }
+    }
+  }
 
   static meta::s_ll max_scstr() { static meta::s_ll n(0); if (!n) { meta::s_ll n2 = meta::s_ll(std::string().max_size()); if (n2 >> 60) { n2 = (1ll << 60) - 1; } n = n2; } return n; }
   static meta::s_ll max_swstr() { static meta::s_ll n(0); if (!n) { meta::s_ll n2 = meta::s_ll(std::wstring().max_size()); if (n2 >> 59) { n2 = (1ll << 59) - 1; } n = n2; } return n; }
@@ -176,18 +2390,45 @@ namespace bmdx
     return q;
   }
 
+    // Find s_what in s.
+    // pos: starting position in s.
+    // Returns:
+    //    a) if found -- the position in s.
+    //    b) if not found -- s.n().
+  s_ll _find_str(arrayref_t<wchar_t> s, arrayref_t<wchar_t> s_what, s_ll pos)
+  {
+    if (s_what.n() <= 0 || pos >= s.n()) { return s.n(); }
+    if (pos < 0) { pos = 0; }
+    const wchar_t* p = s.pd() + pos;
+    const wchar_t* const p2 = s.pd() + (s.n() + 1) - s_what.n();
+    const wchar_t c0 = s_what[0];
+    while (p < p2)
+    {
+      if (*p == c0)
+      {
+        const wchar_t* a = p;
+        const wchar_t* b = s_what.pd();
+        s_ll i = 1;
+        for (; i < s_what.n(); ++i) { if (*++a != *++b) { break; } }
+        if (i >= s_what.n()) { return p - s.pd(); }
+      }
+      ++p;
+    }
+    return s.n();
+  }
+
     // Find (in s) pos. of first character which does not occur in chars.
     //  Search only in range [begin..end). The range is automatically adjusted to fit into s.
     // chars: 0-terminated string. (\0 character cannot be specified as ignored by search.)
     // Returns:
-    //  a) if found -- the position in range [begin..end).
-    //  b) if not found -- s.length().
-  _t_wz _find_char_except(const std::wstring& s, _t_wz begin, _t_wz end, const wchar_t* chars) throw()
+    //    a) if found -- the position in range [begin..end).
+    //    b) if not found -- s.n().
+  s_ll _find_char_except(arrayref_t<wchar_t> s, s_ll begin, s_ll end, const wchar_t* chars) throw()
   {
     if (begin <= 0) { begin = 0; }
-    if (end > s.length()) { end = s.length(); }
-    if (!*chars || end <= begin) { return s.length(); }
-    for (_t_wz ic = begin; ic < end; ++ic)
+    if (end > s.n()) { end = s.n(); }
+    if (!*chars || end <= begin) { return s.n(); }
+    for (s_ll ic = begin; ic < end; ++ic)
     {
       _yk_reg wchar_t q = s[ic];
       _yk_reg wchar_t c = 0;
@@ -200,7 +2441,7 @@ namespace bmdx
       }
       if (!c) { return ic; }
     }
-    return s.length();
+    return s.n();
   }
 
 namespace
@@ -333,8 +2574,20 @@ struct cv_ff
     {
       if (!p_) { throw XUExec("_kfx::Fhash.2", _pmsg(p_)); }
       const std::wstring& key = *p_;
-      if (flags & unity::fkcmpSNocase) { _yk_reg s_long h = 0; _yk_reg const wchar_t* p = key.c_str(); _yk_reg _t_wz n = key.size(); while (n > 0) { h *= 31; h += std::towlower(*p); ++p; --n; } return h; }
-        else { _yk_reg s_long h = 0; _yk_reg const wchar_t* p = key.c_str(); _yk_reg _t_wz n = key.size(); while (n > 0) { h *= 31; h += *p++; --n; } return h; }
+      if (flags & unity::fkcmpSNocase)
+      {
+        _yk_reg s_long h = 0; _yk_reg const wchar_t* p = key.c_str(); _yk_reg _t_wz n = key.size();
+        #if __bmdx_char_case_tables
+            while (n > 0) { h *= 31; h += __bmdx_towlower_sys(*p); ++p; --n; }
+        #elif __bmdx_use_locale_t
+            if (!ensure_loc(1)) { throw XUExec("_kfx::Fhash.4"); }
+            while (n > 0) { h *= 31; h += __bmdx_towlower_l(*p, phloc(1)->h); ++p; --n; }
+        #else
+            while (n > 0) { h *= 31; h += towlower(*p); ++p; --n; }
+        #endif
+        return h;
+      }
+      else { _yk_reg s_long h = 0; _yk_reg const wchar_t* p = key.c_str(); _yk_reg _t_wz n = key.size(); while (n > 0) { h *= 31; h += *p++; --n; } return h; }
     }
     static inline s_long Fhash(const unity* p_, s_long flags) { return p_->k_hashf(flags); }
     template<class C> static inline s_long Fhash(const vec2_t<C, __vecm_tu_selector>* p, s_long flags)
@@ -376,7 +2629,15 @@ struct cv_ff
       if (flags & unity::fkcmpSNocase)
       {
         if (p1->size() != p2->size()) { return false; }
-        _t_wz n = p1->size(); for (_t_wz pos = 0; pos < n; ++pos) { if (std::towlower((*p1)[pos]) != std::towlower((*p2)[pos])) { return false; } }
+        _t_wz n = p1->size();
+        #if __bmdx_char_case_tables
+          for (_t_wz pos = 0; pos < n; ++pos)  {  if (__bmdx_towlower_sys((*p1)[pos]) != __bmdx_towlower_sys((*p2)[pos])) { return false; }  }
+        #elif __bmdx_use_locale_t
+          if (!ensure_loc(1)) { throw XUExec("_kfx::Feq.6"); }
+          for (_t_wz pos = 0; pos < n; ++pos)  {  if (__bmdx_towlower_l((*p1)[pos], phloc(1)->h) != __bmdx_towlower_l((*p2)[pos], phloc(1)->h)) { return false; }  }
+        #else
+          for (_t_wz pos = 0; pos < n; ++pos)  {  if (towlower((*p1)[pos]) != towlower((*p2)[pos])) { return false; }  }
+        #endif
         return true;
       }
       else { return *p1 == *p2; }
@@ -440,13 +2701,29 @@ struct cv_ff
       if (a.size() == 0) { return b.size() > 0; } if (b.size() == 0) { return false; }
       typedef typename std::wstring::const_iterator L;
       L la(a.begin()); L lb(b.begin()); L lae(a.end()); L lbe(b.end());
-      do {
-        if (la == lae) { return lb != lbe; } if (lb == lbe) { return false; }
-        // ~!!! not impl. add flag for locale-dependent comparing c1, c2
-        if (flags & unity::fkcmpSNocase) { T c1 = T(std::towlower(*la)); T c2 = T(std::towlower(*lb)); if (c1 != c2) { return c1 < c2; } }
-          else { if (*la < *lb) { return true; } if (*lb < *la) { return false; } }
-        ++la; ++lb;
-      } while (true);
+      #if __bmdx_char_case_tables
+        do {
+          if (la == lae) { return lb != lbe; } if (lb == lbe) { return false; }
+          if (flags & unity::fkcmpSNocase) { T c1 = T(__bmdx_towlower_sys(*la)); T c2 = T(__bmdx_towlower_sys(*lb)); if (c1 != c2) { return c1 < c2; } }
+            else { if (*la < *lb) { return true; } if (*lb < *la) { return false; } }
+          ++la; ++lb;
+        } while (true);
+      #elif __bmdx_use_locale_t
+        if (!ensure_loc(1)) { throw XUExec("_kfx::Fless.5"); }
+        do {
+          if (la == lae) { return lb != lbe; } if (lb == lbe) { return false; }
+          if (flags & unity::fkcmpSNocase) { T c1 = T(__bmdx_towlower_l(*la, phloc(1)->h)); T c2 = T(__bmdx_towlower_l(*lb, phloc(1)->h)); if (c1 != c2) { return c1 < c2; } }
+            else { if (*la < *lb) { return true; } if (*lb < *la) { return false; } }
+          ++la; ++lb;
+        } while (true);
+      #else
+        do {
+          if (la == lae) { return lb != lbe; } if (lb == lbe) { return false; }
+          if (flags & unity::fkcmpSNocase) { T c1 = T(towlower(*la)); T c2 = T(towlower(*lb)); if (c1 != c2) { return c1 < c2; } }
+            else { if (*la < *lb) { return true; } if (*lb < *la) { return false; } }
+          ++la; ++lb;
+        } while (true);
+      #endif
     }
     static inline bool _Fless12(const unity* p1, const unity* p2, s_long flags)
     {
@@ -564,7 +2841,7 @@ struct cv_ff
       // Returns:
       //  1 - success,
       //  0 - nothing done because the array is empty and its type is not changed,
-      //  < 0 - failure (the value indicates the place of error occurence).
+      //  < 0 - failure (the value indicates the place of error occurrence).
     static s_long Lua_fill(unity* pv, const unity* px, s_long utt);
     typedef s_long (*PFua_fill)(unity* pv, const unity* px, s_long utt);
     static s_long Fua_fill(unity* pv, const unity* px, s_long utt);
@@ -605,6 +2882,7 @@ struct cv_ff
 
     static meta::s_ll Fn(const void* ps);
     static const void* Fp0(const void* ps);
+    static const void* Fp0_arrayref(const arrayref_t<wchar_t>& s);
     static s_long Fwcs();
     static s_long Fti();
   };
@@ -675,7 +2953,7 @@ struct cv_ff
       // Fcnv_this returns:
       //  1 - success.
       //   0 - utt_dest is same as the current type.
-      //  < 0 - failure (the number shows where it occured.)
+      //  < 0 - failure (the number shows where it occurred.)
     static s_long Fcnv_this(unity* p, s_long cs, s_long utt_dest, s_long keep_name) throw();
 
       // flags:
@@ -687,7 +2965,7 @@ struct cv_ff
       // Fasg returns:
       //  1 - success.
       //   0 - p and px are the same.
-      //  < 0 - failure (the number shows where it occured.)
+      //  < 0 - failure (the number shows where it occurred.)
     typedef s_long (*PFasg)(unity* p, const unity* px, s_long flags);
     static void Lasg(unity* p, const unity* px, s_long flags);
     static s_long Fasg(unity* p, const unity* px, s_long flags) throw();
@@ -724,7 +3002,7 @@ struct cv_ff
     static void* Litfslist_cr(unity_common::__Psm pmsm);
     static void* Fitfslist_cr();
 
-      // Returns: 1 - success, 0 - pointer == 0, -1 - deleted but exception occured during op. delete.
+      // Returns: 1 - success, 0 - pointer == 0, -1 - deleted but exception occurred during op. delete.
     typedef s_long (*PFitfslist_del)(void* p);
     static s_long Litfslist_del(unity_common::__Psm pmsm, void* p);
     static s_long Fitfslist_del(void* p);
@@ -764,7 +3042,21 @@ struct cv_ff
 
     typedef s_long (*PFrequest)(const unity::mod_handle* pmh, const unity* para, unity* retval);
     static s_long Frequest(const unity::mod_handle* pmh, const unity* para, unity* retval);
-  };  
+  };
+
+  struct cv_paramline
+  {
+      // Encodes hashlist or map *phm as string *ps, using term *pterm.
+      //  1 - success, -1 - bad arg, -2 - failure.
+    typedef s_long (*PFpl_encode)(const unity* phm, unity* ps, const unity* pterm);
+    static s_long Fpl_encode(const unity* phm, unity* ps, const unity* pterm);
+  };
+  struct cv_mget
+  {
+    typedef arrayref_t<char> t_stringref;
+    typedef s_long (*PFmget_set_retvals)(unity* phm, const cref_t<t_stringref>* patt, unity* pretmsg, cref_t<t_stringref>* retatt, s_long proc_flags);
+    static s_long Fmget_set_retvals(unity* phm, const cref_t<t_stringref>* patt, unity* pretmsg, cref_t<t_stringref>* retatt, s_long proc_flags);
+  };
 };
 
 struct cv_ff_pcos
@@ -1011,6 +3303,7 @@ bool cv_ff::cv_wstring::Fcopy(std::wstring* ps, meta::s_ll n, const void* p, s_l
 }
 meta::s_ll cv_ff::cv_wstring::Fn(const void* ps) { return reinterpret_cast<const std::wstring*>(ps)->size(); }
 const void* cv_ff::cv_wstring::Fp0(const void* ps) { static const wchar_t* pc0 = L""; const std::wstring& r = *reinterpret_cast<const std::wstring*>(ps); return r.size() ? &r[0] : pc0; }
+const void* cv_ff::cv_wstring::Fp0_arrayref(const arrayref_t<wchar_t>& s) { if (!(s.is_valid() && s.pd())) { static const wchar_t* pc0 = L""; return pc0; } return s.pd(); }
 s_long cv_ff::cv_wstring::Fwcs() { s_long x1 = 0x201; s_long x2 = s_long(((char*)&x1)[0]) + (s_long(((char*)&x1)[1]) << 8); return sizeof(wchar_t) | (x1 == x2 || sizeof(wchar_t) == 1 ? 0 : 1) << 8; }
 s_long cv_ff::cv_wstring::Fti() { return yk_c::typer<std::wstring, __vecm_tu_selector>().t_ind; }
 
@@ -1278,6 +3571,8 @@ void* unity_common::ls_modsm(s_long ind)
     (void*)cv_ff::cv_recreate::Frecreate,
     (void*)cv_ff::cv_rootldr::Finit_by_pmsm,
     (void*)cv_ff_pcos::Fcheckref,
+    (void*)cv_ff::cv_paramline::Fpl_encode,
+    (void*)cv_ff::cv_mget::Fmget_set_retvals,
   };
 
   return ind >= 0 && ind < size ? smt[ind] : 0;
@@ -3365,6 +5660,7 @@ unity::unity(const _unitydate& x)        { ut = utEmpty; pmsm = unity_common::ls
 unity::~unity() throw() { clear(); }
 void unity::clear() throw()
 {
+  if (!this) { return; }
   s_long uttf = _uttf();
   if (uttf < utString) { _data.p1 = 0; _data.p2 = 0; ut = utEmpty; return; }
   cv_ff::cv_create::Ldestroy(pmsm, &_data, uttf, 0x4);
@@ -3377,6 +5673,13 @@ unity& unity::operator=(const std::wstring& src)
   std::wstring* next = cv_ff::cv_wstring::Lnew(pmsm, src.length(), cv_ff::cv_wstring::Fp0(&src), cv_ff::cv_wstring::Fwcs(), 0);
   if (next) { clear(); _data.p1 = next; ut = utString | xfPtr; return *this; }
   throw XUExec("operator=(const std::wstring&)");
+}
+unity& unity::operator=(const arrayref_t<wchar_t>& src)
+{
+  std::wstring* next = 0;
+  if (src.is_valid()) { next = cv_ff::cv_wstring::Lnew(pmsm, src.n(), cv_ff::cv_wstring::Fp0_arrayref(src), cv_ff::cv_wstring::Fwcs(), 0); }
+  if (next) { clear(); _data.p1 = next; ut = utString | xfPtr; return *this; }
+  throw XUExec("operator=(const std::arrayref_t<wchar_t>&)");
 }
 unity& unity::operator=(const meta::s_ll& src) { clear(); ut = utInt; *_drf_c_i<utInt>() = src; return *this; }
 unity& unity::operator=(const double& src) { clear(); ut = utFloat; *_drf_c_i<utFloat>() = src; return *this; }
@@ -3430,6 +5733,14 @@ bool unity::arr_insrem(s_long ind, s_long m, EConvStrength cs)
 
 
 
+meta::s_ll unity::lenstr() const throw()
+{
+  if (!this || !pmsm) { return -3; }
+  if (isEmpty()) { return -1; }
+  if (!isString()) { return -2; }
+  std::wstring* p = reference_t<std::wstring>::deref(this->_data, true);
+  return cv_ff::cv_wstring::Ln(pmsm, p);
+}
 std::wstring unity::vstr() const
 {
   if (isAssoc() || isArray()) { std::wostringstream st; st << *this; return st.str(); }
@@ -3440,14 +5751,10 @@ std::wstring unity::vstr(s_long ind) const
   if (utype() == utUnityArray) { return ref<utUnity>(ind).vstr(); }
   return _arr_el_get<utString>::F(this, ind, csNormal);
 }
-meta::s_ll unity::lenstr() const throw()
-{
-  if (!this || !pmsm) { return -3; }
-  if (isEmpty()) { return -1; }
-  if (!isString()) { return -2; }
-  std::wstring* p = reference_t<std::wstring>::deref(this->_data, true);
-  return cv_ff::cv_wstring::Ln(pmsm, p);
-}
+const std::wstring& unity::rstr() const        { return this->ref<utString>(); }
+const std::wstring& unity::rstr(s_long ind) const        { return this->utype() == utStringArray ? this->ref<utString>(ind) : this->ref<utUnity>(ind).rstr(); }
+std::wstring& unity::rstr()        { return this->ref<utString>(); }
+std::wstring& unity::rstr(s_long ind)        { return this->utype() == utStringArray ? this->ref<utString>(ind) : this->ref<utUnity>(ind).rstr(); }
 std::string unity::vcstr() const
 {
   if (isAssoc() || isArray()) { std::ostringstream st; st << *this; return st.str(); }
@@ -3528,6 +5835,25 @@ _fls75 unity::vflstr() const throw()
   }
   return _fls75("?") + _fls75(utype());
 }
+
+#if bmdx_part_unity_oppar_assoc
+  unity& unity::operator()(const unity& k) { if (isMap()) { return map(k); } else { return hash(k); } }
+  unity& unity::operator()(const unity& k, const unity& v) { if (isMap()) { map_append(k, v); } else { hash_set(k, v); } return *this; }
+#endif
+
+unity& unity::pl_dech(arrayref_t<wchar_t> ssrc) { return paramline().decode(ssrc, *this, 0); }
+unity& unity::pl_decm(arrayref_t<wchar_t> ssrc) { return paramline().decode(ssrc, *this, 1); }
+unity& unity::pl_dech_tree(arrayref_t<wchar_t> ssrc, s_long flags) { return paramline().decode_tree(ssrc, *this, flags & ~s_long(1)); }
+unity& unity::pl_decm_tree(arrayref_t<wchar_t> ssrc, s_long flags) { return paramline().decode_tree(ssrc, *this, flags | 1); }
+unity& unity::pl_dec1v(arrayref_t<wchar_t> ssrc) { return paramline().decode1v(ssrc, *this); }
+unity& unity::pl_dech(arrayref_t<char> ssrc) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_dech(bsToWs(ssrc.pd(), ssrc.n())); }
+unity& unity::pl_decm(arrayref_t<char> ssrc) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_decm(bsToWs(ssrc.pd(), ssrc.n())); }
+unity& unity::pl_dech_tree(arrayref_t<char> ssrc, s_long flags) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_dech_tree(bsToWs(ssrc.pd(), ssrc.n()), flags); }
+unity& unity::pl_decm_tree(arrayref_t<char> ssrc, s_long flags) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_decm_tree(bsToWs(ssrc.pd(), ssrc.n()), flags); }
+unity& unity::pl_dec1v(arrayref_t<char> ssrc) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_dec1v(bsToWs(ssrc.pd(), ssrc.n())); }
+std::wstring unity::pl_enc() { return paramline().encode(*this); }
+std::wstring unity::pl_enc_tree() { return paramline().encode_tree(*this); }
+std::wstring unity::pl_enc1v() { return paramline().encode1v(*this); }
 
 unity::_wr_cstring::_wr_cstring() {}
 unity::_wr_cstring::_wr_cstring(const std::string& x) : t_base(x) {}
@@ -4022,7 +6348,7 @@ struct _mx : unity::t_map_tu
   void __rev_inds() { s_long m = n() / 2; for (s_long i = 0; i < m; ++i) { s_long* p1 = _inds.pval_0u<s_long>(i); s_long* p2 = _inds.pval_0u<s_long>(n() - i - 1); s_long temp = *p1; *p1 = *p2; *p2 = temp; } }
     // 1 - k was inserted, v assigned.
     // 0 - k existed, v assigned on keep_first false, or ignored on keep_first true.
-    // -1 - an error occured, the map did not change.
+    // -1 - an error occurred, the map did not change.
     // NOTE if appending breaks the order, normal insertion occurs.
   s_long __append(bool at_front, const unity& k, const unity& v, bool keep_first)
   {
@@ -4195,9 +6521,9 @@ s_long _unity_hl_impl::hl_clear(bool full) throw()
 bool _unity_hl_impl::_a_rsv_1() throw()  // reserve place in list and indk before possible adding 1 elem. to hash
   { return _list.el_reserve_n(n() + 2, false) && _indk.el_reserve_n(n() + 1, false); }
 
-  // Adjustment notifications for list and keys index, on each hash change.
+  // Adjustment notifications for list and keys index, on each hashlist change.
 
-bool _unity_hl_impl::_a_inserted(s_long ind_before) throw() // adjust list and indk after adding 1 elem. to hash, true on success
+bool _unity_hl_impl::_a_inserted(s_long ind_before) throw() // adjust list and indk after adding 1 elem. to hashlist, true on success
 {
   if (ind_before == -1) {}
     else { if (!(ind_before >= 0 && ind_before < n())) { return false; } }
@@ -4224,7 +6550,7 @@ void _unity_hl_impl::_a_removed(s_long ind) throw() // adjust list and indk afte
 void _unity_hl_impl::_a_cleared() throw() // clear list and indk
   {  _list.el_expand_n(1); *_list.pval_first<meta::s_ll>() = _v(-1, -1);  _indk.vecm_clear(); }
 
-bool _unity_hl_impl::_a_indk() const throw() // ensure indk containing full index of hash elems.
+bool _unity_hl_impl::_a_indk() const throw() // ensure indk containing full index of hashlist elems.
 {
   if (_indk.n() == n()) { return true; }
   if (!_indk.el_expand_n(n())) { _indk.vecm_clear(); return false; }
@@ -4313,7 +6639,7 @@ s_long _unity_hl_impl::qi_noel() const throw() { return no_elem; } // starting p
   // Next, prev. elem. ind. >= 0, or qi_noel() at list end
 s_long _unity_hl_impl::qi_next(s_long pos) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(pos); return p ? _inext(*p) : s_long(no_elem); }
 s_long _unity_hl_impl::qi_prev(s_long pos) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(pos); return p ? _iprev(*p) : s_long(no_elem); }
-  // Index of ind-th element in hash, according to list, or qi_noel() for bad ind or indk.
+  // Index of ind-th element in hashlist, according to list, or qi_noel() for bad ind or indk.
 s_long _unity_hl_impl::qi_indk(s_long ind) const throw() { if (!_a_indk()) { return no_elem; } s_long* p = _indk.pval<s_long>(ind); return p ? *p : s_long(no_elem); }
 s_long _unity_hl_impl::compatibility() const throw() { const s_long ti = bytes::type_index_t<s_long>::ind(); const s_long ti2 = bytes::type_index_t<meta::s_ll>::ind(); s_long c = __crvx(_list)._t_ind == ti2  && __crvx(_indk)._t_ind == ti && __crvx(_ht)._t_ind == ti && sizeof(*this) == ((char*)&_indk - (char*)this) + sizeof(vecm) ? this->vecm::compatibility() : -1; if (c == 0) { c = -1; } return c; }
 bool _unity_hl_impl::_check() const throw() { return nexc() == 0 && _list.n() == n() + 1 && (_indk.n() == 0 || _indk.n() == n()); }
@@ -4330,23 +6656,23 @@ void unity::_ensure_m() { if (!isMap()) { u_clear(utMap); } if (!(_m()->pkf() &&
 void unity::_ensure_sc() { if (!isScalar()) { u_clear(utEmpty); } }
 void unity::_ensure_h() { if (!isHash()) { u_clear(utHash); } if (!(_h()->pkf() && _compat_chk())) { throw XUExec("_ensure_h"); } }
 
-const unity* unity::path(const std::wstring& keylist) const throw() { return const_cast<unity*>(this)->_path_u(keylist, false); }
-const unity* unity::path(const wchar_t* keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(keylist, false); } catch (...) { return 0; } }
-const unity* unity::path(const std::string& keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
-const unity* unity::path(const char* keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
-const unity* unity::path(const unity& keylist) const throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.ref<utString>(), false); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), false); } return px->_path_u(keylist.vstr(), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const std::wstring& keylist) const throw() { return const_cast<unity*>(this)->_path_u(keylist, false); }
+unity::checked_ptr<const unity> unity::path(const wchar_t* keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(keylist, false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const std::string& keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const char* keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const unity& keylist) const throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), false); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), false); } return px->_path_u(keylist.vstr(), false); } catch (...) { return 0; } }
 
-const unity* unity::path(const std::wstring& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-const unity* unity::path(const wchar_t* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-const unity* unity::path(const std::string& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-const unity* unity::path(const char* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-const unity* unity::path(const unity& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const std::wstring& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const wchar_t* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const std::string& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const char* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const unity& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
 
 unity* unity::_path_w(const std::wstring& keylist) throw() { return _path_u(keylist, true); }
 unity* unity::_path_w(const wchar_t* keylist) throw() { try { return _path_u(keylist, true); } catch (...) { return 0; } }
 unity* unity::_path_w(const std::string& keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
 unity* unity::_path_w(const char* keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
-unity* unity::_path_w(const unity& keylist) throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.ref<utString>(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const unity& keylist) throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
 
 
 std::ostream& operator<<(std::ostream& s, const unity::iofmt& f) { unity::write_fmt(s, *f.px, f, false); return s; }
@@ -4720,62 +7046,24 @@ void unity::write_fmt(std::wostream& s, const unity& x, const iofmt& f, bool bsp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem); // platform-dependent
-std::string _wsToBsUtf8(const wchar_t* ps, meta::s_ll n);
 std::string _wsToBsLsb(const wchar_t* ps, meta::s_ll n);
 
 std::string wsToBs(const wchar_t* x, meta::s_ll n){ return _wsToBs(x, n, false); }
 std::string wsToBs(const std::wstring& x) { return _wsToBs(x.c_str(), x.length(), false); }
 std::string wsToBsOem(const wchar_t* x, meta::s_ll n){ return _wsToBs(x, n, true); }
 std::string wsToBsOem(const std::wstring& x) { return _wsToBs(x.c_str(), x.length(), true); }
-std::string wsToBsUtf8(const wchar_t* x, meta::s_ll n) { return _wsToBsUtf8(x, n); }
-std::string wsToBsUtf8(const std::wstring& x) { return _wsToBsUtf8(x.c_str(), x.length()); }
 std::string wsToBsLsb(const wchar_t* x, meta::s_ll n) { return _wsToBsLsb(x, n); }
 std::string wsToBsLsb(const std::wstring& x) { return _wsToBsLsb(x.c_str(), x.length()); }
 
 std::wstring _bsToWs(const char* ps, meta::s_ll n); // platform-dependent
-std::wstring _bsUtf8ToWs(const char* ps, meta::s_ll n);
 std::wstring _bsLsbToWs(const char* ps, meta::s_ll n);
 
 std::wstring bsToWs(const char* x, meta::s_ll n){ return _bsToWs(x, n); }
 std::wstring bsToWs(const std::string& x){ return _bsToWs(x.c_str(), x.length()); }
-std::wstring bsUtf8ToWs(const char* x, meta::s_ll n) { return _bsUtf8ToWs(x, n); }
-std::wstring bsUtf8ToWs(const std::string& x) { return _bsUtf8ToWs(x.c_str(), x.length()); }
 std::wstring bsLsbToWs(const char* x, meta::s_ll n) { return _bsLsbToWs(x, n); }
 std::wstring bsLsbToWs(const std::string& x) { return _bsLsbToWs(x.c_str(), x.length()); }
 
 
-std::string _wsToBsUtf8(const wchar_t* ps, meta::s_ll n)
-{
-  try {
-    if (!ps) { throw XUExec("_wsToBsUtf8.3"); }
-    if (n < 0) { n = 0; const wchar_t* p = ps; while (*p++) { ++n; } }
-    std::string s; if (n <= 0) { return s; }
-    meta::s_ll nrsv = n; s.reserve(_t_sz(nrsv));
-    for (meta::s_ll i = 0; i < n; ++i)
-    {
-      s_long q = s_long(ps[i]) & 0xffff;
-      if (q >= 0xd800 && q < 0xe000)
-      {
-        if (q >= 0xdc00 || i + 1 >= n) { q = L'?'; }
-        else
-        {
-          s_long q2 = s_long(ps[i + 1]) & 0xffff;
-          if (q2 >= 0xdc00 && q2 < 0xe000) { q = (((q - 0xd800) << 10) | (q2 - 0xdc00)) + 0x10000; ++i; }
-            else { q = L'?'; }
-        }
-      }
-      if (q <= 0x7f) { s += char(q); }
-        else if (q <= 0x7ff) { s += char((q >> 6) | 0xc0); s += char((q & 0x3f) | 0x80); }
-        else if (q <= 0xffff) { s += char((q >> 12) | 0xe0); s += char(((q >> 6) & 0x3f) | 0x80); s += char((q & 0x3f) | 0x80); }
-        else { s += char((q >> 18) | 0xf0); s += char(((q >> 12) & 0x3f) | 0x80); s += char(((q >> 6) & 0x3f) | 0x80); s += char((q & 0x3f) | 0x80); }
-      if ((i & 0xfff) == 0) { meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
-    }
-    return s;
-  }
-  catch (_XUBase&) { throw; }
-  catch (const std::exception& e) { throw XUExec("_wsToBsUtf8.1", e.what()); }
-  catch (...) { throw XUExec("_wsToBsUtf8.2"); }
-}
 std::string _wsToBsLsb(const wchar_t* ps, meta::s_ll n)
 {
   try {
@@ -4792,40 +7080,6 @@ std::string _wsToBsLsb(const wchar_t* ps, meta::s_ll n)
   catch (...) { throw XUExec("_wsToBsLsb.2"); }
 }
 
-std::wstring _bsUtf8ToWs(const char* ps, meta::s_ll n)
-{
-  try {
-    if (!ps) { throw XUExec("_bsUtf8ToWs.3"); }
-    if (n < 0) { n = 0; const char* p = ps; while (*p++) { ++n; } }
-    std::wstring s; if (n <= 0) { return s; }
-    meta::s_ll nrsv = n / 2; s.reserve(_t_sz(nrsv));
-    meta::s_ll i = 0, rsvi = 0;
-    while (i < n)
-    {
-      unsigned char c = ps[i];
-      if ((c & 0x80) == 0) { s += wchar_t(c); ++i; }
-      else
-      {
-        s_long nbchr = 0;
-        while (((c << nbchr) & 0xc0) == 0xc0) { ++nbchr; }
-        if (nbchr >= 1 && nbchr <= 5 && i + nbchr < n)
-        {
-          s_long q(c & (0x3f >> nbchr)); ++i;
-          do { c = ps[i]; if ((c & 0xc0) != 0x80) { q = L'?'; break; } q = (q << 6) | (c & 0x3f); ++i; } while (--nbchr);
-          if (q > 0x10ffff) { s += L'?'; }
-            else if (q >= 0x10000) { q -= 0x10000; s += wchar_t(0xd800 | (q >> 10)); s += wchar_t(0xdc00 | (q & 0x3ff)); }
-            else { s += wchar_t(q); }
-        }
-        else { s += L'?'; ++i; }
-      }
-      if (i - rsvi > 0xfff) { rsvi = i; meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
-    }
-    return s;
-  }
-  catch (_XUBase&) { throw; }
-  catch (const std::exception& e) { throw XUExec("_bsUtf8ToWs.1", e.what()); }
-  catch (...) { throw XUExec("_bsUtf8ToWs.2"); }
-}
 std::wstring _bsLsbToWs(const char* ps, meta::s_ll n)
 {
   try {
@@ -4843,7 +7097,7 @@ std::wstring _bsLsbToWs(const char* ps, meta::s_ll n)
 }
 
 
-std::string replace(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase, s_ll nmax)
+std::string replace_c(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase, s_ll nmax)
 {
   if (from.length() == 0 || nmax == 0) { return s; }
   else if (s.length() > 0)
@@ -4857,9 +7111,8 @@ std::string replace(const std::string& s, const std::string& from, const std::st
       std::string s_l, from_l;
       if (1)
       {
-        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
-        s_l = lcase(s);
-        from_l = lcase(from);
+        s_l = lcase_c(s);
+        from_l = lcase_c(from);
       }
       do
       {
@@ -4890,7 +7143,7 @@ std::string replace(const std::string& s, const std::string& from, const std::st
   else return s;
 }
 
-std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase, s_ll nmax)
+std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase, s_ll nmax, s_long loc_type)
 {
   if (from.length() == 0 || nmax == 0) { return s; }
   else if (s.length() > 0)
@@ -4904,9 +7157,8 @@ std::wstring replace(const std::wstring& s, const std::wstring& from, const std:
       std::wstring s_l, from_l;
       if (1)
       {
-        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
-        s_l = lcase(s);
-        from_l = lcase(from);
+        s_l = lcase_la(s, loc_type);
+        from_l = lcase_la(from, loc_type);
       }
       do
       {
@@ -5321,11 +7573,11 @@ std::string join(const unity& asrc, const std::string& delim)
     {
         for(s_long ind=asrc.arrlb(); ind<=asrc.arrub(); ++ind)
         {
-            if (ind==asrc.arrlb()) s=wsToBs(asrc.vstr(ind));
-            else (s+=delim)+=wsToBs(asrc.vstr(ind));
+            if (ind==asrc.arrlb()) s=asrc.vcstr(ind);
+            else (s+=delim)+=asrc.vcstr(ind);
         }
     }
-    else s=wsToBs(asrc.vstr());
+    else { s = asrc.vcstr(); }
     return s;
 }
 std::wstring join(const unity& asrc, const std::wstring& delim)
@@ -5339,36 +7591,45 @@ std::wstring join(const unity& asrc, const std::wstring& delim)
             else (s+=delim)+=asrc.vstr(ind);
         }
     }
-    else s=asrc.vstr();
+    else { s = asrc.vstr(); }
     return s;
 }
 
-
-
-std::wstring CStr3(const unity& x)
+namespace
 {
-    if (x.isObject()) { return L"?object " + x.tname(); }
-    if (x.isArray()) { return L"?array " + x.tname(true); }
+    // Returns a short string representation of x.
+    // If x is a string, it is just copied.
+    // If x is an array, object, or unknown value, only a short prefix and the object type name
+    //    is included into output (but NO CONTENTS).
+    // If x is a date, it is converted, using fixed format YYYY-MM-DD HH-MM-SS,
+    //    where H, M, S are missing if all are 0.
+    // If x is char, its boolean value is returned: "true" on 0 or "false" on non-0.
+    // For other values (utEmpty, utInt, utFloat), x.vstr() is returned.
+  std::wstring _vstr_scalar(const unity& x)
+  {
+      if (x.isObject()) { return L"?object " + x.tname(); }
+      if (x.isArray()) { return L"?array " + x.tname(true); }
 
-    switch (x.utype())
-    {
-      case utEmpty: return std::wstring();
-      case utInt: return x.vstr();
-      case utFloat: return x.vstr();
-      case utChar: { return x.ref<utChar>() ? L"True" : L"False"; }
-      case utString: { return x.vstr(); }
-      case utDate:
-        {
-          // Note: this loses fractional part of seconds,
-          //  unlike conv_Date_String.
-          _unitydate d = x.val<utDate>();
-          std::ostringstream oss;
-          oss << std::setw(4) << std::setfill('0') << std::right << d.d_year() << "-" << std::setw(2) <<d.d_month() << "-" << std::setw(2) <<d.d_day();
-          if (d.f() != std::floor(d.f())) { oss << " " << std::setw(2) << d.d_hour() << ":" << std::setw(2) << d.d_minute() << ":" << std::setw(2) << d.d_second(); }
-          return bsToWs(oss.str());
-        }
-      default: { return L"?value/" + x.tname(); }
-    }
+      switch (x.utype())
+      {
+        case utEmpty: return std::wstring();
+        case utInt: return x.vstr();
+        case utFloat: return x.vstr();
+        case utChar: { return x.ref<utChar>() ? L"true" : L"false"; }
+        case utString: { return x.vstr(); }
+        case utDate:
+          {
+            // Note: this loses fractional part of seconds,
+            //  unlike conv_Date_String.
+            _unitydate d = x.val<utDate>();
+            std::ostringstream oss;
+            oss << std::setw(4) << std::setfill('0') << std::right << d.d_year() << "-" << std::setw(2) <<d.d_month() << "-" << std::setw(2) <<d.d_day();
+            if (d.f() != std::floor(d.f())) { oss << " " << std::setw(2) << d.d_hour() << ":" << std::setw(2) << d.d_minute() << ":" << std::setw(2) << d.d_second(); }
+            return bsToWs(oss.str());
+          }
+        default: { return L"?value/" + x.tname(); }
+      }
+  }
 }
 
 namespace
@@ -5893,12 +8154,13 @@ const std::string paramline::ceterm = " = ";
 const std::string paramline::cvterm = "|";
 
 const std::wstring paramline::wpterm = L"; ";
+const unity paramline::uwpterm(wpterm);
 const std::wstring paramline::weterm = L" = ";
 const std::wstring paramline::wvterm = L"|";
 
 const unity& paramline::_0 = unity::_0;
 
-unity& paramline::decode1v(const std::wstring& ssrc0, unity& dest)
+unity& paramline::decode1v(arrayref_t<wchar_t> ssrc0, unity& dest)
 {
   dest.clear();
   try
@@ -5919,17 +8181,18 @@ unity& paramline::decode1v(const std::wstring& ssrc0, unity& dest)
     }
   }
   catch(_XUBase&) { throw; }
-  catch(std::exception& e) { throw XUExec("decode1v.1", e.what(), ssrc0); }
-  catch(...) { throw XUExec("decode1v.2", ssrc0); }
+  catch(std::exception& e) { throw XUExec("decode1v.1", e.what(), _fls75(ssrc0.pd(), ssrc0.n())); }
+  catch(...) { throw XUExec("decode1v.2", _fls75(ssrc0.pd(), ssrc0.n())); }
   return dest;
 }
 
-unity& paramline::decode(const std::wstring& ssrc0, unity& mh, bool useMap, const std::wstring& pterm_0)
+unity& paramline::decode(arrayref_t<wchar_t> ssrc0, unity& mh, bool useMap, arrayref_t<wchar_t> pterm_0)
 {
+  if (!(ssrc0.is_valid() && pterm_0.is_valid())) { throw XUExec("decode.3"); }
   std::wstring src;
   try
   {
-      std::wstring pterm = pterm_0.length() == 0 ? wCRLF : pterm_0;
+      std::wstring pterm = pterm_0.length() == 0 ? wCRLF : std::wstring(pterm_0.pd(), _t_wz(pterm_0.n()));
       if (useMap) { mh.map_clear(false); } else { mh.hash_clear(false); }
 
       std::wstring s, n; unity v;
@@ -5971,63 +8234,64 @@ unity& paramline::decode(const std::wstring& ssrc0, unity& mh, bool useMap, cons
   return mh;
 }
 
-unity& paramline::decode_tree(const std::wstring& ssrc0, unity& mh, s_long flags, const std::wstring& pterm_0)
+unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags, arrayref_t<wchar_t> pterm_0)
 {
+  if (!(ssrc0.is_valid() && pterm_0.is_valid())) { throw XUExec("decode_tree.3"); }
   try {
-    std::wstring pterm2 = pterm_0.length() == 0 ? wCRLF : pterm_0;
+    arrayref_t<wchar_t> pterm2 = pterm_0.length() == 0 ? wCRLF : pterm_0;
     bool b_map = !!(flags & 0x1); bool b_clear = (flags & 0x4) == 0; bool b_keep = (flags & 0x2) == 0; bool b_skipslc = !!(flags & 0x8); bool b_convcr = !!(flags & 0x10); bool b_noinclpath = (flags & 0x20) == 0; bool b_braces = !!(flags & 0x40);
       if (!b_clear && mh.isMap()) { b_map = true; }
       if (b_map) { if (b_clear || !mh.isMap()) { mh.map_clear(true); } } else { if (b_clear || !mh.isHash()) { mh.hash_clear(true); } }
     const unity k_empty_str = L"";
 
-    std::wstring s2;
+    carray_r_t<wchar_t> s2;
     if (b_convcr)
     {
-      s2.reserve(ssrc0.size());
-      for (_t_wz pos = 0; pos < ssrc0.size(); ++pos)
+      if (!s2.reserve(ssrc0.n())) { throw XUExec("decode_tree.4"); }
+      for (s_ll pos = 0; pos < ssrc0.n(); ++pos)
       {
         wchar_t c = ssrc0[pos];
         if (c == L'\r')
         {
-          _t_wz pos2 = pos + 1;
-          if (pos2 < ssrc0.size() && ssrc0[pos2] == L'\n') { pos = pos2; }
+          s_ll pos2 = pos + 1;
+          if (pos2 < ssrc0.n() && ssrc0[pos2] == L'\n') { pos = pos2; }
           s2 += L"\r\n";
         }
         else if (c == L'\n')
         {
-          _t_wz pos2 = pos + 1;
-          if (pos2 < ssrc0.size() && ssrc0[pos2] == L'\r') { pos = pos2; }
+          s_ll pos2 = pos + 1;
+          if (pos2 < ssrc0.n() && ssrc0[pos2] == L'\r') { pos = pos2; }
           s2 += L"\r\n";
         }
         else { s2 += c; }
       }
     }
 
-    _t_wz pos(0); const std::wstring& ssrc = b_convcr ? s2 : ssrc0;
+    s_ll pos(0); arrayref_t<wchar_t> ssrc(b_convcr ? s2 : ssrc0);
     unity stack, last_path; if (b_braces) { last_path.u_clear(utUnityArray); stack.ua_append(last_path); }
-    while (pos < ssrc.length())
+    while (pos < ssrc.n())
     {
-      _t_wz pos2 = ssrc.find(pterm2, pos); if (pos2 == nposw) { pos2 = ssrc.length(); }
+      s_ll pos2 = _find_str(ssrc, pterm2, pos);
       if (pos2 > pos)
       {
         bool b_skip = false;
         if (b_skipslc) // test/skip C-style comments
         {
-          _t_wz pos3 = _find_char_except(ssrc, pos, pos2, L"\t ");
-          if (pos3 + 2 <= pos2 && ssrc[pos3] == '/' && ssrc[pos3 + 1] == '/')
+          s_ll pos3 = _find_char_except(ssrc, pos, pos2, L"\t ");
+          if (pos3 + 2 <= pos2 && ssrc[pos3] == L'/' && ssrc[pos3 + 1] == L'/')
             { b_skip = true; }
         }
         if (!b_skip) // skip lines w/o data
         {
-          _t_wz pos3 = _find_char_except(ssrc, pos, pos2, L" ");
-          if (pos3 >= ssrc.length()) { b_skip = true; }
+          s_ll pos3 = _find_char_except(ssrc, pos, pos2, L" ");
+          if (pos3 >= ssrc.n()) { b_skip = true; }
         }
         if (!b_skip && b_braces) // test/process lines with braces only
         {
-          _t_wz pos3 = _find_char_except(ssrc, pos, pos2, L" {}");
-          if (pos3 >= ssrc.length())
+          s_ll pos3 = _find_char_except(ssrc, pos, pos2, L" {}");
+          if (pos3 >= ssrc.n())
           {
-            for (_t_wz i = pos; i < pos2; ++i)
+            for (s_ll i = pos; i < pos2; ++i)
             {
               if (ssrc[i] == L'{') { if (last_path == stack.ua_last()) { last_path.ua_append(unity()); } stack.ua_append(last_path); }
                 else if (ssrc[i] == L'}') { last_path = stack.ua_last(); if (stack.uaS() > 1) { stack.ua_resize(stack.uaUb(), -1); } }
@@ -6037,7 +8301,7 @@ unity& paramline::decode_tree(const std::wstring& ssrc0, unity& mh, s_long flags
         }
         if (!b_skip) // decode branch, calc. path, merge
         {
-          unity h; paramline().decode(ssrc.substr(pos, pos2 - pos), h, false, pterm2);
+          unity h; paramline().decode(arrayref_t<wchar_t>(&ssrc[pos], pos2 - pos), h, false, pterm2);
 
           bool b_hk = h.u_has(k_empty_str, 6);
           const unity* pk = b_hk ? &h[k_empty_str] : &k_empty_str;
@@ -6080,24 +8344,25 @@ unity& paramline::decode_tree(const std::wstring& ssrc0, unity& mh, s_long flags
     }
   }
   catch(_XUBase&) { throw; }
-  catch(std::exception& e) { throw XUExec("decode_tree.1", e.what(), ssrc0); }
-  catch(...) { throw XUExec("decode_tree.2", ssrc0); }
+  catch(std::exception& e) { throw XUExec("decode_tree.1", e.what(), _fls75(ssrc0.pd(), ssrc0.n())); }
+  catch(...) { throw XUExec("decode_tree.2", _fls75(ssrc0.pd(), ssrc0.n())); }
   return mh;
 }
 
-std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, const std::wstring& pterm_0)
+std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, arrayref_t<wchar_t> pterm_0)
 {
+  if (!pterm_0.is_valid()) { throw XUExec("encode.3"); }
   try
   {
     sdest.clear(); if (!mh.isAssoc() || mh.assocS_c() == 0) { return sdest; }
-    std::wstring s1, s2; std::wstring pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
+    std::wstring s1, s2; arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
     s_long pos = mh.assocl_first();
     while (pos != mh.assocl_noel())
     {
       x_encode1(mh.assocl_key(pos), s1, true, false); x_encode1(mh.assocl_c(pos), s2, false, false);
       if (s2.length() || s1.empty()) { s1 += weterm; s1 += s2; } s2.clear(); x_replace2a(s1, 1);
       pos = mh.assocl_next(pos);
-      if (pos != mh.assocl_noel()) { s1 += pterm; }
+      if (pos != mh.assocl_noel()) { s1.append(pterm.pd(), _t_wz(pterm.n())); }
       sdest += s1;
     }
     return sdest;
@@ -6123,13 +8388,14 @@ std::wstring& paramline::encode1v(const unity& value, std::wstring& s)
   catch(...) { throw XUExec("encode1v.2", "Failed to encode val.", value.utype()); }
 }
 
-void paramline::x_encode_branch(const unity& mh, const std::wstring& path, std::wstring& sdest, hashx<const unity*, int>& hstop, const std::wstring& pterm, const std::wstring& pterm2, const std::wstring& pathpfx)
+void paramline::x_encode_branch(const unity& mh, const std::wstring& path, std::wstring& sdest, hashx<const unity*, int>& hstop, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, const std::wstring& pathpfx)
 {
     // return if not assoc or empty assoc
     // append path if not empty
     // append non-branch pairs, collect branch pairs, skip stopped
     // append term2
     // for each branch, call x_encode_branch recursively with path + string(branch key)
+  if (!(pterm.is_valid() && pterm2.is_valid())) { throw XUExec("x_encode_branch.5"); }
   if (!(mh.isAssoc() && mh.assocS_c())) { return; }
   bool bpath = false;
   vec2_t<s_long> ibr;
@@ -6152,13 +8418,13 @@ void paramline::x_encode_branch(const unity& mh, const std::wstring& path, std::
         res = hsk.insert(s1);
           if (res == 0) { continue; } if (res != 1) { throw XUExec("x_encode_branch.2"); }
       x_encode1(v, s2, false, false);
-      if (!bpath) { bpath = true; if (path.length()) { sdest += path; sdest += pterm; } }
-        else { sdest += pterm; }
+      if (!bpath) { bpath = true; if (path.length()) { sdest += path; sdest.append(pterm.pd(), _t_wz(pterm.n())); } }
+        else { sdest.append(pterm.pd(), _t_wz(pterm.n())); }
       if (s2.length() || s1.empty()) { s1 += weterm; s1 += s2; } s2.clear(); x_replace2a(s1, 1);
       sdest += s1;
     }
   }
-  if (bpath) { sdest += pterm2; }
+  if (bpath) { sdest.append(pterm2.pd(), _t_wz(pterm2.n())); }
   for (s_long i = 0; i < ibr.n(); ++i)
   {
     const unity& k = mh.assocl_key(ibr[i]);
@@ -6174,14 +8440,15 @@ void paramline::x_encode_branch(const unity& mh, const std::wstring& path, std::
   }
 }
 
-std::wstring& paramline::encode_tree(const unity& mh, std::wstring& sdest, const std::wstring& pterm_0, const std::wstring& pterm2_0)
+std::wstring& paramline::encode_tree(const unity& mh, std::wstring& sdest, arrayref_t<wchar_t> pterm_0, arrayref_t<wchar_t> pterm2_0)
 {
+  if (!(pterm_0.is_valid() && pterm2_0.is_valid())) { throw XUExec("encode_tree.3"); }
   try
   {
     sdest.clear(); if (!mh.isAssoc() || mh.assocS_c() == 0) { return sdest; }
     hashx<const unity*, int> hstop;
-    std::wstring pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
-    std::wstring pterm2 = pterm2_0.length() == 0 ? wCRLF : pterm2_0;
+    arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
+    arrayref_t<wchar_t> pterm2 = pterm2_0.length() == 0 ? wCRLF : pterm2_0;
     std::wstring pathpfx = _trim(weterm, L" ", true, true);
     x_encode_branch(mh, L"", sdest, hstop, pterm, pterm2, pathpfx);
     return sdest;
@@ -6234,7 +8501,7 @@ void paramline::_list_hx_set_u ( unity& hdest, s_long fk, _rcu x1, _rcu x2, _rcu
 
 void paramline::x_encode1(const unity& x, std::wstring& retval, bool b_name, bool b_ar_elem, bool x_nourecur)
 {
-    if (b_name && x.utype() != utString) { x_encode1(CStr3(x), retval, true, false); }
+    if (b_name && x.utype() != utString) { x_encode1(_vstr_scalar(x), retval, true, false); }
 
     if (x.isArray())
     {
@@ -6246,8 +8513,8 @@ void paramline::x_encode1(const unity& x, std::wstring& retval, bool b_name, boo
           {
             unity ar; ar.arr_init<utString>(x.arrlb() - 1); ar.arrub_(x.arrub());
             if (x.utype() == utUnityArray)
-              { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.ref<utUnity>(ind), ar.ref<utString>(ind), false, true); } }
-            else { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.val<utUnity>(ind), ar.ref<utString>(ind), false, true); } }
+              { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.ref<utUnity>(ind), ar.rstr(ind), false, true); } }
+            else { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.val<utUnity>(ind), ar.rstr(ind), false, true); } }
             retval = join(ar, L"|");
           }
       }
@@ -6292,7 +8559,7 @@ void paramline::x_encode1(const unity& x, std::wstring& retval, bool b_name, boo
 //                  if (lcase(s) == L"false") { goto lInsertStringPrefix; }
                   _t_wz pos1 = retval.find_first_not_of(' '); if (pos1 == nposw) { goto lInsertStringPrefix; }
                   wchar_t c = retval[pos1]; if ((c >= L'0' && c <= L'9') || c == L'.' || c == L'+' || c == L'-') { goto lInsertStringPrefix; }
-                  if (_wcsileftincl1(&retval[pos1], L"true") || _wcsileftincl1(&retval[pos1], L"false")) { goto lInsertStringPrefix; }
+                  if (_eq_wcs_ascii_nocase(&retval[pos1], L"true") || _eq_wcs_ascii_nocase(&retval[pos1], L"false")) { goto lInsertStringPrefix; }
                   break;
                 }
 lInsertStringPrefix:
@@ -6302,7 +8569,7 @@ lInsertStringPrefix:
                 {
                   const unity* pv = x.objPtr_c<unity>();
                   if (!pv || x_nourecur)
-                    { x_encode1(CStr3(x), retval, false, b_ar_elem); }
+                    { x_encode1(_vstr_scalar(x), retval, false, b_ar_elem); }
                   else if (pv->isArray())
                   {
                     if (b_ar_elem) { retval = L"\\z"; }
@@ -6314,8 +8581,8 @@ lInsertStringPrefix:
                         {
                           unity ar; ar.arr_init<utString>(x.arrlb() - 1); ar.arrub_(x.arrub());
                           if (x.utype() == utUnityArray)
-                            { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.ref<utUnity>(ind), ar.ref<utString>(ind), false, true); } }
-                          else { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.val<utUnity>(ind), ar.ref<utString>(ind), false, true); } }
+                            { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.ref<utUnity>(ind), ar.rstr(ind), false, true); } }
+                          else { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.val<utUnity>(ind), ar.rstr(ind), false, true); } }
                           retval = join(ar, L"|");
                         }
                     }
@@ -6324,7 +8591,7 @@ lInsertStringPrefix:
                   break;
                 }
             default: // unknown type
-                x_encode1(CStr3(x), retval, false, b_ar_elem);
+                x_encode1(_vstr_scalar(x), retval, false, b_ar_elem);
                 break;
         }
     }
@@ -6455,9 +8722,9 @@ void paramline::x_replace2a(std::wstring& s, s_long flags)
   }
 }
 
-void paramline::x_replace4(const std::wstring& s1, std::wstring& s2, s_long& flags)
+void paramline::x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& flags)
 {
-  _t_wz n = s1.size(), n2 = 0, nmax = _t_wz(max_swstr() - 2), ps = 0, pd = 0;
+  _t_wz n = _t_wz(s1.n()), n2 = 0, nmax = _t_wz(max_swstr() - 2), ps = 0, pd = 0;
   while (ps < n)
   {
     wchar_t c = s1[ps++];
@@ -6473,7 +8740,7 @@ void paramline::x_replace4(const std::wstring& s1, std::wstring& s2, s_long& fla
     }
     n2 += 1; if (n2 > nmax) { throw XUExec("x_replace4.3"); }
   }
-  if ((flags & 1) == 0) { s2 = s1; return; }
+  if ((flags & 1) == 0) { if (s1.n() > 0) { s2.assign(s1.pd(), _t_wz(s1.n())); } else { s2.clear(); } return; }
   ps = 0; s2.resize(n2);
   while (ps < n)
   {
@@ -6500,61 +8767,60 @@ void paramline::x_replace4(const std::wstring& s1, std::wstring& s2, s_long& fla
   //   through x_replace4 and _trim(, L" ")
 void paramline::x_decode1v(unity& v, bool v_ar_elem, s_long flags)
 {
-    std::wstring s;
-    try
+  std::wstring s;
+  try
+  {
+    std::wstring pfx = v.rstr().substr(0,1);
+    if (pfx == L"") { v.clear(); }
+    else if (pfx == L"\\")
     {
-        std::wstring pfx = v.ref<utString>().substr(0,1);
-        if (pfx == L"") { v.clear(); }
-        else if (pfx == L"\\")
-        {
-            pfx = v.ref<utString>().substr(0,2);
-            if (pfx == L"\\e") { if (_trim(v.ref<utString>().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v.clear(); }
-            else if (pfx == L"\\s") { v = v.ref<utString>().substr(2); x_replace2a(v.ref<utString>(), flags); }
-            else if (pfx == L"\\i") { s = v.ref<utString>().substr(2); if (x_incorrect_integer_value_str(s, false)) { goto lLogicalDecodeError; } v = str2i(s); }
-            else if (pfx == L"\\f") { s = v.ref<utString>().substr(2); if (x_incorrect_numeric_value_str(s, true)) { goto lLogicalDecodeError; } v = str2f(s, 0, true, true); }
-            else if (pfx == L"\\d") { s = v.ref<utString>().substr(2); try { v = unity(s).val<utDate>(); } catch (...) { goto lLogicalDecodeError; } }
-            else if (pfx == L"\\0") { if (_trim(v.ref<utString>().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = false; }
-            else if (pfx == L"\\1") { if (_trim(v.ref<utString>().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = true; }
-            else if (pfx == L"\\z") { v.arr_init<utUnity>(1); }
-            else
-            {
-                if (v.ref<utString>().length()<=2) { v.clear(); return; }
-                v = v.ref<utString>().substr(2);
-                s = _trim(v.ref<utString>(), L" ");
-                goto lAutoDetectType;
-            }
-        }
-        else if (pfx == L"|")
-        {
-            if (v_ar_elem) goto lLogicalDecodeError;
-            unity ar2 = split(v.ref<utString>(),L"|");
-            v.arr_init<utUnity>(1);
-            v.arrub_(ar2.arrub());
-            for(s_long ind = 1; ind <= ar2.arrub(); ++ind)
-            {
-                v.arr_set(ind, _trim(ar2.ref<utString>(ind), L" "));
-                x_decode1v(v.ref<utUnity>(ind), true, flags);
-            }
-        }
-        else { s = v.ref<utString>(); goto lAutoDetectType; }
-        return;
+      pfx = v.rstr().substr(0,2);
+      if (pfx == L"\\e") { if (_trim(v.rstr().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v.clear(); }
+      else if (pfx == L"\\s") { v = v.rstr().substr(2); x_replace2a(v.rstr(), flags); }
+      else if (pfx == L"\\i") { s = v.rstr().substr(2); if (x_incorrect_integer_value_str(s, false)) { goto lLogicalDecodeError; } v = str2i(s); }
+      else if (pfx == L"\\f") { s = v.rstr().substr(2); if (x_incorrect_numeric_value_str(s, true)) { goto lLogicalDecodeError; } v = str2f(s, 0, true, true); }
+      else if (pfx == L"\\d") { s = v.rstr().substr(2); try { v = unity(s).val<utDate>(); } catch (...) { goto lLogicalDecodeError; } }
+      else if (pfx == L"\\0") { if (_trim(v.rstr().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = false; }
+      else if (pfx == L"\\1") { if (_trim(v.rstr().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = true; }
+      else if (pfx == L"\\z") { v.arr_init<utUnity>(1); }
+      else
+      {
+        if (v.rstr().length()<=2) { v.clear(); return; }
+        v = v.rstr().substr(2);
+        s = _trim(v.rstr(), L" ");
+        goto lAutoDetectType;
+      }
+    }
+    else if (pfx == L"|")
+    {
+      if (v_ar_elem) goto lLogicalDecodeError;
+      unity ar2 = split(v.rstr(),L"|");
+      v.arr_init<utUnity>(1);
+      v.arrub_(ar2.arrub());
+      for(s_long ind = 1; ind <= ar2.arrub(); ++ind)
+      {
+        v.arr_set(ind, _trim(ar2.rstr(ind), L" "));
+        x_decode1v(v.ref<utUnity>(ind), true, flags);
+      }
+    }
+    else { s = v.rstr(); goto lAutoDetectType; }
+    return;
 
 lAutoDetectType:
 
-        if (x_decode1v_auto_date(s, v)) return;
-        if (!x_incorrect_integer_value_str(s, false)) { v = str2i(s); return; }
-        if (!x_incorrect_numeric_value_str(s, false)) { v = str2f(s); return; }
-        if (s == L"true") { v = true; return; }
-        if (s == L"false") { v = false; return; }
-        x_replace2a(v.ref<utString>(), flags);
-        return;
-
-    }
-  catch(std::exception& e) { throw XUExec("x_decode1v.1", e.what(), v.vflstr()); }
-    catch(...) { throw XUExec("x_decode1v.2", v.vflstr()); }
-lLogicalDecodeError:
-    throw XUExec("x_decode1v.3", v.vflstr());
+    if (x_decode1v_auto_date(s, v)) return;
+    if (!x_incorrect_integer_value_str(s, false)) { v = str2i(s); return; }
+    if (!x_incorrect_numeric_value_str(s, false)) { v = str2f(s); return; }
+    if (s == L"true") { v = true; return; }
+    if (s == L"false") { v = false; return; }
+    x_replace2a(v.rstr(), flags);
     return;
+  }
+  catch(std::exception& e) { throw XUExec("x_decode1v.1", e.what(), v.vflstr()); }
+  catch(...) { throw XUExec("x_decode1v.2", v.vflstr()); }
+lLogicalDecodeError:
+  throw XUExec("x_decode1v.3", v.vflstr());
+  return;
 }
 
 bool paramline::x_decode1v_auto_date(const std::wstring& s, unity& retval) throw()
@@ -6582,12 +8848,12 @@ bool paramline::x_incorrect_integer_value_str(const std::wstring& s, bool allow_
   }
 }
 
-unity paramline::decode(const std::wstring& ssrc, bool useMap, const std::wstring& pterm2) { unity x; decode(ssrc, x, useMap, pterm2); return x; }
-unity paramline::decode1v(const std::wstring& ssrc) { unity x; decode1v(ssrc, x); return x; }
-unity paramline::decode_tree(const std::wstring& ssrc, s_long flags, const std::wstring& pterm2) { unity x; decode_tree(ssrc, x, flags, pterm2); return x; }
-std::wstring paramline::encode(const unity& mhsrc, const std::wstring& pterm) { std::wstring s; encode(mhsrc, s, pterm); return s; }
+unity paramline::decode(arrayref_t<wchar_t> ssrc, bool useMap, arrayref_t<wchar_t> pterm2) { unity x; decode(ssrc, x, useMap, pterm2); return x; }
+unity paramline::decode1v(arrayref_t<wchar_t> ssrc) { unity x; decode1v(ssrc, x); return x; }
+unity paramline::decode_tree(arrayref_t<wchar_t> ssrc, s_long flags, arrayref_t<wchar_t> pterm2) { unity x; decode_tree(ssrc, x, flags, pterm2); return x; }
+std::wstring paramline::encode(const unity& mhsrc, arrayref_t<wchar_t> pterm) { std::wstring s; encode(mhsrc, s, pterm); return s; }
 std::wstring paramline::encode1v(const unity& value) { std::wstring s; encode1v(value, s); return s; }
-std::wstring paramline::encode_tree(const unity& mhsrc, const std::wstring& pterm, const std::wstring& pterm2) { std::wstring s; encode_tree(mhsrc, s, pterm, pterm2); return s; }
+std::wstring paramline::encode_tree(const unity& mhsrc, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2) { std::wstring s; encode_tree(mhsrc, s, pterm, pterm2); return s; }
 
 
 unity paramline::list_m
@@ -6653,7 +8919,7 @@ namespace bmdx
   {
     try {
       #if bmdx_wsbs_force_utf8
-        return _wsToBsUtf8(ps, n);
+        return wsToBsUtf8(ps, n);
       #else
         if (!ps) { throw XUExec("_wsToBs.3"); }
         if (n < 0) { n = 0; const wchar_t* p = ps; while (*p++) { ++n; } }
@@ -6677,7 +8943,7 @@ namespace bmdx
   {
     try {
       #if bmdx_bsws_force_utf8
-        return _bsUtf8ToWs(ps, n);
+        return bsUtf8ToWs(ps, n);
       #else
         if (!ps) { throw XUExec("_bsToWs.3"); }
         if (n < 0) { n = 0; const char* p = ps; while (*p++) { ++n; } }
@@ -6699,13 +8965,31 @@ namespace bmdx
 
 
     // 1: s1 > s2, 0: s1 == s2, -1: s1 < s2.
-  s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case)
+  s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type)
   {
+    if (!(loc_type >= 0 && loc_type <= 2)) { throw XUExec("wscompare.1");  }
     if (ignore_case)
     {
-      s_long n = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE|SORT_STRINGSORT, s1.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s1.length())), s2.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s2.length())));
-      if (n == 0) { throw XUExec("wscompare.1"); }
-      return n - 2;
+      if (loc_type == 0)
+      {
+        _t_wz minlen= s1.length(); if (s2.length() < minlen) { minlen = s2.length(); }
+        int cmp1 = __wcsncasecmp_curr(s1.c_str(), s2.c_str(), minlen);
+        if (cmp1 != 0) { return cmp1 > 0 ? 1 : -1; }
+        if (s1.size() != s2.size()) { return s1.size() < s2.size() ? -1 : 1; }
+        return 0;
+      }
+      else if (loc_type == 1) // "user" loc. (system setting)
+      {
+        s_long n = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE|SORT_STRINGSORT, s1.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s1.length())), s2.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s2.length())));
+        if (n == 0) { throw XUExec("wscompare.2"); }
+        return n - 2;
+      }
+      else // loc_type == 2, C loc.
+      {
+        s_long n = CompareStringW(LOCALE_NEUTRAL, NORM_IGNORECASE|SORT_STRINGSORT, s1.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s1.length())), s2.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s2.length())));
+        if (n == 0) { throw XUExec("wscompare.3"); }
+        return n - 2;
+      }
     }
     else { int cmp1 = s1.compare(s2); return cmp1 == 0 ? 0 : (cmp1 > 0 ? 1 : -1); }
   }
@@ -6935,60 +9219,69 @@ static char __buf_argv[65000] = "_\0\0";
   #if __APPLE__ && __MACH__
     __attribute__((section("__DATA,__mod_init_func"))) void (* p___read_argv)(int, char*[], char*[]) = &__read_argv;
   #elif defined(__SUNPRO_CC) || defined(__sun)
-  #elif defined(__ANDROID__)
+  #elif defined(__ANDROID__) || defined(__EMSCRIPTEN__)
   #else
     __attribute__((section(".init_array"))) void (* p___read_argv)(int, char*[], char*[]) = &__read_argv;
   #endif
 #endif
 
 
-#ifdef __ANDROID__
-  static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n)
-  {
-    wchar_t c1, c2;
-    if (n == 0) { return 0; }
-    for (; *s1; s1++, s2++)
-    {
-      c1 = wchar_t(std::towlower(*s1)); c2 = wchar_t(std::towlower(*s2));
-      if (c1 != c2) { return (int)c1 - c2; }
-      if (--n == 0) { return 0; }
-    }
-    return -*s2;
-  }
+#if __bmdx_use_wcrtomb_l
+  static int __wctomb(char* ps, wchar_t c) { return int(wcrtomb_l(ps, c, 0, phloc(1)->h)); } // NOTE the caller must have ensure_loc(1) == true
+  static int __mbtowc(wchar_t* pc, const char* ps, size_t n) { return int(mbrtowc_l(pc, ps, n, 0, phloc(1)->h)); } // -"-
+#else
   static int __wctomb(char* ps, wchar_t c) { return int(wcrtomb(ps, c, 0)); }
   static int __mbtowc(wchar_t* pc, const char* ps, size_t n) { return int(mbrtowc(pc, ps, n, 0)); }
-#else
-  static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n) { return wcsncasecmp(s1, s2, n); }
-  static int __wctomb(char* ps, wchar_t c) { return wctomb(ps, c); }
-  static int __mbtowc(wchar_t* pc, const char* ps, size_t n) { return mbtowc(pc, ps, n); }
 #endif
 
 namespace bmdx
 {
-    namespace { struct _tcnvchk { static bool _test_mbrtowc() { char cc[MB_LEN_MAX+1]; size_t res; wchar_t c; cc[0] = 'A'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'A') { return false; } cc[0] = '1'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'1') { return false; } cc[0] = ';'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L';') { return false; } cc[0] = ' '; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L' ') { return false; } return true; } static bool _test_wcrtomb() { char cc[MB_LEN_MAX+1]; size_t res; res = wcrtomb(cc, L'A', 0); if (res != 1 || cc[0] != 'A') { return false; } res = wcrtomb(cc, L'1', 0); if (res != 1 || cc[0] != '1') { return false; } res = wcrtomb(cc, L';', 0); if (res != 1 || cc[0] != ';') { return false; } res = wcrtomb(cc, L' ', 0); if (res != 1 || cc[0] != ' ') { return false; } return true; } }; }
+    namespace
+    {
+      static bool _test_mbrtowc() { char cc[MB_LEN_MAX+1]; size_t res; wchar_t c; cc[0] = 'A'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'A') { return false; } cc[0] = '1'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'1') { return false; } cc[0] = ';'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L';') { return false; } cc[0] = ' '; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L' ') { return false; } return true; }
+      static bool _test_wcrtomb() { char cc[MB_LEN_MAX+1]; size_t res; res = wcrtomb(cc, L'A', 0); if (res != 1 || cc[0] != 'A') { return false; } res = wcrtomb(cc, L'1', 0); if (res != 1 || cc[0] != '1') { return false; } res = wcrtomb(cc, L';', 0); if (res != 1 || cc[0] != ';') { return false; } res = wcrtomb(cc, L' ', 0); if (res != 1 || cc[0] != ' ') { return false; } return true; }
+    }
     std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem) // n < 0: autodetect length based on null char.
     {
       try {
+        if (!ps) { throw XUExec("_wsToBs.3"); }
+
         #if bmdx_wsbs_force_utf8
           static int _mb(2);
         #else
           static int _mb(0);
         #endif
-        if (_mb == 2) { return _wsToBsUtf8(ps, n); }
 
-        if (!ps) { throw XUExec("_wsToBs.3"); }
+        #if __bmdx_use_wcrtomb_l
+          if (!ensure_loc(1)) { throw XUExec("_wsToBs.4"); }
+        #endif
+
+        if (!_mb) // this check is done once
+        {
+          t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
+          if (__wctomb(0, 0)) {}
+          _mb = 2 + (int)_test_wcrtomb();
+        }
+        if (_mb == 2) { return wsToBsUtf8(ps, n); }
+
         if (n < 0) { n = 0; const wchar_t* p = ps; while (*p++) { ++n; } }
 
         std::string s;
-        char cc[MB_LEN_MAX+1];
-        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
-        if (__wctomb(0, 0)) {}
-
-        if (!_mb) { _mb = 2 + (int)_tcnvchk::_test_wcrtomb(); }
-        if (_mb == 2) { return _wsToBsUtf8(ps, n); }
-
         meta::s_ll nrsv = n; s.reserve(_t_sz(nrsv));
-        for(meta::s_ll pos = 0; pos < n; ++pos)
+        meta::s_ll pos(0);
+        while (pos < n)
+        {
+          wchar_t c = ps[pos];
+          if (c & ~0x7f) { break; }
+          s += char(c);
+          pos += 1;
+        }
+        if (pos >= n) { return s; }
+
+        t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
+        char cc[MB_LEN_MAX+1];
+        if (__wctomb(0, 0)) {}
+        for(; pos < n; ++pos)
         {
           if (ps[pos] == L'\0') { s += '\0'; }
             else { int cnt = __wctomb(cc, ps[pos]); if (cnt <= -1) { s += '?'; } else { cc[cnt] = 0; s += cc; } }
@@ -7004,27 +9297,47 @@ namespace bmdx
     std::wstring _bsToWs(const char* ps, meta::s_ll n) // n < 0: autodetect length based on null char.
     {
       try {
+        if (!ps) { throw XUExec("_bsToWs.3"); }
+
         #if bmdx_bsws_force_utf8
           static int _mb(2);
         #else
           static int _mb(0);
         #endif
-        if (_mb == 2) { return _bsUtf8ToWs(ps, n); }
 
-        if (!ps) { throw XUExec("_bsToWs.3"); }
+        #if __bmdx_use_wcrtomb_l
+          if (!ensure_loc(1)) { throw XUExec("_bsToWs.4"); }
+        #endif
+
+        if (!_mb) // this check is done once
+        {
+          t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
+          if (__mbtowc(0, 0, 0)) {}
+          _mb = 2 + (int)_test_mbrtowc();
+        }
+        if (_mb == 2) { return bsUtf8ToWs(ps, n); }
+
         if (n < 0) { n = 0; const char* p = ps; while (*p++) { ++n; } }
+
         std::wstring s;
         if (n <= 0) { return s; }
-        setlocale_locked __lock(LC_CTYPE, ""); if (sizeof(__lock)) {}
-
-        if (!_mb) { _mb = 2 + (int)_tcnvchk::_test_mbrtowc(); }
-        if (_mb == 2) { return _bsUtf8ToWs(ps, n); }
-
-        meta::s_ll pos(0), rsvpos(0);
-        if (__mbtowc(0, 0, 0)) {}
         meta::s_ll nrsv = n; s.reserve(_t_sz(nrsv));
+        meta::s_ll pos(0);
         while (pos < n)
         {
+          unsigned char c = ps[pos];
+          if (c >= 128) { break; }
+          s += wchar_t(c);
+          pos += 1;
+        }
+        if (pos >= n) { return s; }
+
+        t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
+        meta::s_ll rsvpos(0);
+        if (__mbtowc(0, 0, 0)) {}
+        while (pos < n)
+        {
+          if (pos - rsvpos > 0xfff) { rsvpos = pos; meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
           if (ps[pos] == '\0') { s += L'\0'; pos += 1; }
           else
           {
@@ -7033,7 +9346,6 @@ namespace bmdx
               else if (cnt > 0) { s += c; pos += cnt; }
               else { s += L'\0'; pos += 1; }
           }
-          if (pos - rsvpos > 0xfff) { rsvpos = pos; meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
         }
         return s;
       }
@@ -7043,16 +9355,24 @@ namespace bmdx
     }
 
       // wide character string comparison
-    s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case)
+    s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type)
     {
         if (ignore_case)
         {
             _t_wz minlen= s1.length(); if (s2.length() < minlen) { minlen = s2.length(); }
-            int cmp1 = __wcsncasecmp(s1.c_str(), s2.c_str(), minlen);
-//            int cmp1 = _wcsnicmp(s1.c_str(),s2.c_str(),minlen); // just to test compiling in Windows
-            if (cmp1 != 0) { return (cmp1 > 0 ? 1 : -1); }
-            if (s1.length() == s2.length()) { return 0; }
-            return s1.length() < s2.length() ? -1 : 1;
+            int cmp1;
+            if (loc_type == 0) { cmp1 = __wcsncasecmp_curr(s1.c_str(), s2.c_str(), minlen); }
+            else
+            {
+              #if __bmdx_char_case_tables
+              #elif __bmdx_use_locale_t
+                if (!ensure_loc(loc_type)) { throw XUExec("wscompare.1");  }
+              #endif
+              cmp1 = __wcsncasecmp(s1.c_str(), s2.c_str(), minlen, loc_type);
+            }
+            if (cmp1 != 0) { return cmp1 > 0 ? 1 : -1; }
+            if (s1.size() != s2.size()) { return s1.size() < s2.size() ? -1 : 1; }
+            return 0;
         }
         else { int cmp1 = s1.compare(s2); return cmp1 == 0 ? 0 : (cmp1 > 0 ? 1 : -1); }
     }
@@ -7202,7 +9522,7 @@ namespace bmdx
             s2 = args[i];
             if (b_quoting && (s2.empty() || s2.find_first_of(" \t\r\n\f\v;'\"\\$[](){}^?*") != nposc))
             {
-              if (s2.find("'") != nposc) { s2 = replace(s2, "'", "'\\''"); }
+              if (s2.find("'") != nposc) { s2 = replace_c(s2, "'", "'\\''"); }
               s2 = "'" + s2 + "'";
             }
             s += bsToWs(s2);
@@ -7286,7 +9606,7 @@ namespace bmdx
               {
                 if (b_quoting && (s2.empty() || s2.find_first_of(" \t\r\n\f\v;'\"\\$[](){}^?*") != nposc))
                 {
-                  if (s2.find("'") != nposc) { s2 = replace(s2, "'", "'\\''"); }
+                  if (s2.find("'") != nposc) { s2 = replace_c(s2, "'", "'\\''"); }
                   s2 = "'" + s2 + "'";
                 }
                 s += bsToWs(s2);
@@ -7321,16 +9641,15 @@ namespace bmdx
 #endif // _bmdxpl_Psx
 
 
-//==============================
-// OS or library-dependent code template
-//==============================
+//========================================================================
+//== OS- or library-dependent code template
 
 #ifdef _bmdxpl_OS_NAME_HERE
 namespace bmdx
 {
     std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem) { } // n < 0: autodetect length based on null char.
     std::wstring _bsToWs(const char* ps, meta::s_ll n) { } // n < 0: autodetect length based on null char.
-    s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case) { }
+    s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type) { }
     _unitydate d_now(bool allow_fracsec) { }
     _unitydate d_nowutc(bool allow_fracsec) { }
     std::string cpathsep() { }
@@ -7511,9 +9830,9 @@ namespace bmdx
 
 
 
-//=============================================================================================================================
-// OS-independent part
-//=============================================================================================================================
+//========================================================================
+
+//== OS-independent part
 
 namespace bmdx
 {
@@ -7573,7 +9892,7 @@ std::string file_utils::join_path(const std::string& pathstr, const std::string&
     std::string s0, s; s = pathstr;
     if (s.substr(0, ps2len) == cpathsep2()) { s0 = cpathsep2(); s = s.substr(ps2len); }
     s += cpathsep(); s += pathstr2;
-    while(s.find(cpathsep2()) != nposc) { s = replace(s, cpathsep2(), cpathsep()); }
+    while(s.find(cpathsep2()) != nposc) { s = replace_c(s, cpathsep2(), cpathsep()); }
     if (s_long(s.length()) >= pslen && s.substr(s.length() - pslen) == cpathsep()) { s.erase(s.length() - pslen); }
     #ifdef _bmdxpl_Wnds
       if (s.substr(0, pslen) == cpathsep()) { s.erase(0, pslen); }
@@ -8162,7 +10481,7 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) throw()
 
       // If handle is not found, but the current module is root loader, check if it's main executable
       //  (can be done because exe's handle can be got without knowing its name).
-      // ~!!! Later, this can be replaced by system-dependent getting shared object handle.
+      // ~!!! Later, this can be replaced by system-dependent getting handle of the current shared object.
     if (!h && pmsm_rl == pmsm)
     {
       mod_handle he;
@@ -8231,7 +10550,7 @@ namespace bmdx
         try { f = f_rl(unity_common::ls_modsm, 0); } catch (...) {}
         if (!f) { return -7; } // this is not expected to occur, because Frootldr does not fail on offer != 0
 
-          //~!!! This disables autounloading shared library - rootldr on last ref. des., for case when it has loaded itself at least once.
+          //~!!! This disables autounloading the shared library - rootldr on last ref. des., for case when it has loaded itself at least once.
           //  May be replaced with check "if root loader still contains any other libraries handles, which cannot be immediately released".
         if ((f & 4) && *name != '\0') { b_au = 0; }
       }
@@ -8333,6 +10652,18 @@ namespace bmdx
   void* cv_ff::cv_rootldr::Fsym(const unity::mod_handle* pmh, const char* name) { return 0; }
   s_long cv_ff::cv_rootldr::Frequest(const unity::mod_handle* pmh, const unity* para, unity* retval) { return -2; }
 #endif // bmdx_part_dllmgmt
+
+  s_long cv_ff::cv_paramline::Fpl_encode(const unity* phm, unity* px, const unity* pterm)
+  {
+    if (!(phm && px && pterm)) { return -1; }
+    try {
+      unity x2; std::wstring& s = x2.rx<utString>();
+      paramline().encode(*phm, s, pterm->vstr());
+      px->swap(x2);
+      return 1;
+    } catch (...) {}
+    return -2;
+  }
 }
 
 
@@ -8665,45 +10996,243 @@ namespace bmdx
 namespace bmdx
 {
 
+namespace
+{
+  static const s_long _frqperm_msend_anlo = 0x20;
+  static const s_long _frqperm_mget_anlo = 0x40;
+
+  static const s_long _fl_mget_get_hashlist = 0x1;
+  static const s_long _fl_mget_discard_msg = 0x2;
+  static const s_long _fl_mget_discard_att = 0x4;
+  static const s_long _fl_mget_peek_only = 0x8;
+  static const s_long _fl_mget_anlo_msg = 0x10;
+  static const s_long _fl_mget_anlo_att = 0x20;
+}
+
+struct inprocess_message
+{
+  typedef arrayref_t<char> t_stringref;
+
+  cref_t<unity, cref_nonlock> hmsg; // message as hashlist, local to dispatcher_mt module
+  cref_t<t_stringref> att; // binary attachment as enclosed object, or object reference, local to one of a) sender module, b) dispatcher_mt module
+
+  bool has_hmsg() const throw() { return hmsg && hmsg->isHash() && hmsg->hashS_c() > 0; }
+  bool has_att() const throw() { return att && att->is_valid(); }
+
+  void clear() { hmsg.clear(); att.clear(); }
+
+    // NOTE If retmsg is not set (failure, or disabled by flags), it's not modified at all.
+    // Returns:
+    //    2 - success, got 2 parts. If b_may_clear == true, the current object is cleared.
+    //    1 - success, got 1 part. If b_may_clear == true, the current object is cleared.
+    //    0 - no message in hmsg.
+    //    -2 - failure (mem. alloc. or smth. else). The current object is not modified.
+  s_long move_to_retvals(unity& retmsg, cref_t<t_stringref>* retatt, s_long flags_mget, s_long flags_ses) throw()
+  {
+    const bool b_retstr = (flags_mget & _fl_mget_get_hashlist) == 0;
+    const bool b_discard_msg = (flags_mget & _fl_mget_discard_msg) != 0;
+    const bool b_discard_bin = (flags_mget & _fl_mget_discard_att) != 0;
+    const bool b_may_clear = (flags_mget & _fl_mget_peek_only) == 0;
+    const bool b_anlo_msg = (flags_mget & _fl_mget_anlo_msg) && (flags_ses & _frqperm_mget_anlo);
+    const bool b_anlo_att = (flags_mget & _fl_mget_anlo_att) && (flags_ses & _frqperm_mget_anlo);
+    try {
+      if (!has_hmsg()) { return 0; }
+      const bool b_2parts = has_att(); // att && att->is_valid()
+      const bool b_bin_key = b_2parts && !retatt && !b_discard_bin && !b_discard_msg; // put binary part into "bin" key of the returned message
+
+      cv_ff::cv_mget::PFmget_set_retvals f = (cv_ff::cv_mget::PFmget_set_retvals)retmsg._pmsm()(unity_common::msm_mget_set_retvals);
+        if (!f) { return -2; }
+
+      unity __h2;
+      unity* phm = hmsg._pnonc_u();
+      if (!b_may_clear || (!b_anlo_msg && retmsg._pmsm() != unity_common::ls_modsm))
+        { __h2.recreate_as(retmsg); __h2 = *phm; phm = &__h2; }
+
+      const s_long proc_flags = b_bin_key + (b_discard_msg<<1) + (b_discard_bin<<2) + (b_anlo_msg << 3) + (b_anlo_att << 4) + (b_retstr << 5);
+      s_long res = f(phm, &this->att, &retmsg, retatt, proc_flags);
+        if (res < 1) { return -2; }
+
+      if (b_may_clear) { this->clear(); }
+      return b_2parts ? 2 : 1;
+    } catch (...) {}
+    return -2;
+  }
+
+  static void _scan_objs(unity& h, bool b_rmv_objs) // recursive
+  {
+    if (h.isObject())
+    {
+      if (b_rmv_objs) { h.clear(); }
+    }
+    else if (h.isAssoc())
+    {
+      s_long pos = h.assocl_first();
+      while (pos != h.assocl_noel())
+      {
+        s_long pos2 = h.assocl_next(pos);
+        const unity& k = h.assocl_key(pos);
+        if (!k.isScalar()) { h.assoc_del(k); }
+          else { _scan_objs(h.assocl(pos), b_rmv_objs); }
+        pos = pos2;
+      }
+    }
+    else if (h.utype() == utUnityArray)
+    {
+      if (b_rmv_objs) { for (s_long i = h.arrlb(); i <= h.arrub(); ++i) { _scan_objs(h.ref<utUnity>(i), true); } }
+    }
+  }
+
+    // 1. Moves (on b_may_move_h == true) or copies (on b_may_move_h == false) h into this->hmsg.
+    // 2. Sets this->att = att_ (on b_may_move_h == true), or sets this->att to to copy of att_ data (on b_may_move_h == false).
+    // 3. If b_create_string == true, additionally creates this->msg, from this->hmsg.
+    // Returns:
+    //  1 - success.
+    //  -2 - failure (this object will be cleared, but h is not modified). NOTE h may be lost.
+  s_long set_parts(unity& h, const cref_t<t_stringref>& att_, bool b_may_move_h, s_long flags_msend, s_long flags_ses)
+  {
+    const bool b_keep_msg_objects = (flags_msend & _fl_msend_anlo_msg) && (flags_ses & _frqperm_msend_anlo);
+    const bool b_assign_att_cref = (flags_msend & _fl_msend_anlo_att) && (flags_ses & _frqperm_msend_anlo);
+    try {
+      this->clear(); hmsg.create0(0);
+      cref_t<t_stringref> att2;
+      if (att_ && !b_assign_att_cref) { att2 = i_dispatcher_mt::make_rba(att_.ref(), true); }
+      if (b_may_move_h) { hmsg->swap(h); }
+        else { *hmsg._pnonc_u() = h; }
+      _scan_objs(*hmsg._pnonc_u(), !b_keep_msg_objects);
+      if (b_assign_att_cref) { att = att_; }
+        else { att = att2; }
+      return 1;
+    } catch (...) {}
+    this->clear();
+    return -2;
+  }
+
+    // 1 - success, 0 - no message in both hmsg, -2 - failure
+  static s_long create_msg_wstr(const unity& hmsg, unity& x, bool b_local_to_x) throw()
+  {
+    try {
+      if (b_local_to_x && x._pmsm() != unity_common::ls_modsm)
+      {
+        cv_ff::cv_paramline::PFpl_encode f = (cv_ff::cv_paramline::PFpl_encode)x._pmsm()(unity_common::msm_pl_encode);
+        if (!f) { return -2; }
+        s_long res = f(&hmsg, &x, &paramline::uwpterm);
+        return res < 1 ? -2 : 1;
+      }
+      else
+      {
+        unity x2; std::wstring& s = x2.rx<utString>();
+        paramline().encode(hmsg, s);
+        x.swap(x2);
+        return 1;
+      }
+    } catch(...) {}
+    return -2;
+  }
+};
+
+  // 1 - success, -2 - failure.
+s_long cv_ff::cv_mget::Fmget_set_retvals(unity* phm, const cref_t<t_stringref>* patt, unity* pretmsg, cref_t<t_stringref>* retatt, s_long proc_flags)
+{
+  if (!(phm && patt && pretmsg)) { return -2; } // but retatt may be 0
+  const cref_t<t_stringref>& att = *patt;
+  const bool b_2parts = att && att->is_valid();
+  const bool b_bin_key = proc_flags & 1;
+  const bool b_discard_msg = !!(proc_flags & 2);
+  const bool b_discard_bin = !!(proc_flags & 4);
+  const bool b_anlo_msg = !!(proc_flags & 8);
+  const bool b_anlo_att = !!(proc_flags & 16);
+  const bool b_retstr = !!(proc_flags & 32);
+  try {
+    if (b_bin_key) { unity& rbin = phm->hash(L"bin"); unity bin2(bsLsbToWs(att->pd(), att->n())); rbin.swap(bin2); }
+      // Put message into retmsg.
+    if (!b_discard_msg)
+    {
+      if (b_retstr) { unity s; std::wstring& rstr = s.rx<utString>(); paramline().encode(*phm, rstr); pretmsg->swap(s); }
+        else { inprocess_message::_scan_objs(*phm, !b_anlo_msg); pretmsg->swap(*phm); }
+    }
+      // Put attachment into retatt.
+    if (retatt) { if (b_2parts && !b_discard_bin) { *retatt = b_anlo_att ? att : i_dispatcher_mt::make_rba(att.ref(), true); } else { retatt->clear(); } }
+    return 1;
+  } catch(...) {}
+  return -2;
+}
+
+struct haddrl_phase_info
+{
+  s_ll id_msg_cmd, value;
+  haddrl_phase_info() : id_msg_cmd(-1), value(0) {}
+  haddrl_phase_info(s_ll id_, s_ll value_) : id_msg_cmd(id_), value(value_) {}
+};
+
+} // namespace bmdx
+namespace yk_c
+{
+  template<> struct vecm::spec<haddrl_phase_info> { typedef haddrl_phase_info t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+}
+namespace bmdx
+{
+
 struct cch_slot
 {
-  struct qbi_value { cref_t<std::string, cref_nonlock> msg; cref_t<std::wstring, cref_nonlock> src; };
-  struct qs_value { unity hmsg; cref_t<carray_t<char>, cref_nonlock> bin; }; // bin may contain no object
+  struct qbci_value { inprocess_message msg; cref_t<std::wstring, cref_nonlock> src; s_ll id_msg_cmd; qbci_value() : id_msg_cmd(-1) {} };
+  struct qs_value : inprocess_message {};
+  struct csl_tracking { unity thn, sln_exact, key_hbo; };
+  struct csl_tracking_ext { csl_tracking csl_info; i_dispatcher_mt::tracking_info trk_info; };
+
+  typedef vnnqueue_t<inprocess_message, __vecm_tu_selector> t_qumi;
+  typedef vnnqueue_t<cref_t<qbci_value, cref_nonlock>, __vecm_tu_selector> t_qubci;
+  typedef vnnqueue_t<qs_value, __vecm_tu_selector> t_qus;
+
+  union { bmdx_meta::u_ll type; char type_str[4]; }; // dflt: type = 0
+  bool eq_type(const char* t2) const { if (!t2) { return false; } return std::strcmp(type_str, t2) == 0; }
 
   critsec_t<dispatcher_mt>::csdata lkd; // for locking pins and queues against multithreaded read/write
-  cref_t<std::string, cref_nonlock> r_pin; // input pin data
-  cref_t<fifo_m11_t<std::string, meta::nothing, __vecm_tu_selector>, cref_nonlock> r_q; // input queue
-  cref_t<fifo_m11_t<qbi_value, meta::nothing, __vecm_tu_selector>, cref_nonlock> r_qbi; // input command queue
-  cref_t<fifo_m11_t<qs_value, meta::nothing, __vecm_tu_selector>, cref_nonlock> r_qs; // subscription queue
-  cref_t<std::wstring, cref_nonlock> r_lsrc; // last source address, for input command pins and queues
+  inprocess_message r_pin; // input pin data
+  cref_t<vnnqueue_t<inprocess_message, __vecm_tu_selector>, cref_nonlock> r_qumi; // input queue for messages (qi)
+  cref_t<vnnqueue_t<cref_t<qbci_value, cref_nonlock>, __vecm_tu_selector>, cref_nonlock> r_qubci; // qbi, hbo
+  cref_t<vnnqueue_t<qs_value, __vecm_tu_selector>, cref_nonlock> r_qus; // subscription queue (qs, on origin side)
+  cref_t<std::wstring, cref_nonlock> r_lsrc; // source address of recently popped command, for command inputs (pbi, qbi)
 
-  cref_t<hashx<unity, s_long>, cref_nonlock> r_hsubs;
-    //--
-    //  a) for qs slot: "output list" { target address (string), 0 }
-    //  b) for subscriber slot (pi, qi): "input list" { source address (string), flags }
-    //    flags: remote op. in progress: 0x1 - subscribing, 0x2 - unsubscribing, 0x4 - checking.
-    //  c) for any slot (incl. pi, qi), except qs: no reference (no inputs, or this slot type cannot subscribe)
-    // NOTE Exact correspondence between input (subscriber (any)) and output (supplier (qs)) lists
-    //  is NOT guaranteed. The lists may become unequal due to:
-    //    a) mem. alloc failure when creating/removing whole thread or multiple slots,
-    //    b) netwrok transfer failure (remote list update notification won't pass),
-    //    c) qs output list is fixed, so it's not modified if a subscriber is removed
-    //      (and starts function automatically if a subscriber is added).
-    //    d) adding a slot which is factually subscribed to some qs supplier, but it's not mentioned in its input list.
+    // r_haddrl
+    //  a) for qs slot: "output list" { target address (string), () }; object must exist
+    //  b) for subscribed input slot (pi, qi): "input list" { source address (string); () }
+    //    The ref. object may not exist by default, and be autocreated on first subscription request of any type.
+    //  c) for hbo slot: { command target address (string), (id_msg, status) } - lists uniquely all targets, for which the command has been issued,
+    //    but the response, even if arrived, not popped yet by the issuer.
+    //    status (values same as cch_slot::phase):
+    //      4 - command sent, response not received yet.
+    //      5 - command sent, response received, not popped yet.
+    //      Initially, no keys with  target addresses in the hash map.
+    //      After particular target's response has been popped -- the is removed from the hash.
+    //  d) for any other slot (incl. non-subscribed pi, qi): no reference (no inputs, or this slot type cannot subscribe)
+    // NOTE For subscriptions, exact correspondence between subscriber's input list and supplier's (qs) output list
+    //    is not guaranteed. The lists may be unequal (and this is normal) in the following situations:
+    //      a) when creating slots with predefined local subscriptions, without ensure_local_subs flag: common failure during subscription,
+    //          after the slot itself has been created.
+    //      b) non-local technical message (subscription request) transfer failure, or subscription failure on remote end.
+    //          E.g. CPU process A starts later than B, but only in B the subscription is predefined. (It fails because A does not exist yet. See also (c) below.)
+    //      c) qs output list is configured as fixed (see "output fixed" param.), i.e. cannot be changed when a subscriber
+    //        with pre-configured subscription to that qs is added or removed.
+    //        Though, such subscription automatically starts working when pre-configured on both qs and subscriber side + both slots are created,
+    //        even if one later than another.
+  typedef hashx<unity, haddrl_phase_info> t_haddrl;
+  cref_t<hashx<unity, haddrl_phase_info>, cref_nonlock> r_haddrl;
 
-  s_long phase;
-    //--
+    // phase
     //  0 - no msg.
     //  1 - input msg arrived.
     //      2 - input msg popped.
     //      3 - command response pushed by the receiver and forwarded to sender.
-    //  4 - command sent.
+    //  4 - command sent, response is now expected.
     //      5 - command response received.
-    //      6 - command response popped.
-    //  pbo: 0, 6 --> 4 --> 5 --> 6
+    //      6 - command response is popped.
+    //      7 - (for non-local messages only: command sending in progress, sending not confirmed yet by peer)
+    //  pbo: 0, 6 --> opt. 7 --> 4 --> 5 --> 6
+    //  hbo (for each distinct command target): entry inserted --> opt. 7 --> 4 --> 5 --> entry removed
     //  pbi: 0, 3 --> 1 --> 2 --> 3
     //  qbi: 0, 3 --> 2 --> 3
     //  pi: 0, 2 --> 1 --> 2
+  s_long phase;
 
     // Constant flags, part of slot configuration. May be read without locking.
   s_long ccfgflags;
@@ -8715,12 +11244,14 @@ struct cch_slot
     bool qs_deliv_disp() const;
     bool qs_output_fixed() const;
 
+  s_ll id_msg_cmd; // original command message id (sent from pbo, hbo), associated with the current response; for dflt. and none: -1
+
   cch_slot();
 };
 struct cch_thread
 {
     // RW lock: mst_semaphore m_sl_acquire. Ro lock: m_th_ro_acquire.
-  hashx<unity, cref_t<cch_slot, dispatcher_mt> > h_sl;
+  hashx<unity, cref_t<cch_slot> > h_sl;
 
     // { qs slot name (string), 0 } thread's qs slots with immediate delivery
     //  RW lock: mst_semaphore m_sl_acquire. Ro lock: m_th_ro_acquire.
@@ -8730,12 +11261,9 @@ struct cch_thread
     //  RW lock: mst_semaphore m_sl_acquire. Ro lock: m_th_ro_acquire.
   hashx<unity, int> h_qs_thread;
 
-    // true if this thread is responsible for disp. (LPA) delivery type.
-    //  RW lock: mst_semaphore m_sl_acquire or m_th_acquire,
-    //    + cch_session lkm_ths for cch_thread name_th_disp.
-    //    Both locks must be set/acquired to modify b_disp and cch_thread name_th_disp consistently.
-    //  Ro lock: m_th_ro_acquire.
-  bool b_disp;
+    // true if this thread is allowed to execute LPA delivery (for qs queues with 'input lpa = true", in all threads).
+    //  This flag is assigned once on thread creation, and is constant during thread lifetime.
+  bool cb_disp;
 
     // "Modification state".
     // Bit 0 (+-sl): 1 during slots a) adding, b) removal.
@@ -8746,65 +11274,82 @@ struct cch_thread
   meta::s_ll mst;
 
   cch_thread();
+  ~cch_thread();
 };
 } // namespace bmdx
 namespace yk_c
 {
   template<> struct vecm::spec<cch_slot> { struct aux : vecm::config_aux<cch_slot> { }; typedef config_t<cch_slot, 1, 4, 1, aux> config; };
+  template<> struct vecm::spec<cch_slot::csl_tracking> { typedef cch_slot::csl_tracking t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+  template<> struct vecm::spec<cch_slot::csl_tracking_ext> { typedef cch_slot::csl_tracking_ext t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
   template<> struct vecm::spec<cch_thread> { struct aux : vecm::config_aux<cch_thread> { }; typedef config_t<cch_thread, 1, 4, 1, aux> config; };
 }
 namespace bmdx
 {
 struct dispatcher_mt::cch_session
 {
-  cch_session();
+  cch_session()
+  :
+    gm(0),
+    exitmode(2),
+    ses_state(-1),
+    frqperm(0x7f),
+    __thm_lqsd(1), __thm_lmsc(1), __thm_nsc(1), __thm_cdcc(1),
+    nprx(0),
+    lqsd_dt(1000), qsd_prio(4)
+  {}
 
   bmdx_shm::critsec_gn gm; // interprocess lock to ensure unique process name
   int exitmode;
   volatile int ses_state; // -1 during initialization, 1 during the current session, 0 after the session
 
-    // Desc.: see dispatcher_mt frqperm();
+    // Dflt. == 0x7f. Desc.: see dispatcher_mt frqperm();
   volatile s_long frqperm;
+  unsigned char __thm_lqsd, __thm_lmsc, __thm_nsc, __thm_cdcc; // internal threads activity mode; NOTE all by dflt. = -1
+  void __thm_lqsd_enable() { if (th_lqsd) { __thm_lqsd = 2; } }
+  void __thm_lmsc_enable() { if (lmsc) { __thm_lmsc = 2; } }
 
-    // Short-time lock for main cch_session members read/write: hg_ths, hg_qs_disp, name_th_disp.
-  critsec_t<dispatcher_mt>::csdata lkm_ths;
+    // Short-time lock for main cch_session members: hg_threads, hg_qs_disp, hg_lpai (for read/write); name_th_disp (for associated variable modification).
+  critsec_t<dispatcher_mt>::csdata lkd_disp_ths;
 
-    //  RW lock: lkm_ths.
-    // NOTE hg_ths destruction is safe, because its enclosing object (cch_session)
+    //  RW lock: lkd_disp_ths.
+    // NOTE hg_threads destruction is safe, because its enclosing object (cch_session)
     //    is held reference-counted by all clients.
-  hashx<unity, cch_thread> hg_ths;
+  hashx<unity, cref_t<cch_thread> > hg_threads;
 
     // { qs slot name (string), owning thread name (string) } -- process-global qs slots from different threads.
     //  Delivery by disp. thread periodic().
-    //  Modified by: _s_add_slots_nl, _s_slot_remove.
-    //  RW lock: lkm_ths.
+    //  Modified by: _s_add_slots_nl, _s_slots_remove.
+    //  RW lock: lkd_disp_ths.
     //  Integrity condition: value --> valid thread, key --> valid slot in that thread.
   hashx<unity, unity> hg_qs_disp;
 
     // { pi or qi slot name (string), owning thread name (string) } -- process-global input slots from different threads.
-    //  Modified by: _s_add_slots_nl, _s_slot_remove.
-    //  RW lock: lkm_ths.
+    //  Modified by: _s_add_slots_nl, _s_slots_remove.
+    //  RW lock: lkd_disp_ths.
     //  Integrity condition: value --> valid thread, key --> valid slot in that thread.
   hashx<unity, unity> hg_lpai;
 
-  critsec_t<dispatcher_mt>::csdata lkm_nprx; // nprx incr/decr lock
+  critsec_t<dispatcher_mt>::csdata lkd_disp_nprx; // nprx incr/decr lock
   volatile s_long nprx; // nprx counts the dispatcher_mt single object + all thread_proxy objects
 
-  meta::s_ll qsdt; // (const) >= 0: global qs delivery period, mcs; == -1: no automatic delivery
+  meta::s_ll lqsd_dt; // (const) >= 0: global qs delivery period, mcs
 
-  std::wstring name_pr; // process name (const)
+  std::wstring name_pr; // (const) original process name, passed by client
 
-    // Disp thread name. May be modified on thread creation/removal.
-    //  RW lock for setting together with thread's b_disp flag: lkm_ths.
-  struct lkm_name_th_disp {};
-  cref_t<std::wstring, lkm_name_th_disp> name_th_disp;
+  critsec_t<dispatcher_mt>::csdata lkd_disp_s_qs_deliver; // internal lock in _s_qs_deliver
 
-  threadctl tc_qsd; // qs messages automatic delivery
-  s_long qsd_prio; // last set tc_qsd priority
+  threadctl th_lqsd; // qs messages automatic delivery
+  s_long qsd_prio; // last set th_lqsd priority
+
+  threadctl th_lmsc; // executes lmsc periodic task
+  cref_t<lm_slot_controller> lmsc;
+    critsec_t<dispatcher_mt>::csdata lkd_htrk_csl;
+    hashx<s_ll, cch_slot::csl_tracking> htrk_csl; // { id_msg; temporarily associated command slot tracking info }; locking: lkd_htrk_csl
 };
   // cch_thread mst flags control.
   //  Used by all data transfer functions and slot/thread modifications,
-  //  to set actions in order and also cancel them in certain cases.
+  //  to set actions in order and also, in certain cases, cancel them.
 struct dispatcher_mt::mst_semaphore
 {
   int m_sl_acquire() throw();
@@ -8817,15 +11362,16 @@ struct dispatcher_mt::mst_semaphore
   mst_semaphore();
   ~mst_semaphore() throw();
 
-  int r_sl(const std::wstring& sln, cref_t<cch_slot, dispatcher_mt>& ret_sl) throw();
-  cch_thread* p_thread() throw();
+  int r_sl(const std::wstring& sln, cref_t<cch_slot>& ret_sl) throw();
+  cch_thread* p_thread(bool b_inited_only = false) throw();
   dispatcher_mt::cch_session* p_ses();
   const std::wstring& thn();
 
   private:
     dispatcher_mt::cch_session* _p_ths;
     std::wstring _thn;
-    int rsv, m_allowed; // in both: 1 (+-sl) or 2 (+-th) from mst
+    int rsv;
+    int m_allowed; // either 1: allows +-sl in the current thread, or 2: allows +-th
     void operator=(const mst_semaphore&);
 };
 } // namespace bmdx
@@ -8841,32 +11387,33 @@ namespace
   {
     double t0;
     double to_ms;
-    hangdet(double to_ms_ = 10000.) : to_ms(to_ms_) { t0 = clock_ms(); }
+    hangdet(double to_ms_ = 5000.) : to_ms(to_ms_) { t0 = clock_ms(); }
     operator bool() const { return clock_ms() - t0 >= to_ms; }
+    void reset() { t0 = clock_ms(); }
   };
+
+  using bmdx_main_intl_lib::refmaker_t;
+  using bmdx_main_intl_lib::weakref_t;
+
+  static double idgen_t0(clock_ms());
 }
 struct dispatcher_mt::thread_proxy : i_dispatcher_mt
 {
+  struct lks_idgen {};
+    // Common ID generator for messages and subscription requests.
+    //  NOTE Non-local msg. delivery and subscription tracking uses the same structures.
+  static s_ll idgen() { static s_ll x(make_id0()); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
+  static s_ll make_id0() { s_ll dt = s_ll(1.e4 * (clock_ms() - idgen_t0)) & 0xffffffffll; return (((s_ll(d_nowutc().f()) & 0x7ffffe) + 1) << 40) + (dt << 16); }
   typedef hashx<std::wstring, hashx<std::wstring, s_long> > t_hsubs;
-  typedef fifo_m11_t<std::string, meta::nothing, __vecm_tu_selector> t_q;
-  typedef fifo_m11_t<cch_slot::qbi_value, meta::nothing, __vecm_tu_selector> t_qbi;
-  typedef fifo_m11_t<std::string, meta::nothing, __vecm_tu_selector>::t_elem t_qel;
-  typedef fifo_m11_t<cch_slot::qbi_value, meta::nothing, __vecm_tu_selector>::t_elem t_qbiel;
 
-    // A queue in a slot. Accessed only under slot lock, so does not need its own element-wise lock.
-  template<class T, class _bs = __vecm_tu_selector>
-  struct aux_fifo : fifo_m11_t<T, meta::nothing, _bs>
+  struct th_lqsd_impl : threadctl::ctx_base { virtual void _thread_proc(); };
+  struct th_lmsc_impl : threadctl::ctx_base, lm_slot_controller::i_callback
   {
-    typedef typename fifo_m11_t<T>::t_elem t_elem;
-    s_long _push_nonblk(const t_elem& x) throw() { if (!this->is_valid()) { return -5; } s_long s(this->_isup), s2(s + 1), r(this->_irec); if (s2 >= this->_elems.n()) { s2 = 0; } if (s2 == r) { return -2; }  t_elem* p = this->_elems.template pval_0u<t_elem>(s); *p = x; if (p->has_ref()) { this->_isup = s2; return 1; } return -4; }
-    t_elem _pop_nonblk(bool b_pop) throw() { if (!this->is_valid()) { return t_elem(); } s_long r(this->_irec), s(this->_isup); if (r == s) { return t_elem(); } s_long r2 = r + 1; if (r2 >= this->_elems.n()) { r2 = 0; } t_elem* p = this->_elems.template pval_0u<t_elem>(r); t_elem x = *p; if (b_pop) { p->clear(); this->_irec = r2; } return x; }
+    virtual void _thread_proc();
+    virtual s_long local_write(t_stringref umsg, s_long enc, const cref_t<t_stringref>& bin, s_ll id_msg, s_ll id_msg_cmd);
+    virtual s_long local_subscribe(t_stringref mde, const netmsg_header::mdd_subs_request& dm, const bmdx_shm::t_name_shm& name_peerf);
+    virtual s_long cslph_update(vec2_t<tracking_info>& vtii);
   };
-
-  struct tc_autodelivery : threadctl::ctx_base
-    { virtual void _thread_proc(); };
-
-  static void __append_vals(unity& dest, const unity& src, s_long n_skip = 0);
-  static s_long __recode_slotname(const unity& sn, std::wstring& retval, std::wstring* pn1 = 0, std::wstring* pntail = 0) throw();
 
   struct address
   {
@@ -8879,9 +11426,10 @@ struct dispatcher_mt::thread_proxy : i_dispatcher_mt
     unity sln_v() const;
     std::wstring wstr_sln_1() const;
     std::wstring wstr_sln_tail() const;
+    bool has_sln_tail() const throw();
     std::wstring wstr_thn() const;
     std::wstring wstr_pn() const;
-    std::wstring wstr_hostn() const;
+//    std::wstring wstr_hostn() const;
 
     s_long set_addr(const unity& x) throw();
     s_long set_addr_LP(const std::wstring& thn, const unity& sln);
@@ -8893,67 +11441,96 @@ struct dispatcher_mt::thread_proxy : i_dispatcher_mt
     bool isLMA() const throw();
     bool isR() const throw();
     bool isRMA() const throw();
-    bool isRPA() const throw();
 
     s_long sln_ind() const throw();
     _fls75 slt() const throw();
 
+    bool _conv_LP_LM(arrayref_t<wchar_t> name_peer) throw();
+    bool _conv_LM_LP() throw();
+    s_long _sln_ind0(const _fls75& k1) const throw();
+
   private:
     unity _addr;
   };
+  static void __append_vals(unity& dest, const unity& src, s_long n_skip = 0);
+  static s_long __recode_slotname(const unity& sn, std::wstring* retval = 0, std::wstring* pn1 = 0, std::wstring* ptail = 0, const address* pdtailcmp = 0) throw();
 
-  static s_long __aux_msg_encode(const unity& hm, const arrayref_t<char>* buf, std::string& retmsg) throw();
-  static s_long __aux_msg_decode(const std::string& msg, bool b_rmstr, bool b_discard_bin, unity& retmsg, _carray_base_t<char>* retbuf) throw();
 
 
-  static bool thnchk(const std::wstring& s) throw();
-  static bool pnchk(const std::wstring& s) throw();
+  static bool thnchk(arrayref_t<wchar_t> s) throw();
+  static bool pnchk(arrayref_t<wchar_t> s) throw();
   static bool hostportchk(const std::wstring& s) throw();
-  static bool is_addr_cat(const std::wstring& s) throw();
+  static bool is_addr_cat_all(arrayref_t<wchar_t> s) throw();
 
+  static std::wstring sln1_root(const std::wstring& sln1);
   static bool sln1chk_main(const std::wstring& sln1);
   static bool sln1chk_main_qs(const std::wstring& sln1);
   static bool sln1chk_qs(const std::wstring& sln1);
   static bool sln1chk_subscriber(const std::wstring& sln1) throw();
   static bool sln1chk_main_o(const std::wstring& sln1);
   static bool sln1chk_main_i(const std::wstring& sln1);
-  static std::wstring sln1_root(const std::wstring& sln1);
   static bool sln1chk_iomatch(const std::wstring& ssln1, const std::wstring& dsln1);
+
+  typedef i_dispatcher_mt::tracking_info tracking_info;
 
 private:
   std::wstring _name_th;
   std::wstring _name_pr;
   cref_t<dispatcher_mt::cch_session> _r_ths;
+    // mtrk_htracking notes:
+    //    1) when removed together with parent object: all contained client objects (tracking_info) are released at the same time
+    //      => no client tracking_info's from this proxy are left anywhere in the dispatcher session.
+    //    2) In _s_proxy_init, .info is created automatically, but .strongref is not created: it will be created on the first request for message tracking from proxy's client.
+    //  Locking: any of weakref_t<t_htracking_proxy>::t_lock or refmaker_t<t_htracking_proxy>::t_lock (this is the same) during adding/removing/modifying hash map elements.
+  refmaker_t<t_htracking_proxy> mtrk_htracking; // { msg id; strong refs. to tracking_info }
+
 
   thread_proxy(const thread_proxy&); thread_proxy& operator=(const thread_proxy& x);
 
 public:
+  enum Esender_type
+  {
+    st_client = 0,
+    st_s_subs_deliver = 1,
+    st_lmsc = 2,
+    st_update_subs_input = 3, // request from _s_update_subs_lists to _s_subscribe
+    st_update_subs_output = 4 // request from _s_update_subs_lists to _s_subscribe
+  };
 
-  static s_long _s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thread_name) throw();
-  static s_long _s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw();
-  static s_long _s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& hm, const arrayref_t<char>* buf, bool b_delivery) throw();
-  static s_long _s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags) throw();
-  static s_long _s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot, dispatcher_mt>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs) throw();
-  static s_long _s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& add_qs0, const unity& recv_sl0, s_long rt, const std::wstring& _name_th_recv) throw();
-  static s_long _s_request(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, const std::wstring& _name_th, int frqperm) throw();
+  static s_long _s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw();
+  static s_long _s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) throw();
+  static s_long _s_request(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, const std::wstring& _name_th, int frqperm, s_long flags) throw();
+  static s_long _s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) throw();
+
+  static s_long _s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) throw();
+  static s_long _s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs, s_ll* pnmsent) throw();
+
+  static s_long _s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0, s_long flags_cr) throw();
+  static s_long _s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn, const unity* pthn = 0) throw();
+
+  static s_long _s_add_slots_nl(cch_session& rses, const std::wstring& k_th, const unity& slotscfg, t_hsubs& hsubs_ins, t_hsubs& hsubs_outs, mst_semaphore* pms = 0) throw();
+  static s_long _s_slots_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotnames, const std::wstring& _name_th, s_long flags_rmv) throw();
   static s_long _s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) throw();
-  static s_long _s_add_slots_nl(cch_session& rses, const std::wstring& k_th, const unity& slotscfg, t_hsubs& hsubs_acc, mst_semaphore* pms = 0) throw();
-  static s_long _s_update_subs_lists(cch_session& rses, const t_hsubs& hsubs, int actions) throw();
-  static s_long _s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, const std::wstring& _name_th) throw();
-  static s_long _s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0) throw();
-  static s_long _s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn) throw();
+  static s_long _s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) throw();
+
+  static void _s_thh_sig_stop(cch_session& rses) throw() { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
+  static bool _s_thh_active(cch_session& rses) throw() { return rses.th_lqsd || rses.th_lmsc; }
+
+  static void _s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) throw();
+  static void _s_disp_dtor(dispatcher_mt* pdisp) throw();
+  static s_long _s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, arrayref_t<wchar_t> _name_th) throw();
+  static s_long _s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, arrayref_t<wchar_t> thread_name) throw();
 
   thread_proxy();
   virtual ~thread_proxy();
-  virtual s_long pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw();
-  virtual s_long write(const unity& msg, const arrayref_t<char>* buf) throw();
-  virtual s_long request(s_long rt, unity& retval, const unity& args = unity()) throw();
-  virtual s_long slots_create(const unity& _cfg0) throw();
-  virtual s_long slot_remove(const unity& slotname0) throw();
+  virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw();
+  virtual s_long msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) throw();
+  virtual s_long request(s_long rt, unity& retval, const unity& args, s_long flags) throw();
+  virtual s_long slots_create(const unity& _cfg0, s_long flags) throw();
+  virtual s_long slots_remove(const unity& slotnames, s_long flags) throw();
   virtual s_long thread_name(unity& retname) throw();
   virtual s_long process_name(unity& retname) throw();
-  virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt) throw();
-  virtual s_long periodic(s_long flags) throw();
+  virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) throw();
 };
 
 
@@ -8973,30 +11550,40 @@ public:
     bool cch_slot::qs_deliv_thread() const { return (ccfgflags & 0x3) == 2; }
     bool cch_slot::qs_deliv_disp() const { return (ccfgflags & 0x3) == 3; }
     bool cch_slot::qs_output_fixed() const { return (ccfgflags & 0x10) != 0; }
-cch_slot::cch_slot() : phase(0), ccfgflags(0) {}
-cch_thread::cch_thread() : b_disp(false), mst(0) {}
-dispatcher_mt::cch_session::cch_session() : gm(0), exitmode(1), ses_state(-1), frqperm(0x1f), nprx(0), qsdt(-1), qsd_prio(4) {}
+cch_slot::cch_slot() : type(0), phase(0), ccfgflags(0), id_msg_cmd(-1) {}
+cch_thread::cch_thread() : cb_disp(false), mst(0) {}
+cch_thread::~cch_thread() {}
 
 
-  // m_* ask for possibility of thread adding/removal, or slots collection modification (slots adding/removal),
-  //    or thread object read-only access.
-  //    The client may call *_acquire() multiple times until allowed to make modification or read data.
-  //    Modification itself is not guarded by a lock, because only one client at a time is allowed to make it.
-  //    Read-only access is allowed for multiple clients at a time, and it's also not guarded by a lock.
-  //    When mst_semaphore of that client goes out of scope, the appropriate mst flag
-  //      is automatically cleared as necessary, allowing for further operations on the thread object and threads collection.
+  // m_*_acquire() requests one of
+  //    a) exclusive lock on cch_thread for slots collection modification
+  //        (slots adding/removal),
+  //    b) exclusive lock on cch_thread for its initialization or destruction
+  //        (right after adding / right before removal from hg_threads, which itself occurs under lkd_disp_ths
+  //        as well as any hg_threads operation),
+  //    c) semaphore count increment (one for mst_semaphore object)
+  //        for thread object read-only access.
+  //  One mst_semaphore object may hold only one of the above locks.
+  //  The client may call m_*_acquire() of the chosen type either once,
+  //    or multiple times until allowed to make modification or read data.
+  //  Thread data modification itself is not additionally guarded by any other lock, because all clients use mst_semaphore
+  //    as the only means of locking.
+  //  Thread data read-only access is allowed for multiple clients at a time, and is not additionally guarded
+  //    by any other lock as well.
+  //  When mst_semaphore of that client goes out of scope, the appropriate mst flag, held by this mst_semaphore,
+  //      is automatically cleared, allowing for further operations on the thread object and threads collection.
   // Return values:
   //    -1, -3 - failure, the client should stop further efforts.
   //        (-1 - multiple causes. -3 - thread does not exist.)
-  //    0 - the client should wait until allowed to operate or fail.
+  //    0 - the client should wait until allowed to operate (ret. code 1) or fail (ret. code < 0).
   //    1 - success, the client should make intended operations.
 int dispatcher_mt::mst_semaphore::m_sl_acquire() throw()
 {
   if (!_p_ths) { return -1; }
   if (m_allowed == 1) { return 1; } else if (m_allowed != 0 || !(rsv == 0 || rsv == 1)) { return -1; }
-  critsec_t<dispatcher_mt> __lock(100, -1, &_p_ths->lkm_ths); if (sizeof(__lock)) {}
-  const hashx<unity, cch_thread>::entry* e_th = 0; try { e_th = _p_ths->hg_ths.find(_thn); } catch (...) { return -1; } if (!e_th) { rsv = 0; m_allowed = 0; return -3; }
-  cch_thread& th = e_th->v;
+  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+  const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; try { e_th = _p_ths->hg_threads.find(_thn); } catch (...) { return -1; } if (!e_th) { rsv = 0; m_allowed = 0; return -3; }
+  cch_thread& th = e_th->v._rnonc();
   if (rsv == 0 && (th.mst & 2)) { return -1; } // +-th is already reserved by someone
   if (rsv == 1 && (th.mst & 2)) { rsv = 0; return -1; }
   if (rsv == 0) { rsv = 1; } // ask for +-sl
@@ -9008,9 +11595,9 @@ int dispatcher_mt::mst_semaphore::m_th_acquire() throw()
 {
   if (!_p_ths) { return -1; }
   if (m_allowed == 2) { return 1; } else if (m_allowed != 0 || !(rsv == 0 || rsv == 2)) { return -1; }
-  critsec_t<dispatcher_mt> __lock(100, -1, &_p_ths->lkm_ths); if (sizeof(__lock)) {}
-  const hashx<unity, cch_thread>::entry* e_th = 0; try { e_th = _p_ths->hg_ths.find(_thn); } catch (...) { return -1; } if (!e_th) { rsv = 0; m_allowed = 0; return -3; }
-  cch_thread& th = e_th->v;
+  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+  const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; try { e_th = _p_ths->hg_threads.find(_thn); } catch (...) { return -1; } if (!e_th) { rsv = 0; m_allowed = 0; return -3; }
+  cch_thread& th = e_th->v._rnonc();
   if (rsv == 0 && (th.mst & 2)) { return -1; } // +-th is already reserved by someone
   if (rsv == 0) { th.mst |= 2;  rsv = 2; } // reserve +-th
   if (th.mst & (1+4)) { return 0; } // need waiting for someone else's op. completion
@@ -9021,9 +11608,9 @@ int dispatcher_mt::mst_semaphore::m_th_ro_acquire() throw()
 {
   if (!_p_ths) { return -1; }
   if (m_allowed == 4) { return 1; } else if (m_allowed != 0 || !(rsv == 0 || rsv == 4)) { return -1; }
-  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkm_ths); if (sizeof(__lock)) {}
-  const hashx<unity, cch_thread>::entry* e_th = 0; try { e_th = _p_ths->hg_ths.find(_thn); } catch (...) { return -1; } if (!e_th) { rsv = 0; m_allowed = 0; return -3; }
-  cch_thread& th = e_th->v;
+  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+  const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; try { e_th = _p_ths->hg_threads.find(_thn); } catch (...) { return -1; } if (!e_th) { rsv = 0; m_allowed = 0; return -3; }
+  cch_thread& th = e_th->v._rnonc();
   if (rsv == 0 && (th.mst & 2)) { return -1; } // +-th is already reserved by someone
   if (rsv == 4 && (th.mst & 2)) { rsv = 0; return -1; }
   if (rsv == 0) { rsv = 4; } // ask for read-only access to thread object
@@ -9037,9 +11624,9 @@ void dispatcher_mt::mst_semaphore::release() throw()
   if (rsv)
   {
     if (!_p_ths) { rsv = 0; m_allowed = 0; return; }
-    critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkm_ths); if (sizeof(__lock)) {}
-    const hashx<unity, cch_thread>::entry* e_th = 0; try { e_th = _p_ths->hg_ths.find(_thn); } catch (...) { return; } if (!e_th) { rsv = 0; m_allowed = 0; return; }
-    cch_thread& th = e_th->v;
+    critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+    const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; try { e_th = _p_ths->hg_threads.find(_thn); } catch (...) { return; } if (!e_th) { rsv = 0; m_allowed = 0; return; }
+    cch_thread& th = e_th->v._rnonc();
     if (rsv == 1) { if (m_allowed == 1) { th.mst &= ~1ll; } }
       else if (rsv == 2) { if (m_allowed == 2) { th.mst &= ~2ll; } }
       else if (rsv == 4) { if (m_allowed == 4) { th.mst -= 8; if ((th.mst & ~7ll) == 0) { th.mst &= ~4ll; } } }
@@ -9058,39 +11645,49 @@ dispatcher_mt::mst_semaphore::~mst_semaphore() throw() { release(); }
 
   // sln: valid (recoded) slot name.
   // Returns:
-  //    1 and valid reference to slot sln in thread thn if the slot exists
-  //      and both thread and list of slots are not under modification.
-  //    0 if the client should wait until slots list modification is completed. ret_sl == const.
-  //        (This occurs only when m_sl is acquired by someone.
-  //        If m_th_ro is acquired, for existing slot, 1 and slot reference is returned.)
-  //    -1 if the slot does not exist or cannot be accessed during unknown amount of time. ret_sl == const.
-  //    -3 if the thread does not exist. ret_sl == const.
+  //    1 and valid reference to slot sln in thread thn(), if the slot exists, and any of the following is true:
+  //        a) no locks or semaphores are set on the thread thn(),
+  //        b) anyone's m_th_ro_acquire have set and is currently holding at least one lock.
+  //    0 if the client should wait until slots list modification is completed. ret_sl is not modified.
+  //        This ret. code is possible only if someone's m_sl_acquire has set and is currently holding a lock.
+  //    -1 if the slot does not exist, or slot or thread is locked (i.e. slot cannot be accessed during unknown amount of time). ret_sl is not modified.
+  //    -3 if the thread does not exist. ret_sl is not modified.
   // NOTE Any access to slot itself is guarded by its individual lock (cch_slot lkd),
-  //    which is never mixed with session lock (cch_session lkm_ths).
+  //    which is never mixed with session lock (cch_session lkd_disp_ths).
   //    If the slot removal from its containing thread occurs in between session lock and slot lock,
   //    the slot may be still used to complete operation (e.g. read from message queue) without additional checks
-  //    or cancelling. The slot object is automatically deleted when the last cref_t<cch_slot, dispatcher_mt>
+  //    or canceling. The slot object is automatically deleted when the last cref_t<cch_slot>
   //    goes out of scope.
-int dispatcher_mt::mst_semaphore::r_sl(const std::wstring& sln, cref_t<cch_slot, dispatcher_mt>& ret_sl) throw()
+int dispatcher_mt::mst_semaphore::r_sl(const std::wstring& sln, cref_t<cch_slot>& ret_sl) throw()
 {
   if (!_p_ths) { return -1; }
-  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkm_ths); if (sizeof(__lock)) {}
-  const hashx<unity, cch_thread>::entry* e_th = 0; try { e_th = _p_ths->hg_ths.find(_thn); } catch (...) { return -1; } if (!e_th) { return -3; }
-  cch_thread& th = e_th->v;
-  if (m_allowed == 0) { while (1) { if (th.mst & 4) { break; } if (th.mst & 2) { return -1; } if (th.mst & 1) { return 0; } break; } }
-  const hashx<unity, cref_t<cch_slot, dispatcher_mt> >::entry* e_sl = 0;
-  try { e_sl = e_th->v.h_sl.find(sln); } catch (...) { return -1; } if (!e_sl) { return -1; }
+  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+  const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; try { e_th = _p_ths->hg_threads.find(_thn); } catch (...) { return -1; } if (!e_th) { return -3; }
+  cch_thread& th = e_th->v._rnonc();
+  if (m_allowed == 0) { do { if (th.mst & 4) { break; } if (th.mst & 2) { return -1; } if (th.mst & 1) { return 0; } } while (false); }
+  const hashx<unity, cref_t<cch_slot> >::entry* e_sl = 0;
+  try { e_sl = e_th->v->h_sl.find(sln); } catch (...) { return -1; } if (!e_sl) { return -1; }
   ret_sl = e_sl->v;
   return 1;
 }
 
   // Returns ptr. to associated thread object, if it exists in session.
-cch_thread* dispatcher_mt::mst_semaphore::p_thread() throw()
+  //  To access the object, any
+  //    a) m_th_ro_acquire or m_th_acquire must be called first, and succeed (return 1).
+  //    b) lock on lkd_disp_ths must be set during use if p_thread's pointer .
+  // b_inited_only:
+  //    if true, p_thread() will return 0 during cch_thread initialization and destruction, even if thread exists.
+  //    This should be used for short-time access to special thread members (mtrk_htracking),
+  //    under lkd_disp_ths instead of m_*_acquire().
+cch_thread* dispatcher_mt::mst_semaphore::p_thread(bool b_inited_only) throw()
 {
   if (!_p_ths) { return 0; }
-  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkm_ths); if (sizeof(__lock)) {}
-  const hashx<unity, cch_thread>::entry* e_th = 0; try { e_th = _p_ths->hg_ths.find(_thn); } catch (...) {} if (!e_th) { return 0; }
-  return &e_th->v;
+  critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+  const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; try { e_th = _p_ths->hg_threads.find(_thn); } catch (...) {} if (!e_th) { return 0; }
+  cch_thread* pth = e_th->v._pnonc_u();
+  if (!pth) { return 0; }
+  if (b_inited_only && !!(pth->mst & 2)) { return 0; }
+  return pth;
 }
 
 dispatcher_mt::cch_session* dispatcher_mt::mst_semaphore::p_ses() { return _p_ths; }
@@ -9101,24 +11698,63 @@ const std::wstring& dispatcher_mt::mst_semaphore::thn() { return _thn; }
 dispatcher_mt::thread_proxy::thread_proxy() {}
 dispatcher_mt::thread_proxy::~thread_proxy()
 {
+  if (this->mtrk_htracking.b_nonempty())
+  { try {
+    refmaker_t<t_htracking_proxy>::t_lock __lock(this->mtrk_htracking); if (sizeof(__lock)) {}
+    t_htracking_proxy& h = this->mtrk_htracking.strongref._rnonc();
+    for (s_long i = 0; i < h.n(); ++i)
+    {
+      cref_t<i_dispatcher_mt::tracking_info>& r = h(i)->v;
+      if (r->state >= 0) { r->state = -15; }
+    }
+    h.hashx_clear();
+  } catch (...) {} }
   if (_r_ths)
   {
-    critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths._pnonc_u()->lkm_nprx); if (sizeof(__lock)) {}
-    if ((_r_ths._pnonc_u()->nprx -= 1) <= 0) { _r_ths._pnonc_u()->ses_state = 0; }
+    critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths->lkd_disp_nprx); if (sizeof(__lock)) {}
+    if ((_r_ths->nprx -= 1) <= 0) { _r_ths->ses_state = 0; }
   }
   _r_ths.clear();
 }
 
-s_long dispatcher_mt::thread_proxy::pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw() { return _s_pop(_r_ths, _name_th, slotname, retmsg, retbuf, flags); }
-s_long dispatcher_mt::thread_proxy::write(const unity& msg, const arrayref_t<char>* buf) throw()
+s_long dispatcher_mt::thread_proxy::mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw() { return _s_pop(_r_ths, _name_th, slotname, retmsg, retatt, flags); }
+s_long dispatcher_mt::thread_proxy::msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) throw()
 {
-  if (!_r_ths.has_ref()) { return -2; }
-  if (_r_ths.ref().ses_state != 1) { return -3; }
-  unity hm; if (msg.isString()) { try { paramline().decode(msg.cref<utString>().ref(), hm, false); } catch (...) { return -2; } }
-  return _s_write(_r_ths, _name_th, msg.isString() ? hm : msg, buf, false);
+  if (!tracking)
+  {
+    return dispatcher_mt::thread_proxy::_s_write(_r_ths, _name_th, msg, att, st_client, flags, false, -1, -1, 0, 0);
+  }
+  else
+  {
+    tracking->id = idgen();
+    tracking->state = -1; if (!tracking.is_cm()) { return -1; }
+    tracking->state = -2; if (!_r_ths.has_ref()) { return -2; }
+    dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+    tracking->state = -3; if (rses.ses_state != 1) { return -3; }
+    tracking->state = -2;
+    if (1)
+    {
+      refmaker_t<t_htracking_proxy>::t_lock __lock(this->mtrk_htracking); if (sizeof(__lock)) {}
+      try {
+        const t_htracking_proxy::entry* e = 0;
+        if (this->mtrk_htracking.strongref->insert(tracking->id, &e) != 1) { return -2; }
+        e->v = tracking;
+      } catch (...) { return -2; }
+    }
+    bool b_da_is_local = true;
+    s_long res = dispatcher_mt::thread_proxy::_s_write(_r_ths, _name_th, msg, att, st_client, flags, false, -1, tracking->id, &this->mtrk_htracking, &b_da_is_local);
+    if (1)
+    {
+      refmaker_t<t_htracking_proxy>::t_lock __lock(this->mtrk_htracking); if (sizeof(__lock)) {}
+      if (b_da_is_local) { tracking->state = res >= 0 ? 3 : res; }
+        else { if (res < 0 || res > tracking->state) { tracking->state = res; } }
+      if (res < 0 || b_da_is_local) { try { this->mtrk_htracking.strongref->remove(tracking->id); } catch (...) {} }
+    }
+    return res;
+  }
 }
-s_long dispatcher_mt::thread_proxy::request(s_long rt, unity& retval, const unity& args) throw() { return _s_request(_r_ths, rt, retval, args, _name_th, _r_ths ? _r_ths.ref().frqperm : 0); }
-s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0) throw()
+s_long dispatcher_mt::thread_proxy::request(s_long rt, unity& retval, const unity& args, s_long flags) throw() { return _s_request(_r_ths, rt, retval, args, _name_th, _r_ths ? _r_ths.ref().frqperm : 0, flags); }
+s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0, s_long flags_cr) throw()
 {
   if (!_r_ths.has_ref()) { return -2; }
   if (_r_ths.ref().ses_state != 1) { return -3; }
@@ -9128,50 +11764,207 @@ s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0) throw()
   const unity& cfg = _cfg0.isString() ? _cfg1 : _cfg0;
 
   s_long res = -2;
-  cch_session& rses = *_r_ths._pnonc_u(); t_hsubs hsubs;
-  res = _s_add_slots_nl(rses, _name_th, cfg, hsubs);
-    if (res == 1) { _s_update_subs_lists(rses, hsubs, 4); }
-      else if (res == -3) { res = -7; }
+  cch_session& rses = *_r_ths._pnonc_u(); t_hsubs hsubs_ins, hsubs_outs;
+  res = dispatcher_mt::thread_proxy::_s_add_slots_nl(rses, _name_th, cfg, hsubs_ins, hsubs_outs);
+  if (res == 1)
+  {
+    s_long resfl = dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs_ins, 16|8);
+    resfl |= dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs_outs, 4|8);
+      resfl &= ~s_long(0x10); // "failed to update non-local subscription" is not an error in here
+    if (resfl && !!(flags_cr & dispatcher_mt_flags::ensure_local_subs)) { try { dispatcher_mt::thread_proxy::_s_slots_remove(_r_ths, cfg[L"slots"], _name_th, 0); } catch (...) {} return -2; }
+  }
+  else if (res == -3) { res = -7; }
   return res;
 }
-s_long dispatcher_mt::thread_proxy::slot_remove(const unity& slotname0) throw() { return _s_slot_remove(_r_ths, slotname0, _name_th); }
+s_long dispatcher_mt::thread_proxy::slots_remove(const unity& slotnames, s_long flags) throw() { return dispatcher_mt::thread_proxy::_s_slots_remove(_r_ths, slotnames, _name_th, flags); }
 s_long dispatcher_mt::thread_proxy::thread_name(unity& retname) throw() { if (!_r_ths.has_ref()) { return -2; } try { retname = _name_th; return 1; } catch (...) { return -2; } }
 s_long dispatcher_mt::thread_proxy::process_name(unity& retname) throw() { if (!_r_ths.has_ref()) { return -2; } try { retname = _name_pr; return 1; } catch (...) { return -2; } }
-s_long dispatcher_mt::thread_proxy::subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt) throw() { return _s_subscribe(_r_ths, addr_qs, recv_sl, rt, _name_th); }
-s_long dispatcher_mt::thread_proxy::periodic(s_long flags) throw() { s_long res = _s_qs_deliver(_r_ths, _name_th, flags); if (res > 0) { return 1; } if (res == 0 || res == -3) { return res; } if (res == -4) { return -1; } return -2; }
-
-
-void dispatcher_mt::thread_proxy::tc_autodelivery::_thread_proc()
+s_long dispatcher_mt::thread_proxy::subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) throw()
 {
-  cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >();
   try {
-    cch_session& rses = *_r_ths._pnonc_u();
+    address qsa, suba;
+    s_long res;
+    res = suba.set_addr_LP(_name_th, recv_sl); if (res != 1) { return res == -1 ? -1 : -2; }
+    res = qsa.set_addr(addr_qs); if (res != 1) { return res == -1 ? -1 : -2; }
+    if (!tracking)
+    {
+      return dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, rt, st_client, qsa, suba, -1, 0, 0);
+    }
+    else
+    {
+      tracking->id = idgen();
+      tracking->state = -1; if (!tracking.is_cm()) { return -1; }
+      tracking->state = -2; if (!_r_ths.has_ref()) { return -2; }
+      dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+      tracking->state = -3; if (rses.ses_state != 1) { return -3; }
+      tracking->state = -2;
+      if (1)
+      {
+        refmaker_t<t_htracking_proxy>::t_lock __lock(this->mtrk_htracking); if (sizeof(__lock)) {}
+        try {
+          const t_htracking_proxy::entry* e = 0;
+          if (this->mtrk_htracking.strongref->insert(tracking->id, &e) != 1) { return -2; }
+          e->v = tracking;
+        } catch (...) { return -2; }
+      }
+      res = dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, rt, st_client, qsa, suba, tracking->id, &this->mtrk_htracking, 0);
+      if (1)
+      {
+        refmaker_t<t_htracking_proxy>::t_lock __lock(this->mtrk_htracking); if (sizeof(__lock)) {}
+        if (res < 0 || res > tracking->state) { tracking->state = res; }
+        if (res < 0 || qsa.isLP_any()) { try { this->mtrk_htracking.strongref->remove(tracking->id); } catch (...) {} }
+      }
+      return res;
+    }
+  } catch (...) { return -2; }
+}
+
+
+void dispatcher_mt::thread_proxy::th_lqsd_impl::_thread_proc()
+{
+  const meta::s_ll sleep1_max = 5000; // 5 ms
+  const s_ll sleep_total_half_enabled = 100000; // 100 ms, until LQSD is enabled in full (rses.__thm_lqsd_enable())
+
+  cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return; } cch_session& rses = *_r_ths._pnonc_u();
+
+  while (!b_stop())
+  {
+    s_ll nm = 0;
+    try { dispatcher_mt::thread_proxy::_s_qs_deliver(_r_ths, std::wstring(), 2, &nm); } catch (...) {}
+    if (nm > 0) { rses.__thm_lqsd_enable(); }
+
+    s_ll sleep_total = rses.lqsd_dt;
+    if (rses.__thm_lqsd < 2) { sleep_total = sleep_total_half_enabled; }
+    double t0 = clock_ms();
     while (true)
     {
-      cref_t<std::wstring, cch_session::lkm_name_th_disp> rthn = rses.name_th_disp;
-      if (rses.ses_state == 1 && rthn)
-      {
-        bool b = false;
-        if (1)
-        {
-          mst_semaphore ms;
-          try { ms.set_refs(rses, rthn.ref()); } catch (...) {}
-          int res = 0; hangdet hd; while (true) { if (hd) { res = -1; break; } res = ms.m_th_ro_acquire(); if (res != 0) { break; } sleep_mcs(50); } // res > 0 is checked below
-          cch_thread* pth = ms.p_thread();
-          if (res > 0 && pth && pth->b_disp) { b = true; }
-        }
-        if (b) { _s_qs_deliver(_r_ths, rthn.ref(), 0); }
-      }
-      const meta::s_ll delta = 100000;
-      for (meta::s_ll dt = rses.qsdt; dt > 0; dt -= delta)
-      {
-        sleep_mcs(dt < delta ? dt : delta);
-        if (rses.ses_state == 0 || rses.nprx <= 0) { goto lExit; } // during dispatcher_mt(), ses_state == -1, but exit does not occur since nprx == 1
-      }
+      if (rses.ses_state == 0 || rses.nprx <= 0) { goto lExit; }
+      if (nm > 0) { break; }
+      const s_ll dtmcs = bmdx_minmax::myllmin(sleep1_max, sleep_total - s_ll(1000 * (clock_ms() - t0)));
+      if (dtmcs < 0) { break; }
+      sleep_mcs(dtmcs);
     }
-  lExit:;
+  }
+lExit: _r_ths.clear();
+}
+s_long dispatcher_mt::thread_proxy::th_lmsc_impl::local_write(t_stringref umsg, s_long enc, const cref_t<t_stringref>& bin, s_ll id_msg, s_ll id_msg_cmd)
+{
+  cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return -2; }
+  try {
+  unity hmsg;
+  if (enc == 2) { hmsg.pl_dech(bmdx_str::conv::bsws_utf8(umsg.pd(), umsg.n())); }
+    else if (enc == 1) { hmsg.pl_dech(arrayref_t<wchar_t>((wchar_t*)umsg.pd(), umsg.n() / 2)); }
+    else if (enc == 0) { std::wstring s; s.reserve(_t_wz(umsg.n())); for (s_ll i = 0; i < umsg.n(); ++i) { s += wchar_t(umsg[i]); } hmsg.pl_dech(s); }
+    else { return -2; }
+  s_long res = dispatcher_mt::thread_proxy::_s_write(_r_ths, std::wstring(), hmsg, bin, st_lmsc, _fl_msend_anlo_att, true, id_msg, id_msg_cmd, 0, 0);
+    return res;
   } catch (...) {}
-  _r_ths.clear();
+  return -2;
+}
+s_long dispatcher_mt::thread_proxy::th_lmsc_impl::local_subscribe(t_stringref mde, const netmsg_header::mdd_subs_request& dm, const bmdx_shm::t_name_shm& name_peerf)
+{
+  if (!(mde.is_valid() && dm.is_valid() && dm.pmsg == mde.pd())) { return -1; }
+  try {
+    address qsa; qsa.set_addr(bmdx_str::conv::bsws_utf8((char*)dm.pqsa_utf8(), dm.nb_qsa));
+    address suba; suba.set_addr(bmdx_str::conv::bsws_utf8((char*)dm.psuba_utf8(), dm.nb_suba));
+    if (!(qsa.isLM() && suba.isLM())) { return -1; }
+    if (dm.rt >= 1 && dm.rt <= 3) { if (make_fixed_utf8_name(suba.wstr_pn()) != name_peerf) { return -1; } }
+      else if (dm.rt >= 4 && dm.rt <= 6) { if (make_fixed_utf8_name(qsa.wstr_pn()) != name_peerf) { return -1; } }
+    cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return -2; }
+    s_long res = dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, dm.rt, st_lmsc, qsa, suba, -1, 0, 0);
+    return res;
+  } catch (...) {}
+  return -2;
+}
+s_long dispatcher_mt::thread_proxy::th_lmsc_impl::cslph_update(vec2_t<tracking_info>& vtii)
+{
+  if (vtii.empty()) { return 1; }
+  cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return -2; } cch_session& rses = *_r_ths._pnonc_u();
+  vec2_t<cch_slot::csl_tracking_ext> vtrk2;
+  if (1)
+  {
+    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_htrk_csl);
+    for (s_long i = 0; i < vtii.n(); ++ i)
+    {
+      const hashx<s_ll, cch_slot::csl_tracking>::entry* e = rses.htrk_csl.find(vtii[i].id);
+        if (!e) { continue; }
+      try { vtrk2.resize(vtrk2.size() + 1); bmdx_str::words::swap_bytes(vtrk2.back().csl_info, e->v); vtrk2.back().trk_info = vtii[i]; } catch (...) { return -2; }
+    }
+  }
+  for (s_long i = 0; i < vtrk2.n(); ++ i)
+  { try {
+    cch_slot::csl_tracking_ext& tr = vtrk2[i];
+    cref_t<cch_slot> rcmd_sl;
+    if (1)
+    {
+      mst_semaphore ms_s(rses, tr.csl_info.thn.rstr()); hangdet hd(__lm_slot_controller_thread_hang_toms);
+      int bf = 0; while (true) { if (hd) { bf = 2; break; } int res = ms_s.r_sl(tr.csl_info.sln_exact.rstr(), rcmd_sl); if (res < 0) { bf = 1; break; } if (res > 0) { break; } sleep_mcs(50); }
+      if (bf == 2) { return -2; }
+      if (bf == 1) { continue; }
+    }
+    cch_slot& cmd_sl = *rcmd_sl._pnonc_u();
+    // lock the slot; hbo: get the sending entry; check if current id_msg of the sending entity is the same as in tr.csl_info; check entity phase; update entity phase and reset id_msg
+    critsec_t<dispatcher_mt> __lock(10, -1, &cmd_sl.lkd); if (sizeof(__lock)) {}
+    if (cmd_sl.eq_type("hbo"))
+    {
+      if (!(tr.csl_info.key_hbo.isNonempty() && cmd_sl.r_haddrl)) { continue; }
+      const cch_slot::t_haddrl::entry* e = cmd_sl.r_haddrl->find(tr.csl_info.key_hbo);
+        if (!e) { continue; }
+      s_ll& cmd_ph = e->v.value;
+      if (!(tr.trk_info.id == e->v.id_msg_cmd && cmd_ph == 7)) { continue; }
+      if (tr.trk_info.state > 0) { cmd_ph = 4; }
+        else { cmd_sl.r_haddrl->remove_e(e); }
+    }
+    else if (cmd_sl.eq_type("pbo"))
+    {
+      s_long& cmd_ph = cmd_sl.phase;
+      if (!(tr.trk_info.id == cmd_sl.id_msg_cmd && cmd_ph == 7)) { continue; }
+      if (tr.trk_info.state > 0) { cmd_ph = 4; }
+        else { cmd_ph = 6; }
+    }
+  } catch (...) {} }
+  return 1;
+}
+
+void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
+{
+  const double idle_toms = 3000; // 3 s
+  const s_ll sleep_short = 50; // 50 mcs (until idle_toms passes in inactivity, then switches to sleep_total_long)
+  const s_ll sleep1_long = 5000; // 5 ms (by this value, until sleep_total_long is accumulated)
+  const s_ll sleep_total_long = 20000; // 20 ms
+  const s_ll sleep_total_half_enabled = 100000; // 100 ms, until LMSC is enabled in full (rses.__thm_lmsc = 2)
+
+  cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return; } cch_session& rses = *_r_ths._pnonc_u();
+  cref_t<lm_slot_controller> lmsc = rses.lmsc; if (!lmsc) { return; }
+
+  double t_la = clock_ms(); // time of last activity
+  while (!b_stop())
+  {
+    bool b_active = true;
+    try {
+      const s_long st = lmsc->state();
+      if (st == 1) { b_active = false; lmsc->det_periodic(*this, b_active); }
+        else if (st == 0 || st == -2) { lmsc->det_init(); }
+    } catch (...) {}
+
+    s_ll sleep_total = sleep_short; s_ll sleep1 = sleep_short;
+    if (rses.__thm_lmsc < 2) { t_la = clock_ms(); sleep_total = sleep_total_half_enabled; sleep1 = sleep1_long; }
+    else
+    {
+      if (b_active) { t_la = clock_ms(); }
+        else if (clock_ms() - t_la >= idle_toms) { sleep_total = sleep_total_long; sleep1 = sleep1_long; }
+    }
+
+    const double t0 = clock_ms();
+    while (true)
+    {
+      if (rses.ses_state == 0 || rses.nprx <= 0) { goto lExit; }
+      const s_ll dtmcs = bmdx_minmax::myllmin(sleep1, sleep_total - s_ll(1000 * (clock_ms() - t0)));
+      if (dtmcs < 0) { break; }
+      sleep_mcs(dtmcs);
+    }
+  }
+lExit: lmsc.clear(); _r_ths.clear();
 }
 
   // Append values from array src to array dest.
@@ -9210,23 +12003,44 @@ void dispatcher_mt::thread_proxy::__append_vals(unity& dest, const unity& src, s
 
   // sn may be string or already decoded array.
   //  pn1 may be specified to receive 1st part of slot name (in decoded form).
-  //  pntail may be specified to receive [2nd..end) parts of slot name.
+  //  pdtailcmp != 0: destination address, to compare with (source) sn.
+  //    Any of the following must be true: a) no tails, b) sn has no tail, *pdtailcmp has tail, c) both sn and *pdtailcmp have equal tails.
   // Returns:
   //    1 and recoded slot name, if sn is valid.
-  //    -1 - if the name is not valid. retval is not changed.
-  //    -2 - failure. retval is not changed.
-s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstring& retval, std::wstring* pn1, std::wstring* pntail) throw()
+  //    -1:
+  //      a) if the name is not valid. *pretval == const, *pn1, *pntail are undefined.
+  //      b) sn tail is != that of *pdtailcmp.
+  //    -2 - failure. *pretval == const, *pn1, *pntail are undefined.
+s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstring* pretval, std::wstring* pn1, std::wstring* pntail, const address* pdtailcmp) throw()
 {
   try {
     unity _a; const unity* pa(0);
     if (sn.isString()) { paramline().decode1v(sn.vstr(), _a); pa = &_a; }
       else { pa = &sn; }
-    if (!(pa->isString() || (pa->isArray() && pa->arrsz() >= 2))) { return -1; }
-    std::wstring sln1 = pa->isArray() ? pa->vstr(pa->arrlb()) : pa->vstr();
+    if (!(pa->isString() || ((pa->utype() == utUnityArray || pa->utype() == utStringArray) && pa->arrlb() == 1 && pa->arrsz() >= 2))) { return -1; }
+    std::wstring sln1 = pa->isArray() ? pa->vstr(1) : pa->vstr();
     if (!sln1chk_main(sln1)) { return -1; }
-    if (pn1) { *pn1 = sln1; }
-    if (pntail) { if (pa->isArray()) { unity x; __append_vals(x, *pa, 1); *pntail = paramline().encode1v(x); } else { pntail->clear(); } }
-    retval = paramline().encode1v(*pa);
+    if (pn1) { pn1->swap(sln1); }
+    if (pdtailcmp)
+    {
+      if (pa->isArray() && !pdtailcmp->has_sln_tail()) { return -1; }
+      if (pa->isArray())
+      {
+        const s_long itail1 = 2;
+        const s_long n = pa->arrsz() - 1;
+        const unity& a2 = pdtailcmp->addr();
+        const s_long itail2 = pdtailcmp->sln_ind() + 1;
+        if (!(itail2 + n - 1 == a2.arrub())) { return -1; }
+        if (pa->utype() == utUnityArray) { for (s_long i = 0; i < n; ++i) { const unity& v2 = a2[itail2 + i]; if (!((*pa)[itail1 + i] == v2)) { return -1; } } }
+          else { for (s_long i = 0; i < n; ++i) { const unity& v2 = a2[itail2 + i]; if (!(v2.isString() && pa->rstr(itail1 + i) == v2.rstr())) { return -1; } } }
+      }
+    }
+    if (pntail)
+    {
+      if (pa->isArray()) { unity x; __append_vals(x, *pa, 1); *pntail = paramline().encode1v(x); }
+      else { pntail->clear(); }
+    }
+    if (pretval) { std::wstring s(paramline().encode1v(*pa)); pretval->swap(s); }
     return 1;
   } catch (...) { return -2; }
 }
@@ -9280,10 +12094,16 @@ std::wstring dispatcher_mt::thread_proxy::address::wstr_sln_1() const
   // Returns empty string if addr() is empty or slot name has only one part.
 std::wstring dispatcher_mt::thread_proxy::address::wstr_sln_tail() const
 {
-  std::wstring s; if (_addr.isEmpty()) { return s; } s_long ind = sln_ind(); if (ind < 1 || ind + 1 > _addr.arrub()) { return s; }
+  std::wstring s; if (_addr.isEmpty()) { return s; }
+  const s_long ind = sln_ind(); if (ind < 1 || ind + 1 > _addr.arrub()) { return s; }
   unity _a; __append_vals(_a, _addr, ind + 1 - _addr.arrlb());
   paramline().encode1v(_a, s);
   return s;
+}
+bool dispatcher_mt::thread_proxy::address::has_sln_tail() const throw()
+{
+  const s_long ind = sln_ind();
+  return ind >= 2 && ind < _addr.arrub();
 }
 
   // Returns string representation of thread name part of the address,
@@ -9305,24 +12125,23 @@ std::wstring dispatcher_mt::thread_proxy::address::wstr_thn() const
 std::wstring dispatcher_mt::thread_proxy::address::wstr_pn() const
 {
   std::wstring s; if (_addr.isEmpty()) { return s; }
-  const _fls75 k1 = _addr.ref<utUnity>(1).vflstr();
+  const _fls75 k1 = _addr[1].vflstr();
   s_long ind = -1;
   if (k1 == L"LM") { ind = 2; }
     else if (k1 == L"R") { ind = 3; }
-    else if (k1 == L"RPA") { ind = 3; }
   if (ind >= 0) { s = _addr.vstr(ind); }
   return s;
 }
 
-  // Returns string representation of host name part of the (remote) address,
+  // Returns string representation of host name part of the remote address,
   //    or empty string if addr() does not contain host name.
-std::wstring dispatcher_mt::thread_proxy::address::wstr_hostn() const
-{
-  std::wstring s; if (_addr.isEmpty()) { return s; }
-  const _fls75 k1 = _addr.ref<utUnity>(1).vflstr();
-  if (k1.length() > 0 && k1[0] == L'R') { s = _addr.vstr(2); }
-  return s;
-}
+//std::wstring dispatcher_mt::thread_proxy::address::wstr_hostn() const
+//{
+//  std::wstring s; if (_addr.isEmpty()) { return s; }
+//  const _fls75 k1 = _addr.ref<utUnity>(1).vflstr();
+//  if (k1.length() > 0 && k1[0] == L'R') { s = _addr.vstr(2); }
+//  return s;
+//}
 
   // x may be string or already decoded array.
   // Returns:
@@ -9336,18 +12155,24 @@ s_long dispatcher_mt::thread_proxy::address::set_addr(const unity& x) throw()
     unity _a; const unity* pa(0); if (x.isString()) { paramline().decode1v(x.vstr(), _a); pa = &_a; } else { pa = &x; }
     if (!(pa->isArray() && pa->arrsz() >= 2)) { return -1; }
     s_long nb = pa->arrlb();
-    const std::wstring k1 = pa->vstr(nb + 0);
-    if (!is_addr_cat(k1)) { return -1; }
-    if (k1 == L"LP") { if (pa->arrsz() < 3 || !thnchk(pa->vstr(nb + 1)) || !sln1chk_main(pa->vstr(nb + 2))) { return -1; } }
-      else if (k1 == L"LPA") { if (!sln1chk_main_qs(pa->vstr(nb + 1))) { return -1; } }
-      else if (k1 == L"LM") { if (pa->arrsz() < 4 || !pnchk(pa->vstr(nb + 1)) || !thnchk(pa->vstr(nb + 2)) || !sln1chk_main(pa->vstr(nb + 3))) { return -1; } }
-      else if (k1 == L"LMA") { if (!sln1chk_main_qs(pa->vstr(nb + 1))) { return -1; } }
-      else if (k1 == L"R") { if (pa->arrsz() < 5 || !hostportchk(pa->vstr(nb + 1)) || !pnchk(pa->vstr(nb + 2)) || !thnchk(pa->vstr(nb + 3)) || !sln1chk_main(pa->vstr(nb + 4))) { return -1; } }
-      else if (k1 == L"RMA") { if (pa->arrsz() < 3 || !hostportchk(pa->vstr(nb + 1)) || !sln1chk_main_qs(pa->vstr(nb + 2))) { return -1; } }
-      else if (k1 == L"RPA") { if (pa->arrsz() < 4 || !hostportchk(pa->vstr(nb + 1)) || !pnchk(pa->vstr(nb + 2)) || !sln1chk_main_qs(pa->vstr(nb + 3))) { return -1; } }
+    _fls75 k1; if (pa->utype() == utStringArray) { k1= pa->vstr(1); } else { k1 = (*pa)[nb + 0].vflstr(); }
+    const s_long npmin = _sln_ind0(k1);
+    if (npmin < 2 || pa->arrsz() < npmin) { return -1; }
+    unity aprep; aprep.arr_init<utUnity>(1);
+    if (pa->utype() == utStringArray) { for (s_long i = 0; i < pa->arrsz(); ++i) { aprep.arr_append(pa->vstr(nb + i)); } }
+    else
+    {
+      for (s_long i = 0; i < npmin; ++i) { aprep.arr_append((*pa)[nb + i].vstr()); }
+      for (s_long i = npmin; i < pa->arrsz(); ++i) { const unity& x = (*pa)[nb + i]; if (x.isString() || x.isInt() || x.isEmpty()) { aprep.arr_append(x); } else { aprep.arr_append(x.vstr()); } }
+    }
+    if (k1 == L"LP") { if (!thnchk(aprep.rstr(2)) || !sln1chk_main(aprep.rstr(3))) { return -1; } } // |LP|thread|slot
+      else if (k1 == L"LPA") { if (!sln1chk_main_qs(aprep.rstr(2))) { return -1; } } // |LPA|slot
+      else if (k1 == L"LM") { if (!pnchk(aprep.rstr(2)) || !thnchk(aprep.rstr(3)) || !sln1chk_main(aprep.rstr(4))) { return -1; } } // |LM|process|thread|slot
+      else if (k1 == L"LMA") { if (!thnchk(aprep.rstr(2)) || !sln1chk_main_qs(aprep.rstr(3))) { return -1; } } // |LMA|thread|slot
+      else if (k1 == L"R") { if (!hostportchk(aprep.rstr(2)) || !pnchk(aprep.rstr(3)) || !thnchk(aprep.rstr(4)) || !sln1chk_main(aprep.rstr(5))) { return -1; } } // |R|remote_address|process|thread|slot
+      else if (k1 == L"RMA") { if (!hostportchk(aprep.rstr(2)) || !thnchk(aprep.rstr(3)) || !sln1chk_main_qs(aprep.rstr(4))) { return -1; } }  // |RMA|remote_address|thread|slot
       else { return -1; }
-    _addr.arr_init<utUnity>(1); _addr.arrsz_(pa->arrsz());
-    for (s_long i = 0; i < pa->arrsz(); ++i) { _addr.arr_set(1 + i, pa->vstr(nb + i)); }
+    _addr.swap(aprep);
     return 1;
   } catch (...) { _addr.clear(); return -2; }
 }
@@ -9386,7 +12211,6 @@ bool dispatcher_mt::thread_proxy::address:: isLM() const throw() { if (_addr.isE
 bool dispatcher_mt::thread_proxy::address:: isLMA() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LMA"; } catch (...) {} return false; }
 bool dispatcher_mt::thread_proxy::address:: isR() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"R"; } catch (...) {} return false; }
 bool dispatcher_mt::thread_proxy::address:: isRMA() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"RMA"; } catch (...) {} return false; }
-bool dispatcher_mt::thread_proxy::address:: isRPA() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"RPA"; } catch (...) {} return false; }
 
   // Returns base index of slot name in addr():
   //  >= 2 on success.
@@ -9394,19 +12218,19 @@ bool dispatcher_mt::thread_proxy::address:: isRPA() const throw() { if (_addr.is
   //  -2 on failure.
 s_long dispatcher_mt::thread_proxy::address::sln_ind() const throw()
 {
-  try {
-    if (_addr.isEmpty()) { return -1; }
-    const _fls75 k1 = _addr.ref<utUnity>(1).vflstr();
-    s_long ind = -2;
-    if (k1 == L"LP") { ind = 3; }
-      else if (k1 == L"LPA") { ind = 2; }
-      else if (k1 == L"LM") { ind = 4; }
-      else if (k1 == L"LMA") { ind = 2; }
-      else if (k1 == L"R") { ind = 5; }
-      else if (k1 == L"RMA") { ind = 3; }
-      else if (k1 == L"RPA") { ind = 4; }
-    return ind;
-  } catch (...) { return -2; }
+  try { return _sln_ind0(_addr[1].vflstr()); } catch (...) {}
+  return -2;
+}
+s_long dispatcher_mt::thread_proxy::address::_sln_ind0(const _fls75& k1) const throw()
+{
+  s_long ind = -2;
+  if (k1 == L"LP") { ind = 3; } // |LP|thread|slot
+    else if (k1 == L"LPA") { ind = 2; } // |LPA|slot
+    else if (k1 == L"LM") { ind = 4; } // |LM|process|thread|slot
+    else if (k1 == L"LMA") { ind = 3; } // |LMA|thread|slot
+    else if (k1 == L"R") { ind = 5; } // |R|remote_address|process|thread|slot
+    else if (k1 == L"RMA") { ind = 4; } // |RMA|remote_address|thread|slot
+  return ind;
 }
 
   // Returns slot type part,
@@ -9421,165 +12245,39 @@ _fls75 dispatcher_mt::thread_proxy::address::slt() const throw()
   return _fls75();
 }
 
-
-  // Encodes message hash or map (hm), converts the result to char std::string,
-  //    adds header length prefix. If buf is given, buf length and data are appended.
-  // retmsg: the resulting string.
-  // Limits:
-  //    max. hm size when encoded into string - 2^30 16-bit characters.
-  //    max. buf size - 2^31-1 chars.
-  //    sum of sizes must be < min(std::string::max_size(), 2^60).
-  // Returns:
-  //    1 - success.
-  //    -1 - hm is not a hash or map.
-  //    -2 - failure (mem. alloc. or smth. else).
-  // Message format:
-  //  <part1 length>[<space><part2 length>][<space><additional info>]:<part1>[<part2>]
-  //    [] - optional parts.
-  //    part1: input message hash, paramline-encoded into wide-character string, and then into UTF-8.
-  //    part2: optional binary part of message (bytes).
-  //    length format: decimal number >= 0 in ASCII, up to 15 digits.
-  //    space: any number of any " \r\n\t".
-  //    part1 length: > 0.
-  //    part2 length: >= 0.
-  //    ':' character separates header from message parts.
-  //    additional info: reserved. NOTE Max. header length (incl. ':') == 1000.
-s_long dispatcher_mt::thread_proxy::__aux_msg_encode(const unity& hm, const arrayref_t<char>* buf, std::string& retmsg) throw()
+bool dispatcher_mt::thread_proxy::address::_conv_LP_LM(arrayref_t<wchar_t> name_peer) throw()
 {
   try {
-      if (!hm.isAssoc()) { return -1; }
-    const short max_digits = 15; meta::s_ll max_len(0);  max_len += 999999999999999ll;
-
-      if (buf && buf->n() > max_len) { return -2; }
-    std::string msg1 = wsToBsUtf8(paramline().encode(hm));
-      if (meta::s_ll(msg1.length()) > max_len) { return -2; }
-      if (meta::s_ll(msg1.length()) + (buf ? buf->n() : 0) + 2 + max_digits * 2 > max_scstr()) { return -2; }
-
-    std::string hdr(2 + max_digits * 2, ' ');
-    s_long nc1 = 0; s_long nc2 = 0;
-    nc1 = bmdx_str::conv::str_from_s_ll(meta::s_ll(msg1.length()), &hdr[0], max_digits); if (nc1 < 1) { return -2; }
-    if (buf) { nc2 = bmdx_str::conv::str_from_s_ll(meta::s_ll(buf->n()), &hdr[nc1 + 1], max_digits); if (nc2 < 1) { return -2; } }
-
-    _t_sz n0 = buf ? nc1 + nc2 + 2 : nc1 + 1;
-    _t_sz n1 = msg1.size();
-    _t_sz n2 = buf ? _t_sz(buf->n()) : 0;
-
-    hdr[n0 - 1] = ':';
-    retmsg.resize(n0 + n1 + n2);
-    yk_c::bytes::memmove_t<char>::F(&retmsg[0], &hdr[0], meta::t_pdiff(n0));
-    yk_c::bytes::memmove_t<char>::F(&retmsg[0] + n0, &msg1[0], meta::t_pdiff(n1)); msg1.clear();
-    if (buf) { yk_c::bytes::memmove_t<char>::F(&retmsg[0] + n0 + n1, buf->pd(), meta::t_pdiff(n2)); }
-
-    return 1;
-  } catch (...) { return -2; }
+    if (!isLP()) { return false; }
+    _addr.arr_append(unity());
+    for (s_long i = _addr.arrub() - 1; i >= 2; --i) { _addr[i].swap(_addr[i + 1]); }
+    _addr[1] = L"LM";
+    _addr[2] = name_peer;
+    return true;
+  } catch (...) {}
+  return false;
 }
-
-  // Decodes message and binary attachment (if exists).
-  //    Message must have message part, and optional binary data part.
-  //    Part format:
-  //    [ \t\r\n]*([0-9]{1,10})([^:]*):(.*)
-  //    \1 is decimal length of data (\3). \2 is optional metadata.
-  //    Length must not exceed 2^31 - 1.
-  // b_rmstr:
-  //    true - retmsg must be std::wstring (unity / utString).
-  //    false - retmsg must be hash, containing decoded data (unity / utHash).
-  // b_discard_bin: ignore message binary part if it is received but no retbuf given.
-  // Returns:
-  //  2 - success, got 2 parts.
-  //  1 - success, got 1 part.
-  //  0 - got empty message, no parts.
-  //  -1 - msg has wrong format.
-  //  -2 - failure (mem. alloc. or smth else).
-s_long dispatcher_mt::thread_proxy::__aux_msg_decode(const std::string& msg, bool b_rmstr, bool b_discard_bin, unity& retmsg, _carray_base_t<char>* retbuf) throw()
+bool dispatcher_mt::thread_proxy::address::_conv_LM_LP() throw()
 {
   try {
-    retmsg.clear();
-
-    typedef unsigned char u_char;
-    _t_sz n(msg.length());
-    if (n == 0) { if (retbuf) { retbuf->realloc(0, 0, 0, 0); } return 0; }
-    const char *ptr1(0), *ptr2(0); meta::s_ll l1(0), l2(0);
-    bool b_bin = false; // binary part presence
-    if (1)
-    {
-      const _t_sz max_digits = 15; const _t_sz max_hdr = 1000;
-      _t_sz pos_term = 0;
-      for (_t_sz i = 0; i < msg.size(); ++i) { if (msg[i] == ':') { pos_term = i; ptr1 = msg.c_str() + i + 1; break; } if (i >= max_hdr) { return -1; } }
-        if (!ptr1) { return -1; }
-      _t_sz pos1 = 0; for (_t_sz i = pos1; i < pos_term + 1; ++i) { char c = msg[i]; if (!(c == ' ' || c == '\t' || c == '\r' || c == '\n')) { pos1 = i; break; } }
-      _t_sz pos2 = pos1; for (_t_sz i = pos1; i < pos_term + 1; ++i) { char c = msg[i]; if (!(c >= '0' && c <= '9')) { pos2 = i; break; } l1 = l1 * 10 + meta::s_ll(c - '0'); }
-        if (pos2 <= pos1) { return -1; }
-        if (pos2 - pos1 > max_digits) { return -1; }
-        if (pos2 < pos_term) { char c = msg[pos2]; if (!(c == ' ' || c == '\t' || c == '\r' || c == '\n')) { return -1; } }
-
-      pos1 = pos2; for (_t_sz i = pos1; i < pos_term + 1; ++i) { char c = msg[i]; if (!(c == ' ' || c == '\t' || c == '\r' || c == '\n')) { pos1 = i; break; } }
-      pos2 = pos1; for (_t_sz i = pos1; i < pos_term + 1; ++i) { char c = msg[i]; if (!(c >= '0' && c <= '9')) { pos2 = i; break; } l2 = l2 * 10 + meta::s_ll(c - '0'); }
-        if (pos2 - pos1 > max_digits) { return -1; }
-        if (pos2 < pos_term) { char c = msg[pos2]; if (!(c == ' ' || c == '\t' || c == '\r' || c == '\n')) { return -1; } }
-      if (pos2 > pos1) { b_bin = true; ptr2 = ptr1 + size_t(l1); } else { l2 = 0; }
-        if (meta::s_ll(ptr1 - msg.c_str()) + l1 + l2 > meta::s_ll(n)) { return -1; }
-    }
-
-    bool b_bin_key = b_bin && retbuf == 0 && !b_discard_bin; // store binary part in "bin" key of the returned message
-
-    std::wstring wmsg1 = bsUtf8ToWs(ptr1, l1);
-
-    if (b_rmstr)
-    {
-      if (b_bin_key)
-      {
-        unity h; unity k_bin = L"bin";
-        paramline().decode(wmsg1, h, false); wmsg1.clear();
-        unity& x = h.hash(k_bin); x.u_clear(utString);
-        if (l2)
-        {
-          std::wstring& ws = x.ref<utString>();
-          ws.resize(_t_wz(l2));
-          if (1) { _yk_reg wchar_t* pw = &ws[0]; _yk_reg const char* p = ptr2; _yk_reg const char* p_end = p + l2; while (p != p_end) { *pw++ = wchar_t(u_char(*p++)); } }
-        }
-        paramline().encode(h, wmsg1);
-      }
-      else if (b_bin && retbuf) { if (!retbuf->realloc(l2, 0, 0, 0)) { return -2; } bytes::memmove_t<char>::F(retbuf->pd(), ptr2, meta::t_pdiff(l2)); }
-      else if (retbuf) { retbuf->realloc(0, 0, 0, 0); }
-
-      retmsg = wmsg1; wmsg1.clear();
-    }
-    else
-    {
-      paramline().decode(wmsg1, retmsg, false); wmsg1.clear();
-
-      if (b_bin_key)
-      {
-        unity k_bin = L"bin";
-        unity& x = retmsg.hash(k_bin); x.u_clear(utString);
-        if (l2)
-        {
-          std::wstring* pws = x.pval<utString>(); // 0 if another module strings are incompatible
-          std::wstring s2; if (!pws) { pws = &s2; }
-          pws->resize(_t_wz(l2));
-          if (1) { _yk_reg wchar_t* pw = &(*pws)[0]; _yk_reg const char* p = ptr2; _yk_reg const char* p_end = p + l2; while (p != p_end) { *pw++ = wchar_t(u_char(*p++)); } }
-          if (pws == &s2) { x = s2; } // copy to incompat. string
-        }
-      }
-      else if (b_bin && retbuf) { if (!retbuf->realloc(l2, 0, 0, 0)) { return -2; } bytes::memmove_t<char>::F(retbuf->pd(), ptr2, meta::t_pdiff(l2)); }
-      else if (retbuf) { retbuf->realloc(0, 0, 0, 0); }
-    }
-
-    return b_bin ? 2 : 1;
-  } catch (...) { return -2; }
+    if (!isLM()) { return false; }
+    _addr[1] = L"LP";
+    if (_addr.arrub() >= 2) { _addr.arr_insrem(2, -1); }
+    return true;
+  } catch (...) {}
+  return false;
 }
 
 
-
-bool dispatcher_mt::thread_proxy::thnchk(const std::wstring& s) throw() { return !(s.length() == 0 || (s.length() >= 2 && s[0] == L'_' && s[1] == L'_')); }
-bool dispatcher_mt::thread_proxy::pnchk(const std::wstring& s) throw() { return s.length() != 0 && !is_addr_cat(s); }
-bool dispatcher_mt::thread_proxy::hostportchk(const std::wstring& s) throw() { return s.length() != 0 && !is_addr_cat(s); }
-bool dispatcher_mt::thread_proxy::is_addr_cat(const std::wstring& s) throw()
+bool dispatcher_mt::thread_proxy::thnchk(arrayref_t<wchar_t> s) throw() { return s.is_valid() && !(s.n() == 0 || (s.n() >= 2 && s[0] == L'_' && s[1] == L'_')); }
+bool dispatcher_mt::thread_proxy::pnchk(arrayref_t<wchar_t> s) throw() { return s.is_valid() && s.n() > 0 && !is_addr_cat_all(s); }
+bool dispatcher_mt::thread_proxy::hostportchk(const std::wstring& s) throw() { return s.length() != 0 && !is_addr_cat_all(s); }
+bool dispatcher_mt::thread_proxy::is_addr_cat_all(arrayref_t<wchar_t> s) throw()
 {
-  if (s.length() == 0) { return false; }
+  if (!(s.is_valid() && s.n() > 0)) { return false; }
   if (s[0] == L'L')
   {
-    switch (s.length())
+    switch (s.n())
     {
       case 2: return s[1] == L'P' || s[1] == L'M';
       case 3: return (s[1] == L'P' || s[1] == L'M') && s[2] == L'A';
@@ -9588,71 +12286,75 @@ bool dispatcher_mt::thread_proxy::is_addr_cat(const std::wstring& s) throw()
   }
   else if (s[0] == L'R')
   {
-    if (s.length() == 1) { return true; }
-    if (s.length() != 3) { return false; }
+    if (s.n() == 1) { return true; }
+    if (s.n() != 3) { return false; }
     return (s[1] == L'P' || s[1] == L'M') && s[2] == L'A';
   }
-  return false;
+  return false; // required (compiler bug fix)
+}
+
+std::wstring dispatcher_mt::thread_proxy::sln1_root(const std::wstring& sln1)
+{
+  _t_wz i = sln1.find(L'_');
+  return i == nposw ? std::wstring() : sln1.substr(i+1);
 }
 
 bool dispatcher_mt::thread_proxy::sln1chk_main(const std::wstring& sln1)
 {
   if (sln1.length() < 4) { return false; }
-  if (sln1[1] == L'b')
+  if (sln1[1] == L'b') // ?b??*
   {
-    if (sln1.length() < 5 || sln1[3] != L'_') { return false; }
-    if (sln1[0] == 'p' && (sln1[2] == 'o' || sln1[2] == 'i')) { return true; }
-      else if (sln1[0] == L'q' && sln1[2] == 'i') { return true; }
+    if (sln1.length() < 5 || sln1[3] != L'_') { return false; } // ?b?_?*
+    if (sln1[0] == L'p') { return sln1[2] == L'o' || sln1[2] == L'i'; } // pbo, pbi
+      else if (sln1[0] == L'q') { return sln1[2] == L'i'; } // qbi
+      else if (sln1[0] == L'h') { return sln1[2] == L'o'; } // hbo
   }
   else
   {
-    if (sln1[2] != L'_') { return false; }
-    if (sln1[0] == L'p' && (sln1[1] == 'o' || sln1[1] == 'i')) { return true; }
-      else if (sln1[0] == L'q' && (sln1[1] == 'i' || sln1[1] == 's')) { return true; }
+    if (sln1[2] != L'_') { return false; } // ??_?*
+    if (sln1[0] == L'p') { return sln1[1] == L'o' || sln1[1] == L'i'; } // po, pi
+      else if (sln1[0] == L'q') { return sln1[1] == L'i' || sln1[1] == L's'; } // qi, qs
   }
   return false;
 }
 bool dispatcher_mt::thread_proxy::sln1chk_main_qs(const std::wstring& sln1) { return sln1chk_main(sln1) && sln1[0] == L'q' && sln1[1] == L's'; }
 bool dispatcher_mt::thread_proxy::sln1chk_qs(const std::wstring& sln1) { return sln1.length() >= 4 && sln1[0] == L'q' && sln1[1] == L's' && sln1[2] == L'_'; }
-bool dispatcher_mt::thread_proxy::sln1chk_subscriber(const std::wstring& sln1) throw() { return sln1.length() >= 4 && (sln1[0] == 'p' || sln1[0] == 'q') && sln1[1] == 'i' && sln1[2] == L'_'; }
+bool dispatcher_mt::thread_proxy::sln1chk_subscriber(const std::wstring& sln1) throw() { return sln1.length() >= 4 && (sln1[0] == L'p' || sln1[0] == L'q') && sln1[1] == L'i' && sln1[2] == L'_'; }
 bool dispatcher_mt::thread_proxy::sln1chk_main_o(const std::wstring& sln1)
 {
   if (sln1.length() < 4) { return false; }
-  if (sln1[1] == L'b')
+  if (sln1[1] == L'b') // ?b??*
   {
-    if (sln1.length() < 5 || sln1[3] != L'_') { return false; }
-    if (sln1[0] == 'p' && (sln1[2] == 'o' || sln1[2] == 'i')) { return true; }
-      else if (sln1[0] == L'q') { if (sln1[2] == 'i') { return true; } }
+    if (sln1.length() < 5 || sln1[3] != L'_') { return false; } // ?b?_?*
+    if (sln1[0] == L'p') { return sln1[2] == L'o' || sln1[2] == L'i'; } // pbo, pbi
+      else if (sln1[0] == L'q') { return sln1[2] == L'i'; } // qbi
+      else if (sln1[0] == L'h') { return sln1[2] == L'o'; } // hbo
   }
   else
   {
-    if (sln1[2] != L'_') { return false; }
-    if (sln1[0] == L'p' && sln1[1] == 'o') { return true; }
-      else if (sln1[0] == L'q' && sln1[1] == 's') { return true; }
+    if (sln1[2] != L'_') { return false; } // ??_?*
+    if (sln1[0] == L'p') { return sln1[1] == L'o'; } // po
+      else if (sln1[0] == L'q') { return sln1[1] == L's'; } // qs
   }
   return false;
 }
 bool dispatcher_mt::thread_proxy::sln1chk_main_i(const std::wstring& sln1)
 {
   if (sln1.length() < 4) { return false; }
-  if (sln1[1] == L'b')
+  if (sln1[1] == L'b') // ?b??*
   {
-    if (sln1.length() < 5 || sln1[3] != L'_') { return false; }
-    if (sln1[0] == 'p' && (sln1[2] == 'o' || sln1[2] == 'i')) { return true; }
-      else if (sln1[0] == L'q' && sln1[2] == 'i') { return true; }
+    if (sln1.length() < 5 || sln1[3] != L'_') { return false; } // ?b?_?*
+    if (sln1[0] == L'p') { return sln1[2] == L'o' || sln1[2] == L'i'; } // pbo, pbi
+      else if (sln1[0] == L'q') { return sln1[2] == L'i'; } // qbi
+      else if (sln1[0] == L'h') { return sln1[2] == L'o'; } // hbo
   }
   else
   {
-    if (sln1[2] != L'_') { return false; }
-    if (sln1[0] == L'p' && sln1[1] == 'i') { return true; }
-      else if (sln1[0] == L'q' && (sln1[1] == 'i' || sln1[1] == 's')) { return true; }
+    if (sln1[2] != L'_') { return false; } // ??_?*
+    if (sln1[0] == L'p') { return sln1[1] == L'i'; } // pi
+      else if (sln1[0] == L'q') { return sln1[1] == L'i' || sln1[1] == L's'; } // qi, qs
   }
   return false;
-}
-std::wstring dispatcher_mt::thread_proxy::sln1_root(const std::wstring& sln1)
-{
-  _t_wz i = sln1.find(L'_');
-  return i == nposw ? std::wstring() : sln1.substr(i+1);
 }
 bool dispatcher_mt::thread_proxy::sln1chk_iomatch(const std::wstring& ssln1, const std::wstring& dsln1)
 {
@@ -9660,73 +12362,67 @@ bool dispatcher_mt::thread_proxy::sln1chk_iomatch(const std::wstring& ssln1, con
   if (ssln1[1] == L'b')
   {
     if (ssln1.length() < 5 || dsln1.length() < 5 || ssln1[3] != L'_' || dsln1[3] != L'_') { return false; }
-    if (ssln1[0] == 'p' && ssln1[2] == 'o' && (dsln1[0] == 'p' || dsln1[0] == 'q') && dsln1[2] == 'i') { return true; }
-      else if (ssln1[0] == 'p' && ssln1[2] == 'i' && dsln1[0] == 'p' && dsln1[2] == 'o') { return true; }
-      else if (ssln1[0] == 'q' && ssln1[2] == 'i' && dsln1[0] == 'p' && dsln1[2] == 'o') { return true; }
+    if (ssln1[0] == L'p')
+    {
+      if (ssln1[2] == L'o') { return (dsln1[0] == L'p' || dsln1[0] == L'q') && dsln1[2] == L'i'; } // command pbo --> pbi, qbi
+        else if (ssln1[2] == L'i') { return (dsln1[0] == L'p' || dsln1[0] == L'h') && dsln1[2] == L'o'; } // response pbi --> pbo, hbo
+    }
+    else if (ssln1[0] == L'q')
+    {
+      if (ssln1[2] == L'i') { return (dsln1[0] == L'p' || dsln1[0] == L'h') && dsln1[2] == L'o'; } // response qbi --> pbo, hbo
+    }
+    else if (ssln1[0] == L'h')
+    {
+      if (ssln1[2] == L'o') { return (dsln1[0] == L'p' || dsln1[0] == L'q') && dsln1[2] == L'i'; } // command hbo --> pbi, qbi
+    }
   }
   else
   {
     if (ssln1[2] != L'_') { return false; }
-    if (ssln1[0] == 'p' && ssln1[1] == 'o' && dsln1[0] == 'p' && dsln1[1] == 'i') { return true; }
-      else if (ssln1[0] == 'p' && ssln1[1] == 'o' && dsln1[0] == 'q' && (dsln1[1] == 'i' || dsln1[1] == 's')) { return true; }
-      else if (ssln1[0] == 'q' && ssln1[1] == 's' && (dsln1[0] == 'p' || dsln1[0] == 'q') && dsln1[1] == 'i') { return true; }
+    if (ssln1[0] == L'p')
+    {
+      if (!(ssln1[1] == L'o')) { return false; }
+      if (dsln1[0] == L'p') { return dsln1[1] == L'i'; } // po --> pi
+      if (dsln1[0] == L'q') { return dsln1[1] == L'i' || dsln1[1] == L's'; } // po --> qi, qs
+    }
+    else if (ssln1[0] == L'q')
+    {
+      if (!(ssln1[1] == L's' && dsln1[1] == L'i')) { return false; }
+      return dsln1[0] == L'p' || dsln1[0] == L'q'; // qs --> pi, qi
+    }
   }
   return false;
 }
 
 
 
-  //    1 - success.
-  //    -2 - failed.
-  //    -3 - disp. session is closed.
-  //    -5 - invalid thread name.
-  //    -7 - thread does not exist.
-s_long dispatcher_mt::thread_proxy::_s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thread_name) throw()
+
+
+s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags_mget) throw()
 {
-  if (!thnchk(thread_name)) { return -5; }
+  if (!retmsg.isEmpty()) { retmsg.clear(); }
+  if (retatt && *retatt) {}
   if (!_r_ths) { return -2; }
-  try {
-    std::wstring process_name;
-    if (1)
-    {
-      critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths._pnonc_u()->lkm_ths); if (sizeof(__lock)) {}
-      if (_r_ths.ref().ses_state != 1) { return -3; }
-      process_name = _r_ths.ref().name_pr;
-      if (!_r_ths.ref().hg_ths.find(thread_name)) { return -7; }
-    }
-    x._name_th = thread_name;
-    x._name_pr = process_name;
-
-    if (1)
-    {
-      critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths._pnonc_u()->lkm_nprx); if (sizeof(__lock)) {}
-      x._r_ths = _r_ths;
-      x._r_ths._pnonc_u()->nprx += 1;
-    }
-    return 1;
-  } catch (...) { return -2; }
-}
-
-s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw()
-{
-  if (!_r_ths) { return -2; } if (_r_ths.ref().ses_state != 1) { return -3; }
+  dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+  if (rses.ses_state != 1) { return -3; }
+  const s_long flags_ses = rses.frqperm;
   try {
 
       //  Det. exact slot name.
-    std::wstring ssln1, ssln_r;
-    s_long res = __recode_slotname(slotname, ssln_r, &ssln1);
+    std::wstring ssln1, ssln_exact;
+    s_long res = __recode_slotname(slotname, &ssln_exact, &ssln1);
       if (res != 1) { return res == -1 ? -1 : -2; }
 
       // Check if slot exists / get ref.
-    cref_t<cch_slot, dispatcher_mt> ri_sl;
+    cref_t<cch_slot> ri_sl;
     if (1)
     {
-      mst_semaphore ms(*_r_ths._pnonc_u(), _name_th);
-      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(ssln_r, ri_sl); if (res < 0) { if (!ms.p_thread()) { return -7; } return -6; } if (res > 0) { break; } sleep_mcs(50); }
+      mst_semaphore ms(rses, _name_th);
+      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(ssln_exact, ri_sl); if (res < 0) { if (!ms.p_thread()) { return -7; } return -6; } if (res > 0) { break; } sleep_mcs(50); }
     }
     cch_slot& i_sl = *ri_sl._pnonc_u();
 
-      // Check if message exists, get message, set slot phase as necessary for slot type
+      // Check if message exists, get message, set slot phase as necessary for slot type.
     if (ssln1[1] == L'i') // pi, qi
     {
       if (ssln1[0] == L'p')
@@ -9734,123 +12430,98 @@ s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _
         critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
         if (i_sl.phase != 1) { return 0; }
 
-        s_long res = 3;
-        if ((flags & 2) == 0) { res = __aux_msg_decode(i_sl.r_pin.ref(), (flags & 1) == 0, (flags & 4) != 0, retmsg, retbuf); }
-        if (res <= 0) { return -22; }
-
-        if ((flags & 8) != 0) { } // peek only, do not pop
-        else
-        {
-          i_sl.r_pin.clear();
-          i_sl.phase = 2;
-        }
+        s_long res = i_sl.r_pin.move_to_retvals(retmsg, retatt, flags_mget, flags_ses); if (res < 0) { return -2; }
+        if (!(flags_mget & _fl_mget_peek_only) && res != 0) { i_sl.r_pin.clear(); i_sl.phase = 2; }
         return res;
       }
       else if (ssln1[0] == L'q')
       {
         critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
+        if (i_sl.r_qumi->navl() == 0) { return 0; }
 
-        t_qel r_msg = i_sl.r_q._pnonc_u()->pop(-1, false);
-          if (!r_msg) { return 0; }
-
-        s_long res;
-        if ((flags & 2) != 0) { res = 3; } // discard (do not read) the message
-        else
+        s_long res = 0;
+        while (1)
         {
-          res = __aux_msg_decode(r_msg.ref(), (flags & 1) == 0, (flags & 4) != 0, retmsg, retbuf);
-            if (res <= 0) { return -22; }
+          res = i_sl.r_qumi->front().move_to_retvals(retmsg, retatt, flags_mget, flags_ses); if (res < 0) { return -2; }
+          if (res == 0)
+          {
+            i_sl.r_qumi->pop_1();
+            if (i_sl.r_qumi->navl() == 0) { return 0; }
+            continue;
+          }
+          break;
         }
-
-        if ((flags & 8) != 0) { } // peek only, do not pop
-        else
-        {
-          i_sl.r_q._pnonc_u()->pop(-1, true);
-        }
+        if (!(flags_mget & _fl_mget_peek_only) && res != 0) { i_sl.r_qumi->pop_1(); }
         return res;
       }
       else { return -1; }
     }
-    else if (ssln1[1] == L'b') // pbo, pbi, qbi
+    else if (ssln1[1] == L'b') // pbo, hbo, pbi, qbi
     {
-    //  1 - input msg arrived.
-    //      2 - input msg popped.
-    //      3 - command response pushed by the receiver and forwarded to sender.
-    //  4 - command sent.
-    //      5 - command response received.
-    //      6 - command response popped.
-    //  pbo: 0, 6 --> 4 --> 5 --> 6
-    //  pbi: 0, 3 --> 1 --> 2 --> 3
-    //  qbi: 0, 3 --> 2 --> 3
-    //  pi: 0, 2 --> 1 --> 2
-      if (ssln1[2] == L'o') // pbo (popping response)
+      if (ssln1[2] == L'o') // pbo, hbo
       {
-        critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
-        if (i_sl.phase == 4) { return -20; }
-        if (i_sl.phase != 5) { return 0; }
-
-        s_long res;
-        if ((flags & 2) != 0) { res = 3; } // discard (do not read) the message
-        else
+        if (ssln1[0] == L'h') // hbo (pop a response from queue)
         {
-          res = __aux_msg_decode(i_sl.r_pin.ref(), (flags & 1) == 0, (flags & 4) != 0, retmsg, retbuf);
-            if (res <= 0) { return -22; }
-        }
+          critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
+          if (i_sl.r_qubci->navl() <= 0)
+          {
+            if (i_sl.r_haddrl->n() > 0) { return -20; } // something sent - no replies at all yet
+            return 0; // nothing sent currently - nothing to wait
+          }
 
-        if ((flags & 8) == 0)
-        {
-          i_sl.r_pin.clear();
-          i_sl.phase = 6;
+          cref_t<cch_slot::qbci_value, cref_nonlock>& rz = i_sl.r_qubci->front();
+          const cch_slot::t_haddrl::entry* e = i_sl.r_haddrl->find(rz->src.ref());
+          if (!e)  { i_sl.r_qubci->pop_1(); return -2;  } // broken constraint, not expected to occur
+          s_ll ph = e->v.value;
+          if (!(ph == 5 || ph == 7)) { i_sl.r_qubci->pop_1(); i_sl.r_haddrl->remove_e(e); return -2; } // broken constraint, not expected to occur
+
+          s_long res = rz->msg.move_to_retvals(retmsg, retatt, flags_mget, flags_ses); if (res < 0) { return -2; }
+          if (res == 0) { i_sl.r_qubci->pop_1(); return -20; } // invalid message on the queue, not expected to occur
+          if (!(flags_mget & _fl_mget_peek_only) && res != 0) { i_sl.r_qubci->pop_1(); i_sl.r_haddrl->remove_e(e); }
+          return res;
         }
-        return res;
+        else if (ssln1[0] == L'p') // pbo (get a response)
+        {
+          critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
+          s_long ph = i_sl.phase;
+          if (ph == 4) { return -20; }
+          if (!(ph == 5 || ph == 7)) { return 0; }
+
+          s_long res = i_sl.r_pin.move_to_retvals(retmsg, retatt, flags_mget, flags_ses); if (res < 0) { return -2; }
+          if (res == 0) { return -20; } // no response yet
+          if (!(flags_mget & _fl_mget_peek_only) && res != 0) { i_sl.r_pin.clear(); i_sl.id_msg_cmd = -1; i_sl.phase = 6; }
+          return res;
+        }
       }
-      else if (ssln1[0] == 'p' && ssln1[2] == L'i') // pbi (popping command)
+      else if (ssln1[0] == L'p' && ssln1[2] == L'i') // pbi (get a command)
       {
         critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
         if (i_sl.phase == 2) { return -21; }
         if (i_sl.phase != 1) { return 0; }
 
-        s_long res;
-        if ((flags & 2) != 0) { res = 3; } // discard (do not read) the message
-        else
-        {
-          res = __aux_msg_decode(i_sl.r_pin.ref(), (flags & 1) == 0, (flags & 4) != 0, retmsg, retbuf);
-            if (res <= 0) { return -22; }
-        }
-
-        if ((flags & 8) != 0) { } // peek only, do not pop
-        else
-        {
-          i_sl.r_pin.clear();
-          i_sl.phase = 2;
-        }
+        s_long res = i_sl.r_pin.move_to_retvals(retmsg, retatt, flags_mget, flags_ses); if (res < 0) { return -2; }
+        if (!(flags_mget & _fl_mget_peek_only) && res != 0) { i_sl.r_pin.clear(); i_sl.phase = 2; }
         return res;
       }
-      else if (ssln1[0] == 'q' && ssln1[2] == L'i') // qbi (popping command from queue)
+      else if (ssln1[0] == L'q' && ssln1[2] == L'i') // qbi (pop a command from queue)
       {
         critsec_t<dispatcher_mt> __lock(10, -1, &i_sl.lkd); if (sizeof(__lock)) {}
         if (i_sl.phase == 2) { return -21; }
-        if (i_sl.r_qbi.ref().is_empty()) { return 0; }
+        if (i_sl.r_qubci->navl() == 0) { return 0; }
 
-        t_qbiel r_msg = i_sl.r_qbi._pnonc_u()->pop(-1, false);
-          if (!r_msg.has_ref()) { return -2; }
-
-        s_long res;
-        if ((flags & 2) != 0) { res = 3; } // discard (do not read) the message
-        else
+        s_long res = 0;
+        while (1)
         {
-          res = __aux_msg_decode(r_msg.ref().msg.ref(), (flags & 1) == 0, (flags & 4) != 0, retmsg, retbuf);
-            if (res <= 0) { return -22; }
+          res = i_sl.r_qubci->front()->msg.move_to_retvals(retmsg, retatt, flags_mget, flags_ses); if (res < 0) { return -2; }
+          if (res == 0)
+          {
+            i_sl.r_qubci->pop_1();
+            if (i_sl.r_qubci->navl() == 0) { return 0; }
+            continue;
+          }
+          break;
         }
-
-        if ((flags & 8) != 0) { } // peek only, do not pop
-        else
-        {
-          i_sl.r_qbi._pnonc_u()->pop(-1, true);
-          i_sl.r_lsrc = r_msg.ref().src;
-          i_sl.phase = 2;
-        }
-        r_msg.clear();
-
+        if (!(flags_mget & _fl_mget_peek_only) && res != 0)  { i_sl.r_lsrc = i_sl.r_qubci->front()->src; i_sl.id_msg_cmd = i_sl.r_qubci->front()->id_msg_cmd; i_sl.r_qubci->pop_1(); i_sl.phase = 2; }
         return res;
       }
       return -1;
@@ -9860,290 +12531,1108 @@ s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _
 }
 
   // _name_th: name of the thread, calling _s_write (should be same as thread name in source address (src = ...), if it's specified)
-  // hm: must be already decoded mesage (hash or map).
+  // msg: the message to send in form: a) string, b) map, c) hashlist.
   //  Must have "src", "trg", "text" fields.
   //  During processing, "src" and "trg" fields are modified, to reflect the receiving side context.
+  // sender_type:
+  //    st_client: thread_proxy,
+  //      _name_th: client dispatcher's thread name
+  //      id_msg_nl: -1
+  //      id_msg_orig:
+  //        a) id of the current message, if tracking is enabled for it,
+  //        b) -1 if tracking is disabled.
+  //      prhtrprx (st_client only): ptr. to client proxy's mtrk_htracking object; must be !=0 if dest. addr. is non-local, + must remain valid during _s_write call.
+  //    st_s_subs_deliver: _s_subs_deliver(),
+  //      _name_th: qs slot owner thread name
+  //      id_msg_nl: -1
+  //      id_msg_orig = -1.
+  //      prhtrprx = 0.
+  //    st_lmsc: LMSC.
+  //      _name_th: empty ("")
+  //      id_msg_nl: the current message ID, generated by non-local sender; used only by pbi, qbi slots, to later send response to the command along with original ID
+  //      id_msg_orig:
+  //          a) id of the original command message, associated with the current response message, passed into _s_write; not for tracking, only for detecting "out of order" error,
+  //          b) -1 for other types of messages, written by LMSC
+  //      prhtrprx = 0.
+  // pb_da_is_local: may be 0; if != 0, receives da.isLP_any(), where da is destination address, taken from msg.
   // NOTE _s_write is called multiple times for one message from _s_subs_deliver,
   //  each time with different "trg" and re-set "src".
-s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& hm0, const arrayref_t<char>* buf, bool b_delivery) throw()
+s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags_msend, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) throw()
 {
   if (!_r_ths.has_ref()) { return -2; }
   dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
   if (rses.ses_state != 1) { return -3; }
+  const s_long flags_ses = rses.frqperm | (sender_type == st_s_subs_deliver ? _frqperm_msend_anlo | _frqperm_mget_anlo : 0); // delivery occurs already inside the dispatcher => the global anlo flags must be ignored
   try {
+    unity hm1; // message (in the form of hashlist) that will really be sent; values are kept as ptrs. to subobjects, to minimize copying
+    if (msg.isHash()) { if (b_may_swap_msg) { hm1.swap((unity&)msg); } else { hm1 = msg; } }
+      else if (msg.isMap()) { hm1.u_clear(utHash); paramline().merge(hm1, msg); }
+      else if (msg.isString()) { paramline().decode(msg.cref<utString>().ref(), hm1, false); }
+      else { return -1; }
     const unity k_src(L"src"), k_trg(L"trg"), k_text(L"text");
-    if (!(hm0.isAssoc() && hm0.u_has(k_src, 4) && hm0.u_has(k_trg, 4) && hm0.u_has(k_text, 4))) { return -1; }
-
-    const unity& __src0 = hm0[k_src];
-    const unity& __trg0 = hm0[k_trg];
-    unity hm1;
-    unity& __src = hm1.hash(k_src); __src = __src0;
-    for (s_long pos = hm0.assocl_first(); pos != hm0.assocl_noel(); pos = hm0.assocl_next(pos))
-    {
-      const unity& v = hm0.assocl_c(pos); if (&v == &__src0) { continue; }
-      if (!v.isLocal()) { if (v.compatibility() < 0) { return -2; } }
-      hm1.hash(hm0.assocl_key(pos)).set_obj_atop(const_cast<unity&>(v), false);
-    }
-
+    unity* __psrc0 = 0; const unity *__ptrg = 0, *__ptext = 0;
+    try { __psrc0 = &hm1[k_src]; __ptrg = &hm1[k_trg]; __ptext = &hm1[k_text]; if (sizeof(__ptext)) {}  } catch (...) { return -1; } // "text" key is only checked for existence
+    unity& __src = *__psrc0;
     s_long res;
 
-      // Source address:
-      // a) On b_delivery == false:
-      //    <slot name> - thread sending a message from itself.
-      //  Before encoding, the address is completed: |LP|<thread name>|<slot name>.
-      // b) On b_delivery == true:
-      //    |LP|<thread name>|<qs slot name>
-      //    |LPA|<qs slot name>
-      //  -- thread's periodic() / _s_qs_deliver() sends a message to a subscriber.
-      //  Thread name must be same as _name_th.
-      //  Source qs slot existence is checked, but the slot itself is not accessed, because this is done already by _s_qs_deliver.
-    address sa; std::wstring ssln_r, ssln1, sslntail;
-    if (b_delivery)
+    address sa;
+    address da; res = da.set_addr(*__ptrg); if (res != 1) { return res == -1 ? -1 : -2; }
+    if (pb_da_is_local) { *pb_da_is_local = da.isLP_any(); }
+
+      // Source address preparation.
+    if (sender_type == st_client)
     {
-      sa.set_addr(__src);
-          // For delivery, source address should be that of sourcing qs slot, belonging to _name_th (in the current process).
-        if (sa.isLP()) { if (sa.wstr_thn() != _name_th) { return -1; } }
-          else if (sa.is_empty() || sa.isLPA()) { return -1; }
-          else { return -1; }
-      res = __recode_slotname(sa.sln_v(), ssln_r, &ssln1, &sslntail);
-        if (res != 1) { return -1; }
-        if (!sln1chk_main_o(ssln1)) { return -1; }
-    }
-    else
-    {
+      // Expected __src format:
+      //      <slot name>
+      //    (because that local thread sends a message from itself.)
+      //    Before encoding, the address is completed: |LP|<thread name>|<slot name>.
+      // Expected *__ptrg format:
+      //      |LP|<thread name>|<slot name>
+      //      |LPA|<qs slot name>
+      //      |LM|<peer process name>|<thread name>|<slot name>
       unity a;
       __append_vals(a, L"LP");
       __append_vals(a, _name_th);
       __append_vals(a, __src);
       sa.set_addr(a);
         if (sa.is_empty()) { return -1; }
-      res = __recode_slotname(sa.sln_v(), ssln_r, &ssln1, &sslntail);
-        if (res != 1) { return -1; }
-        if (!sln1chk_main_o(ssln1)) { return -1; }
       __src = sa.addr();
     }
+    else if (sender_type == st_s_subs_deliver)
+    {
+      // Expected __src format:
+      //      |LP|<thread name>|<qs slot name>
+      //      -- thread's request(rt = 8, unity(), 1) --> _s_qs_deliver() sends a message to a subscriber.
+      //      Thread name must be same as _name_th.
+      //      Source qs slot existence is checked, but the slot itself is not accessed, because this is done already by _s_qs_deliver.
+      // Expected *__ptrg format:
+      //      |LP|<thread name>|<slot name>
+      //      |LPA|<qs slot name>
+      //      |LM|<peer process name>|<thread name>|<slot name>
+      sa.set_addr(__src);
+          // For delivery, source address should be that of sourcing qs slot, belonging to _name_th (in the current process).
+        if (sa.isLP()) { if (sa.wstr_thn() != _name_th) { return -1; } }
+          else if (sa.is_empty() || sa.isLPA()) { return -1; }
+          else { return -1; }
+    }
+    else if (sender_type == st_lmsc)
+    {
+      // Expected __src format (pre-set by sender's _s_write in peer process):
+      //      |LM|<sender process name>|<sender thread name>|<sender slot name>
+      // Expected *__ptrg format:
+      //      |LP|<recipient thread name>|<recipient slot name>
+      //      |LPA|<recipient qs slot name>
+      // NOTE The original sender knows its process name in full (not a hash of the name),
+      //    and converts both src and trg (__src and *__ptrg)
+      //    to reflect the recipient's perspective (i.e. the process, in which the current _s_write is called).
+      sa.set_addr(__src);
+        if (sa.is_empty()) { return -1; }
+      if (!sa.isLM()) { return -2; }
+    }
+    else { return -2; }
 
-    address da;
-    res = da.set_addr(__trg0); if (res != 1) { return res == -1 ? -1 : -2; }
 
     if (da.isLP_any())
     {
-      std::wstring dthn;
-        // Det. dest. slot type and exact name.
-        // Check source / dest. type match.
-      std::wstring dsln_r = da.wstr_sln();
-      std::wstring dsln1 = da.wstr_sln_1();
-        if (!sln1chk_main_i(dsln1)) { return -1; }
-        if (sln1_root(ssln1) != sln1_root(dsln1)) { return -1; }
-        if (sslntail.length() > 0 && da.wstr_sln_tail() != sslntail) { return -1; }
-        if (!sln1chk_iomatch(ssln1, dsln1)) { return -1; }
-
-        // Get slot refs.
-      cref_t<cch_slot, dispatcher_mt> rs_sl, rd_sl;
-      if (1)
+      if (sender_type <= st_s_subs_deliver)
       {
-        if (da.isLP()) { dthn = da.wstr_thn(); }
-        else // LPA
-        {
-          critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-          const hashx<unity, unity>::entry* e_sl2th = rses.hg_lpai.find(dsln_r);
-            if (!e_sl2th) { return -8; }
-          dthn = e_sl2th->v.vstr();
-        }
-        mst_semaphore ms_d(rses, dthn), ms_s(rses, _name_th);
-        hangdet hd;
-        while (true)
-        {
-          if (hd) { return -2; }
-          int res1 = 1, res2 = 1;
-          if (!rs_sl) { res2 = ms_s.r_sl(ssln_r, rs_sl); if (res2 < 0) { if (!ms_s.p_thread()) { return -7; } return -6; } }
-          if (!rd_sl) { res1 = ms_d.r_sl(dsln_r, rd_sl); if (res1 < 0) { if (!ms_d.p_thread()) { return -9; } return -8; } }
-          if (res1 > 0 && res2 > 0) { break; }
-          sleep_mcs(50);
-        }
-      }
-      cch_slot& d_sl = *rd_sl._pnonc_u();
-      cch_slot& s_sl = *rs_sl._pnonc_u();
+        std::wstring ssln_exact, ssln1;
+        res = __recode_slotname(sa.sln_v(), &ssln_exact, &ssln1, 0, &da);
+          if (res != 1) { return -1; }
+          if (!sln1chk_main_o(ssln1)) { return -1; }
 
-      if (dsln1[1] == L'i' || dsln1[1] == L's' || (dsln1[1] == L'b' && dsln1[2] == L'i')) // all inputs: pi, qi, qs, pbi, qbi
-      {
-        if (da.isLPA()) { if (!d_sl.b_input_lpa()) { return -10; } }
-          else if (!d_sl.b_input_any_th()) { if (_name_th != dthn) { return -10; } }
-      }
+        std::wstring dthn;
+          // Det. dest. slot type and exact name.
+          // Check source / dest. type match.
+        std::wstring dsln_exact = da.wstr_sln();
+        std::wstring dsln1 = da.wstr_sln_1();
+          if (!sln1chk_main_i(dsln1)) { return -1; }
+          if (sln1_root(ssln1) != sln1_root(dsln1)) { return -1; }
+          if (!sln1chk_iomatch(ssln1, dsln1)) { return -1; }
 
-        // Check phases, recode message, write dest. slot, update phases.
-      if (dsln1[1] == L'i') // pi, qi
-      {
-        if (dsln1[0] == L'p')
+          // Get slot refs.
+        cref_t<cch_slot> rs_sl, rd_sl;
+        if (1)
         {
-          cref_t<std::string, cref_nonlock> msg2; if (!msg2.create0(true)) { return -2; }
-          s_long res = __aux_msg_encode(hm1, buf, *msg2._pnonc_u()); if (res < 0) { return -2; }
-
-          critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
-          d_sl.r_pin = msg2; msg2.clear();
-          d_sl.phase = 1;
-          return 1;
-        }
-        else if (dsln1[1] == L'i')
-        {
-          cref_t<std::string, cref_nonlock> msg2; if (!msg2.create0(true)) { return -2; }
-          s_long res = __aux_msg_encode(hm1, buf, *msg2._pnonc_u()); if (res < 0) { return -2; }
-
-          critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
-          if (static_cast<aux_fifo<std::string>*>(d_sl.r_q._pnonc_u())->_push_nonblk(msg2) < 0) { return -20; }
-          msg2.clear();
-          return 1;
-        }
-        else { return -2; }
-      }
-      else if (dsln1[1] == L'b') // pbo, pbi, qbi
-      {
-        cref_t<std::string, cref_nonlock> msg2; if (!msg2.create0(true)) { return -2; }
-        s_long res = __aux_msg_encode(hm1, buf, *msg2._pnonc_u()); if (res < 0) { return -2; }
-
-        cref_t<std::wstring, cref_nonlock> cmdsrc;
-        if (dsln1[2] == L'o')
-        {
-          cmdsrc.copy(da.wstr_addr(), true);
-            if (!cmdsrc.has_ref()) { return -2; }
-        }
-        else if (dsln1[2] == L'i')
-        {
-          cmdsrc.copy(sa.wstr_addr(), true);
-            if (!cmdsrc.has_ref()) { return -2; }
-        }
-
-// phase:
-//  1 - input msg arrived, 2 - input msg popped.
-//    3 - command response pushed by the receiver and forwarded to sender.
-//  4 - command sent, 5 - command response received.
-//    6 - command response popped.
-//  pbo: 0, 6 --> 4 --> 5 --> 6
-//  pbi: 0, 3 --> 1 --> 2 --> 3
-//  qbi: 0, 3 --> 2 --> 3
-//  pi: 0, 2 --> 1 --> 2
-        if (dsln1[2] == L'o' && (dsln1[0] == 'p' || dsln1[0] == 'q')) // pbo (writing response to sender pin)
-        {
-            // Reverse order of locks for pbo == forward order of locks for pbi and qbi.
-          critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
-          critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
-          s_long& d_ph = d_sl.phase;
-          s_long& s_ph = s_sl.phase;
-
-          if (!(d_ph == 4 && s_ph == 2)) { return -5; }
-          if (cmdsrc.ref() != s_sl.r_lsrc.ref()) { return -1; } // previously -13
-          d_sl.r_pin = msg2; msg2.clear();
-          s_sl.r_lsrc.clear();
-          d_ph = 5;
-          s_ph = 3;
-          return 1;
-        }
-        else if (dsln1[0] == 'p' && dsln1[2] == L'i') // pbi (writing command to receiver pin)
-        {
-          critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
-          critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
-          s_long& d_ph = d_sl.phase;
-          s_long& s_ph = s_sl.phase;
-
-          if (!((d_ph == 0 || d_ph == 3) && (s_ph == 0 || s_ph == 6))) { return -5; }
-          d_sl.r_pin = msg2; msg2.clear();
-          d_sl.r_lsrc = cmdsrc; cmdsrc.clear();
-          d_ph = 1;
-          s_ph = 4;
-          return 1;
-        }
-        else if (dsln1[0] == 'q' && dsln1[2] == L'i') // qbi (writing command to receiver queue)
-        {
-          critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
-          critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
-          s_long& s_ph = s_sl.phase;
-
-          if (!(s_ph == 0 || s_ph == 6)) { return -5; }
-          cref_t<cch_slot::qbi_value, cref_nonlock> rz;
-            if (!rz.create0(true)) { return -2; }
-            rz._pnonc_u()->msg = msg2; msg2.clear();
-            rz._pnonc_u()->src = cmdsrc; cmdsrc.clear();
-          if (static_cast<aux_fifo<cch_slot::qbi_value>*>(d_sl.r_qbi._pnonc_u())->_push_nonblk(rz) < 0) { return -20; }
-          rz.clear();
-          s_ph = 4;
-          return 1;
-        }
-      }
-      else if (dsln1[1] == L's') // qs
-      {
-        if (dsln1[0] == L'q')
-        {
-            // Creating subscription message.
-          cref_t<cch_slot::qs_value, cref_nonlock> r_x; if (!r_x.create0(true)) { return -2; }
-          cch_slot::qs_value& x = *r_x._pnonc_u();
-          try { x.hmsg = hm0; x.hmsg[k_src] = __src; } catch (...) { return -2; }
-          if (buf)
+          if (da.isLP()) { dthn = da.wstr_thn(); }
+          else // LPA
           {
-            if (!x.bin.create0(true)) { return -2; }
-            if (!x.bin._pnonc_u()->resize(buf->n())) { return -2; }
-            bytes::memmove_t<char>::F(x.bin._pnonc_u()->pd(), buf->pd(), meta::t_pdiff(buf->n()));
+            critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+            const hashx<unity, unity>::entry* e_sl2th = rses.hg_lpai.find(dsln_exact);
+              if (!e_sl2th) { return -8; }
+            dthn = e_sl2th->v.vstr();
           }
-
-            // Writing to qs slot.
-          if (1)
+          mst_semaphore ms_d(rses, dthn), ms_s(rses, _name_th);
+          hangdet hd;
+          while (true)
           {
+            if (hd) { return -2; }
+            int res1 = 1, res2 = 1;
+            if (!rs_sl) { res2 = ms_s.r_sl(ssln_exact, rs_sl); if (res2 < 0) { if (!ms_s.p_thread()) { return -7; } return -6; } }
+            if (!rd_sl) { res1 = ms_d.r_sl(dsln_exact, rd_sl); if (res1 < 0) { if (!ms_d.p_thread()) { return -9; } return -8; } }
+            if (res1 > 0 && res2 > 0) { break; }
+            sleep_mcs(50);
+          }
+        }
+        cch_slot& d_sl = *rd_sl._pnonc_u();
+        cch_slot& s_sl = *rs_sl._pnonc_u();
+
+        if (dsln1[1] == L'i' || dsln1[1] == L's' || (dsln1[1] == L'b' && dsln1[2] == L'i')) // all normal inputs: qs, pi, qi, pbi, qbi
+        {
+          if (da.isLPA())
+          {
+            if (!d_sl.b_input_lpa()) { return -10; }
+          }
+          else if (!d_sl.b_input_any_th()) { if (!(_name_th == dthn)) { return -10; } }
+        }
+
+          // Check phases, recode message, write dest. slot, update phases.
+        if (dsln1[1] == L'i') // dest.: pi, qi
+        {
+          if (dsln1[0] == L'p') // msg --> pi
+          {
+            inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
             critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
-            s_long res = static_cast<aux_fifo<cch_slot::qs_value>*>(d_sl.r_qs._pnonc_u())->_push_nonblk(r_x);
-            r_x.clear();
-            if (res < 0) { return -20; }
+            if (sender_type == st_s_subs_deliver)
+            {
+              if (!(d_sl.r_haddrl && d_sl.r_haddrl->find(sa.wstr_addr()))) { return -2; }
+            }
+            bool b_over = d_sl.phase == 1; // the currently holds the previous message
+            d_sl.r_pin = msg2; msg2.clear();
+            d_sl.phase = 1;
+            return b_over ? 0 : 1;
           }
+          else if (dsln1[0] == L'q') // msg --> qi
+          {
+            inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
 
-            // Immediate delivery if necessary.
-          if (d_sl.qs_deliv_imm()) { _s_subs_deliver(_r_ths, rd_sl, dthn, dsln_r); }
-          return 1;
+            if (1)
+            {
+              critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+              if (sender_type == st_s_subs_deliver)
+              {
+                if (!(d_sl.r_haddrl && d_sl.r_haddrl->find(sa.wstr_addr()))) { return -2; }
+              }
+              s_long res = d_sl.r_qumi->push_1(msg2);
+              msg2.clear();
+                if (res == -1) { return -20; }
+                if (res != 1) { return -2; }
+            }
+            return 1;
+          }
+          else { return -2; }
+        }
+        else if (dsln1[1] == L'b') // dest.: pbo, hbo, pbi, qbi
+        {
+          inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
+
+          if (dsln1[0] == L'p' && dsln1[2] == L'o') // local response (pbi, qbi) --> pbo
+          {
+            const std::wstring cmdsrc(da.wstr_addr());
+
+              // Reverse order of locks for pbo == forward order of locks for pbi and qbi.
+            critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            s_long& d_ph = d_sl.phase;
+            s_long& s_ph = s_sl.phase;
+
+            if (!(s_ph == 2)) { return -5; } // out of order
+            if (cmdsrc != s_sl.r_lsrc.ref()) { return -1; }
+            if (!(d_ph == 4 && s_sl.id_msg_cmd == d_sl.id_msg_cmd)) { return -5; } // out of order
+            d_sl.r_pin = msg2; msg2.clear(); d_ph = 5; // clearing non-locking object before local locks are removed
+            s_sl.r_lsrc.clear(); s_sl.id_msg_cmd = -1; s_ph = 3;
+            return 1;
+          }
+          else if (dsln1[0] == L'h' && dsln1[2] == L'o') // local response (pbi, qbi) --> hbo
+          {
+            const std::wstring cmdsrc(da.wstr_addr());
+
+              // Reverse order of locks for hbo == forward order of locks for pbi and qbi.
+            critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            s_long& s_ph = s_sl.phase;
+
+            if (!(s_ph == 2)) { return -5; } // out of order
+            if (cmdsrc != s_sl.r_lsrc.ref()) { return -1; }
+
+            cref_t<cch_slot::qbci_value, cref_nonlock> rz;
+              if (!rz.create0(true)) { return -2; }
+              if (!rz->src.copy(sa.wstr_addr(), true)) { return -2; }
+                rz->msg = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+            const cch_slot::t_haddrl::entry* e = d_sl.r_haddrl->find(rz->src.ref());
+            if (!(e && e->v.value == 4 && s_sl.id_msg_cmd == e->v.id_msg_cmd)) { return -5; } // out of order
+
+            s_long res  = d_sl.r_qubci->push_1(rz); rz.clear();
+              if (res == -1) { return -20; }
+              if (res != 1) { return -2; }
+
+            e->v.value = 5;
+            s_sl.r_lsrc.clear(); s_sl.id_msg_cmd = -1; s_ph = 3;
+            return 1;
+          }
+          else if (dsln1[0] == L'p' && dsln1[2] == L'i') // local command --> pbi
+          {
+            s_ll id_msg = -1; if (id_msg_orig != -1) { id_msg = id_msg_orig; } else { id_msg = idgen(); }
+
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
+            cref_t<std::wstring, cref_nonlock> cmdsrc; if (!cmdsrc.create1(1, sa.wstr_addr())) { return -2; }
+            s_long& d_ph = d_sl.phase;
+
+            if (ssln1[0] == L'h') // hbo --> pbi
+            {
+              const cch_slot::t_haddrl::entry* e = 0;
+              unity da_u = da.wstr_addr();
+              s_long res = s_sl.r_haddrl->insert(da_u, &e);
+                if (res == 0)  { return -5; } // out of order
+                if (res != 1) { return -2; }
+                // NOTE s_sl.r_haddrl is modified before d_ph check, because out-of-order error in source slot has higher priority
+                //  than pin is busy error in target slot.
+              if (!(d_ph == 0 || d_ph == 3)) { s_sl.r_haddrl->remove(da_u); return -20; } // cmd. target pin is busy
+
+              d_sl.r_pin = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+              d_sl.r_lsrc = cmdsrc; d_sl.id_msg_cmd = id_msg; d_ph = 1;
+              e->v.id_msg_cmd = id_msg; e->v.value = 4;
+              return 1;
+            }
+            else if (ssln1[0] == L'p') // pbo --> pbi
+            {
+              s_long& s_ph = s_sl.phase;
+              if (!(s_ph == 0 || s_ph == 6)) { return -5; } // out of order
+              if (!(d_ph == 0 || d_ph == 3)) { return -20; } // cmd. target pin is busy
+              d_sl.r_pin = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+              d_sl.r_lsrc = cmdsrc; d_sl.id_msg_cmd = id_msg; d_ph = 1;
+              s_sl.id_msg_cmd = id_msg; s_ph = 4;
+              return 1;
+            }
+          }
+          else if (dsln1[0] == L'q' && dsln1[2] == L'i') // local command  --> qbi
+          {
+            s_ll id_msg = -1; if (id_msg_orig != -1) { id_msg = id_msg_orig; } else { id_msg = idgen(); }
+
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
+            cref_t<std::wstring, cref_nonlock> cmdsrc; if (!cmdsrc.create1(1, sa.wstr_addr())) { return -2; }
+
+            if (ssln1[0] == L'h') // hbo --> qbi
+            {
+              cref_t<cch_slot::qbci_value, cref_nonlock> rz;
+                if (!rz.create0(true)) { return -2; }
+                rz->msg = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+                rz->src = cmdsrc;
+                rz->id_msg_cmd = id_msg;
+
+              const cch_slot::t_haddrl::entry* e = 0;
+              s_long res = s_sl.r_haddrl->insert(da.wstr_addr(), &e);
+                if (res == 0) { return -5; } // out of order
+                if (res != 1) { return -2; }
+
+              res = d_sl.r_qubci->push_1(rz); rz.clear();
+                if (res == -1) { s_sl.r_haddrl->remove_e(e); return -20; } // queue overflow
+                if (res != 1) { s_sl.r_haddrl->remove_e(e); return -2; }
+
+              e->v.id_msg_cmd = id_msg; e->v.value = 4;
+              return 1;
+            }
+            else if (ssln1[0] == L'p') // pbo --> qbi
+            {
+              s_long& s_ph = s_sl.phase;
+              if (!(s_ph == 0 || s_ph == 6)) { return -5; } // out of order
+              cref_t<cch_slot::qbci_value, cref_nonlock> rz;
+                if (!rz.create0(true)) { return -2; }
+                rz->msg = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+                rz->src = cmdsrc;
+                rz->id_msg_cmd = id_msg;
+
+              s_long res = d_sl.r_qubci->push_1(rz); rz.clear();
+                if (res == -1) { return -20; } // queue overflow
+                if (res != 1) { return -2; }
+
+              s_sl.id_msg_cmd = id_msg; s_ph = 4;
+              return 1;
+            }
+          }
+        }
+        else if (dsln1[1] == L's') // qs
+        {
+          rses.__thm_lqsd_enable();
+          if (dsln1[0] == L'q')
+          {
+              // Creating subscription message.
+            cch_slot::qs_value msgsub;
+              if (msgsub.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
+              // Writing to qs slot.
+            if (1)
+            {
+              critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+              s_long res = d_sl.r_qus->push_1(msgsub); msgsub.clear();
+                if (res == -1) { return -20; } // queue overflow
+                if (res != 1) { return -2; }
+            }
+
+              // Immediate delivery if necessary.
+            if (d_sl.qs_deliv_imm()) { dispatcher_mt::thread_proxy::_s_subs_deliver(_r_ths, rd_sl, dthn, dsln_exact, 0); }
+            return 1;
+          }
         }
       }
       return -2;
     }
-    else
+    else if (da.isLM()) // sending a message to peer process
     {
-      // ~!!! not impl. LM, R, LMA, RPA, RMA
-      return -11;
+      if (sender_type <= st_s_subs_deliver)
+      {
+        if (!rses.lmsc) { return -11; }
+        std::wstring ssln_exact, ssln1;
+        res = __recode_slotname(sa.sln_v(), &ssln_exact, &ssln1, 0, &da);
+          if (res != 1) { return -1; }
+          if (!sln1chk_main_o(ssln1)) { return -1; }
+
+          // Det. dest. slot type and exact name.
+          // Check source / dest. type match.
+        std::wstring dsln_exact = da.wstr_sln();
+        std::wstring dsln1 = da.wstr_sln_1();
+          if (!sln1chk_main_i(dsln1)) { return -1; }
+          if (sln1_root(ssln1) != sln1_root(dsln1)) { return -1; }
+          if (!sln1chk_iomatch(ssln1, dsln1)) { return -1; }
+        std::wstring name_peer = da.wstr_pn();
+
+        s_ll id_msg = -1; unsigned char flags_mtrk = 0; // flags_mtrk: see md_entry type 54
+        if (id_msg_orig != -1) { id_msg = id_msg_orig; flags_mtrk = 1; } else { id_msg = idgen(); }
+        const s_long flags_clt_msend = flags_msend & _fl_msend__mask_clt_msend;
+
+          // Get slot refs.
+        cref_t<cch_slot> rs_sl;
+        weakref_t<t_htracking_proxy> rhtrprx;
+        if (1)
+        {
+          mst_semaphore ms_s(rses, _name_th);
+          hangdet hd; while (true) { if (hd) { return -2; } int res2 = 1; if (!rs_sl) { res2 = ms_s.r_sl(ssln_exact, rs_sl); if (res2 < 0) {  if (!ms_s.p_thread()) { return -7; } return -6; } } if (res2 > 0) { break; } sleep_mcs(50); }
+        }
+        if (id_msg_orig != -1)
+        {
+          if (!prhtrprx) { return -2; }
+          rhtrprx = *prhtrprx;
+        }
+        cch_slot& s_sl = *rs_sl._pnonc_u();
+
+          // Check phases, recode message, write dest. slot, update phases.
+        if (!sa._conv_LP_LM(rses.name_pr)) { return -2; }
+        __src = sa.addr();
+        std::wstring wmsg; cref_t<t_stringref> att2;
+        if (1)
+        {
+          inprocess_message __msg; if (__msg.set_parts(hm1, cref_t<t_stringref>(), true, flags_msend & ~_fl_msend_anlo_msg, flags_ses) < 1) { return -2; }
+          paramline().encode(__msg.hmsg.ref(), wmsg);
+        }
+        if (att)
+        {
+          const bool b_assign_att_cref = (flags_msend & _fl_msend_anlo_att) && (flags_ses & _frqperm_msend_anlo);
+          if (b_assign_att_cref) { att2 = att; }
+            else { try { att2 = i_dispatcher_mt::make_rba(att.ref(), true); } catch (...) { return -2; } }
+        }
+
+        if (dsln1[1] == L'i' || dsln1[1] == L's') // msg --> LMSC (peer's pi, qi, qs)
+        {
+          rses.__thm_lmsc = 2;
+          s_long res = rses.lmsc->clt_msend(id_msg, -1, flags_mtrk, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
+              if (res < 1) { return res < -2 ? res : -2; }
+          return 1;
+        }
+        else if (dsln1[1] == L'b') // msg --> LMSC (peer's any: pbo, hbo, pbi, qbi)
+        {
+          if ((dsln1[0] == L'p' || dsln1[0] == L'h') && dsln1[2] == L'o') // response (from pbi or qbi) --> LMSC (peer's pbo or hbo)
+          {
+            const std::wstring cmdsrc(da.wstr_addr());
+            critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
+            s_long& s_ph = s_sl.phase;
+            if (!(s_ph == 2)) { return -5; } // out of order
+            if (cmdsrc != s_sl.r_lsrc.ref()) { return -1; }
+            rses.__thm_lmsc = 2;
+            s_long res = rses.lmsc->clt_msend(id_msg, s_sl.id_msg_cmd, flags_mtrk, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
+              if (res < 1) { return res < -2 ? res : -2; }
+            s_sl.r_lsrc.clear(); s_sl.id_msg_cmd = -1; s_ph = 3;
+            return 1;
+          }
+          else if ((dsln1[0] == L'p' || dsln1[0] == L'q') && dsln1[2] == L'i') // command (from hbo or pbo) --> LMSC (peer's pbi or qbi)
+          {
+            critsec_t<dispatcher_mt> __lock2(10, -1, &s_sl.lkd); if (sizeof(__lock2)) {}
+            struct __csl_trk_rmv
+            {
+              dispatcher_mt::cch_session& rses; s_ll id_msg;
+              __csl_trk_rmv(dispatcher_mt::cch_session& rses_, s_ll id_msg_, cch_slot::csl_tracking& info) : rses(rses_), id_msg(id_msg_)
+              {
+                critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_htrk_csl);
+                const hashx<s_ll, cch_slot::csl_tracking>::entry* e = 0;
+                if (rses.htrk_csl.insert(id_msg, &e) < 1) { id_msg = -1; return; }
+                bmdx_str::words::swap_bytes(e->v, info);
+              }
+              ~__csl_trk_rmv()
+              {
+                if (id_msg < 1) { return; }
+                critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_htrk_csl);
+                rses.htrk_csl.remove(id_msg);
+              }
+            };
+            cch_slot::csl_tracking _tr1; _tr1.thn = _name_th; _tr1.sln_exact = ssln_exact;
+            if (ssln1[0] == L'h') // hbo --> LMSC (peer's pbi or qbi)
+            {
+              const std::wstring cmdsrc(da.wstr_addr());
+              _tr1.key_hbo = cmdsrc;
+              __csl_trk_rmv _tr2(rses, id_msg, _tr1); if (_tr2.id_msg < 1) { return -2; }
+              const cch_slot::t_haddrl::entry* e = 0;
+              s_long res = s_sl.r_haddrl->insert(cmdsrc, &e);
+                if (res == 0) { return -5; } // out of order
+                if (res != 1) { return -2; }
+              rses.__thm_lmsc = 2;
+              res = rses.lmsc->clt_msend(id_msg, -1, flags_mtrk | 2, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
+                if (res < 1) { s_sl.r_haddrl->remove_e(e); return res < -2 ? res : -2; }
+              _tr2.id_msg = -1; // prevents entry autoremoving from rses.htrk_csl
+              e->v.id_msg_cmd = id_msg; e->v.value = 7;
+              return 1;
+            }
+            else if (ssln1[0] == L'p') // pbo --> LMSC (peer's pbi or qbi)
+            {
+              __csl_trk_rmv _tr2(rses, id_msg, _tr1); if (_tr2.id_msg < 1) { return -2; }
+              s_long& s_ph = s_sl.phase;
+              if (!(s_ph == 0 || s_ph == 6)) { return -5; }
+              rses.__thm_lmsc = 2;
+              s_long res = rses.lmsc->clt_msend(id_msg, -1, flags_mtrk | 2, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
+                if (res < 1) { return res < -2 ? res : -2; }
+              _tr2.id_msg = -1; // prevents entry autoremoving from rses.htrk_csl
+              s_sl.id_msg_cmd = id_msg; s_ph = 7;
+              return 1;
+            }
+          }
+        }
+      }
+      else if (sender_type == st_lmsc)
+      {
+        if (!da.isLM()) { return -1; }
+        std::wstring ssln1;
+        res = __recode_slotname(sa.sln_v(), 0, &ssln1, 0, &da);
+          if (res != 1) { return -1; }
+          if (!sln1chk_main_o(ssln1)) { return -1; }
+
+        std::wstring dthn = da.wstr_thn();
+          // Det. dest. slot type and exact name.
+          // Check source / dest. type match.
+        std::wstring dsln_exact = da.wstr_sln();
+        std::wstring dsln1 = da.wstr_sln_1();
+          if (!sln1chk_main_i(dsln1)) { return -1; }
+          if (sln1_root(ssln1) != sln1_root(dsln1)) { return -1; }
+          if (!sln1chk_iomatch(ssln1, dsln1)) { return -1; }
+
+          // Get dest. slot ref.
+        cref_t<cch_slot> rd_sl;
+        if (1)
+        {
+          mst_semaphore ms_d(rses, dthn);
+          hangdet hd; while (true) { if (hd) { return -2; } int res1 = 1; if (!rd_sl) { res1 = ms_d.r_sl(dsln_exact, rd_sl); if (res1 < 0) { if (!ms_d.p_thread()) { return -9; } return -8; } } if (res1 > 0) { break; } sleep_mcs(50); }
+        }
+        cch_slot& d_sl = *rd_sl._pnonc_u();
+
+        if (dsln1[1] == L'i' || dsln1[1] == L's' || (dsln1[1] == L'b' && dsln1[2] == L'i')) // LMSC --> all normal inputs: qs, pi, qi, pbi, qbi
+        {
+          if (da.isLPA()) { if (!d_sl.b_input_lpa()) { return -10; } }
+          else if (!d_sl.b_input_any_th()) { return -10; }
+        }
+
+          // Check phases, recode message, write dest. slot, update phases.
+        if (dsln1[1] == L'i') // LMSC --> (pi or qi)
+        {
+          if (dsln1[0] == L'p') // LMSC --> pi
+          {
+            inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            if (sln1chk_qs(ssln1))
+            {
+              if (!(d_sl.r_haddrl && d_sl.r_haddrl->find(sa.wstr_addr()))) { return -2; }
+            }
+            bool b_over = d_sl.phase == 1; // the currently holds the previous message
+            d_sl.r_pin = msg2; msg2.clear();
+            d_sl.phase = 1;
+            return b_over ? 0 : 1;
+          }
+          else if (dsln1[0] == L'q') // LMSC --> qi
+          {
+            inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
+            if (1)
+            {
+              critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+              if (sln1chk_qs(ssln1))
+              {
+                if (!(d_sl.r_haddrl && d_sl.r_haddrl->find(sa.wstr_addr()))) { return -2; }
+              }
+              s_long res = d_sl.r_qumi->push_1(msg2);
+              msg2.clear();
+                if (res == -1) { return -20; } // queue overflow
+                if (res != 1) { return -2; }
+            }
+            return 1;
+          }
+          else { return -2; }
+        }
+        else if (dsln1[1] == L'b') // LMSC --> response --> (any: pbo, hbo, pbi, qbi)
+        {
+          inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
+          if (dsln1[0] == L'p' && dsln1[2] == L'o') // LMSC --> response --> pbo
+          {
+              // Reverse order of locks for pbo == forward order of locks for pbi and qbi.
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            s_long& d_ph = d_sl.phase;
+
+            if (!((d_ph == 7 || d_ph == 4) && id_msg_orig == d_sl.id_msg_cmd)) { return -5; } // out of order
+            d_sl.r_pin = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+            d_ph = 5;
+            return 1;
+          }
+          else if (dsln1[0] == L'h' && dsln1[2] == L'o') // LMSC --> response --> hbo
+          {
+            const std::wstring cmdsrc(da.wstr_addr());
+
+              // Reverse order of locks for hbo == forward order of locks for pbi and qbi.
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+
+            cref_t<cch_slot::qbci_value, cref_nonlock> rz;
+              if (!rz.create0(true)) { return -2; }
+              if (!rz->src.copy(sa.wstr_addr(), true)) { return -2; }
+                rz->msg = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+            const cch_slot::t_haddrl::entry* e = d_sl.r_haddrl->find(rz->src.ref());
+            if (!(e && (e->v.value == 7 || e->v.value == 4) && id_msg_orig == e->v.id_msg_cmd)) { return -5; } // out of order
+
+            s_long res  = d_sl.r_qubci->push_1(rz); rz.clear();
+              if (res == -1) { return -20; } // queue overflow
+              if (res != 1) { return -2; }
+
+            e->v.value = 5;
+            return 1;
+          }
+          else if (dsln1[0] == L'p' && dsln1[2] == L'i') // LMSC --> command --> pbi
+          {
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            cref_t<std::wstring, cref_nonlock> cmdsrc; if (!cmdsrc.create1(1, sa.wstr_addr())) { return -2; }
+            s_long& d_ph = d_sl.phase;
+
+            if (ssln1[0] == L'h' || ssln1[0] == L'p') // LMSC --> (from hbo or pbo) --> pbi
+            {
+              if (!(d_ph == 0 || d_ph == 3)) { return -20; }
+              d_sl.r_pin = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+              d_sl.r_lsrc = cmdsrc; d_sl.id_msg_cmd = id_msg_nl; d_ph = 1;
+              return 1;
+            }
+          }
+          else if (dsln1[0] == L'q' && dsln1[2] == L'i') // LMSC --> command  --> qbi
+          {
+            critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+            cref_t<std::wstring, cref_nonlock> cmdsrc; if (!cmdsrc.create1(1, sa.wstr_addr())) { return -2; }
+
+            if (ssln1[0] == L'h' || ssln1[0] == L'p') // LMSC --> (from hbo or pbo) --> qbi
+            {
+              cref_t<cch_slot::qbci_value, cref_nonlock> rz;
+                if (!rz.create0(true)) { return -2; }
+                rz->msg = msg2; msg2.clear(); // clearing non-locking object before local locks are removed
+                rz->src = cmdsrc;
+                rz->id_msg_cmd = id_msg_nl;
+
+              res = d_sl.r_qubci->push_1(rz); rz.clear();
+                if (res == -1) { return -20; } // queue overflow
+                if (res != 1) { return -2; }
+              return 1;
+            }
+          }
+        }
+        else if (dsln1[1] == L's') // LMSC --> qs
+        {
+          rses.__thm_lqsd_enable();
+          if (dsln1[0] == L'q')
+          {
+              // Creating subscription message.
+            cch_slot::qs_value msgsub;
+              if (msgsub.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
+
+              // Writing to qs slot.
+            if (1)
+            {
+              critsec_t<dispatcher_mt> __lock(10, -1, &d_sl.lkd); if (sizeof(__lock)) {}
+              s_long res = d_sl.r_qus->push_1(msgsub); msgsub.clear();
+                if (res == -1) { return -20; } // queue overflow
+                if (res != 1) { return -2; }
+            }
+
+              // Immediate delivery if necessary.
+            if (d_sl.qs_deliv_imm()) { dispatcher_mt::thread_proxy::_s_subs_deliver(_r_ths, rd_sl, dthn, dsln_exact, 0); }
+            return 1;
+          }
+        }
+      }
+      return -2;
     }
-  } catch (...) { return -2; }
+    return -11;
+  } catch (...) {}
+  return -2;
+}
+
+  // empty _name_th means the call directly from dispatcher_mt (not associated with any thread).
+s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, const std::wstring& _name_th, int frqperm, s_long flags_rq) throw()
+{
+  retval.clear();
+  if (!_r_ths.has_ref()) { return -2; }
+  if (_r_ths.ref().ses_state != 1) { return -3; }
+  cch_session& rses = *_r_ths._pnonc_u();
+  switch (rt)
+  {
+  case 1: // get list of threads
+    try {
+      if ((frqperm & 0x8) == 0) { return -4; }
+      retval.arr_init<utStringArray>(0);
+      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+      for (s_long i = 0; i < rses.hg_threads.n(); ++i) { retval.arr_append(rses.hg_threads(i)->k.vstr()); }
+      return 1;
+    } catch (...) { return -2; }
+  case 2: // get all slots of a thread
+    try {
+      if ((frqperm & 0x8) == 0) { return -4; }
+      retval.arr_init<utStringArray>(0);
+      std::wstring thn = args.vstr();
+      mst_semaphore ms(rses, thn);
+      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_ro_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
+      cch_thread* pth = ms.p_thread(); if (!pth) { return -7; }  // under m_th_ro_acquire
+      for (s_long i = 0; i < pth->h_sl.n(); ++i) { retval.arr_append(pth->h_sl(i)->k.vstr()); }
+      return 1;
+    } catch (...) { return -2; }
+  case 11: // get N of threads
+    try {
+      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+      retval = rses.hg_threads.n();
+      return 1;
+    } catch (...) { return -2; }
+  case 12: // get N of slots of a thread
+    try {
+      std::wstring thn = args.vstr();
+      mst_semaphore ms(rses, thn);
+      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_ro_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
+      cch_thread* pth = ms.p_thread(); if (!pth) { return -7; } // under m_th_ro_acquire
+      retval = pth->h_sl.n();
+      return 1;
+    } catch (...) { return -2; }
+  case 3: // set priority and timing for internal subscription delivery
+    try {
+      if ((frqperm & 0x10) == 0) { return -4; }
+      if (_r_ths.ref().__thm_lqsd == 0) { return -7; }
+      if (!(args.isArray() && args.arrsz() >= 2)) { return -5; }
+      meta::s_ll pr, dt;
+      try {
+        pr = args.vint(args.arrlb());
+        dt = args.vint(args.arrlb() + 1);
+      } catch (...) { return -5; }
+      if (!(pr >= 1 && pr <= 7 && dt >= 0)) { return -5; }
+      if (!_r_ths->th_lqsd.set_priority(s_long(pr))) { return -2; }
+      _r_ths->qsd_prio = s_long(pr);
+      _r_ths->lqsd_dt = dt;
+      return 1;
+    } catch (...) { return -2; }
+  case 4: // get priority and timing of internal subscription delivery
+    try {
+      if ((frqperm & 0x10) == 0) { return -4; }
+      if (_r_ths.ref().__thm_lqsd == 0) { return -7; }
+      unity x; x.arr_init<utInt>(1);
+      x.arr_append(_r_ths.ref().qsd_prio);
+      x.arr_append(_r_ths.ref().lqsd_dt);
+      retval = x;
+      return 1;
+    } catch (...) { return -2; }
+  case 5: // get new proxy
+    try {
+      if ((frqperm & 0x4) == 0) { return -4; }
+      return dispatcher_mt::thread_proxy::_s_proxy_new(_r_ths, retval, args.vstr());
+    } catch (...) { return -2; }
+  case 6: // create thread
+    try {
+      if ((frqperm & 0x1) == 0) { return -4; }
+      const s_long flags_cr = flags_rq & 0x1;
+      return dispatcher_mt::thread_proxy::_s_thread_create(_r_ths, args, flags_cr);
+    } catch (...) { return -2; }
+  case 7: // remove thread
+    try {
+      if ((frqperm & 0x2) == 0) { return -4; }
+      return dispatcher_mt::thread_proxy::_s_thread_remove(_r_ths, args.vstr());
+    } catch (...) { return -2; }
+  case 8: // deliver messages
+    try {
+      if (!args.isInt()) { return -5; }
+      s_long res = dispatcher_mt::thread_proxy::_s_qs_deliver(_r_ths, _name_th, args.vint_l(), 0);
+      if (res >= 0) { res = 1; }
+        else if (res != -3) { res = -2; }
+      return res;
+    } catch (...) { return -2; }
+  case 9: // reset command slot
+    try {
+      unity __hm0; s_long res = -2;
+      const unity* phm1 = 0;
+      if (args.isAssoc()) { phm1 = &args; }
+        else if (args.isString()) { paramline().decode(args.cref<utString>().ref(), __hm0, false); phm1 = &__hm0; }
+        else { return -1; }
+      const unity k_src(L"src"), k_trg(L"trg");
+      const unity* __psrc0 = 0; try { __psrc0 = &(*phm1)[k_src]; } catch (...) { return -1; }
+      std::wstring k_sl; res = __recode_slotname(*__psrc0, &k_sl); if (res != 1) { return res == -1 ? -1 : -2; }
+
+      cref_t<cch_slot> rcmd_sl;
+      if (1)
+      {
+        mst_semaphore ms_s(rses, _name_th); hangdet hd;
+        int bf = 0; while (true) { if (hd) { bf = 2; break; } int res = ms_s.r_sl(k_sl, rcmd_sl); if (res < 0) { bf = 1; break; } if (res > 0) { break; } sleep_mcs(50); }
+        if (bf != 0) { return -2; }
+      }
+      cch_slot& cmd_sl = *rcmd_sl._pnonc_u();
+      if (1)
+      {
+        critsec_t<dispatcher_mt> __lock(10, -1, &cmd_sl.lkd); if (sizeof(__lock)) {}
+
+        if (cmd_sl.eq_type("hbo"))
+        {
+          const unity *__ptrg = 0; try { __ptrg = &(*phm1)[k_trg]; } catch (...) { return -1; }
+          address da; res = da.set_addr(*__ptrg); if (res != 1) { return res == -1 ? -1 : -2; }
+          if (cmd_sl.r_haddrl) { cmd_sl.r_haddrl->remove_e(cmd_sl.r_haddrl->find(da.wstr_addr())); }
+        }
+        else if (cmd_sl.eq_type("pbo")) { cmd_sl.r_pin.clear(); cmd_sl.id_msg_cmd = -1; cmd_sl.phase = 6; }
+        else if (cmd_sl.eq_type("pbi")) { cmd_sl.r_pin.clear(); cmd_sl.r_lsrc.clear(); cmd_sl.id_msg_cmd = -1; cmd_sl.phase = 3; }
+        else if (cmd_sl.eq_type("qbi")) { cmd_sl.r_lsrc.clear(); cmd_sl.id_msg_cmd = -1; cmd_sl.phase = 3; }
+        else { return -2; }
+
+      }
+      return 1;
+    } catch (...) { return -2; }
+  default: { return -1; }
+  }
+}
+
+  // qsa: "broadcasting" local or non-local qs slot address
+  // suba: "subscribed" local or non-local recipient address
+  // sender_type:
+  //    a) st_client: qsa may be any of (LP, LPA, LM), suba must be local (LP-type only) address.
+  //      id_rq_subs: if tracking is needed for non-local subscription, must be unique value, != -1.
+  //        (In other cases, ID is generated by _s_subscribe internally, as necessary.)
+  //      prhtrprx: ptr. to client proxy's mtrk_htracking object; must be !=0 if qsa is non-local, + must remain valid during _s_write call.
+  //    b) st_lmsc: qsa must be local (LP or LPA) address, suba must be non-local address.
+  //      id_rq_subs, prhtrprx: ignored, may be -1, 0.
+  //      For st_lmsc, it is the client responsibility to send _s_subscribe ret. code back to non-local client.
+  //    c, d) st_update_subs_input, st_update_subs_output: for calling from _s_update_subs_lists.
+  //      id_rq_subs: must be generated (!= -1).
+  //      prhtrprx: ignored, should be 0. rses.lmsc->clt_mdsend will be anyway called with empty rhtrprx arg.
+  // pret_destloc:
+  //    may be 0; if != 0 - receives the location of destination slot (regardless of success of operation):
+  //    0 - location not determined,
+  //    1 - local destination (e.g. direct modification of local qs slot),
+  //    2 - non-local destination (e.g. subscription request through LMSC clt_msend).
+s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) throw()
+{
+  if (!_r_ths.has_ref()) { return -2; }
+  if ((sender_type == st_client || sender_type == st_lmsc) && _r_ths.ref().ses_state != 1) { return -3; }
+  cch_session& rses = *_r_ths._pnonc_u();
+  try {
+    if (pret_destloc) { *pret_destloc = 0; }
+    const std::wstring ssln1 = qsa.wstr_sln_1();
+    const std::wstring sslntail = qsa.wstr_sln_tail();
+      if (!sln1chk_qs(ssln1)) { return -1; }
+    const std::wstring dsln1 = suba.wstr_sln_1();
+      if (!sln1chk_subscriber(dsln1)) { return -1; }
+      if (sln1_root(ssln1) != sln1_root(dsln1)) { return -1; }
+      if (sslntail.length() > 0 && suba.wstr_sln_tail() != sslntail) { return -1; }
+
+    if (sender_type == st_client)
+    {
+      if (!(rt >= 1 && rt <= 3)) { return -1; }
+      if (!suba.isLP()) { return -1; }
+      std::wstring _thn_suba = suba.wstr_thn();
+      if (qsa.isLP_any()) // subscribe to local address (immediate result)
+      {
+        if (pret_destloc) { *pret_destloc = 1; }
+        rses.__thm_lqsd_enable();
+        address __qsa_deref;
+        const address* pqsa = &qsa;
+        cref_t<cch_slot> rqs_sl; std::wstring sln_s = qsa.wstr_sln();
+        if (qsa.isLPA())
+        {
+          std::wstring thn_qs;
+          if (1)
+          {
+            critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+            const hashx<unity, unity>::entry* e1 = rses.hg_lpai.find(sln_s); if (!e1) { return -6; }
+            thn_qs = e1->v.vstr();
+          }
+          if (__qsa_deref.set_addr_LP(thn_qs, sln_s) != 1) { return -2; }
+          pqsa = &__qsa_deref;
+        }
+        mst_semaphore ms(rses, pqsa->wstr_thn());
+        hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(sln_s, rqs_sl); if (res < 0) { return -6; } if (res > 0) { break; } sleep_mcs(50); }
+
+        cref_t<cch_slot> rsub_sl;
+        if (1) { mst_semaphore ms(rses, _thn_suba); hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(suba.wstr_sln(), rsub_sl); if (res < 0) { return -5; } if (res > 0) { break; } sleep_mcs(50); } }
+
+        cch_slot& qs_sl = *rqs_sl._pnonc_u();
+        cch_slot& sub_sl = *rsub_sl._pnonc_u();
+        unity suba_u = suba.wstr_addr();
+        unity qsa_u = pqsa->wstr_addr();
+        cch_slot::t_haddrl *ph1(0), *ph2(0);
+        bool b_sub1(false), b_sub2(false);
+        if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} ph1 = qs_sl.r_haddrl._pnonc_u(); if (!ph1) { return -2; } b_sub1 = !!ph1->find(suba_u); }
+        if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {} ph2 = sub_sl.r_haddrl._pnonc_u(); if (!ph2) { sub_sl.r_haddrl.create0(true); ph2 = sub_sl.r_haddrl._pnonc_u(); } if (!ph2) { return -2; } b_sub2 = !!ph2->find(qsa_u); }
+
+        if (rt == 1) // sub
+        {
+          if (b_sub1 && b_sub2) { return 2; }
+          if (qs_sl.qs_output_fixed()) { if (!b_sub1) { return -10; } }
+          if (!b_sub1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} if (ph1->insert(suba_u) < 0) { return -2; } }
+          if (!b_sub2)
+          {
+            bool bf = false;
+            if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}  bf = ph2->insert(qsa_u) < 0; }
+            if (bf && !b_sub1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} ph1->remove(suba_u); }
+            if (bf && !b_sub1) { return -2; }
+          }
+          return 2;
+        }
+        else if (rt == 2) // uns
+        {
+          if (!b_sub1 && !b_sub2) { return 1; }
+          if (qs_sl.qs_output_fixed()) { if (b_sub1) { return -10; } }
+          if (b_sub1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} ph1->remove(suba_u); }
+          if (b_sub2) { critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {} ph2->remove(qsa_u); }
+          return 1;
+        }
+        // else rt == 3, chk sub
+        return b_sub1 && b_sub2 ? 2 : 1;
+      }
+      else // subscribe to qsa with non-local address (non-immediate result)
+      {
+        if (pret_destloc) { *pret_destloc = 2; }
+        if (!qsa.isLM()) { return -1; }
+        if (!prhtrprx) { return -1; }
+        if (!suba.isLP()) { return -1; }
+        if (id_rq_subs == -1) { id_rq_subs = idgen(); }
+
+          // Prep. message for LMSC.
+        if (!rses.lmsc) { return -11; }
+        address suba2(suba);
+        if (!suba2._conv_LP_LM(rses.name_pr)) { return -2; }
+        cref_t<netmsg_header::msg_builder> rmb = netmsg_header::mdd_subs_request::make_msg(rt, id_rq_subs, qsa.wstr_addr(), suba2.wstr_addr());
+          if (!rmb) { return -2; }
+
+        if (rt == 1 || rt ==2)
+        {
+            // Update local slot input list.
+          cref_t<cch_slot> rsub_sl;
+          if (1) { mst_semaphore ms(rses, _thn_suba); hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(suba.wstr_sln(), rsub_sl); if (res < 0) { return -5; } if (res > 0) { break; } sleep_mcs(50); } }
+
+          if (1)
+          {
+            cch_slot& sub_sl = *rsub_sl._pnonc_u();
+            critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}
+            cch_slot::t_haddrl* ph2 = sub_sl.r_haddrl._pnonc_u(); if (!ph2) { sub_sl.r_haddrl.create0(true); ph2 = sub_sl.r_haddrl._pnonc_u(); }
+            if (!ph2) { return -2; }
+            if (rt == 1) { if (ph2->insert(qsa.wstr_addr()) < 0) { return -2; } }
+              else if (rt ==2) { ph2->remove(qsa.wstr_addr()); }
+          }
+        }
+
+          // Request non-local qs slot output list update or check.
+        rses.__thm_lmsc = 2;
+        s_long res = rses.lmsc->clt_mdsend(id_rq_subs, qsa.wstr_pn(), rmb.ref(), *prhtrprx, 1);
+          if (res < 0) { return res; }
+          if (res > 0) { return 0; }
+        return -2;
+      }
+    }
+    else if (sender_type == st_lmsc) // subscribe non-local recipient to local address
+    {
+      if (!(rt >= 1 && rt <= 6)) { return -1; }
+      if (pret_destloc) { *pret_destloc = 1; }
+      if (!suba.isLM()) { return -1; }
+      if (!qsa.isLM()) { return -1; }
+      if (rt < 4) // request from non-local slot to local qs slot
+      {
+        rses.__thm_lqsd_enable();
+
+        cref_t<cch_slot> rqs_sl; std::wstring sln_s = qsa.wstr_sln();
+        mst_semaphore ms(rses, qsa.wstr_thn());
+        hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(sln_s, rqs_sl); if (res < 0) { return -6; } if (res > 0) { break; } sleep_mcs(50); }
+
+        if (1)
+        {
+          cch_slot& qs_sl = *rqs_sl._pnonc_u();
+          critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {}
+          cch_slot::t_haddrl* ph1 = qs_sl.r_haddrl._pnonc_u();
+          if (!ph1) { return -2; }
+          unity suba_u(suba.wstr_addr());
+          bool b_sub = !!ph1->find(suba_u);
+          if (rt == 1) { if (b_sub) { return 2; } if (qs_sl.qs_output_fixed()) { return -10; } if (ph1->insert(suba_u) < 0) { return -2; } return 2; } // sub
+            else if (rt == 2) { if (!b_sub) { return 1; } if (qs_sl.qs_output_fixed()) { return -10; } ph1->remove(suba_u); return 1; } // unsub
+            else { return b_sub ? 2 : 1; } // chk
+        }
+      }
+      else // rt 4..6 request from non-local qs slot to local subscriber
+      {
+        cref_t<cch_slot> rsub_sl;
+        if (1) { mst_semaphore ms(rses, suba.wstr_thn()); hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(suba.wstr_sln(), rsub_sl); if (res < 0) { return -5; } if (res > 0) { break; } sleep_mcs(50); } }
+
+        if (1)
+        {
+          cch_slot& sub_sl = *rsub_sl._pnonc_u();
+          critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}
+          cch_slot::t_haddrl* ph2 = sub_sl.r_haddrl._pnonc_u(); if (!ph2) { sub_sl.r_haddrl.create0(true); ph2 = sub_sl.r_haddrl._pnonc_u(); }
+          if (!ph2) { return -2; }
+          unity qsa_u(qsa.wstr_addr());
+          bool b_sub = !!ph2->find(qsa_u);
+          if (rt == 4)  { if (b_sub) { return 2; } if (ph2->insert(qsa_u) < 0) { return -2; } return 2; } // sub
+            else if (rt == 5)  { if (!b_sub) { return 1; } ph2->remove(qsa_u); return 1; } // unsub
+            else { return b_sub ? 2 : 1; } // check
+        }
+      }
+    }
+    else if (sender_type == st_update_subs_input)
+    {
+        // Add (rt 1) or remove (rt 2) local supplier (qs) to/from any subscriber's input list.
+      if (!(rt >= 1 && rt <= 2)) { return -1; }
+      if (!qsa.isLP()) { return -1; }
+      std::wstring _thn_suba = suba.wstr_thn();
+      if (suba.isLP()) // modify local subscriber's input list (immediate result)
+      {
+        if (pret_destloc) { *pret_destloc = 1; }
+        cref_t<cch_slot> rsub_sl;
+        if (1) { mst_semaphore ms(rses, _thn_suba); hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(suba.wstr_sln(), rsub_sl); if (res < 0) { return -5; } if (res > 0) { break; } sleep_mcs(50); } }
+
+        if (1)
+        {
+          cch_slot& sub_sl = *rsub_sl._pnonc_u();
+          critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}
+          cch_slot::t_haddrl* ph2 = sub_sl.r_haddrl._pnonc_u(); if (!ph2) { sub_sl.r_haddrl.create0(true); ph2 = sub_sl.r_haddrl._pnonc_u(); }
+          if (!ph2) { return -2; }
+          unity qsa_u(qsa.wstr_addr());
+          bool b_sub = !!ph2->find(qsa_u);
+          if (rt == 1)  { if (b_sub) { return 2; } if (ph2->insert(qsa_u) < 0) { return -2; } return 2; } // sub
+            else if (rt == 2)  { if (!b_sub) { return 1; } ph2->remove(qsa_u); return 1; } // unsub
+            else { return -2; } // unexpected
+        }
+      }
+      else // send request to modify non-local subscriber's input list (non-immediate result)
+      {
+        if (pret_destloc) { *pret_destloc = 2; }
+        if (!suba.isLM()) { return -1; }
+        if (id_rq_subs == -1) { return -1; }
+        if (!qsa.isLP()) { return -1; }
+          // Prep. message for LMSC.
+        if (!rses.lmsc) { return -11; }
+        address qsa2(qsa);
+        if (!qsa2._conv_LP_LM(rses.name_pr)) { return -2; }
+        cref_t<netmsg_header::msg_builder> rmb = netmsg_header::mdd_subs_request::make_msg(rt + 3, id_rq_subs, qsa2.wstr_addr(), suba.wstr_addr()); // rt 1, 2 is converted to 4, 5, as required by branch sender_type == st_lmsc (see above)
+          if (!rmb) { return -2; }
+          // Request non-local qs slot output list update or check.
+        rses.__thm_lmsc = 2;
+        s_long res = rses.lmsc->clt_mdsend(id_rq_subs, suba.wstr_pn(), rmb.ref(), weakref_t<t_htracking_proxy>(), -1); // comm_mode == -1 because the client (_s_update_subs_lists) already waited for comm. establishing
+          if (res < 0) { return res; }
+          if (res > 0) { return 0; }
+        return -2;
+      }
+    }
+    else if (sender_type == st_update_subs_output)
+    {
+        // Add (rt 1) or remove (rt 2) local subscriber from any supplier's (qs) output list (similar to _s_subscribe with st_client)
+      if (!(rt >= 1 && rt <= 2)) { return -1; }
+      if (!suba.isLP()) { return -1; }
+      if (qsa.isLP()) // sub./unsub. to local address (immediate result)
+      {
+        if (pret_destloc) { *pret_destloc = 1; }
+        cref_t<cch_slot> rqs_sl; std::wstring sln_s = qsa.wstr_sln();
+        mst_semaphore ms(rses, qsa.wstr_thn());
+        hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(sln_s, rqs_sl); if (res < 0) { return -6; } if (res > 0) { break; } sleep_mcs(50); }
+
+        if (1)
+        {
+          cch_slot& qs_sl = *rqs_sl._pnonc_u();
+          critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {}
+          cch_slot::t_haddrl* ph1 = qs_sl.r_haddrl._pnonc_u();
+          if (!ph1) { return -2; }
+          unity suba_u(suba.wstr_addr());
+          bool b_sub = !!ph1->find(suba_u);
+          if (rt == 1) { if (b_sub) { return 1; } if (qs_sl.qs_output_fixed()) { return -10; } ph1->insert(suba_u); return 2; } // sub
+            else if (rt == 2) { if (!b_sub) { return 1; } if (qs_sl.qs_output_fixed()) { return -10; } ph1->remove(suba_u); return 1; } // unsub
+            else { return -2; }
+        }
+      }
+      else // send request (sub./unsub.) to qsa with non-local address (non-immediate result)
+      {
+        if (pret_destloc) { *pret_destloc = 2; }
+        if (!qsa.isLM()) { return -1; }
+        if (id_rq_subs == -1) { return -1; }
+        if (!suba.isLP()) { return -1; }
+          // Prep. message for LMSC.
+        if (!rses.lmsc) { return -11; }
+        address suba2(suba);
+        if (!suba2._conv_LP_LM(rses.name_pr)) { return -2; }
+        cref_t<netmsg_header::msg_builder> rmb = netmsg_header::mdd_subs_request::make_msg(rt, id_rq_subs, qsa.wstr_addr(), suba2.wstr_addr());
+          if (!rmb) { return -2; }
+          // Request non-local qs slot output list update or check.
+        rses.__thm_lmsc = 2;
+        s_long res = rses.lmsc->clt_mdsend(id_rq_subs, qsa.wstr_pn(), rmb.ref(), weakref_t<t_htracking_proxy>(), -1); // comm_mode == -1 because the client (_s_update_subs_lists) already waited for comm. establishing
+          if (res < 0) { return res; }
+          if (res > 0) { return 0; }
+        return -2;
+      }
+    }
+  } catch (...) {}
+  return -2;
 }
 
   // _s_qs_deliver delivers messages
-  //  1) from the calling _name_th's qs slots with delivery type "thread" (listed in cch_thread::h_qs_thread).
-  //  2) (only if _name_th is disp thread) from qs slots of different threads, with delivery type "disp" (listed in global ths.hg_qs_disp).
+  //  1) (on flags & 1) from the calling _name_th's qs slots with delivery type "thread" (listed in cch_thread::h_qs_thread).
+  //    _name_th must specify a thread with disp = true.
+  //  2) (on flags & 2) from qs slots of different threads, with delivery type "disp" (listed in global ths.hg_qs_disp).
+  //    _name_th must be
+  //      a) name of a thread with disp = true,
+  //      b) empty, when called from dispatcher_mt::thread_proxy::th_lqsd_impl::_thread_proc.
+  //
+  // pnmsent: if != 0, receives the exact number of messages processed.
   //
   // Returns:
-  //    >=0 - number of subscription queues processed.
+  //    1 - success, >=0 messages delivered. See also _s_subs_deliver.
+  //    0 - all queues, specified by flags, were empty, so nothing done.
   //    -1 - failure, no messages sent.
-  //    -2 - failure, some part of messages has been sent.
-  //    -3 - session is closed, no messages sent.
-  //    -4 - invalid flags.
-s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags) throw()
+  //    -2 - failure for one or more queues, messages for other queues may have been sent.
+  //    -3 - session is closed, some part of messages may have been sent before that.
+  //    -4 - invalid flags, no messages sent.
+s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) throw()
 {
-  if (!_r_ths.has_ref()) { return -2; }
+  if (pnmsent) { *pnmsent = 0; }
+  if (!_r_ths.has_ref()) { return -1; }
   if (_r_ths.ref().ses_state != 1) { return -3; }
-  if (flags != 0) { return -4; }
-  if (_name_th.empty()) { return -1; }
-  s_long res = 0;
+  if ((flags & 3) == 0) { return 0; }
+  const bool b_internal = _name_th.empty();
+  if (b_internal && !!(flags & 1)) { return -1; }
   cch_session& rses = *_r_ths._pnonc_u();
+  critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_s_qs_deliver); if (sizeof(__lock)) {}
   try {
-    bool b_disp = false;
-    vec2_t<cref_t<cch_slot, dispatcher_mt> > sls_disp;
-    vec2_t<std::wstring> slsn_disp, sls_thn_disp;
-    vec2_t<cref_t<cch_slot, dispatcher_mt> > sls_th;
-    vec2_t<std::wstring> slsn_th;
+    vec2_t<std::wstring> sl_th1_thn; vec2_t<cref_t<cch_slot> > sl_th1; // used on (flags & 1)
+    vec2_t<std::wstring> sl_disp_sln, sl_disp_thn; vec2_t<cref_t<cch_slot> > sl_disp; // used on (flags & 2)
     if (1)
     {
-      mst_semaphore ms(rses, _name_th); hashx<std::wstring, mst_semaphore> h_ms_disp;
-      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_ro_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
-      cch_thread* pth_qs = ms.p_thread(); if (!pth_qs) { return -2; }
-      if (pth_qs->b_disp)
+      mst_semaphore ms_th1(rses, _name_th);
+      hashx<std::wstring, mst_semaphore> h_ms_disp;
+
+      if (!b_internal) { hangdet hd; while (true) { int res = ms_th1.m_th_ro_acquire(); if (res != 0 || hd) { break; } sleep_mcs(50); } }
+      cch_thread* pth_qs = ms_th1.p_thread(); if (!b_internal && !pth_qs) { return -1; } // under m_th_ro_acquire
+      if ((flags & 2) && (b_internal || pth_qs->cb_disp))
       {
         hashx<dispatcher_mt::mst_semaphore*, int> h_waits;
         if (1) // get refs. for (disp. delivery) slots that are ready to receive messages
         {
-          critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-          b_disp = true;
+          critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
           for (s_long i = 0; i < rses.hg_qs_disp.n(); ++i)
           {
             std::wstring sln = rses.hg_qs_disp(i)->k.vstr();
@@ -10151,13 +13640,13 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
             mst_semaphore& ms_x = h_ms_disp[thn];
             ms_x.set_refs(rses, thn);
 
-            slsn_disp.push_back(sln);
-            sls_thn_disp.push_back(thn);
-            sls_disp.push_back(cref_t<cch_slot, dispatcher_mt>());
+            sl_disp_sln.push_back(sln);
+            sl_disp_thn.push_back(thn);
+            sl_disp.push_back(cref_t<cch_slot>());
 
             int res = ms_x.m_th_ro_acquire();
               if (res == 0) { h_waits[&ms_x] = 1; }
-              if (res == 1) { ms_x.r_sl(sln, sls_disp.back()); }
+              if (res == 1) { ms_x.r_sl(sln, sl_disp.back()); }
           }
         }
 
@@ -10179,42 +13668,58 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
 
         if (b_waited) // get remaining refs. for (disp. delivery) slots that have been waited for
         {
-          for (s_long i = 0; i < slsn_disp.n(); ++i)
+          for (s_long i = 0; i < sl_disp_sln.n(); ++i)
           {
-            cref_t<cch_slot, dispatcher_mt>& r_qs = sls_disp[i];
+            cref_t<cch_slot>& r_qs = sl_disp[i];
               if (r_qs) { continue; }
-            std::wstring& sln = slsn_disp[i]; std::wstring& thn = sls_thn_disp[i]; mst_semaphore& ms_x = h_ms_disp[thn];
+            std::wstring& sln = sl_disp_sln[i]; std::wstring& thn = sl_disp_thn[i]; mst_semaphore& ms_x = h_ms_disp[thn];
             if (ms_x.m_th_ro_acquire() == 1) { ms_x.r_sl(sln, r_qs); } // try to get slot ref. if having thread lock
           }
         }
       }
 
-      if (1) // get refs. for (thread delivery) slots that are ready to receive messages
+      if ((flags & 1) && pth_qs) // collect refs. for the calling thread's (_name_th) qs slots with conf. "delivery = thread"
       {
         hashx<unity, int>& h_qs = pth_qs->h_qs_thread;
         for (s_long i = 0; i < h_qs.n(); ++i)
         {
-          std::wstring sln = h_qs(i)->k.vstr(); cref_t<cch_slot, dispatcher_mt> r_qs;
-          if (ms.r_sl(sln, r_qs) == 1) { sls_th.push_back(r_qs); slsn_th.push_back(sln); }
+          std::wstring sln = h_qs(i)->k.vstr(); cref_t<cch_slot> r_qs;
+          if (ms_th1.r_sl(sln, r_qs) == 1)
+          {
+            sl_th1.push_back(r_qs);
+            sl_th1_thn.push_back(sln);
+          }
         }
       }
     } // end semaphores scope
 
-    for (s_long i = 0; i < sls_th.n(); ++i)
+    s_long res = 0;
+    if (flags & (1|2))
     {
-      s_long res2 = _s_subs_deliver(_r_ths, sls_th[i], _name_th, slsn_th[i]);
-      if (res2 < res) { res = res2; if (res == -3) { return res; } }
-      if (res >= 0 && res2 >= 0) { ++res; }
-    }
-    if (b_disp)
-    {
-      for (s_long i = 0; i < sls_disp.n(); ++i)
+      res = 1;
+      if (flags & 1) // the current thread's own qs delivery
       {
-        cref_t<cch_slot, dispatcher_mt>& r_qs = sls_disp[i];
-          if (!r_qs) { continue; }
-        s_long res2 = _s_subs_deliver(_r_ths, r_qs, sls_thn_disp[i], slsn_disp[i]);
-        if (res2 < res) { res = res2; if (res == -3) { return res; } }
-        if (res >= 0 && res2 >= 0) { ++res; }
+        for (s_long i = 0; i < sl_th1.n(); ++i)
+        {
+          s_ll nm = 0;
+          s_long res2 = dispatcher_mt::thread_proxy::_s_subs_deliver(_r_ths, sl_th1[i], _name_th, sl_th1_thn[i], &nm);
+          if (pnmsent) { *pnmsent += nm; }
+          if (res2 == -3) { return -3; }
+          if (res2 < res) { res = res2; }
+        }
+      }
+      if (flags & 2) // all threads globally listed qs delivery
+      {
+        for (s_long i = 0; i < sl_disp.n(); ++i)
+        {
+          cref_t<cch_slot>& r_qs = sl_disp[i];
+            if (!r_qs) { continue; }
+          s_ll nm = 0;
+          s_long res2 = dispatcher_mt::thread_proxy::_s_subs_deliver(_r_ths, r_qs, sl_disp_thn[i], sl_disp_sln[i], &nm);
+          if (pnmsent) { *pnmsent += nm; }
+          if (res2 == -3) { return -3; }
+          if (res2 < res) { res = res2; }
+        }
       }
     }
     return res;
@@ -10223,15 +13728,19 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
 
   // _name_th - r_qs owner thread name.
   // _name_qs: r_qs name.
+  // pnmsent: if != 0, receives the exact number of messages processed.
   // Returns:
-  //    >=0 - number of messages processed (sent + failed).
+  //    1 - the queue was not empty, and >=0 messages are delivered (0 may be if for some of them delivery failed as whole).
+  //    0 - the queue was empty, no messages delivered.
   //    -1 - failure, no messages sent.
   //    -2 - failure, some part of messages may have been sent.
   //    -3 - session is closed, no messages sent.
-s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot, dispatcher_mt>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs) throw()
+s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs, s_ll* pnmsent) throw()
 {
-  if (!_r_ths.has_ref()) { return -2; }
-  if (_r_ths.ref().ses_state != 1) { return -3; }
+  if (pnmsent) { *pnmsent = 0; }
+  if (!_r_ths.has_ref()) { return -1; }
+  dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+  if (rses.ses_state != 1) { return -3; }
   if (!r_qs.has_ref()) { return -1; }
 
   s_long res0 = -1;
@@ -10250,323 +13759,273 @@ s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_se
       }
     cch_slot& qs_sl = *r_qs._pnonc_u();
 
-    typedef aux_fifo<cch_slot::qs_value>::t_elem t_elem;
-    vec2_t<t_elem> msgs;
-    hashx<unity, s_long> hsubs;
-    try {
-      critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {}
-      if (!(qs_sl.r_qs.has_ref() && qs_sl.r_hsubs.has_ref())) { return -2; }
-      aux_fifo<cch_slot::qs_value>* pqs = static_cast<aux_fifo<cch_slot::qs_value>*>(qs_sl.r_qs._pnonc_u());
-      while (true) { t_elem x = pqs->_pop_nonblk(true); if (!x) { break; } msgs.push_back(x); }
-      if (hsubs.hashx_copy(qs_sl.r_hsubs.ref(), false) < 1) { return -2; }
-    } catch (...) {}
-
-    res0 = -2; s_long n = 0;
-    for (s_long imsg = 0; imsg < msgs.n(); ++imsg)
+    vec2_t<cch_slot::t_qus::t_value> msgs;
+    cch_slot::t_haddrl hsubs;
+    cref_t<vnnqueue_t<cch_slot::qs_value, __vecm_tu_selector>, cref_nonlock> r_qus;
+    s_ll nmsg = 0, nmsgdone = 0;
+    if (1)
     {
-      cch_slot::qs_value* pv = msgs[imsg]._pnonc_u(); if (!pv) { continue; }
-      unity& hmsg = pv->hmsg; if (!hmsg.isAssoc()) { continue; }
-      arrayref_t<char> bin;  if (pv->bin) { bin = pv->bin.ref(); }
-      for (s_long isubs = 0; isubs < hsubs.n(); ++isubs)
-      {
-        try
-        {
-          address da;
-          da.set_addr(hsubs(isubs)->k); if (da.is_empty()) { continue; }
-          hmsg.assoc_set(k_src0, hmsg[k_src], true);
-          hmsg.assoc_set(k_trg0, hmsg[k_trg], true);
-          hmsg.assoc_set(k_src, sa.addr(), false);
-          hmsg.assoc_set(k_trg, da.addr(), false);
-        } catch (...) { continue; }
-        _s_write(_r_ths, _name_th, hmsg, pv->bin ? &bin : 0, true);
-      }
-      ++n;
+      critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {}
+      if (!(qs_sl.r_qus.has_ref() && qs_sl.r_haddrl)) { return -1; }
+      nmsg = qs_sl.r_qus->navl();
+      if (nmsg <= 0) { return 0; }
+      r_qus = qs_sl.r_qus;
+      if (hsubs.hashx_copy(qs_sl.r_haddrl.ref(), false) < 1) { return -1; }
     }
 
-    return n;
+    res0 = -2;
+    for (s_long imsg = 0; imsg < nmsg; ++imsg)
+    {
+      cch_slot::qs_value& qsv = r_qus->front();
+      try { do { // once
+        if (!qsv.hmsg) { break; }
+        unity& hmsg = *qsv.hmsg._pnonc_u(); if (!hmsg.isAssoc()) { break; }
+        const unity sa_msg = hmsg[k_src];
+        const unity da_msg = hmsg[k_trg];
+        unity sa0lm, da0lm;
+        for (s_long isubs = 0; isubs < hsubs.n(); ++isubs)
+        {
+          try {
+            address da; da.set_addr(hsubs(isubs)->k);
+              if (da.is_empty()) { continue; }
+            hmsg.assoc_set(k_src, sa.addr(), false);
+            hmsg.assoc_set(k_trg, da.addr(), false);
+            if (da.isLM())
+            {
+              if (sa0lm.isEmpty())
+              {
+                if (sa_msg[1] == L"LP") { address a; a.set_addr(sa_msg); if (!a._conv_LP_LM(rses.name_pr)) { continue; } sa0lm.swap((unity&)a.addr()); }
+                  else { sa0lm = sa_msg; }
+              }
+              if (da0lm.isEmpty())
+              {
+                if (da_msg[1] == L"LP") { address a; a.set_addr(da_msg); if (!a._conv_LP_LM(rses.name_pr)) { continue; } da0lm.swap((unity&)a.addr()); }
+                  else { da0lm = da_msg; }
+              }
+              hmsg.assoc_set(k_src0, sa0lm, false);
+              hmsg.assoc_set(k_trg0, da0lm, false);
+            }
+            else
+            {
+              hmsg.assoc_set(k_src0, sa_msg, false);
+              hmsg.assoc_set(k_trg0, da_msg, false);
+            }
+          } catch (...) { continue; }
+          dispatcher_mt::thread_proxy::_s_write(_r_ths, _name_th, hmsg, qsv.att, st_s_subs_deliver, _fl_msend_anlo_msg | _fl_msend_anlo_att, false, -1, -1, 0, 0);
+        }
+        if (pnmsent) { ++*pnmsent; }
+        ++nmsgdone;
+      } while (false); } catch (...) {}
+      r_qus->pop_1();
+    }
+
+    return nmsgdone > 0 ? 1 : 0;
   } catch (...) { return res0; }
 }
 
-s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& add_qs0, const unity& recv_sl0, s_long rt, const std::wstring& _name_th_recv) throw()
+  // flags:
+  //    same as flags arg. of request, slots_create, dispatcher_mt,
+  //    but uses only: ensure_local_subs
+  // Ret. vals. are compatible with _s_request().
+  //    1 - success.
+  //    -2 - operation failed.
+  //    -3 - session is closed.
+  //    -5 - invalid argument (args and/or retval as required by request type).
+  //    -6 - thread already exists.
+s_long dispatcher_mt::thread_proxy::_s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0, s_long flags_cr) throw()
 {
-  if (!_r_ths.has_ref()) { return -2; }
-  if (_r_ths.ref().ses_state != 1) { return -3; }
-  if (!(rt >= 1 && rt <= 5)) { return -1; }
-  cch_session& rses = *_r_ths._pnonc_u();
+  if (!_r_ths) { return -2; }
+  dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+  if (rses.ses_state != 1) { return -3; }
+
+  unity _cfg1; const unity* pcfg = 0; const unity* pcfg_th = 0; const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0; cch_thread* pth = 0;
+  mst_semaphore ms; s_long res = -2;
+  int _undos = 0; // ORed: 2 - do not continue initialization, 1 - before exit, remove thread object only from hg_threads, 4 - before exit, remove whole thread
+  unity ku_thn;
   try {
-    address sa, da;
-      int res;
-      res = sa.set_addr(unity(add_qs0)); if (res != 1) { return res == -1 ? -1 : -2; }
-        std::wstring ssln1 = sa.wstr_sln_1();
-        std::wstring sslntail = sa.wstr_sln_tail();
-          if (!sln1chk_qs(ssln1)) { return -1; }
-      if (sa.isLP_any()) // local subscription
-      {
-        if (rt == 4 || rt == 5) { return 0; }
-        res = da.set_addr_LP(_name_th_recv, recv_sl0); if (res != 1) { return res == -1 ? -1 : -2; }
-        std::wstring dsln1 = da.wstr_sln_1();
-          if (!sln1chk_subscriber(dsln1)) { return -1; }
-          if (sln1_root(ssln1) != sln1_root(dsln1)) { return -1; }
-          if (sslntail.length() > 0 && da.wstr_sln_tail() != sslntail) { return -1; }
+    if (!(_cfg0.isString() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return -5; }
+    try { if (_cfg0.isString()) { paramline().decode_tree(_cfg0.vstr(), _cfg1, 0x3a); } } catch (...) { return -2; }
+    pcfg = _cfg0.isString() ? &_cfg1 : &_cfg0;
 
-        cref_t<cch_slot, dispatcher_mt> rqs_sl; std::wstring sln_s = sa.wstr_sln();
-        if (sa.isLPA())
+    const unity kth_disp(L"disp");
+
+      // Extract and primarily check thread configuration.
+    for (s_long i = pcfg->assocl_first(); i != pcfg->assocl_noel(); i = pcfg->assocl_next(i))
+    {
+      std::wstring k_th = pcfg->assocl_key(i).vstr();
+        if (!thnchk(k_th)) { continue; }
+      if (!ku_thn.isEmpty()) { return -5; }
+
+      ku_thn = k_th; pcfg_th = &pcfg->assocl_c(i);
+    }
+    if (ku_thn.isEmpty()) { return -5; }
+
+      // Create/insert thread object, lock for further initialization.
+    if (1)
+    {
+      cref_t<cch_thread> _rth; if (!_rth.create0(1)) { return -2; }
+      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+      s_long res = rses.hg_threads.insert(ku_thn, &e_th);
+        if (res < 0) { return -2; }
+        if (res == 0) { return -6; } // thread already exists
+      bmdx_str::words::swap_bytes(e_th->v, _rth);
+
+        // Primary initialization (for cch_thread being valid after releasing the __lock).
+      pth = e_th->v._pnonc_u();
+      pth->cb_disp = pcfg_th->u_has(kth_disp, 6) && (*pcfg_th)[kth_disp].isBoolTrue();
+
+      _undos |= 1; // will be set to 0 later, on successful init. completion
+
+      try { ms.set_refs(rses, ku_thn.rstr()); } catch (...) {}
+      if (ms.m_th_acquire() < 0) { _undos |= 2; } // init. failed
+    }
+
+      // Add slots.
+    t_hsubs hsubs_ins, hsubs_outs;
+    if (!(_undos & 2))
+    {
+      res = dispatcher_mt::thread_proxy::_s_add_slots_nl(rses, ku_thn.rstr(), *pcfg_th, hsubs_ins, hsubs_outs, &ms);
+      if (res == 1) { _undos = 0;  }
+        else { if (res == -1) { res = -5; } else { res = -2; } _undos |= 2; }
+    }
+
+      // Release lock.
+    ms.release();
+
+      // Update pre-configured subscriptions.
+    if (!(_undos & 2))
+    {
+      s_long resfl = dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs_ins, 16|8);
+      resfl |= dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs_outs, 4|8);
+        resfl &= ~s_long(0x10); // "failed to update non-local subscription" is not an error in here
+      if (resfl != 0 && !!(flags_cr & dispatcher_mt_flags::ensure_local_subs)) { _undos |= 4; res = -2; }
+    }
+  } catch (...) {}
+
+  if (_undos)
+  {
+    if (_undos & 4)
+      { try { dispatcher_mt::thread_proxy::_s_thread_remove(_r_ths, ku_thn.rstr(), &ku_thn); } catch (...) {} }
+    else if (_undos & 1)
+    {
+      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+      rses.hg_threads.remove(ku_thn);
+    }
+    if (res >= 0) { res = -2; }
+  }
+  return res;
+}
+
+  // pthn (optional) - if specified, must be same string as thn.
+  //    With pthn, in all practically possible conditions (i.e. no concurrent thread holding a semaphore for several seconds),
+  //        the function completes thread removal.
+  //        If any mem. alloc. fails, the function may skip removal of some of subscription slot addresses from other threads,
+  //        but anyway removes the thread thn itself, its slots, and additional objects in the session (e.g. slot names in hg_qs_disp, hg_lpai).
+  // Ret. vals. are compatible with _s_request().
+  //    1 - success.
+  //    -2 - operation failed (top level code only, not expected to occur).
+  //    -3 - session is closed.
+  //    -5 - invalid argument (args and/or retval as required by request type).
+  //    -7 - thread does not exist.
+s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn, const unity* pthn) throw()
+{
+  if (!_r_ths) { return -2; }
+  dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+  if (rses.ses_state != 1) { return -3; }
+
+  // get thread lock
+  //  for each slot:
+  //    slot removal produces lists for unsubscribing (hsubs_outs, hsubs_ins)
+  //    certain slots are removed from hg_qs_disp, hg_lpai
+  //  remove thread object
+  // release thread lock
+  // update subs. lists
+
+  cch_thread* pth = 0;
+  hashx<std::wstring, hashx<std::wstring, s_long> > hsubs_outs, hsubs_ins;
+  try {
+    unity __thn1; const unity* pku_thn = pthn; if (!pku_thn) { pku_thn = &__thn1; __thn1 = thn; }
+    mst_semaphore ms(rses, thn);
+    pth = ms.p_thread(); if (!pth) { return -7; } // under m_th_acquire
+    hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
+
+    for (s_long j = 0; j < pth->h_sl.n(); ++j)
+    {
+      try {
+        const unity& ku_sl = pth->h_sl(j)->k;
+        cref_t<cch_slot>& r_sl = pth->h_sl(j)->v;
+
+        s_long deliv = 0;
+
+          // The following hash map elem. removals do not fail.
+          //  cch_thread h_qs_*, cch_session hg_qs_disp, hg_lpai are consistent with cch_thread h_sl.
+        deliv = r_sl.ref().qs_delivery_type();
+        if (deliv == 3 || r_sl.ref().b_input_lpa())
         {
-          std::wstring thn_qs;
-          if (1)
-          {
-            critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-            const hashx<unity, unity>::entry* e1 = rses.hg_lpai.find(sln_s); if (!e1) { return 10; }
-            thn_qs = e1->v.vstr();
-          }
-          if (sa.set_addr_LP(thn_qs, sln_s) != 1) { return -2; }
-          mst_semaphore ms(rses, thn_qs);
-          hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(sln_s, rqs_sl); if (res < 0) { return 10; } if (res > 0) { break; } sleep_mcs(50); }
-        }
-        else
-        {
-          mst_semaphore ms(rses, sa.wstr_thn());
-          hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(sln_s, rqs_sl); if (res < 0) { return 10; } if (res > 0) { break; } sleep_mcs(50); }
+          critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+          if (deliv == 3) { rses.hg_qs_disp.remove(ku_sl); }
+          if (r_sl.ref().b_input_lpa()) { rses.hg_lpai.remove(ku_sl); }
         }
 
-        cref_t<cch_slot, dispatcher_mt> rsub_sl;
         if (1)
         {
-          mst_semaphore ms(rses, _name_th_recv);
-          hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(da.wstr_sln(), rsub_sl); if (res < 0) { return -5; } if (res > 0) { break; } sleep_mcs(50); }
+          critsec_t<dispatcher_mt> __lock(10, -1, &r_sl->lkd); if (sizeof(__lock)) {}
+          try {
+            if (r_sl.ref().r_haddrl)
+            {
+              const cch_slot::t_haddrl& hs_sl = r_sl.ref().r_haddrl.ref();
+              address _a; _a.set_addr_LP(thn, ku_sl);
+              if (hs_sl.n() && !_a.is_empty())
+              {
+                if (deliv != 0) // r_sl (sla) is a qs slot
+                {
+                  std::wstring sla = _a.wstr_addr();
+                  for (s_long i = 0; i < hs_sl.n(); ++i) { try { hsubs_ins[hs_sl(i)->k.vstr()][sla] = 0; } catch (...) {} }
+                }
+                else // r_sl (sla) is non-qs slot that may be subscribed
+                {
+                  std::wstring sla = _a.wstr_addr();
+                  for (s_long i = 0; i < hs_sl.n(); ++i) { try { hsubs_outs[sla][hs_sl(i)->k.vstr()] = 0; } catch (...) {} }
+                }
+              }
+            }
+          } catch (...) {}
         }
-
-        cch_slot& qs_sl = *rqs_sl._pnonc_u();
-        cch_slot& sub_sl = *rsub_sl._pnonc_u();
-        unity sda = da.wstr_addr(), ssa = sa.wstr_addr();
-        hashx<unity, s_long> *ph1(0), *ph2(0);
-        bool b_sub1(false), b_sub2(false);
-        if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} ph1 = qs_sl.r_hsubs._pnonc_u(); if (!ph1) { return -2; } b_sub1 = !! ph1->find(da.wstr_addr()); }
-        if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {} ph2 = sub_sl.r_hsubs._pnonc_u(); if (!ph2) { sub_sl.r_hsubs.create0(true); ph2 = sub_sl.r_hsubs._pnonc_u(); } if (!ph2) { return -2; } b_sub2 = !! ph2->find(ssa); }
-
-        if (rt == 1) // sub
-        {
-          if (b_sub1 && b_sub2) { return 2; }
-          if (qs_sl.qs_output_fixed()) { if (!b_sub1) { return 12; } }
-          if (!b_sub1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} if (ph1->insert(sda) < 0) { return -2; } }
-          if (!b_sub2)
-          {
-            bool bf = false;
-            if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}  bf = ph2->insert(ssa) < 0; }
-            if (bf && !b_sub1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} ph1->remove(sda); }
-            if (bf && !b_sub1) { return -2; }
-          }
-          return 2;
-        }
-        else if (rt == 2) // uns
-        {
-          if (!b_sub1 && !b_sub2) { return 1; }
-          if (qs_sl.qs_output_fixed()) { if (b_sub1) { return 12; } }
-          if (b_sub1) { critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {} ph1->remove(sda); }
-          if (b_sub2) { critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {} ph2->remove(ssa); }
-          return 1;
-        }
-        else // rt == 3, chk sub
-          { return b_sub1 && b_sub2 ? 2 : 1; }
-      }
-      else
-      {
-        //~!!! not impl. remote request:
-        //  recode and verify qs and recv, also verify their matching
-        //  the current op. is pending:
-        //    match rt
-        //    check for timeout
-        //    return the result as for now
-        //    remove the current op. state if it's completed
-        //  no current op.:
-        //    create op. state
-        //    add op. state into states hash, check memory limit
-        //    send ipc or remote request
-        // ----------------------------
-        // ipc or network thread:
-        //  receive remote response
-        //  update the current op. state
-        return -2;
-      }
-  } catch (...) { return -2; }
-}
-
-  // empty _name_th means the call directly from dispatcher_mt (not associated with any thread).
-s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, const std::wstring& _name_th, int frqperm) throw()
-{
-  if (!_r_ths.has_ref()) { return -2; }
-  if (_r_ths.ref().ses_state != 1) { return -3; }
-  cch_session& rses = *_r_ths._pnonc_u();
-  switch (rt)
-  {
-  case 1: // get list of threads
-    try {
-      if ((frqperm & 0x8) == 0) { return -4; }
-      retval.arr_init<utStringArray>(0);
-      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-      for (s_long i = 0; i < rses.hg_ths.n(); ++i) { retval.arr_append(rses.hg_ths(i)->k.vstr()); }
-      return 1;
-    } catch (...) { return -2; }
-  case 2: // get all slots of a thread
-    try {
-      if ((frqperm & 0x8) == 0) { return -4; }
-      retval.arr_init<utStringArray>(0);
-      std::wstring thn = args.vstr();
-      mst_semaphore ms(rses, thn);
-      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_ro_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
-      cch_thread* pth = ms.p_thread(); if (!pth) { return -7; }
-      for (s_long i = 0; i < pth->h_sl.n(); ++i) { retval.arr_append(pth->h_sl(i)->k.vstr()); }
-      return 1;
-    } catch (...) { return -2; }
-  case 11: // get N of threads
-    try {
-      retval.clear();
-      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-      retval = rses.hg_ths.n();
-      return 1;
-    } catch (...) { return -2; }
-  case 12: // get N of slots of a thread
-    try {
-      retval.clear();
-      std::wstring thn = args.vstr();
-      mst_semaphore ms(rses, thn);
-      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_ro_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
-      cch_thread* pth = ms.p_thread(); if (!pth) { return -7; }
-      retval = pth->h_sl.n();
-      return 1;
-    } catch (...) { return -2; }
-  case 3: // set priority and timing for internal subscription delivery
-    try {
-      if ((frqperm & 0x10) == 0) { return -4; }
-      if (_r_ths.ref().qsdt < 0) { return -7; }
-      unity x = args; x.arrlb_(1); if (!(x.arrsz() == 2)) { return -5; }
-      meta::s_ll pr = x.ref<utInt>(1); meta::s_ll dt = x.ref<utInt>(2); if (!(pr >= 1 && pr <= 7 && dt >= 0)) { return -5; }
-      if (!_r_ths._pnonc_u()->tc_qsd.set_priority(s_long(pr))) { return -2; }
-      _r_ths._pnonc_u()->qsd_prio = s_long(pr);
-      _r_ths._pnonc_u()->qsdt = dt;
-      return 1;
-    } catch (...) { return -2; }
-  case 4: // get priority and timing of internal subscription delivery
-    try {
-      if ((frqperm & 0x10) == 0) { return -4; }
-      if (_r_ths.ref().qsdt < 0) { return -7; }
-      unity x; x.arr_init<utString>(1);
-      x.arr_append(_r_ths.ref().qsd_prio);
-      x.arr_append(_r_ths.ref().qsdt);
-      retval = x;
-      return 1;
-    } catch (...) { return -2; }
-  case 5: // get new proxy
-    try {
-      if ((frqperm & 0x4) == 0) { return -4; }
-      return _s_proxy_new(_r_ths, retval, args.vstr());
-    } catch (...) { return -2; }
-  case 6: // create thread
-    try {
-      if ((frqperm & 0x1) == 0) { return -4; }
-      return _s_thread_create(_r_ths, args);
-    } catch (...) { return -2; }
-  case 7: // remove thread
-    try {
-      if ((frqperm & 0x2) == 0) { return -4; }
-      return _s_thread_remove(_r_ths, args.vstr());
-    } catch (...) { return -2; }
-  default: { return -1; }
-  }
-}
-
-s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) throw()
-{
-  if (!_r_ths.has_ref()) { return -2; }
-  if (_r_ths.ref().ses_state != 1) { return -3; }
-  cch_session& rses = *_r_ths._pnonc_u();
-  try {
-    t_hsubs hsubs;
-    unity sln = slotname0; if (!(sln.isString() || sln.isArray())) { return -1; }
-    unity _a; // exact slot name
-    if (sln.isString()) { paramline().decode1v(sln.vstr(), _a); if (!sln1chk_main((_a.isArray() ? _a[1] : _a).vstr())) { return -1; } }
-      else { if (!sln1chk_main(sln.vstr(sln.arrlb()))) { return -1; } }
-    std::wstring k_sl; s_long res = __recode_slotname(sln, k_sl); if (res != 1) { return res == -1 ? -1 : -2; }
-    const unity ku_sl = k_sl;
-
-    s_long deliv = 0; cref_t<cch_slot, dispatcher_mt> r_sl;
-    if (1)
-    {
-      mst_semaphore ms(rses, _name_th);
-      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_sl_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
-      cch_thread* pth = ms.p_thread(); if (!pth) { return -2; }
-      ms.r_sl(k_sl, r_sl); if (!r_sl) { return 0; }
-      pth->h_sl.remove(ku_sl);
-
-        // The following hash elem. removals do not fail.
-        //  cch_thread h_qs_*, cch_session hg_qs_disp, hg_lpai are consistent with cch_thread h_sl.
-      deliv = r_sl.ref().qs_delivery_type();
-      if (deliv == 1)
-      {
-        pth->h_qs_imm.remove(ku_sl);
-        if (r_sl.ref().b_input_lpa()) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {} rses.hg_lpai.remove(ku_sl); }
-      }
-      else if (deliv == 2)
-      {
-        pth->h_qs_thread.remove(ku_sl);
-        if (r_sl.ref().b_input_lpa()) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {} rses.hg_lpai.remove(ku_sl); }
-      }
-      else if (deliv == 3 || r_sl.ref().b_input_lpa())
-      {
-        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-        if (deliv == 3) { rses.hg_qs_disp.remove(ku_sl); }
-        if (r_sl.ref().b_input_lpa()) { rses.hg_lpai.remove(ku_sl); }
-      }
+      } catch (...) {}
     }
 
     if (1)
     {
-      critsec_t<dispatcher_mt> __lock(10, -1, &r_sl._pnonc_u()->lkd); if (sizeof(__lock)) {}
-      if (r_sl.ref().r_hsubs)
-      {
-        const hashx<unity, s_long>& hs_sl = r_sl.ref().r_hsubs.ref();
-        address _a; _a.set_addr_LP(_name_th, ku_sl);
-        if (hs_sl.n() && !_a.is_empty())
-        {
-          if (deliv) // r_sl is a qs slot
-          {
-            std::wstring sla = _a.wstr_addr();
-            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs[hs_sl(i)->k.vstr()][sla] = 0; } } catch (...) {}
-//            _s_update_subs_lists(rses, hsubs, 1);
-          }
-          else // r_sl may have subscriptions
-          {
-            std::wstring sla = _a.wstr_addr();
-            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs[sla][hs_sl(i)->k.vstr()] = 0; } } catch (...) {}
-//            _s_update_subs_lists(rses, hsubs, 2);
-          }
-        }
-      }
+      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+      rses.hg_threads.remove(*pku_thn); // does not fail
     }
-
-    if (hsubs.n()) { _s_update_subs_lists(rses, hsubs, deliv ? 1 : 2); }
-
-    return 1;
   } catch (...) { return -2; }
+
+  dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs_ins, 1);
+  dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs_outs, 2);
+
+  return 1;
 }
 
   // Adds slots to existing thread.
   // Returns:
   //  1 - success.
-  //    hsubs_acc - the list, accumulating inputs for pins, subscribed to newly created qs slots. Format:
-  //      { <ADDR slot-subscriber (local or remote)>, { <ADDR qs slot-supplier>, 4 } }
-  //    NOTE on _s_add_slots_nl success, hsubs_acc must be passed to _s_update_subs_lists to complete operation.
-  //    NOTE on error, all dispatcher structure changes are cancelled.
-  //      But, hsubs_acc may be left modified. It must not be used for any further updates.
+  //    hsubs_ins - the list, accumulating addresses of new slots, that must be later subscribed to their supplying qs slots. Format:
+  //      { <ADDR slot-subscriber>, { <ADDR qs slot-supplier>, 0 } }
+  //    hsubs_outs - the list, accumulating addresses of qs slots, that must be later inserted into input lists subscribed (pi, qi) slots. Format:
+  //      { <ADDR slot-subscriber>, { <ADDR qs slot-supplier>, 0 } }
+  //    NOTE on _s_add_slots_nl success, hsubs_* must be passed to _s_update_subs_lists to complete operation.
+  //    NOTE on error, all dispatcher structure changes are canceled.
+  //      But, hsubs_* may be left modified. It must not be used for any further updates.
   //  -1 - bad arg. (_name_th empty, slotscfg invalid).
   //  -2 - failure (mem. alloc.).
   //  -3 - thread does not exist.
   //  -4 - one of new slot names is not unique.
-s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std::wstring& _name_th, const unity& slotscfg, t_hsubs& hsubs_acc, mst_semaphore* _pms0) throw()
+s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std::wstring& _name_th, const unity& slotscfg, t_hsubs& hsubs_ins, t_hsubs& hsubs_outs, mst_semaphore* _pms0) throw()
 {
   try {
     unity k_slots(L"slots");
-    if (!(_name_th.length() > 0 && slotscfg.compatibility() > 0 && slotscfg.isAssoc())) { return -1; }
+    if (!(_name_th.length() > 0 && slotscfg.compatibility() > 0 && (slotscfg.isAssoc() || slotscfg.isEmpty()))) { return -1; }
 
     mst_semaphore _ms0;
     if (!_pms0)
@@ -10575,54 +14034,81 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
       hangdet hd; while (true) { if (hd) { return -2; } int res = _ms0.m_sl_acquire(); if (res < 0) { return res == -3 ? -3 : -2; } if (res > 0) { break; } sleep_mcs(50); }
     }
     mst_semaphore& ms = _pms0 ? *_pms0 : _ms0;
-    cch_thread* pth = ms.p_thread(); if (!pth) { return -3; }
+    cch_thread* pth = ms.p_thread(); if (!pth) { return -3; } // under m_sl_acquire
 
     unity u_empty;
-    const unity& sls_cfgroot = slotscfg.u_has(k_slots, 6) ? slotscfg[k_slots] : u_empty;
+    const unity& sl_cfgroot = slotscfg.u_has(k_slots, 6) ? slotscfg[k_slots] : u_empty;
     struct _aux_qsh
     {
       hashx<unity, unity> h_qsd_, h_lpai_;
       hashx<unity, int> h_qst_, h_qsimm_;
     };
     _aux_qsh qsh;
-    hashx<unity, cref_t<cch_slot, dispatcher_mt> > h_sl2;
+    hashx<unity, cref_t<cch_slot> > h_sl2;
     hashx<unity, int>& h_qst = pth->h_qs_thread; hashx<unity, int>& h_qsimm = pth->h_qs_imm;
-    unity ku_input_all(L"input all"), ku_input_lpa(L"input lpa");
-    for (s_long pos = sls_cfgroot.assocl_first(); pos != sls_cfgroot.assocl_noel(); pos = sls_cfgroot.assocl_next(pos))
+    unity ku_input_all(L"input all"), ku_input_lpa(L"input lpa"), ku_input_qsa(L"input qsa");
+    for (s_long pos = sl_cfgroot.assocl_first(); pos != sl_cfgroot.assocl_noel(); pos = sl_cfgroot.assocl_next(pos))
     {
-      const unity& ku_sl0 = sls_cfgroot.assocl_key(pos); if (ku_sl0.isEmpty() || ku_sl0.lenstr() == 0) { continue; }
+      const unity& ku_sl0 = sl_cfgroot.assocl_key(pos); if (ku_sl0.isEmpty() || ku_sl0.lenstr() == 0) { continue; }
       std::wstring k_sl, sln1, slntail;
-        s_long res = __recode_slotname(ku_sl0.vstr(), k_sl, &sln1, &slntail);
+        s_long res = __recode_slotname(ku_sl0.vstr(), &k_sl, &sln1, &slntail);
           if (res != 1) { return res == -1 ? -1 : -2; }
           if (!sln1chk_main(sln1)) { return -1; }
       const unity ku_sl = k_sl;
 
         // Create uninitialized slot.
-      cref_t<cch_slot, dispatcher_mt>& rr_sl = h_sl2[ku_sl];
+      cref_t<cch_slot>& rr_sl = h_sl2[ku_sl];
         if (rr_sl.has_ref()) { return -4; }
         if (!rr_sl.create0(true)) { return -2; }
         cch_slot& new_sl = *rr_sl._pnonc_u();
 
         // Initialize slot data according with slot type.
-      const unity* psc = &sls_cfgroot.assocl_c(pos);
+      const unity* psc = &sl_cfgroot.assocl_c(pos);
         if (!psc->isAssoc()) { psc = 0; }
 
-      s_long cf_inp = 0x4; // allowed inputs (used only by qs, qi, pi, pbi, qbi), default: accept input from all threads
+      s_long cf_inp = 0x4; // allowed inputs (used only by normal inputs qs, qi, pi, pbi, qbi), default: accept input from all threads
         if (psc && psc->u_has(ku_input_all, 6)) { const unity& x = (*psc)[ku_input_all]; if (!x.isBool()) { return -1; } if (x.isBoolFalse()) { cf_inp &= ~s_long(0x4); } }
         if (psc && psc->u_has(ku_input_lpa, 6)) { const unity& x = (*psc)[ku_input_lpa]; if (!x.isBool()) { return -1; } if (x.isBoolTrue()) { cf_inp |= 0x8; } }
 
+      s_ll capmin = 0, capmax = -2, caporig = 0;
+      if (sln1[0] == L'q' || sln1[0] == L'h') // // qi, qbi, qs, hbo - determine queue capacity parameters
+      {
+        unity k_size(L"size"), k_capmin(L"capmin"), k_capmax(L"capmax"), k_caporig(L"caporig");
+        const bool bk_size = psc && psc->u_has(k_size, 6);
+        const bool bk_capmin = psc && psc->u_has(k_capmin, 6);
+        const bool bk_capmax = psc && psc->u_has(k_capmax, 6);
+        const bool bk_caporig = psc && psc->u_has(k_caporig, 6);
+        if (bk_capmin || bk_capmax || bk_caporig)
+        {
+          if (bk_capmin != bk_capmax) { return -1; }
+          if (bk_capmin)
+          {
+            const unity& mi = (*psc)[k_capmin]; if (!mi.isInt()) { return -1; }
+            const unity& ma = (*psc)[k_capmax]; if (!ma.isInt()) { return -1; }
+            capmin = mi.vint();
+            capmax = ma.vint();
+          }
+          if (bk_caporig)
+          {
+            const unity& rc = (*psc)[k_caporig]; if (!rc.isInt()) { return -1; }
+            caporig = rc.vint();
+          }
+        }
+        else if (bk_size)
+        {
+          const unity& rs = (*psc)[k_size]; if (!rs.isInt()) { return -1; }
+          capmax = caporig = rs.vint();
+          if (capmax < 3) { return -1; }
+        }
+      }
+
+      if (1) { bool b_stop = false; for (size_t i = 0; i < 4; ++i) { if (i >= sln1.size() || sln1[i] == L'_') { b_stop = true; }  unsigned char c = 0; if (!b_stop) { c = (unsigned char)sln1[i]; } new_sl.type_str[i] = c; } }
       if (sln1[0] == L'q') // qi, qbi, qs
       {
-        unity k_size(L"size");
-        s_long ncap = -1;
-           if (psc && psc->u_has(k_size, 6) && (*psc)[k_size].isInt()) { ncap = s_long((*psc)[k_size].vint()); if (ncap < 3) { return -1; } ncap += 1; }
-
         if (sln1[1] == L'i')
         {
           new_sl.ccfgflags = cf_inp;
-
-          new_sl.r_q.create1(false, ncap >= 0 ? ncap : (sln1 == L"qi_char" ? 201 : 11));
-          if (!new_sl.r_q.ref().is_valid()) { return -2; }
+          new_sl.r_qumi.create0(0); if (!(1 == new_sl.r_qumi->set_cap_hints(capmin, capmax) && 1 == new_sl.r_qumi->set_rsv(caporig))) { return -2; }
         }
         else if (sln1[1] == L's')
         {
@@ -10639,34 +14125,26 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
               else { return -1; }
           }
 
-          if (!new_sl.r_hsubs.has_ref()) { if (!new_sl.r_hsubs.create0(true)) { return -2; } }
+          if (!new_sl.r_haddrl) { if (!new_sl.r_haddrl.create0(true)) { return -2; } }
 
           unity k_output(L"output"), k_output_fixed(L"output fixed");
           s_long qsoutp = 0x0;
           if (psc && psc->u_has(k_output, 6))
           {
             const unity& subs = (*psc)[k_output]; if (!subs.isAssoc()) { return -1; }
-            std::wstring s_sa;
-            if (1)
-            {
-              unity a, a2; a.arr_init<utUnityArray>(1);
-                __append_vals(a, L"LP");
-                __append_vals(a, _name_th);
-                __append_vals(a, paramline().decode1v(k_sl, a2));
-              s_sa = paramline().encode1v(a);
-            }
+            std::wstring sa_s; if (1) { unity a, a2; a.arr_init<utUnityArray>(1); __append_vals(a, L"LP"); __append_vals(a, _name_th); __append_vals(a, paramline().decode1v(k_sl, a2)); sa_s = paramline().encode1v(a); }
             for (s_long pos = subs.assocl_first(); pos != subs.assocl_noel(); pos = subs.assocl_next(pos))
             {
               const unity& ku_addr0 = subs.assocl_key(pos); if (ku_addr0.isEmpty() || ku_addr0.lenstr() == 0) { continue; }
-              int res; address da;
-              res = da.set_addr(ku_addr0.vstr()); if (res != 1) { return res == -1 ? -1 : -2; }
-              std::wstring dsln1 = da.wstr_sln_1();
+              int res; address suba;
+              res = suba.set_addr(ku_addr0.vstr()); if (res != 1) { return res == -1 ? -1 : -2; }
+              std::wstring dsln1 = suba.wstr_sln_1();
                 if (!sln1chk_subscriber(dsln1)) { return -1; }
                 if (sln1_root(sln1) != sln1_root(dsln1)) { return -1; }
-                if (slntail.length() > 0 && da.wstr_sln_tail() != slntail) { return -1; }
-              std::wstring s_da = da.wstr_addr();
-              if (new_sl.r_hsubs._pnonc_u()->insert(s_da) != 1) { return -1; }
-              hsubs_acc[s_da][s_sa] = 0;
+                if (slntail.length() > 0 && suba.wstr_sln_tail() != slntail) { return -1; }
+              std::wstring suba_s = suba.wstr_addr();
+              if (new_sl.r_haddrl->insert(suba_s) != 1) { return -1; }
+              hsubs_outs[suba_s][sa_s] = 0;
             }
           }
           if (psc && psc->u_has(k_output_fixed, 6)) { const unity& x = (*psc)[k_output_fixed]; if (!x.isBool()) { return -1; } if (x.isBoolTrue()) { qsoutp |=  0x10; } }
@@ -10675,42 +14153,62 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
 
           if (qsd == 3)
           {
-            critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
+            critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
             if (rses.hg_qs_disp.find(ku_sl) || qsh.h_qsd_.find(ku_sl)) { return -4; }
             qsh.h_qsd_[ku_sl] = _name_th;
           }
           else if (qsd == 2) { if (h_qst.find(ku_sl) || qsh.h_qst_.find(ku_sl)) { return -4; } qsh.h_qst_[ku_sl] = 0; }
           else { if (h_qsimm.find(ku_sl) || qsh.h_qsimm_.find(ku_sl)) { return -4; } qsh.h_qsimm_[ku_sl] = 0; }
 
-          //--------------------------------
-
-          new_sl.r_qs.create1(false, ncap >= 0 ? ncap : 11);
-          if (!new_sl.r_qs.ref().is_valid()) { return -2; }
+          new_sl.r_qus.create0(0); if (!(1 == new_sl.r_qus->set_cap_hints(capmin, capmax) && 1 == new_sl.r_qus->set_rsv(caporig))) { return -2; }
         }
         else if (sln1[1] == L'b')
         {
           new_sl.ccfgflags = cf_inp;
-
-          new_sl.r_qbi.create1(false, ncap >= 0 ? ncap : 11);
-          if (!new_sl.r_qbi.ref().is_valid()) { return -2; }
+          new_sl.r_qubci.create0(0); if (!(1 == new_sl.r_qubci->set_cap_hints(capmin, capmax) && 1 == new_sl.r_qubci->set_rsv(caporig))) { return -2; }
         }
       }
       else if (sln1[0] == L'p') // pi, po, pbi, pbo
       {
-        if (sln1[1] == L'i') // pi
-        {
-          new_sl.ccfgflags = cf_inp;
-        }
-        else if (sln1[1] == L'b' && sln1[2] == L'i') // pbi
-        {
-          new_sl.ccfgflags = cf_inp;
-        }
+        if (sln1[1] == L'i')  { new_sl.ccfgflags = cf_inp; } // pi
+        else if (sln1[1] == L'b' && sln1[2] == L'i')  { new_sl.ccfgflags = cf_inp; } // pbi
+      }
+      else if (sln1[0] == L'h')  // hbo
+      {
+        new_sl.ccfgflags = cf_inp;
+        new_sl.r_qubci.create0(0); if (!(1 == new_sl.r_qubci->set_cap_hints(capmin, capmax) && 1 == new_sl.r_qubci->set_rsv(caporig))) { return -2; }
+        new_sl.r_haddrl.create0(0);
       }
       else { return -1; }
 
+      if (sln1[1] == L'i' && (sln1[0] == L'p' || sln1[0] == L'q')) // pi, qi (here: as subscribers)
+      {
+        if (psc && psc->u_has(ku_input_qsa, 6))
+        {
+          std::wstring sa_s; if (1) { unity a, a2; a.arr_init<utUnityArray>(1); __append_vals(a, L"LP"); __append_vals(a, _name_th); __append_vals(a, paramline().decode1v(k_sl, a2)); sa_s = paramline().encode1v(a); }
+          const unity& qsa_u = (*psc)[ku_input_qsa]; if (!qsa_u.isAssoc()) { return -1; }
+          for (s_long pos = qsa_u.assocl_first(); pos != qsa_u.assocl_noel(); pos = qsa_u.assocl_next(pos))
+          {
+            const unity& ku_addr0 = qsa_u.assocl_key(pos); if (ku_addr0.isEmpty() || ku_addr0.lenstr() == 0) { continue; }
+            int res; address qsa;
+            res = qsa.set_addr(ku_addr0.vstr()); if (res != 1) { return res == -1 ? -1 : -2; }
+            std::wstring qssln1 = qsa.wstr_sln_1();
+              if (!sln1chk_main_qs(qssln1)) { return -1; }
+              if (sln1_root(qssln1) != sln1_root(sln1)) { return -1; }
+              std::wstring qsa_slntail = qsa.wstr_sln_tail();
+              if (qsa_slntail.length() > 0 && qsa_slntail != slntail) { return -1; }
+
+            if (!new_sl.r_haddrl) { if (!new_sl.r_haddrl.create0(true)) { return -2; } }
+            std::wstring qsa_s = qsa.wstr_addr();
+            if (new_sl.r_haddrl->insert(qsa_s) != 1) { return -1; }
+            hsubs_ins[sa_s][qsa_s] = 0;
+          }
+        }
+      }
+
       if (new_sl.b_input_lpa())
       {
-        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
+        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
         if (rses.hg_lpai.find(ku_sl) || qsh.h_lpai_.find(ku_sl)) { return -4; }
         qsh.h_lpai_[ku_sl] = _name_th;
       }
@@ -10724,10 +14222,10 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
     for (s_long i = 0; i < h_sl2.n(); ++i) { if (pth->h_sl.insert(h_sl2(i)->k) != 1) { goto lSkip1; } ++n_sl2; pth->h_sl(pth->h_sl.n() - 1)->v = h_sl2(i)->v; }
     if (qsh.h_qsd_.n() || qsh.h_lpai_.n())
     {
-      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
+      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
       bool bf2 = false; s_long n_d1(0), n_d2(0);
 
-        // Insert slot names and their owning threads into the list of LPA ("disp thread") delivery.
+        // Insert slot names and their owning threads into the list of LPA queues (qs queues with delivery = disp).
       for (s_long i = 0; i < qsh.h_qsd_.n(); ++i) { if (rses.hg_qs_disp.insert(qsh.h_qsd_(i)->k) != 1) { bf2 = true; break; } ++n_d1; rses.hg_qs_disp(rses.hg_qs_disp.n() - 1)->v = qsh.h_qsd_(i)->v; }
       if (!bf2) { for (s_long i = 0; i < qsh.h_lpai_.n(); ++i) { if (rses.hg_lpai.insert(qsh.h_lpai_(i)->k) != 1) { bf2 = true; break; } ++n_d2; rses.hg_lpai(rses.hg_lpai.n() - 1)->v = qsh.h_lpai_(i)->v; } }
 
@@ -10761,107 +14259,318 @@ lSkip1:;
   return -2;
 }
 
+s_long dispatcher_mt::thread_proxy::_s_slots_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotnames, const std::wstring& _name_th, s_long flags_rmv) throw()
+{
+  if (!_r_ths.has_ref()) { return -2; }
+  if (_r_ths.ref().ses_state != 1) { return -3; }
+  try {
+    unity anames;
+    if (slotnames.isString()) { anames.array(slotnames); }
+    else if (slotnames.isArray() && !!(flags_rmv & dispatcher_mt_flags::array_of_slotnames)) // array of slots
+      { anames.array(); for (s_long i = slotnames.arrlb(); i <= slotnames.arrub(); ++i) { anames.arr_append(slotnames[i]); } }
+    else if (slotnames.isArray()) // single slot name
+      { anames.array(slotnames); }
+    else if (slotnames.isAssoc())
+      { anames.array(); for (s_long i = slotnames.assocl_first(); i != slotnames.assocl_noel(); i = slotnames.assocl_next(i)) { anames.arr_append(slotnames.assocl_key(i)); } }
+    else { return -1; }
+
+    bool bfail = false, bnotf = false;
+    s_long res = -2;
+    for (s_long i = 1; i <= anames.arrub(); ++i)
+    {
+      res = _s_slot_remove(_r_ths, anames[i], _name_th);
+      if (res <= -3) { return res; }
+      if (res == -2) { bfail = true; continue; }
+      if (res == -1 || res == 0) { bnotf = true; continue; }
+    }
+    if (bfail) { return 0; }
+    if (bnotf) { return 1; }
+    return 2;
+  } catch (...) { return -2; }
+}
+s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) throw()
+{
+  if (!_r_ths.has_ref()) { return -2; }
+  if (_r_ths.ref().ses_state != 1) { return -3; }
+  cch_session& rses = *_r_ths._pnonc_u();
+  try {
+    t_hsubs hsubs, hsubs_empty;
+    unity sln = slotname0; if (!(sln.isString() || sln.isArray())) { return -1; }
+    unity _a; // exact slot name
+    if (sln.isString()) { paramline().decode1v(sln.vstr(), _a); if (!sln1chk_main((_a.isArray() ? _a[1] : _a).vstr())) { return -1; } }
+      else { if (!sln1chk_main(sln.vstr(sln.arrlb()))) { return -1; } }
+    std::wstring k_sl; s_long res = __recode_slotname(sln, &k_sl); if (res != 1) { return res == -1 ? -1 : -2; }
+    const unity ku_sl = k_sl;
+
+    s_long deliv = 0; cref_t<cch_slot> r_sl;
+    if (1)
+    {
+      mst_semaphore ms(rses, _name_th);
+      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_sl_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
+      cch_thread* pth = ms.p_thread(); if (!pth) { return -2; } // under m_sl_acquire
+      ms.r_sl(k_sl, r_sl); if (!r_sl) { return 0; }
+      pth->h_sl.remove(ku_sl);
+
+        // The following hash map elem. removals do not fail.
+        //  cch_thread h_qs_*, cch_session hg_qs_disp, hg_lpai are consistent with cch_thread h_sl.
+      deliv = r_sl.ref().qs_delivery_type();
+      if (deliv == 1)
+      {
+        pth->h_qs_imm.remove(ku_sl);
+        if (r_sl.ref().b_input_lpa()) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {} rses.hg_lpai.remove(ku_sl); }
+      }
+      else if (deliv == 2)
+      {
+        pth->h_qs_thread.remove(ku_sl);
+        if (r_sl.ref().b_input_lpa()) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {} rses.hg_lpai.remove(ku_sl); }
+      }
+      else if (deliv == 3 || r_sl.ref().b_input_lpa())
+      {
+        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+        if (deliv == 3) { rses.hg_qs_disp.remove(ku_sl); }
+        if (r_sl.ref().b_input_lpa()) { rses.hg_lpai.remove(ku_sl); }
+      }
+    }
+
+    if (1)
+    {
+      critsec_t<dispatcher_mt> __lock(10, -1, &r_sl->lkd); if (sizeof(__lock)) {}
+      if (r_sl.ref().r_haddrl)
+      {
+        const cch_slot::t_haddrl& hs_sl = r_sl.ref().r_haddrl.ref();
+        address _a; _a.set_addr_LP(_name_th, ku_sl);
+        if (hs_sl.n() && !_a.is_empty())
+        {
+          if (deliv) // r_sl is a qs slot
+          {
+            std::wstring sla = _a.wstr_addr();
+            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs[hs_sl(i)->k.vstr()][sla] = 0; } } catch (...) {}
+          }
+          else // r_sl may have subscriptions
+          {
+            std::wstring sla = _a.wstr_addr();
+            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs[sla][hs_sl(i)->k.vstr()] = 0; } } catch (...) {}
+          }
+        }
+      }
+    }
+
+    if (hsubs.n()) { dispatcher_mt::thread_proxy::_s_update_subs_lists(_r_ths, hsubs, deliv ? 1 : 2); }
+
+    return 1;
+  } catch (...) { return -2; }
+}
+
   // Update input list for each of the given subscribers, or remove subscriber from all suppliers output lists.
   //    This function processes subscriber slots in a loop, all necessary locking is done in each iteration.
-  //    hsubs: similar to hsubs_acc in _s_add_slots_nl:
+  //    hsubs: similar to hsubs_* in _s_add_slots_nl:
   //      { <ADDR slot-subscriber>, { <ADDR qs slot-supplier>, 0 } }
   //    actions:
-  //        4 - add supplier to subscriber's input list.
-  //        1 - remove supplier from subscriber's input list.
-  //        2 - remove subscriber from supplier's output list.
-  //        Flags 1 and 2 may be combined.
+  //        4 - add local supplier (qs) to any subscriber's input list.
+  //        16 - add local subscriber (pi, qi) to any supplier's (qs) output list (similar to _s_subscribe with st_client).
+  //        1 - remove local supplier (qs) from any subscriber's input list. Suppresses 4.
+  //        2 - remove local subscriber (pi, qi) from any supplier's (qs) output list (similar to _s_subscribe with st_client).
+  //          Flags may be combined (1 with 2; 4 with 16). Removal flags suppress appropriate adding flags.
+  //        8 - extract non-local peer names, and pre-create peer trackers, before executing other flags.
+  //          (this flag may be combined with all other flags.)
   // Returns:
-  //    2 - success.
-  //    1 - some part of subscriptions was not updated due to non-local or invalid address.
-  //    0 - some part of subscriptions was not updated due to failure during update.
-s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cch_session& rses, const t_hsubs& hsubs, int actions) throw()
+  //    0 on success.
+  //    > 0: ORed flags, indicating type of failures occurred:
+  //      0x1 - complete failure, no changes (e.g. if no session),
+  //      0x2 - common-case failure, part of changes are made,
+  //      0x4 - an invalid address detected,
+  //      0x8 - failed to update local subscription,
+  //      0x10 - failed to update non-local subscription (LMSC request failed).
+s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) throw()
 {
-  s_long n1 = 0, n2 = 0;
+  if (!_r_ths) { return 0x1; }
+  cch_session& rses = *_r_ths._pnonc_u();
+  if (hsubs.n() <= 0) { return 0x0; }
+  s_long resfl = 0x0;
+  if (!!(actions & 8) && rses.lmsc)
+  {
+    hashx<std::wstring, s_long> hpn;
+    for (s_long i1 = 0; i1 < hsubs.n(); ++i1)
+    {
+      if (1) { const std::wstring& k = hsubs(i1)->k; if (k.find(L"LM") != nposw) { address suba; suba.set_addr(k); try { if (suba.isLM()) { hpn.opsub(suba.wstr_pn()); } } catch (...) {} } }
+      const hashx<std::wstring, s_long>& h_qsa = hsubs(i1)->v;
+      for (s_long i2 = 0; i2 < h_qsa.n(); ++i2) { try { const std::wstring& k = h_qsa(i2)->k; if (k.find(L"LM") == nposw) { continue; } address qsa; qsa.set_addr(k); if (qsa.isLM()) { hpn.opsub(qsa.wstr_pn()); } } catch (...) {} }
+    }
+    if (hpn.n() > 0)
+    {
+      for (s_long i = 0; i < hpn.n(); ++i) { rses.lmsc->clt_ensure_comm(hpn(i)->k, -1); } // try comm. with all peers once
+      const double t0 = clock_ms();
+      for (s_long i = 0; i < hpn.n(); ++i)
+      {
+        rses.lmsc->clt_ensure_comm(hpn(i)->k, 0); // internally, this may wait for some time
+        if (clock_ms() - t0 >= 1.5 * __lm_slot_controller_qum_send_avl_wait_toms) { break; } // after this time, comm. with all really existing peers is already established
+      }
+    }
+  }
   for (s_long i1 = 0; i1 < hsubs.n(); ++i1)
   {
     bool bf = false;
     try {
-      cref_t<cch_slot, dispatcher_mt> rsub_sl;
-
-      const hashx<std::wstring, s_long>& h_qs = hsubs(i1)->v;
-      address da; da.set_addr(hsubs(i1)->k);
-        if (!da.isLP()) { ++n1; continue; } //~!!! not impl. send request to remote subscriber (remove qs from input list)
-        if (!sln1chk_subscriber(da.wstr_sln_1())) { ++n1; continue; }
-      std::wstring dsln = da.wstr_sln();
-      unity da_u = da.addr();
-
-      if (actions & (4+1))
+      const hashx<std::wstring, s_long>& h_qsa = hsubs(i1)->v;
+      address suba; suba.set_addr(hsubs(i1)->k);
+        if (!sln1chk_subscriber(suba.wstr_sln_1())) { resfl |= 0x4; continue; }
+      for (s_long i2 = 0; i2 < h_qsa.n(); ++i2)
       {
-        mst_semaphore ms(rses, da.wstr_thn());
-        int res = -1;
-        hangdet hd(2000); while (true) { if (hd) { break; } res = ms.r_sl(dsln, rsub_sl); if (res != 0) { break; } sleep_mcs(50); } if (hd || res < 0) { ++n1; continue; }
-      }
-
-      if ((actions & 4) && rsub_sl)
-      {
-        cch_slot& sub_sl = *rsub_sl._pnonc_u();
-        try {
-          critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}
-          for (s_long i2 = 0; i2 < h_qs.n(); ++i2)
-          {
-            address sa; sa.set_addr(h_qs(i2)->k); if (sa.is_empty()) { continue; }
-            if (!sub_sl.r_hsubs.has_ref()) { sub_sl.r_hsubs.create0(false); }
-            sub_sl.r_hsubs._pnonc_u()->insert(sa.wstr_addr());
-          }
-        } catch (...) { bf = true; }
-      }
-
-      if ((actions & 1) && rsub_sl)
-      {
-        cch_slot& sub_sl = *rsub_sl._pnonc_u();
-        if (sub_sl.r_hsubs.has_ref())
+        address qsa; qsa.set_addr(h_qsa(i2)->k); if (qsa.is_empty()) { resfl |= 0x4; continue; }
+        s_long res = 0; bool b_action = false; s_long oploc = 0;
+        if (actions & 1)
         {
-          const hashx<std::wstring, s_long>& h_qs = hsubs(i1)->v;
-          try {
-            critsec_t<dispatcher_mt> __lock(10, -1, &sub_sl.lkd); if (sizeof(__lock)) {}
-            for (s_long i2 = 0; i2 < h_qs.n(); ++i2)
-            {
-              address sa; sa.set_addr(h_qs(i2)->k); if (sa.is_empty()) { continue; }
-              sub_sl.r_hsubs._pnonc_u()->remove(sa.wstr_addr());
-            }
-          } catch (...) { bf = true; }
+          b_action = true;
+          res = dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, 2, st_update_subs_input, qsa, suba, idgen(), 0, &oploc);
         }
+        else if (actions & 4)
+        {
+          b_action = true;
+          res = dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, 1, st_update_subs_input, qsa, suba, idgen(), 0, &oploc);
+        }
+        if (b_action) { if (res == -1) { resfl |= 0x4; } else if (res < 0) { if (oploc == 2) { resfl |= 0x10; } else { resfl |= (oploc == 1 ? 0x8 : 0x2); } } }
+
+        res = 0; b_action = false;
+        if (actions & 2)
+        {
+          b_action = true;
+          res = dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, 2, st_update_subs_output, qsa, suba, idgen(), 0, &oploc);
+        }
+        else if (actions & 16)
+        {
+          b_action = true;
+          res = dispatcher_mt::thread_proxy::_s_subscribe(_r_ths, 1, st_update_subs_output, qsa, suba, idgen(), 0, &oploc);
+        }
+        if (b_action) { if (res == -1) { resfl |= 0x4; } else if (res < 0) { if (oploc == 2) { resfl |= 0x10; } else { resfl |= (oploc == 1 ? 0x8 : 0x2); } } }
       }
-
-      if (actions & 2)
-      {
-        try {
-          for (s_long i2 = 0; i2 < h_qs.n(); ++i2)
-          {
-            address sa; sa.set_addr(h_qs(i2)->k); if (sa.is_empty()) { continue; }
-            std::wstring sln_s = sa.wstr_sln();
-            if (sa.isLP()) // unsubscribe locally
-            {
-              cref_t<cch_slot, dispatcher_mt> rqs_sl; int res = -1;
-              mst_semaphore ms(rses, sa.wstr_thn());
-              hangdet hd(2000); while (true) { if (hd) { break; } res = ms.r_sl(sln_s, rqs_sl); if (res != 0) { break; } sleep_mcs(50); } if (hd) { continue; } if (res < 0) { continue; }
-
-              cch_slot& qs_sl = *rqs_sl._pnonc_u();
-              if (!qs_sl.qs_output_fixed())
-              {
-                critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {}
-                hashx<unity, s_long>* ph1 = qs_sl.r_hsubs._pnonc_u();
-                  if (ph1) { ph1->remove(da_u); }
-              }
-            }
-            else if (sa.isLPA()) { continue; } // subscription source addresses are expected to be dereferenced
-            else {} //~!!! not impl. send request to remote qs slot (remove subscriber from output list)
-          }
-        } catch (...) { bf = true; }
-      }
-
-      ++n1;
     } catch (...) { bf = true; }
-    if (!bf) { ++n2; }
+    if (bf) { resfl |= 0x2; }
   }
-  return n2 == hsubs.n() ? 2 : (n1 == hsubs.n() ? 1 : 0);
+  return resfl;
 }
 
+
+void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) throw()
+{
+  if (!(pdisp && process_name.is_valid())) { return; }
+  if (!(_cfg0.isString() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return; }
+  unity _cfg1; try { if (_cfg0.isString()) { paramline().decode_tree(_cfg0.vstr(), _cfg1, 0x3a); } } catch (...) { return; }
+  const unity& cfg = _cfg0.isString() ? _cfg1 : _cfg0;
+
+  if (!pdisp->_r_ths.create0(true)) { return; }
+    pdisp->_r_ths->nprx += 1;
+  cch_session& rses = *pdisp->_r_ths._pnonc_u();
+
+  bool b = true;
+  try { while (true) { // once
+
+    const unity kg_lqsd_dt(L"__lqsd_dt");
+    const unity kg_exitmode(L"__exitmode");
+    const unity kg_msend_anlo(L"__msend_anlo");
+    const unity kg_mget_anlo(L"__mget_anlo");
+    const unity kg_thm_lqsd(L"__thm_lqsd");
+    const unity kg_thm_lmsc(L"__thm_lmsc");
+    const unity kg_thm_nsc(L"__thm_nsc");
+    const unity kg_thm_cdcc(L"__thm_cdcc");
+    const unity kg_lmsc_nb_qum(L"__lmsc_nb_rqum");
+    const unity kg_lmsc_nb_qinfo(L"__lmsc_nb_rqinfo");
+    const unity kg_lmsc_peers(L"__lmsc_peers");
+    const unity kg_lmsc_chsbin(L"__lmsc_chsbin");
+
+    const unity kth_disp(L"disp");
+
+
+    if (!thread_proxy::pnchk(process_name)) { b = false; break; }
+    rses.name_pr.assign(process_name.pd(), _t_wz(process_name.n()));
+
+    if (1) { meta::s_ll q = +cfg / kg_exitmode / 2ll; if (!(q >= 0 && q <=2)) { b = false; break; } rses.exitmode = (int)q; }
+    if (1) { meta::s_ll q = +cfg / kg_lqsd_dt / -1ll; if (q >= 0) { rses.lqsd_dt = q; } }
+    if (1) { meta::s_ll q = +cfg / kg_msend_anlo / -1ll; if (q >= 0) { const s_long m = _frqperm_msend_anlo; volatile s_long& f = rses.frqperm; if (q > 0) { f |= m; } else { f &= ~m; } } }
+    if (1) { meta::s_ll q = +cfg / kg_mget_anlo / -1ll; if (q >= 0) { const s_long m = _frqperm_mget_anlo; volatile s_long& f = rses.frqperm; if (q > 0) { f |= m; } else { f &= ~m; } } }
+    if (1) { meta::s_ll q = +cfg / kg_thm_lqsd / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_lqsd = (unsigned char)q; } }
+    if (1) { meta::s_ll q = +cfg / kg_thm_lmsc / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_lmsc = (unsigned char)q; } }
+    if (1) { meta::s_ll q = +cfg / kg_thm_nsc / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_nsc = (unsigned char)q; } }
+    if (1) { meta::s_ll q = +cfg / kg_thm_cdcc / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_cdcc = (unsigned char)q; } }
+    s_ll _lmsc_nb_qum = +cfg / kg_lmsc_nb_qum / -1ll;
+    s_ll _lmsc_nb_qinfo = +cfg / kg_lmsc_nb_qinfo / -1ll;
+    unity _lmsc_peers = +cfg / kg_lmsc_peers / unity(); if (!(_lmsc_peers.isEmpty() || _lmsc_peers.utype() == utUnityArray || _lmsc_peers.utype() == utStringArray)) { _lmsc_peers.clear(); }
+    bool _lmsc_chsbin = +cfg / kg_lmsc_chsbin / false;
+
+    if (flags_ctor & dispatcher_mt_flags::disp_off_th_lqsd) { rses.__thm_lqsd = 0; }
+    if (flags_ctor & dispatcher_mt_flags::disp_off_th_lmsc) { rses.__thm_lmsc = 0; }
+
+
+      // Lock to make process name unique in the system.
+    std::string pnutf("bmdx_disp\t"); pnutf += wsToBsUtf8(rses.name_pr);
+    rses.gm.~critsec_gn(); new (&rses.gm) bmdx_shm::critsec_gn((bmdx_shm::t_name_shm(__bmdx_dispatcher_name_prefix) += make_fixed_utf8_name(rses.name_pr)).c_str());
+
+    if (!rses.gm.lock()) { b = false; break; }
+
+
+      // Initialize threads and slots.
+    thread_proxy::t_hsubs hsubs_ins, hsubs_outs;
+    for (s_long i = cfg.assocl_first(); i != cfg.assocl_noel(); i = cfg.assocl_next(i))
+    {
+      const std::wstring k_th(cfg.assocl_key(i).vstr());
+      if (!thread_proxy::thnchk(k_th)) { continue; }
+
+      cref_t<cch_thread> _rth; if (!_rth.create0(1)) { b = false; break; }
+      const hashx<unity, cref_t<cch_thread> >::entry* e_th = 0;
+        if (rses.hg_threads.insert(k_th, &e_th) != 1) { b = false; break; }
+      bmdx_str::words::swap_bytes(e_th->v, _rth);
+
+      const unity& th_cfg = cfg.assocl_c(i);
+      e_th->v->cb_disp = th_cfg.u_has(kth_disp, 6) && th_cfg[kth_disp].isBoolTrue();
+      if (dispatcher_mt::thread_proxy::_s_add_slots_nl(rses, k_th, th_cfg, hsubs_ins, hsubs_outs) != 1) { b = false; break; }
+    }
+    if (!b) { break; }
+
+    if (rses.__thm_lmsc > 0)
+    {
+      if (!rses.lmsc.create4(1, rses.name_pr, _lmsc_nb_qum, _lmsc_nb_qinfo, _lmsc_peers)) { b = false; break; }
+      rses.lmsc->setparam_chsbin(_lmsc_chsbin);
+      rses.lmsc->det_init(); // 1st-time init., not critical if fails: it is periodically repeated by th_lmsc_impl, when necessary
+    }
+
+    if (rses.__thm_lqsd > 0) { if (!rses.th_lqsd.start_auto<thread_proxy::th_lqsd_impl>(pdisp->_r_ths)) { b = false; break; } }
+    if (rses.__thm_lmsc > 0) { if (!rses.th_lmsc.start_auto<thread_proxy::th_lmsc_impl>(pdisp->_r_ths)) { b = false; break; } }
+
+      // NOTE the following updates qs subscribers' input lists both locally and non-locally
+    s_long resfl = dispatcher_mt::thread_proxy::_s_update_subs_lists(pdisp->_r_ths, hsubs_ins, 16|8);
+    resfl |= dispatcher_mt::thread_proxy::_s_update_subs_lists(pdisp->_r_ths, hsubs_outs, 4|8);
+      resfl &= ~s_long(0x10); // "failed to update non-local subscription" is not an error in here
+    if (resfl != 0 && !!(flags_ctor & dispatcher_mt_flags::ensure_local_subs)) { b = false; break; }
+
+    break;
+  } } catch (...) { b = false; }
+
+  if (b) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {} rses.ses_state = 1; }
+  else
+  {
+    if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {} rses.nprx -= 1; }
+    _s_thh_sig_stop(rses); while (_s_thh_active(rses)) { sleep_mcs(100); }
+    pdisp->_r_ths.clear();
+  }
+}
+void dispatcher_mt::thread_proxy::_s_disp_dtor(dispatcher_mt* pdisp) throw()
+{
+  if (!pdisp) { return; }
+  if (pdisp->_r_ths)
+  {
+    cch_session& rses = *pdisp->_r_ths._pnonc_u();
+    int e = rses.exitmode;
+    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {}
+    rses.nprx -= 1;
+    if (e > 0 || rses.nprx <= 0) { rses.ses_state = 0; _s_thh_sig_stop(rses); }
+  }
+  if (pdisp->_r_ths)
+  {
+    cch_session& rses = *pdisp->_r_ths._pnonc_u();
+    int e = rses.exitmode;
+    if (e == 2) { while (rses.nprx > 0 || _s_thh_active(rses)) { sleep_mcs(100); } } // NOTE this loop exits only when all clients session references are released (i.e. may wait while any client thread is busy or sleeping, or infinitely if it's been terminated by force).
+    pdisp->_r_ths.clear();
+  }
+}
   // Ret. vals. are same as _s_proxy_init().
   // Ret. vals. are compatible with _s_request().
   //    1 - success.
@@ -10869,10 +14578,11 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cch_session& rses, cons
   //    -3 - disp. session is closed.
   //    -5 - invalid thread name.
   //    -7 - thread does not exist.
-s_long dispatcher_mt::thread_proxy::_s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, const std::wstring& _name_th) throw()
+s_long dispatcher_mt::thread_proxy::_s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, arrayref_t<wchar_t> _name_th) throw()
 {
   unity temp; retval.swap(temp);
   if (!_r_ths) { return -2; } if (_r_ths.ref().ses_state != 1) { return -3; }
+  if (!_name_th.is_valid()) { return -2; }
 
   dispatcher_mt::thread_proxy* p(0); try { p = new dispatcher_mt::thread_proxy(); } catch (...) {}
     if (!p) { return -2; }
@@ -10881,308 +14591,75 @@ s_long dispatcher_mt::thread_proxy::_s_proxy_new(const cref_t<dispatcher_mt::cch
   try { retval.set_obj<thread_proxy, o_interfaces<thread_proxy, i_dispatcher_mt> >(*p, true); } catch (...) { try { delete p; } catch (...) {} return -2; }
   return 1;
 }
-
-  // Ret. vals. are compatible with _s_request().
   //    1 - success.
-  //    -2 - operation failed.
-  //    -3 - session is closed.
-  //    -5 - invalid argument (args and/or retval as required by request type).
-  //    -6 - thread already exists.
-s_long dispatcher_mt::thread_proxy::_s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0) throw()
-{
-  if (!_r_ths) { return -2; }
-  dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
-  if (rses.ses_state != 1) { return -3; }
-
-  unity _cfg1; const unity* pcfg = 0; const unity* pcfg_th = 0; cref_t<std::wstring, cch_session::lkm_name_th_disp> rthn; const hashx<unity, cch_thread>::entry* e_th = 0; cch_thread* pth = 0; bool b_disp = false; unity ku_thn;
-  mst_semaphore ms; int _state = 0; s_long res = -2;
-  try {
-    if (!(_cfg0.isString() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return -5; }
-    try { if (_cfg0.isString()) { paramline().decode_tree(_cfg0.vstr(), _cfg1, 0x3a); } } catch (...) { return -2; }
-    pcfg = _cfg0.isString() ? &_cfg1 : &_cfg0;
-
-    const unity kth_disp(L"disp");
-
-      // Extract and primarily check thread configuration.
-    for (s_long i = pcfg->assocl_first(); i != pcfg->assocl_noel(); i = pcfg->assocl_next(i))
-    {
-      std::wstring k_th = pcfg->assocl_key(i).vstr();
-        if (!thnchk(k_th)) { continue; }
-        if (rthn) { return -5; }
-      pcfg_th = &pcfg->assocl_c(i);
-      rthn.create1(false, k_th);
-      ku_thn = rthn.ref();
-
-      if (pcfg_th->u_has(kth_disp, 6) && (*pcfg_th)[kth_disp].isBoolTrue())
-      {
-        b_disp = true;
-        cref_t<std::wstring, cch_session::lkm_name_th_disp> rthn_disp = rses.name_th_disp;
-        if (rthn_disp && rthn_disp.ref().length() && rthn_disp.ref() != rthn.ref()) { return -2; }
-      }
-    }
-    if (!rthn) { return -5; }
-
-      // Create/insert thread object, lock for further initialization.
-    if (1)
-    {
-      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-      s_long res = rses.hg_ths.insert(ku_thn, &e_th);
-        if (res < 0) { return -2; } if (res == 0) { return -6; }
-      _state |= 1;
-      try { ms.set_refs(rses, rthn.ref()); } catch (...) {}
-      if (ms.m_th_acquire() < 0) { _state |= 2; }
-    }
-    pth = &e_th->v;
-
-      // Initialize thread object as configured.
-    if ((_state & 2) == 0)
-    {
-      if (b_disp)
-      {
-        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-        cref_t<std::wstring, cch_session::lkm_name_th_disp>& r0 = rses.name_th_disp;
-        if (r0 && r0.ref().length() && r0.ref() != rthn.ref()) { _state |= 2; }
-          else { rses.name_th_disp = rthn; pth->b_disp = true; _state |= 4; }
-      }
-    }
-
-      // Add slots.
-    t_hsubs hsubs;
-    if ((_state & 2) == 0)
-    {
-      res = _s_add_slots_nl(rses, rthn.ref(), *pcfg_th, hsubs, &ms);
-      if (res == 1) { _state = 0;  }
-        else { if (res == -1) { res = -5; } else { res = -2; } _state |= 2; }
-    }
-
-      // Release lock.
-    ms.release();
-
-      // Update subscribers input lists.
-    if ((_state & 2) == 0)
-    {
-      _s_update_subs_lists(rses, hsubs, 4);
-    }
-  } catch (...) {}
-
-  if (_state & (4 + 1))
-  {
-    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-    if (_state & 4) { pth->b_disp = false; rses.name_th_disp.clear(); }
-    if (_state & 1) { rses.hg_ths.remove(ku_thn); }
-  }
-  return res;
-}
-
-  // Ret. vals. are compatible with _s_request().
-  //    1 - success.
-  //    -2 - operation failed.
-  //    -3 - session is closed.
-  //    -5 - invalid argument (args and/or retval as required by request type).
+  //    -2 - failed.
+  //    -3 - disp. session is closed.
+  //    -5 - invalid thread name.
   //    -7 - thread does not exist.
-s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn) throw()
+s_long dispatcher_mt::thread_proxy::_s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, arrayref_t<wchar_t> thread_name) throw()
 {
+  if (!thnchk(thread_name)) { return -5; }
   if (!_r_ths) { return -2; }
-  dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
-  if (rses.ses_state != 1) { return -3; }
-
-  // get thread lock
-  //  remove disp. flag if set
-  //  for each slot: slot removal sequence --> hsubs_outs, hsubs_ins
-  //  remove thread object
-  // release thread lock
-  // update subs. lists
-
-  cch_thread* pth = 0;
-  hashx<std::wstring, hashx<std::wstring, s_long> > hsubs_outs, hsubs_ins;
   try {
-    unity ku_thn = thn;
-    mst_semaphore ms(rses, thn);
-    pth = ms.p_thread(); if (!pth) { return -7; }
-    hangdet hd; while (true) { if (hd) { return -2; } int res = ms.m_th_acquire(); if (res < 0) { return -2; } if (res > 0) { break; } sleep_mcs(50); }
-
-    if (pth->b_disp)
+    std::wstring process_name;
+    if (1)
     {
-      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-      pth->b_disp = false;
-      rses.name_th_disp.clear();
+      critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+      if (_r_ths.ref().ses_state != 1) { return -3; }
+      process_name = _r_ths.ref().name_pr;
+      if (!_r_ths.ref().hg_threads.find(thread_name)) { return -7; }
     }
+    x._name_th.assign(thread_name.pd(), _t_wz(thread_name.n()));
+    x._name_pr = process_name;
 
-    for (s_long j = 0; j < pth->h_sl.n(); ++j)
-    {
-      try {
-        const unity& ku_sl = pth->h_sl(j)->k;
-        cref_t<cch_slot, dispatcher_mt>& r_sl = pth->h_sl(j)->v;
-
-        s_long deliv = 0;
-
-          // The following hash elem. removals do not fail.
-          //  cch_thread h_qs_*, cch_session hg_qs_disp, hg_lpai are consistent with cch_thread h_sl.
-        deliv = r_sl.ref().qs_delivery_type();
-        if (deliv == 3 || r_sl.ref().b_input_lpa())
-        {
-          critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-          if (deliv == 3) { rses.hg_qs_disp.remove(ku_sl); }
-          if (r_sl.ref().b_input_lpa()) { rses.hg_lpai.remove(ku_sl); }
-        }
-
-        if (1)
-        {
-          critsec_t<dispatcher_mt> __lock(10, -1, &r_sl._pnonc_u()->lkd); if (sizeof(__lock)) {}
-          try {
-            if (r_sl.ref().r_hsubs)
-            {
-              const hashx<unity, s_long>& hs_sl = r_sl.ref().r_hsubs.ref();
-              address _a; _a.set_addr_LP(thn, ku_sl);
-              if (hs_sl.n() && !_a.is_empty())
-              {
-                if (deliv) // r_sl is a qs slot
-                {
-                  std::wstring sla = _a.wstr_addr();
-                  for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs_ins[hs_sl(i)->k.vstr()][sla] = 0; }
-                }
-                else // r_sl may have subscriptions
-                {
-                  std::wstring sla = _a.wstr_addr();
-                    for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs_outs[sla][hs_sl(i)->k.vstr()] = 0; }
-                }
-              }
-            }
-          } catch (...) {}
-        }
-      } catch (...) {}
-    }
+    if (!x.mtrk_htracking.create_info(false)) { return -2; }
+    cref_t<t_htracking_proxy> htr; if (!htr.create0(1)) { return -2; }
+    x.mtrk_htracking.set_ref(htr);
 
     if (1)
     {
-      critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_ths); if (sizeof(__lock)) {}
-      rses.hg_ths.remove(ku_thn); // does not fail
+      critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths->lkd_disp_nprx); if (sizeof(__lock)) {}
+      x._r_ths = _r_ths;
+      x._r_ths->nprx += 1;
     }
+    return 1;
   } catch (...) { return -2; }
-
-  _s_update_subs_lists(rses, hsubs_ins, 1);
-  _s_update_subs_lists(rses, hsubs_outs, 2);
-
-  return 1;
 }
 
-dispatcher_mt::dispatcher_mt(const std::string& process_name, const unity& cfg) throw()
-  { try { new (this) dispatcher_mt(bsToWs(process_name), cfg); } catch (...) {} }
-dispatcher_mt::dispatcher_mt(const std::wstring& process_name, const unity& _cfg0) throw()
-{
-  if (!(_cfg0.isString() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return; }
-  unity _cfg1; try { if (_cfg0.isString()) { paramline().decode_tree(_cfg0.vstr(), _cfg1, 0x3a); } } catch (...) { return; }
-  const unity& cfg = _cfg0.isString() ? _cfg1 : _cfg0;
-
-  if (!_r_ths.create0(true)) { return; }
-    _r_ths._pnonc_u()->nprx += 1;
-
-  cch_session& rses = *_r_ths._pnonc_u();
-
-  bool b = true;
-  try { while (true) { // once
-    const unity kg_qsdt(L"__qsdt");
-    const unity kg_exitmode(L"__exitmode");
-    const unity kth_disp(L"disp");
-
-    if (!thread_proxy::pnchk(process_name)) { b = false; break; }
-    rses.name_pr = process_name;
 
 
-    if (1) { int e = +cfg / kg_exitmode / 1; if (!(e >= 0 && e <=2)) { b = false; break; } rses.exitmode = e; }
-    if (1) { meta::s_ll dt = +cfg / kg_qsdt / -1; if (!(dt >= -1)) { b = false; break; } rses.qsdt = dt; }
-
-
-      // Lock to make process name unique in the system.
-    std::string pnutf("bmdxdmt\t"); pnutf += wsToBsUtf8(process_name);
-    rses.gm.~critsec_gn(); new (&rses.gm) bmdx_shm::critsec_gn(pnutf.c_str());
-    if (!rses.gm.lock()) { b = false; break; }
-
-
-      // Initialize threads and slots.
-    thread_proxy::t_hsubs hsubs;
-    for (s_long i = cfg.assocl_first(); i != cfg.assocl_noel(); i = cfg.assocl_next(i))
-    {
-      std::wstring k_th = cfg.assocl_key(i).vstr();
-      if (!thread_proxy::thnchk(k_th)) { continue; }
-
-      const hashx<unity, cch_thread>::entry* e_th = 0;
-        if (rses.hg_ths.insert(k_th, &e_th) != 1) { b = false; break; }
-
-      const unity& th_cfg = cfg.assocl_c(i);
-      if (th_cfg.u_has(kth_disp, 6))
-      {
-        const unity& v = th_cfg[kth_disp];
-        if (!v.isBool() || (v.isBoolTrue() && rses.name_th_disp)) { b = false; break; }
-        if (v.isBoolTrue()) { if (!rses.name_th_disp.create1(true, k_th)) { b = false; break; } e_th->v.b_disp = true; }
-      }
-
-      if (thread_proxy::_s_add_slots_nl(rses, k_th, th_cfg, hsubs) != 1) { b = false; break; }
-    }
-    if (!b) { break; }
-
-    thread_proxy::_s_update_subs_lists(rses, hsubs, 4);
-
-    if (rses.qsdt >= 0) { if (!rses.tc_qsd.start_auto<thread_proxy::tc_autodelivery, cref_t<cch_session> >(_r_ths)) { b = false; break; } }
-
-    break;
-  } } catch (...) { b = false; }
-  if (1)
-  {
-    if (!b) 
-    { 
-      if (1)
-      {
-        critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_nprx); if (sizeof(__lock)) {}
-        rses.nprx -= 1; 
-      }
-      _r_ths.clear(); 
-      return; 
-    }
-    rses.ses_state = 1;
-  }
-}
-dispatcher_mt::~dispatcher_mt() throw()
-{
-  if (_r_ths)
-  {
-    cch_session& rses = *_r_ths._pnonc_u();
-    int e = rses.exitmode;
-    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_nprx); if (sizeof(__lock)) {}
-    rses.nprx -= 1;
-    if (e > 0 || rses.nprx <= 0) { rses.ses_state = 0; }
-  }
-  if (_r_ths)
-  {
-    cch_session& rses = *_r_ths._pnonc_u();
-    int e = rses.exitmode;
-    if (e == 2) { while (rses.nprx > 0) { sleep_mcs(50); } } // ~!!! NOTE this may hang if any of CPU threads holding proxy objects, had been forcefully terminated (maybe add timeout param. to cfg)
-    _r_ths.clear();
-  }
-}
-bool dispatcher_mt::is_valid() const throw() { return _r_ths; }
-bool dispatcher_mt::has_session() const throw() { return _r_ths && _r_ths.ref().ses_state == 1; }
+dispatcher_mt::dispatcher_mt(arrayref_t<char> process_name, const unity& cfg, s_long flags_ctor) throw()       { try { dispatcher_mt::thread_proxy::_s_disp_ctor(this, process_name.is_valid() ? bsToWs(process_name.pd(), process_name.n()) : L"", cfg, flags_ctor); } catch (...) {} }
+dispatcher_mt::dispatcher_mt(arrayref_t<wchar_t> process_name, const unity& cfg, s_long flags_ctor) throw()        { dispatcher_mt::thread_proxy::_s_disp_ctor(this, process_name, cfg, flags_ctor); }
+dispatcher_mt::~dispatcher_mt() throw()        { dispatcher_mt::thread_proxy::_s_disp_dtor(this); }
+bool dispatcher_mt::is_valid() const throw()        { return _r_ths; }
+bool dispatcher_mt::has_session() const throw()        { return _r_ths && _r_ths.ref().ses_state == 1; }
 void dispatcher_mt::end_session() throw()
 {  if (_r_ths)  {
     cch_session& rses = *_r_ths._pnonc_u();
-    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkm_nprx); if (sizeof(__lock)) {}
+    critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {}
     rses.ses_state = 0;
 } }
 bool dispatcher_mt::frqperm(s_long& f, bool b_get, bool b_set) const throw()
 {
   if (!has_session()) { return false; }
-  critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths._pnonc_u()->lkm_ths); if (sizeof(__lock)) {}
-  volatile s_long& x = _r_ths._pnonc_u()->frqperm; int x0 = x; if (b_set) { x = f; } if (b_get) { f = x0; }
+  critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths->lkd_disp_ths); if (sizeof(__lock)) {}
+  volatile s_long& x = _r_ths->frqperm; int x0 = x; if (b_set) { x = f; } if (b_get) { f = x0; }
   return true;
 }
-s_long dispatcher_mt::new_proxy(unity& dest, const std::wstring& _name_th) const throw() { return thread_proxy::_s_proxy_new(_r_ths, dest, _name_th); }
-s_long dispatcher_mt::new_proxy(unity& dest, const std::string& _name_th) const throw() { try { return thread_proxy::_s_proxy_new(_r_ths, dest, bsToWs(_name_th)); } catch (...) {} return -2; }
+s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<wchar_t> _name_th) const throw() { return thread_proxy::_s_proxy_new(_r_ths, dest, _name_th); }
+s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<char> _name_th) const throw() { if (!_name_th.is_valid()) { return -2; } try { return thread_proxy::_s_proxy_new(_r_ths, dest, bsToWs(_name_th.pd(), _name_th.n())); } catch (...) {} return -2; }
 
-s_long dispatcher_mt::request(s_long rt, unity& retval, const unity& args) throw()
-  { try { return thread_proxy::_s_request(_r_ths, rt, retval, args, std::wstring(), -1); } catch (...) { return -2; } }
+s_long dispatcher_mt::request(s_long rt, unity& retval, const unity& args, s_long flags) throw()
+  { try { return thread_proxy::_s_request(_r_ths, rt, retval, args, std::wstring(), -1, flags); } catch (...) { return -2; } }
 
 } // bmdx ns
 
+#else // !bmdx_part_dispatcher_mt
+  s_long cv_ff::cv_mget::Fmget_set_retvals(unity* phm, const cref_t<t_stringref>* patt, unity* pretmsg, cref_t<t_stringref>* retatt, s_long proc_flags) { return -2; }
 #endif // bmdx_part_dispatcher_mt
 
-#endif // bmdx_main_H
+#if defined(__clang__)
+  #pragma clang diagnostic pop
+#endif
+
+#endif // #ifndef __bmdx_main_impl_skip

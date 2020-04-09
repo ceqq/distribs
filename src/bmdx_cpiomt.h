@@ -1,36 +1,46 @@
-// BMDX library 1.1 RELEASE for desktop & mobile platforms
+// BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-08-12
+//  Cross-platform input/output, IPC, multithreading. Standalone header.
+// rev. 2020-04-09
 //
-// Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
+//
+// Copyright 2004-2020 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // The Software is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the Software or the use or other dealings in the Software.
 // https://opensource.org/licenses/MIT
 
-// bmdx_cpiomt.h: cross-platform tools for i/o and multithreading (standalone header).
 
-// Features:
+// In bmdx_cpiomt.h:
 //
-//    Automatic definition for 32, 64-bit signed integers.    (bmdx_meta::  s_long, u_long, s_ll, u_ll)
-//    Read/write data words between integer variable and memory.    (bmdx_str::words::  le2 le4 le8 .. be8, set_le2 .. set_be8)
-//    Conversions between strings and numbers. Fixed-length string.    (bmdx_str::conv::  str_from_*, ntocs, ntows, str2i, str2f; bmdx_str::  flstr_t)
+//    Automatic stdint-independent definition for 32, 64-bit signed integers.    (bmdx_meta::  s_long, u_long, s_ll, u_ll)
+//    Read/write BE, LE data words from/into memory.    (bmdx_str::words::  le2 le4 le8 .. be8, set_le2 .. set_be8)
+//    Conversions between strings and numbers.    (bmdx_str::conv::  str_from_*, ntocs, ntows, str2i, str2f)
+//    Fixed-length string.    (bmdx_str::  flstr_t)
 //
 //    Timer with near-microseconds resolution.    (bmdx::  clock_ms)
 //    Sleep with near-microseconds resolution.    (bmdx::  sleep_mcs)
 //    Recursive mutex.    (bmdx::  struct critsec_t)
-//    Unified thread control. Priorities, high-level data passing to thread etc.    (bmdx::  struct threadctl)
+//    Unified thread control. Priorities, high-level data passing to thread, forced termination etc.    (bmdx::  struct threadctl)
 //    Parallel task processing helper.     (bmdx::  struct multithread)
 //    Simple process launcher. Execute, wait, check running state.    (bmdx::  struct processctl)
-//    Const. reference object with threadsafe setting and copying, + unsafe non-const access.    (bmdx::  struct cref_t)
+//    Thread-safe smart pointer with customizable allocations, embedded helper objects and events.    (bmdx::  struct cref_t)
 //
-//    Basic unbuffered console i/o.    (bmdx::  struct console_io)
+//    Basic unbuffered console input.    (bmdx::  struct console_io)
 //    Bytewise file i/o + save/load whole file as string.    (bmdx::  struct file_io)
 //
-//    Experimental features: shared memory object, global critical section, non-blocking queue of bytes,
-//      IPC queue of string messages.     (bmdx_shm::  shmobj2s_t, critsec_gn, rfifo_nbl11, shmfifo_s)
+//    Cross-module arrays and non-blocking queues:
+//      bmdx::  carray_t, cpparray_t, carray_r_t, arrayref_t
+//      bmdx::  cringbuf1_t, cppringbuf1_t, vnnqueue_t
+//
+//    IPC helpers (namespace bmdx_shm):
+//      global named critical section    (struct critsec_gn),
+//      container template for shared memory object with locks    (struct shmobj2s_t),
+//      simple non-blocking queue of bytes at the given memory location   (struct rfifo_nbl11),
+//      global named queue of string messages   (struct shmqueue_s).
 
 #ifndef bmdx_cpiomt_H
 #define bmdx_cpiomt_H
@@ -91,12 +101,15 @@ namespace bmdx_meta
   template <int n, class t1=nothing, class t2=nothing, class t3=nothing, class t4=nothing, class t5=nothing> struct find_size_n { typedef typename if_t<sizeof(t1) == n, t1, typename find_size_n<n, t2, t3, t4, nothing>::result>::result result; };
   template <int n> struct find_size_n<n> { typedef nothing result; };
 
-    // 32-bit, 64-bit integers.
+    // 16, 32, 64-bit integers.
+  typedef bmdx_meta::find_size_n<2, signed int, signed short, wchar_t>::result s_short;
   typedef bmdx_meta::find_size_n<4, signed long int, signed int, signed short>::result s_long;
   typedef bmdx_meta::find_size_n<4, unsigned long int, unsigned int, unsigned short>::result u_long;
   typedef bmdx_meta::find_size_n<8, signed long long int, signed long int, signed int>::result s_ll;
   typedef bmdx_meta::find_size_n<8, unsigned long long int, unsigned long int, unsigned int>::result u_ll;
 
+    // Signed integer, large enough to hold linear pointers difference.
+  typedef if_t<(sizeof(void*) > 4), s_ll, s_long>::result t_pdiff;
 }
 
 #undef _s_long
@@ -104,7 +117,7 @@ namespace bmdx_meta
 #undef _u_ll
 #ifdef yk_c_vecm_hashx_H
   #define _s_long ::yk_c::s_long
-  #define _s_ll ::yk_c::meta::s_ll
+  #define _s_ll ::bmdx_meta::s_ll
 #else
   #define _s_long ::bmdx_meta::s_long
   #define _s_ll ::bmdx_meta::s_ll
@@ -145,29 +158,137 @@ namespace bmdx_str
 {
   namespace words
   {
+      // NOTE Values are treated as signed integer.
       // NOTE pos is the offset in bytes from p.
     static inline _s_ll le8(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_ll x = _s_ll(*pc++); x |= _s_ll(*pc++) << 8; x |= _s_ll(*pc++) << 16; x |= _s_ll(*pc++) << 24; x |= _s_ll(*pc++) << 32; x |= _s_ll(*pc++) << 40; x |= _s_ll(*pc++) << 48; x |= _s_ll(*pc) << 56; return x; }
     static inline _s_long le4(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc++) << 8; x |= _s_long(*pc++) << 16; x |= _s_long(*pc) << 24; return x; }
-    static inline _s_long le2(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc) << 8; return x; }
+    static inline _s_long le2(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc) << 8; return (x << 16) >> 16; }
     static inline void set_le8(void* p, _s_long pos, _s_ll x) throw() { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc = char(x);  }
     static inline void set_le4(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc = char(x);  }
     static inline void set_le2(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc = char(x);  }
 
+      // NOTE Values are treated as signed integer.
       // NOTE pos is the offset in bytes from p.
     static inline _s_ll be8(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 7; _s_ll x = _s_ll(*pc--); x |= _s_ll(*pc--) << 8; x |= _s_ll(*pc--) << 16; x |= _s_ll(*pc--) << 24; x |= _s_ll(*pc--) << 32; x |= _s_ll(*pc--) << 40; x |= _s_ll(*pc--) << 48; x |= _s_ll(*pc) << 56; return x; }
     static inline _s_long be4(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 3; _s_long x = _s_long(*pc--); x |= _s_long(*pc--) << 8; x |= _s_long(*pc--) << 16; x |= _s_long(*pc) << 24; return x; }
-    static inline _s_long be2(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 1; _s_long x = _s_long(*pc--); x |= _s_long(*pc) << 8; return x; }
+    static inline _s_long be2(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 1; _s_long x = _s_long(*pc--); x |= _s_long(*pc) << 8; return (x << 16) >> 16; }
     static inline void set_be8(void* p, _s_long pos, _s_ll x) throw() { _yk_reg char* pc = ((char*)p) + pos + 7; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
     static inline void set_be4(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos + 3; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
     static inline void set_be2(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos + 1; *pc-- = char(x); x >>= 8; *pc = char(x);  }
 
-    template<class T> static inline void swap_bytes(T& a, T& b) { enum { n = sizeof(T)  }; if (!n || &a == &b) { return; } _s_ll c[(n + 7) / 8]; std::memcpy(&c[0], &a, n); std::memcpy(&a, &b, n); std::memcpy(&b, &c[0], n); }
-  }
+    #undef __bmdx_null_pchar
+    #define __bmdx_null_pchar ((char*)1 - 1)
+    template<class T, class Aux = bmdx_meta::nothing, class _ = yk_c::__vecm_tu_selector> struct memmove_t
+    {
+      typedef bmdx_meta::t_pdiff t_pdiff;
+      typedef _s_ll s_ll;
+      typedef _s_long s_long;
+      static inline void sf_memmove(void* dest_, const void* src_, t_pdiff n) throw()
+      {
+        if (dest_ == src_ || n <= 0) { return; }
+        char* s = (char*)src_;
+        char* d = (char*)dest_;
+        if (s > d)
+        {
+          t_pdiff als = (s - __bmdx_null_pchar) & 7;
+          t_pdiff ald = (d - __bmdx_null_pchar) & 7;
+          char* const d3 = d + n;
+          if (als == ald)
+          {
+            typedef s_ll word; enum { shift = 3 };
+            if (als) { char* d2 = d + sizeof(word) - als; if (d2 > d3) { d2 = d3; } do { *d++ = *s++; } while (d != d2); }
+            if (1) { word* d2 = (word*)d + ((d3 - d) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *qd++ = *qs++; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+            while (d != d3) { *d++ = *s++; }
+            return;
+          }
+          if (!((als ^ ald) & 3))
+          {
+            als &= 3;
+            typedef s_long word; enum { shift = 2 };
+            if (als) { char* d2 = d + sizeof(word) - als; if (d2 > d3) { d2 = d3; } do { *d++ = *s++; } while (d != d2); }
+            if (1) { word* d2 = (word*)d + ((d3 - d) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *qd++ = *qs++; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+            while (d != d3) { *d++ = *s++; }
+            return;
+          }
+          if (0)
+          {
+            typedef s_ll word; enum { shift = 3 };
+            if (ald) { char* d2 = d + sizeof(word) - ald; if (d2 > d3) { d2 = d3; } do { *d++ = *s++; } while (d != d2); }
+            if (1) { word* d2 = (word*)d + ((d3 - d) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *qd++ = *qs++; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+            while (d != d3) { *d++ = *s++; }
+            return;
+          }
+        }
+        else
+        {
+          char* const d0 = d; d += n; s += n;
+          t_pdiff als = (s - __bmdx_null_pchar) & 7;
+          t_pdiff ald = (d - __bmdx_null_pchar) & 7;
+          if (als == ald)
+          {
+            typedef s_ll word; enum { shift = 3 };
+            if (als) { char* d2 = d - (als < n ? als : n); do { *--d = *--s; } while (d != d2); }
+            if (d == d0) { return; }
+            if (1) { word* d2 = (word*)d - ((d - d0) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *--qd = *--qs; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+            while (d != d0) { *--d = *--s; }
+            return;
+          }
+          if (!((als ^ ald) & 3))
+          {
+            als &= 3;
+            typedef s_long word; enum { shift = 2 };
+            if (als) { char* d2 = d - (als < n ? als : n); do { *--d = *--s; } while (d != d2); }
+            if (d == d0) { return; }
+            if (1) { word* d2 = (word*)d - ((d - d0) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *--qd = *--qs; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+            while (d != d0) { *--d = *--s; }
+            return;
+          }
+          if (0)
+          {
+            typedef s_ll word; enum { shift = 3 };
+            if (ald) { char* d2 = d - (ald < n ? ald : n); do { *--d = *--s; } while (d != d2); }
+            if (d == d0) { return; }
+            if (d - s >= 8) { word* d2 = (word*)d - ((d - d0) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *--qd = *--qs; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+            while (d != d0) { *--d = *--s; }
+            return;
+          }
+        }
+        std::memmove(dest_, src_, n);
+        return;
+      }
+
+        // pchs: accumulator (the calculated checksum will be added to *pchs.
+      static void sf_memcpy(void* pdest_, const void* psrc_, _s_ll n, _s_long* pchs = 0)
+      {
+        if (n <= 0) { return; }
+        if (pchs)
+        {
+          typedef _u_ll word; enum { shift = 3 };
+          typedef const word* pcword;
+          typedef const unsigned char* pcchar;
+          pcchar s = (pcchar)psrc_;
+          pcchar const s3 = s + n;
+          const t_pdiff als = (s - (pcchar)__bmdx_null_pchar) & 7;
+          if (als) { _s_long chs = 0; pcchar s2 = s + sizeof(word) - als; if (s2 > s3) { s2 = s3; } do { chs += *s++; } while (s != s2); *pchs += chs; }
+          if (1) { pcword s2 = (pcword)s + ((s3 - s) >> shift); if ((pcword)s != s2) { _yk_reg pcword qs = (pcword)s;_yk_reg _s_long chs = 0; do { _yk_reg word w = *qs; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; chs += (unsigned char)w; w >>= 8; } while (++qs != s2); *pchs += chs; s = (pcchar)qs; } }
+          if (1) { _s_long chs = 0; while (s != s3) { chs += *s++; } *pchs += chs; }
+        }
+        #if 1
+          sf_memmove(pdest_, psrc_, t_pdiff(n));
+        #else
+          std::memcpy(pdest_, psrc_, size_t(n));
+        #endif
+      }
+    };
+
+     template<class T> static inline void swap_bytes(T& a, T& b) { enum { n = sizeof(T)  }; if (!n || &a == &b) { return; } _s_ll c[(n + 7) / 8]; memmove_t<char>::sf_memcpy(&c[0], &a, n); memmove_t<char>::sf_memcpy(&a, &b, n); memmove_t<char>::sf_memcpy(&b, &c[0], n); }
+ }
 
   namespace conv
   {
     struct exc_str2i : std::exception { const char* what() const throw() { return "bmdx_str::str2i"; } };
     struct exc_str2f : std::exception { const char* what() const throw() { return "bmdx_str::str2f"; } };
+    struct exc_conv_ws : std::exception { enum { nmax = 80 }; char msg[nmax ]; const char* what() const throw() { return msg; } exc_conv_ws(const char* s1, const char* s2 = 0) { _s_long n = nmax - 1; char* p = msg; if (s1) { while (*s1 && n > 0) { *p++ = *s1++; } } if (s2) { while (*s2 && n > 0) { *p++ = *s2++; } } *p = '\0'; } };
 
     template<class _ = yk_c::__vecm_tu_selector>
     struct _bmdx_str_impl
@@ -178,6 +299,8 @@ namespace bmdx_str
       static double str2f(const wchar_t* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans);
       static _s_ll str2i(const char* x, _s_ll xlen, _s_ll dflt, bool no_exc);
       static double str2f(const char* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans);
+      static std::string _wsbs_utf8(const wchar_t* ps, _s_ll n);
+      static std::wstring _bsws_utf8(const char* ps, _s_ll n);
     };
 
     static inline bool is_finite(double x)
@@ -413,12 +536,82 @@ c = x[pos]; if (c == '.') { ++pos; while (pos < xlen) { c = x[pos]; if (c >= '0'
 double z(0.); do { if (bf) { break; } if (nq1 > 0) { if (nq2 > 0) { const _s_ll nprec = 15; _s_ll m(1); for (_s_ll i = 0; i < nq2; ++i) { m *= 10; } _s_ll nd = nq1 + nq2; if (nd >= nprec) { z = (q1 * m + q2 + 0.0) / m; } else { _s_ll m2 = 1; for (_s_ll i = nd; i < nprec; ++i) { m2 *= 10; } z = ((q1 * m + q2) * m2 + 0.1) / (m * m2); } } else { z = double(q1); } } if (b_neg1) { z = -z; } if (q3) { if (b_neg3) { q3 = -q3; } if (q3 >= 280) { z *= 1.e280; q3 -= 280; if (q3 > 50) { bf = true; break; } } else if (q3 >= -280) { } else { z *= 1.e-280; q3 += 280; if (q3 < -50) { z = 0.; break; } } z *= std::pow(10., int(q3)); } } while (false);
 if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     }
+
+    template<class _>
+    std::string _bmdx_str_impl<_>::_wsbs_utf8(const wchar_t* ps, _s_ll n)
+    {
+      try {
+        if (!ps) { throw exc_conv_ws("_wsbs_utf8.3"); }
+        if (n < 0) { n = 0; const wchar_t* p = ps; while (*p++) { ++n; } }
+        std::string s; if (n <= 0) { return s; }
+        _s_ll nrsv = n; s.reserve(size_t(nrsv));
+        for (_s_ll i = 0; i < n; ++i)
+        {
+          _s_long q = _s_long(ps[i]) & 0xffff;
+          if (q >= 0xd800 && q < 0xe000)
+          {
+            if (q >= 0xdc00 || i + 1 >= n) { q = L'?'; }
+            else
+            {
+              _s_long q2 = _s_long(ps[i + 1]) & 0xffff;
+              if (q2 >= 0xdc00 && q2 < 0xe000) { q = (((q - 0xd800) << 10) | (q2 - 0xdc00)) + 0x10000; ++i; }
+                else { q = L'?'; }
+            }
+          }
+          if (q <= 0x7f) { s += char(q); }
+            else if (q <= 0x7ff) { s += char((q >> 6) | 0xc0); s += char((q & 0x3f) | 0x80); }
+            else if (q <= 0xffff) { s += char((q >> 12) | 0xe0); s += char(((q >> 6) & 0x3f) | 0x80); s += char((q & 0x3f) | 0x80); }
+            else { s += char((q >> 18) | 0xf0); s += char(((q >> 12) & 0x3f) | 0x80); s += char(((q >> 6) & 0x3f) | 0x80); s += char((q & 0x3f) | 0x80); }
+          if ((i & 0xfff) == 0) { _s_ll n2 = _s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(size_t(nrsv)); } }
+        }
+        return s;
+      }
+      catch (exc_conv_ws&) { throw; }
+      catch (const std::exception& e) { throw exc_conv_ws("_wsbs_utf8.1", e.what()); }
+      catch (...) { throw exc_conv_ws("_wsbs_utf8.2"); }
+    }
+
+    template<class _>
+    std::wstring _bmdx_str_impl<_>::_bsws_utf8(const char* ps, _s_ll n)
+    {
+      try {
+        if (!ps) { throw exc_conv_ws("_bsws_utf8.3"); }
+        if (n < 0) { n = 0; const char* p = ps; while (*p++) { ++n; } }
+        std::wstring s; if (n <= 0) { return s; }
+        _s_ll nrsv = n / 2; s.reserve(size_t(nrsv));
+        _s_ll i = 0, rsvi = 0;
+        while (i < n)
+        {
+          unsigned char c = ps[i];
+          if ((c & 0x80) == 0) { s += wchar_t(c); ++i; }
+          else
+          {
+            _s_long nbchr = 0;
+            while (((c << nbchr) & 0xc0) == 0xc0) { ++nbchr; }
+            if (nbchr >= 1 && nbchr <= 5 && i + nbchr < n)
+            {
+              _s_long q(c & (0x3f >> nbchr)); ++i;
+              do { c = ps[i]; if ((c & 0xc0) != 0x80) { q = L'?'; break; } q = (q << 6) | (c & 0x3f); ++i; } while (--nbchr);
+              if (q > 0x10ffff) { s += L'?'; }
+                else if (q >= 0x10000) { q -= 0x10000; s += wchar_t(0xd800 | (q >> 10)); s += wchar_t(0xdc00 | (q & 0x3ff)); }
+                else { s += wchar_t(q); }
+            }
+            else { s += L'?'; ++i; }
+          }
+          if (i - rsvi > 0xfff) { rsvi = i; _s_ll n2 = _s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(size_t(nrsv)); } }
+        }
+        return s;
+      }
+      catch (exc_conv_ws&) { throw; }
+      catch (const std::exception& e) { throw exc_conv_ws("_bsws_utf8.1", e.what()); }
+      catch (...) { throw exc_conv_ws("_bsws_utf8.2"); }
+    }
   }
 
 
 
     // Fixed-length string of char.
-    //    Automatic conversion from std string, wstring, integer types, floating-point types.
+    //    Automatic conversion from std::string, std::wstring, integer types, floating-point types.
     //    Min., max. length: 4, 2^20 - 1.
   template<_s_long nmax_>
   struct flstr_t
@@ -459,6 +652,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     _s_long is_empty() const throw() { return length() == 0; }
     _s_long res() const throw() { return _nr >> _sh_res; }
     const char* c_str() const throw() { return _x; }
+    const char* pd() const throw() { return _x; }
     _s_long type() const throw() { return 0; }
 
       // If n >= 0, chars [pos0..min(pos0+n, length())) are returned.
@@ -516,19 +710,19 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     char& operator[] (_s_long i) { return _x[i]; }
     const char& operator[] (_s_long i) const { return _x[i]; }
 
-    bool operator == (const t_string& s) const throw()        { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    bool operator < (const t_string& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    bool operator <= (const t_string& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
-    bool operator != (const t_string& s) const throw()        { return !operator==(s); }
-    bool operator > (const t_string& s) const throw()        { return !operator<(s); }
-    bool operator >= (const t_string& s) const throw()        { return !operator<=(s); }
+    bool operator == (const t_string& s) const throw()    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
+    bool operator < (const t_string& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    bool operator <= (const t_string& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    bool operator != (const t_string& s) const throw()    { return !operator==(s); }
+    bool operator > (const t_string& s) const throw()    { return !operator<(s); }
+    bool operator >= (const t_string& s) const throw()    { return !operator<=(s); }
 
-    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const throw()        { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const throw()        { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
-    template<_s_long n2> bool operator != (const flstr_t<n2>& s) const throw()        { return !operator==(s); }
-    template<_s_long n2> bool operator > (const flstr_t<n2>& s) const throw()        { return !operator<(s); }
-    template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const throw()        { return !operator<=(s); }
+    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const throw()    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
+    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    template<_s_long n2> bool operator != (const flstr_t<n2>& s) const throw()    { return !operator==(s); }
+    template<_s_long n2> bool operator > (const flstr_t<n2>& s) const throw()    { return !operator<(s); }
+    template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const throw()    { return !operator<=(s); }
 
     template<class T> t_string& operator << (const T& x) { *this += x; return *this; }
 
@@ -583,58 +777,58 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     template<_s_long nmax2> t_string operator + (const flstr_t<nmax2>& s) throw() { t_string s2(*this); s2 += s; return s2; }
     template<_s_long nmax2> t_string& operator = (const flstr_t<nmax2>& s) throw() { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
 
-    private:
-      _s_long _nr; char _x[nmax_c + 1];
-      inline void _copy_u(const char* buf, char* dest, _s_long n) { while (n > 0) { *dest++ = *buf++; --n; } }
-        // Copies <= nc chars., stops on null character (it's not copied).
-        //  Returns num. of characters copied. Num. < nmax means "null character is reached".
-      inline _s_long _copy_le_u(const char* buf, char* dest, _s_long nc) { _s_long n = 0; while (nc > 0) { char c = *buf++; if (!c) { break; } *dest++ = c; ++n; --nc; } return n; }
-      inline void _set_u(char c, char* dest, _s_long n) { while (n > 0) { *dest++ = c; --n; } }
-      inline void _set_end_u(_s_long n) { _x[n] = 0; _nr &= ~_s_long(_m_size); _nr |= n; }
-      inline void _set_res_u(_s_long x) throw() { _nr &= _m_size; _nr |= (x << _sh_res); }
-        // 1: success, 0: partially copied, -1: string is full, cannot append, -2: invalid ps, nsrc.
-      _s_long _append_s(const char* ps, _s_ll nsrc = -1) throw()
+  private:
+    _s_long _nr; char _x[nmax_c + 1];
+    inline void _copy_u(const char* buf, char* dest, _s_long n) { while (n > 0) { *dest++ = *buf++; --n; } }
+      // Copies <= nc chars., stops on null character (it's not copied).
+      //  Returns num. of characters copied. Num. < nmax means "null character is reached".
+    inline _s_long _copy_le_u(const char* buf, char* dest, _s_long nc) { _s_long n = 0; while (nc > 0) { char c = *buf++; if (!c) { break; } *dest++ = c; ++n; --nc; } return n; }
+    inline void _set_u(char c, char* dest, _s_long n) { while (n > 0) { *dest++ = c; --n; } }
+    inline void _set_end_u(_s_long n) { _x[n] = 0; _nr &= ~_s_long(_m_size); _nr |= n; }
+    inline void _set_res_u(_s_long x) throw() { _nr &= _m_size; _nr |= (x << _sh_res); }
+      // 1: success, 0: partially copied, -1: string is full, cannot append, -2: invalid ps, nsrc.
+    _s_long _append_s(const char* ps, _s_ll nsrc = -1) throw()
+    {
+      if (!(ps && nsrc >= -1)) { return -2; }
+      _s_long ncmax = nmax() - length(); if (nsrc > 0 && ncmax <= 0) { return -1; }
+      if (nsrc >= 0) { bool b_part = nsrc > ncmax; if (b_part) { nsrc = ncmax; } _copy_u(ps, &_x[length()], _s_long(nsrc)); _set_end_u(length() + _s_long(nsrc)); return b_part ? 0 : 1; }
+        else { _s_long n = _copy_le_u(ps, &_x[length()], ncmax + 1); if (n == ncmax + 1) { _set_end_u(nmax()); return 0; } else { _set_end_u(length() + n); return 1; } }
+    }
+      // 1: success, 0: partially copied, -1: string is full, cannot append, -2: invalid ps, nsrc.
+    inline _s_long _append_wcs(const wchar_t* ps, _s_ll nsrc = -1)
+    {
+      _s_long res; _s_ll pos = 0;
+      do { res = _append_wc(ps, pos, nsrc); } while (res == 1);
+      if (res == 0) { return 1; }
+      if (res == -1 && pos > 0) { return 0; }
+      return res;
+    }
+      // nsrc: >=0 - num. of characters available in the input, starting from ps. -1 - input is 0-terminated.
+      // 1: success, 0: end of input, -1: string is full, cannot append, -2: invalid ps, pos, nsrc.
+    inline _s_long _append_wc(const wchar_t* ps, _s_ll& pos, _s_ll nsrc)
+    {
+      if (!(ps && nsrc >= -1 && pos >= 0)) { return -2; } const wchar_t* p2 = ps + pos;
+      if (nsrc >= 0 && pos >= nsrc) { return 0; }
+      _s_long q = p2[0] & 0xffff; if (nsrc == -1 && q == 0) { return 0; }
+      _s_ll dpos = 1;
+      if (q >= 0xd800 && q < 0xe000)
       {
-        if (!(ps && nsrc >= -1)) { return -2; }
-        _s_long ncmax = nmax() - length(); if (nsrc > 0 && ncmax <= 0) { return -1; }
-        if (nsrc >= 0) { bool b_part = nsrc > ncmax; if (b_part) { nsrc = ncmax; } _copy_u(ps, &_x[length()], _s_long(nsrc)); _set_end_u(length() + _s_long(nsrc)); return b_part ? 0 : 1; }
-          else { _s_long n = _copy_le_u(ps, &_x[length()], ncmax + 1); if (n == ncmax + 1) { _set_end_u(nmax()); return 0; } else { _set_end_u(length() + n); return 1; } }
+        if (q >= 0xdc00 || (nsrc == -1 && p2[1] == 0) || (nsrc >= 0 && pos + 1 >= nsrc)) { q = L'?'; }
+          else { _s_long q2 = _s_long(p2[1]); if (q2 >= 0xdc00 && q2 < 0xe000) { q = (((q - 0xd800) << 10) | (q2 - 0xdc00)) + 0x10000; dpos += 1; } else { q = L'?'; } }
       }
-        // 1: success, 0: partially copied, -1: string is full, cannot append, -2: invalid ps, nsrc.
-      inline _s_long _append_wcs(const wchar_t* ps, _s_ll nsrc = -1)
-      {
-        _s_long res; _s_ll pos = 0;
-        do { res = _append_wc(ps, pos, nsrc); } while (res == 1);
-        if (res == 0) { return 1; }
-        if (res == -1 && pos > 0) { return 0; }
-        return res;
-      }
-        // nsrc: >=0 - num. of characters available in the input, starting from ps. -1 - input is 0-terminated.
-        // 1: success, 0: end of input, -1: string is full, cannot append, -2: invalid ps, pos, nsrc.
-      inline _s_long _append_wc(const wchar_t* ps, _s_ll& pos, _s_ll nsrc)
-      {
-        if (!(ps && nsrc >= -1 && pos >= 0)) { return -2; } const wchar_t* p2 = ps + pos;
-        if (nsrc >= 0 && pos >= nsrc) { return 0; }
-        _s_long q = p2[0] & 0xffff; if (nsrc == -1 && q == 0) { return 0; }
-        _s_ll dpos = 1;
-        if (q >= 0xd800 && q < 0xe000)
-        {
-          if (q >= 0xdc00 || (nsrc == -1 && p2[1] == 0) || (nsrc >= 0 && pos + 1 >= nsrc)) { q = L'?'; }
-            else { _s_long q2 = _s_long(p2[1]); if (q2 >= 0xdc00 && q2 < 0xe000) { q = (((q - 0xd800) << 10) | (q2 - 0xdc00)) + 0x10000; dpos += 1; } else { q = L'?'; } }
-        }
-        _s_long n = length();
-        _s_long nmdest = nmax() - n;
-        if (q <= 0x7f) { if (nmdest < 1) { return -1; } }
-          else if (q <= 0x7ff) { if (nmdest < 2) { return -1; } }
-          else if (q <= 0xffff) { if (nmdest < 3) { return -1; } }
-          else { if (nmdest < 4) { return -1; } }
-        if (q <= 0x7f) { _x[n] = char(q); _set_end_u(n + 1); }
-          else if (q <= 0x7ff) { _x[n] = char((q >> 6) | 0xc0); _x[n + 1] = char((q & 0x3f) | 0x80); _set_end_u(n + 2); }
-          else if (q <= 0xffff) { _x[n] = char((q >> 12) | 0xe0); _x[n + 1] = char(((q >> 6) & 0x3f) | 0x80); _x[n + 2] = char((q & 0x3f) | 0x80); _set_end_u(n + 3); }
-          else { _x[n] = char((q >> 18) | 0xf0); _x[n + 1] = char(((q >> 12) & 0x3f) | 0x80); _x[n + 2] = char(((q >> 6) & 0x3f) | 0x80); _x[n + 3] = char((q & 0x3f) | 0x80); _set_end_u(n + 4); }
-        pos += dpos;
-        return 1;
-      }
+      _s_long n = length();
+      _s_long nmdest = nmax() - n;
+      if (q <= 0x7f) { if (nmdest < 1) { return -1; } }
+        else if (q <= 0x7ff) { if (nmdest < 2) { return -1; } }
+        else if (q <= 0xffff) { if (nmdest < 3) { return -1; } }
+        else { if (nmdest < 4) { return -1; } }
+      if (q <= 0x7f) { _x[n] = char(q); _set_end_u(n + 1); }
+        else if (q <= 0x7ff) { _x[n] = char((q >> 6) | 0xc0); _x[n + 1] = char((q & 0x3f) | 0x80); _set_end_u(n + 2); }
+        else if (q <= 0xffff) { _x[n] = char((q >> 12) | 0xe0); _x[n + 1] = char(((q >> 6) & 0x3f) | 0x80); _x[n + 2] = char((q & 0x3f) | 0x80); _set_end_u(n + 3); }
+        else { _x[n] = char((q >> 18) | 0xf0); _x[n + 1] = char(((q >> 12) & 0x3f) | 0x80); _x[n + 2] = char(((q >> 6) & 0x3f) | 0x80); _x[n + 3] = char((q & 0x3f) | 0x80); _set_end_u(n + 4); }
+      pos += dpos;
+      return 1;
+    }
   };
 
   template<_s_long nmax_> inline flstr_t<nmax_> operator + (const char* ps, const flstr_t<nmax_>& s2) throw() { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
@@ -665,7 +859,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       //        b) x == 0: '0'.
       //        c) x < 0: '-'.
       //    0 - nchars == 0.
-      //    -1 - invlaid input parameter (buf == 0, nchars < 0).
+      //    -1 - invalid input parameter (buf == 0, nchars < 0).
     static inline _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed = true) throw() { return _bmdx_str_impl<>::str_from_s_ll(x, buf, nchars, b_signed); }
 
       // ndmmax (max. num. of digits in mantissa) is limited to 1..14.
@@ -678,7 +872,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       //    >=2 - success.
       //    1 - string representation is longer than nchars, so only sign is extracted: buf[0] == '+', '0', or '-'.
       //    0 - nchars == 0.
-      //    -1 - invlaid input parameter (buf == 0, nchars < 0, x is not finite with b_nans == false).
+      //    -1 - invalid input parameter (buf == 0, nchars < 0, x is not finite with b_nans == false).
     static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw() { return _bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax, b_nans); }
 
       // Converts string to number. On failure, returns dflt, or (if no_exc == false) generates exc_str2i.
@@ -695,7 +889,56 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     static inline double strn2f(const wchar_t* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
     static inline double str2f(const std::string& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc, b_nans); }
     static inline double strn2f(const char* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
+
+      // Converts UTF-16 string to UTF-8 string.
+      //  n < 0: autodetect x length based on null char.
+    static inline std::string wsbs_utf8(const std::wstring& x) { return bmdx_str::conv::_bmdx_str_impl<>::_wsbs_utf8(x.c_str(), x.length()); }
+    static inline std::string wsbs_utf8(const wchar_t* x, _s_ll n = -1 ) { return bmdx_str::conv::_bmdx_str_impl<>::_wsbs_utf8(x, n); }
+
+      // Converts UTF-8 string to UTF-16 string.
+      //  n < 0: autodetect x length based on null char.
+    static inline std::wstring bsws_utf8(const std::string& x) { return bmdx_str::conv::_bmdx_str_impl<>::_bsws_utf8(x.c_str(), x.length()); }
+    static inline std::wstring bsws_utf8(const char* x, _s_ll n = -1) { return bmdx_str::conv::_bmdx_str_impl<>::_bsws_utf8(x, n); }
   } }
+}
+
+namespace bmdx_minmax
+{
+  inline _s_ll myllmax(_s_ll a, _s_ll b) { return a > b ? a : b; }
+  inline _s_ll myllmin(_s_ll a, _s_ll b) { return a < b ? a : b; }
+  inline _s_ll myllmax(_s_ll a, _s_ll b, _s_ll c) { return myllmax(a, myllmax(b, c)); }
+  inline _s_ll myllmin(_s_ll a, _s_ll b, _s_ll c) { return myllmin(a, myllmin(b, c)); }
+  inline _s_ll myllmax(_s_ll a, _s_ll b, _s_ll c, _s_ll d) { return myllmax(myllmax(a, b), myllmax(c, d)); }
+  inline _s_ll myllmin(_s_ll a, _s_ll b, _s_ll c, _s_ll d) { return myllmin(myllmin(a, b), myllmin(c, d)); }
+  inline _s_ll myllrange(_s_ll x, _s_ll a, _s_ll b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline _s_ll myllrange_lb(_s_ll x, _s_ll a, _s_ll b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
+
+  inline _s_long mylmax(_s_long a, _s_long b) { return a > b ? a : b; }
+  inline _s_long mylmin(_s_long a, _s_long b) { return a < b ? a : b; }
+  inline _s_long mylmax(_s_long a, _s_long b, _s_long c) { return mylmax(a, mylmax(b, c)); }
+  inline _s_long mylmin(_s_long a, _s_long b, _s_long c) { return mylmin(a, mylmin(b, c)); }
+  inline _s_long mylmax(_s_long a, _s_long b, _s_long c, _s_long d) { return mylmax(mylmax(a, b), mylmax(c, d)); }
+  inline _s_long mylmin(_s_long a, _s_long b, _s_long c, _s_long d) { return mylmin(mylmin(a, b), mylmin(c, d)); }
+  inline _s_long mylrange(_s_long x, _s_long a, _s_long b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline _s_long mylrange_lb(_s_long x, _s_long a, _s_long b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
+
+  inline double myffmax(double a, double b) { return a > b ? a : b; }
+  inline double myffmin(double a, double b) { return a < b ? a : b; }
+  inline double myffmax(double a, double b, double c) { return myffmax(a, myffmax(b, c)); }
+  inline double myffmin(double a, double b, double c) { return myffmin(a, myffmin(b, c)); }
+  inline double myffmax(double a, double b, double c, double d) { return myffmax(myffmax(a, b), myffmax(c, d)); }
+  inline double myffmin(double a, double b, double c, double d) { return myffmin(myffmin(a, b), myffmin(c, d)); }
+  inline double myffrange(double x, double a, double b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline double myffrange_lb(double x, double a, double b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
+
+  inline float myfmax(float a, float b) { return a > b ? a : b; }
+  inline float myfmin(float a, float b) { return a < b ? a : b; }
+  inline float myfmax(float a, float b, float c) { return myfmax(a, myfmax(b, c)); }
+  inline float myfmin(float a, float b, float c) { return myfmin(a, myfmin(b, c)); }
+  inline float myfmax(float a, float b, float c, float d) { return myfmax(myfmax(a, b), myfmax(c, d)); }
+  inline float myfmin(float a, float b, float c, float d) { return myfmin(myfmin(a, b), myfmin(c, d)); }
+  inline float myfrange(float x, float a, float b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline float myfrange_lb(float x, float a, float b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
 }
 
 #ifdef _bmdxpl_Wnds
@@ -711,6 +954,8 @@ namespace bmdx
 {
   using yk_c::__vecm_tu_selector;
 
+  //== BASE PART FOR CROSS-MODULE CONTAINERS
+
     // operator= and copy constructor exception for array types with enabled exceptions. May be caught on the client.
   struct exc_carr_alloc_asg : std::exception { const char* what() const throw() { return "c[pp]array_t/operator=|cc/alloc"; } };
 
@@ -718,7 +963,7 @@ namespace bmdx
   struct __exc_carr_asg : std::exception { const char* what() const throw() { return "_carr_asgx_t::try_asg"; } };
   struct __exc_carr_cc : std::exception { const char* what() const throw() { return "_carr_asgx_t:try_cc"; } };
   template<class T, bool no_exc_asg> struct carray_t;
-  template<class T, bool no_exc_asg> struct cpparray_t;
+  template<class T, bool no_exc_asg, class _bs> struct cpparray_t;
   template<class T, bool no_exc_asg> struct carray_r_t;
   template<class T> struct arrayref_t;
   template<class A, class Ax, class _ = __vecm_tu_selector> struct _carr_aux1_t { static inline void try_asg(A& dest, const A& src) { (Ax&)dest = (const Ax&)src; if (dest.n() != src.n()) { throw __exc_carr_asg(); } } static inline void try_cc(void* pdest, const A& src) { new (pdest) Ax((const Ax&)src); if (((A*)pdest)->n() != src.n()) { throw __exc_carr_cc(); } } };
@@ -727,9 +972,9 @@ namespace bmdx
     //    (Easier error processing for deeply nested structures.)
   template<class A, class Aux = bmdx_meta::nothing, class _ = __vecm_tu_selector> struct _carr_asgx_t { enum { is_carr_any = 0, is_cpparray = 0 }; typedef A t_ax; static inline void try_asg(A& dest, const A& src) { dest = src; } static inline void try_cc(void* pdest, const A& src) { new (pdest) A(src); } };
   template<class T, class _> struct _carr_asgx_t<carray_t<T, true>, bmdx_meta::nothing, _> : _carr_aux1_t<carray_t<T, true>, carray_t<T, false>, _> { enum { is_carr_any = 1, is_cpparray = 0 }; typedef carray_t<T, false> t_ax; static inline void check_exc_alloc() { } };
-  template<class T, class _> struct _carr_asgx_t<cpparray_t<T, true>, bmdx_meta::nothing, _> : _carr_aux1_t<cpparray_t<T, true>, cpparray_t<T, false>, _> { enum { is_carr_any = 1, is_cpparray = 1 }; typedef cpparray_t<T, false> t_ax; static inline void check_exc_alloc() { } };
+  template<class T, class _, class _bs> struct _carr_asgx_t<cpparray_t<T, true, _bs>, bmdx_meta::nothing, _> : _carr_aux1_t<cpparray_t<T, true, _bs>, cpparray_t<T, false, _bs>, _> { enum { is_carr_any = 1, is_cpparray = 1 }; typedef cpparray_t<T, false, _bs> t_ax; static inline void check_exc_alloc() { } };
   template<class T, class _> struct _carr_asgx_t<carray_t<T, false>, bmdx_meta::nothing, _> : _carr_asgx_t<carray_t<T, false>, int, _> { enum { is_carr_any = 1, is_cpparray = 0 }; static inline void check_exc_alloc() { throw exc_carr_alloc_asg(); } };
-  template<class T, class _> struct _carr_asgx_t<cpparray_t<T, false>, bmdx_meta::nothing, _> : _carr_asgx_t<cpparray_t<T, false>, int, _> { enum { is_carr_any = 1, is_cpparray = 1 }; static inline void check_exc_alloc() { throw exc_carr_alloc_asg(); } };
+  template<class T, class _, class _bs> struct _carr_asgx_t<cpparray_t<T, false, _bs>, bmdx_meta::nothing, _> : _carr_asgx_t<cpparray_t<T, false, _bs>, int, _> { enum { is_carr_any = 1, is_cpparray = 1 }; static inline void check_exc_alloc() { throw exc_carr_alloc_asg(); } };
 
   template<class T, class _ = __vecm_tu_selector>
   struct _carray_tu_alloc_t
@@ -739,13 +984,13 @@ namespace bmdx
       #else
         static inline void* _s_psf1() throw() { return (void*)&std::calloc; }
       #endif
-      static void* _sf_alloc(_s_ll nb) throw() { if (nb < 0) { return 0; } size_t n2 = size_t(nb); if (_s_ll(n2) != nb) { return 0; } try { return std::calloc(n2, 1); } catch (...) { return 0; } }
+      static void* _sf_calloc(_s_ll nb) throw() { if (nb < 0) { return 0; } size_t n2 = size_t(nb); if (_s_ll(n2) != nb) { return 0; } try { return std::calloc(n2, 1); } catch (...) { return 0; } }
       static void _sf_free(void* p) throw() { try { std::free(p); } catch (...) {} }
       static void _sf_destroy1(T* p) throw() { if (p) { try { p->~T(); } catch (...) {} } }
       static void _sf_delete1(T* p) throw() { if (p) { try { delete p; } catch (...) {} } }
     static void* _spff[];
   };
-  template<class T, class _> void* _carray_tu_alloc_t<T, _>::_spff[5] = { (void*)(3 + (const char*)0), (void*)&_sf_alloc, (void*)&_sf_free, (void*)&_sf_destroy1, (void*)&_sf_delete1 };
+  template<class T, class _> void* _carray_tu_alloc_t<T, _>::_spff[5] = { (void*)(3 + __bmdx_null_pchar), (void*)&_sf_calloc, (void*)&_sf_free, (void*)&_sf_destroy1, (void*)&_sf_delete1 };
 
   template<class T>
   struct _carray_base_t
@@ -755,7 +1000,7 @@ namespace bmdx
 
     _carray_base_t() throw() : _n(0), _data(0), _psf1(_carray_tu_alloc_t<T>::_s_psf1()) { __pad1 = 0; _pff = _carray_tu_alloc_t<T>::_spff; }
 
-    inline _s_ll n() const throw()  { return _n; }
+    inline _s_ll n() const throw()    { return _n; }
 
       // NOTE Normally, pd() == 0 if n() == 0. See also _set_n_u.
     inline const t_value* pd() const throw() { return _data; }
@@ -785,7 +1030,7 @@ namespace bmdx
       // Reallocate storage. Copy, destroy, initialize elements as specified.
       //  n2 >= 0: the new number of elements of type T.
       //  dmode: 1 - use local destructor, 0 - do not call destructor.
-      //  imode: 4 - copy existing elems. with std::memcpy, 1 - copy with local T(const T&), 0 - no copying (new allocation only + initialize all bytes to 0).
+      //  imode: 4 - copy existing elems. as plain memory (bytes), 1 - copy with local T(const T&), 0 - no copying (new allocation only + initialize all bytes to 0).
       //  px:
       //    != 0 - if elements are added, initialize them as copy *px (method depends on imode).
       //    == 0 with imode == 0, 4 - initialize all bytes to 0.
@@ -813,7 +1058,7 @@ namespace bmdx
           }
         }
         else if (imode == 4)
-          { if (n0) { std::memcpy(pd2, _data, n0 * sizeof(T)); } if (px && n2 > _n) { for (i0 = n0; i0 < _t_size(n2); ++i0) { std::memcpy(pd2 + i0, px, sizeof(T)); } } }
+          { if (n0) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2, _data, n0 * sizeof(T)); } if (px && n2 > _n) { for (i0 = n0; i0 < _t_size(n2); ++i0) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2 + i0, px, sizeof(T)); } } }
       }
       if (_n > 0) { if (dmode == 1) { _destroy(_data, 0, _t_size(_n)); } _free(_data); }
       _data = pd2; _n = n2;
@@ -840,7 +1085,7 @@ namespace bmdx
           }
         }
         else if (imode == 4)
-          { if (n0) { std::memcpy(pd2, _data, n0 * sizeof(T)); } if (n2 > _n) { for (i0 = n0; i0 < _t_size(n2); ++i0) { std::memcpy(pd2 + i0, &x, sizeof(T)); } } }
+          { if (n0) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2, _data, n0 * sizeof(T)); } if (n2 > _n) { for (i0 = n0; i0 < _t_size(n2); ++i0) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2 + i0, &x, sizeof(T)); } } }
       }
       if (_n > 0) { if (dmode == 1) { _destroy(_data, 0, _t_size(_n)); } _free(_data); }
       _data = pd2; _n = n2;
@@ -857,6 +1102,8 @@ namespace bmdx
 
       // Element-by-element equality check.
     bool is_eq(const _carray_base_t<t_value>& x) const { if (this == &x) { return true; } if (this->_n != x._n) { return false; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x[i])) { return false; } } return true; }
+    template<class Iter> bool is_eq(Iter x, _s_ll n) const { if (this->_n != n) { return false; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == *x++)) { return false; } } return true; }
+    bool is_eq_z(const t_value* px, const t_value& z = t_value()) const { if (!px) { return this->_n == 0; } for (_s_ll i = 0; i < this->_n; ++i) { if (*px == z) { return false; } if (!(*px == this->_data[i])) { return false; } ++px; } return *px == z; }
 
       // Sets _n field (number of elements), without memory reallocation or elements creation/destruction.
       //  May be used carefully to reserve/unreserve place.
@@ -867,27 +1114,34 @@ namespace bmdx
     ~_carray_base_t() throw() { if (_data) { _free(_data); _data = 0; } _n = 0; }
 
     typedef void* (*F_alloc)(_s_ll nbytes); typedef void (*F_free)(void* p);
-    inline void* _alloc(_s_ll nbytes) throw() { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_alloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
+    inline void* _alloc(_s_ll nbytes) throw() { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_calloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
     inline void _free(void* p) throw() { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
 
     inline void _destroy(T* pd_, _t_size i0, _t_size i2) throw() { (void)pd_; while (i0 < i2) { try { for (; i0 < i2; ++i0) { (pd_ + i0)->~T(); } } catch (...) { ++i0; } } }
+    inline void _destroy1(T* pd_) throw() { try { pd_->~T(); } catch (...) {} }
+
   private:
     _carray_base_t(const _carray_base_t&); _carray_base_t& operator=(const _carray_base_t&);
   };
 
-  template<class T, bool no_exc_asg>
-  struct cpparray_t;
+
+
+
+
+
+
+  //== struct carray_t
 
     // C-style array wrapper. For T allowing bytewise copying and not needing constructor/destructor calls.
     // Behavior:
     //    1. Any elements copying copies just bytes.
-    //      If storage allocation fails, no exceptions (dflt., no_exc_asg == true):
-    //        a) assignment returns false, no changes to target;
-    //        b) copy ctor. creates an empty object.
+    //      In the default mode (no_exc_asg == true), no exceptions are generated on allocation failure:
+    //        a) assignment returns false, without any changes to target;
+    //        b) copy ctor. creates an empty array.
     //
     //    2. resize(n) preserves existing elements.
-    //      If size grows, new elements are initialized by writing 0 to each byte.
-    //      For pure storage reallocation without copying existing elements:
+    //      If size grows, new elements ARE initialized by writing 0 to each byte.
+    //      For pure storage reallocation without copying existing elements (top speed):
     //        array.realloc(n, 0, 0, 0);
     //      For storage growth with new elements initialization:
     //        a) T src; array.realloc(n, 0, 4, &src);
@@ -895,11 +1149,12 @@ namespace bmdx
     //
     //    3. On carray_t destruction, individual elements destructors ARE NOT called.
     //
-    //    4. carray_t, created in binary module A, may be passed as bytes or as container element,
+    //    4. carray_t, created in binary module A, may be passed as bytes or as other container's element,
     //        manipulated and destroyed locally in binary module B.
     //      a) WinAPI: any A, B / POSIX: A, B using standard malloc() family:
     //        carray_t destruction in B is safe even after A being unloaded.
     //      b) POSIX: A or B using custom malloc() family: carray_t destruction in B is safe only before unloading A.
+    //
   template<class T, bool no_exc_asg = true>
   struct carray_t : _carray_base_t<T>
   {
@@ -908,29 +1163,35 @@ namespace bmdx
     typedef typename _carray_base_t<T>::_t_size _t_size; // _t_size: private; client uses s_ll as index as size type
 
     carray_t() throw() {}
-    carray_t(const carray_t& x) : _carray_base_t<T>() { if (!this->realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return; } if (x.n()) { std::memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
+    carray_t(const carray_t& x) : _carray_base_t<T>() { if (!this->realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
     ~carray_t() throw() {}
 
       // If this != &src: clears this, moves src to this, sets src to be empty.
-    void move(carray_t& src) throw() { if (this == &src) { return; } this->~carray_t(); std::memcpy(this, &src, sizeof(carray_t)); src._data = 0; src._n = 0; }
-    void swap(carray_t& src) throw() { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; std::memcpy(x, &src, sizeof(t_a)); std::memcpy(&src, this, sizeof(t_a)); std::memcpy(this, x, sizeof(t_a)); }
+    void move(carray_t& src) throw() { if (this == &src) { return; } this->~carray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(carray_t)); src._data = 0; src._n = 0; }
+    void swap(carray_t& src) throw() { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
     bool resize(_s_ll n) throw() { if (n == this->_n) { return true; } return this->realloc(n, 0, 4, 0); }
     void clear() throw() { this->realloc(0, 0, 4, 0); }
     bool operator=(const carray_t& x)
-      { if (this == &x) { return true; } carray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; } if (x.n()) { std::memcpy(x2._data, x._data, _t_size(x.n()) * sizeof(T)); } this->move(x2); return true; }
+      { if (this == &x) { return true; } carray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(x2._data, x._data, _t_size(x.n()) * sizeof(T)); } this->move(x2); return true; }
 
     template<bool _ne> inline bool operator==(const carray_t<t_value, _ne>& x) const { return this->is_eq(x); }
     template<bool _ne> inline bool operator!=(const carray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
-    template<bool _ne> inline bool operator==(const cpparray_t<t_value, _ne>& x) const { return this->is_eq(x); }
-    template<bool _ne> inline bool operator!=(const cpparray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
+    template<bool _ne, class _bs> inline bool operator==(const cpparray_t<t_value, _ne, _bs>& x) const { return this->is_eq(x); }
+    template<bool _ne, class _bs> inline bool operator!=(const cpparray_t<t_value, _ne, _bs>& x) const { return !this->is_eq(x); }
     template<bool _ne> inline bool operator==(const carray_r_t<t_value, _ne>& x) const { return this->is_eq(x._base()); }
     template<bool _ne> inline bool operator!=(const carray_r_t<t_value, _ne>& x) const { return !this->is_eq(x._base()); }
   };
 
+
+
+  //== struct cpparray_t
+
     // C++-style array wrapper. For T with non-trivial construction, copying and destructor calls.
     // Behavior:
-    //    1. Any copying is via T(const T&). If operation fails, no exceptions (dflt., no_exc_asg == true):
-    //      a) assignment returns false, no changes to target; b) copy ctor. creates an empty object.
+    //    1. Any elements copying is via T(const T&).
+    //      In the default mode (no_exc_asg == true), no exceptions are generated on allocation or copying failure:
+    //        a) assignment returns false, without any changes to target;
+    //        b) copy ctor. creates an empty array.
     //
     //    2. resize(n) preserves elements.
     //      If size grows, new elements ARE initialized as T().
@@ -939,12 +1200,13 @@ namespace bmdx
     //
     //    4. cpparray_t, created in binary module A, may be passed as bytes or as container element,
     //        manipulated and destroyed locally in binary module B if all the following conditions are true:
-    //      1) T(), T(const T&), ~T() in B behave exactly as in A, i.e. have module-independent data, like flstr_t,
-    //        or are aware of the current binary module, like carray_t, cpparray_t, vec2_t, unity, threadctl, hashx etc.
+    //      1) T(), T(const T&), ~T() in B behave exactly as in A, i.e. have purely module-independent data, like flstr_t,
+    //        or are aware of the current binary module, like carray_t, cpparray_t, cref_t, threadctl etc.
     //        NOTE STL's and other objects with dynamic data, like string, vector etc. can safely be elements of cpparray_t
-    //        only in the binary module where they are constructed.
+    //        ONLY in the binary module where they are constructed.
     //      2) cpparray_t destruction in B is safe only before unloading A.
-  template<class T, bool no_exc_asg = true>
+    //
+  template<class T, bool no_exc_asg = true, class _bs = bmdx_meta::nothing>
   struct cpparray_t : _carray_base_t<T>
   {
     typedef T t_value;
@@ -956,14 +1218,14 @@ namespace bmdx
     ~cpparray_t() throw() { this->realloc_0(1); }
 
       // If this != &src: clears this, moves src to this, sets src to be empty.
-    void move(cpparray_t& src) throw() { if (this == &src) { return; } this->~cpparray_t(); std::memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; }
-    void swap(cpparray_t& src) throw() { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; std::memcpy(x, &src, sizeof(t_a)); std::memcpy(&src, this, sizeof(t_a)); std::memcpy(this, x, sizeof(t_a)); }
+    void move(cpparray_t& src) throw() { if (this == &src) { return; } this->~cpparray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; }
+    void swap(cpparray_t& src) throw() { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
     bool resize(_s_ll n) throw() { if (n == this->_n) { return true; } return this->realloc(n, 1, 1, 0); }
     void clear() throw() { this->realloc_0(1); }
     bool operator=(const cpparray_t& x)
     {
       if (this == &x) { return true; } cpparray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; }
-      T* pd2 = x2.pd(); _t_size i0 = 0; _t_size n0 = x2.n();
+      T* pd2 = x2.pd(); _t_size i0 = 0; _t_size n0 = _t_size(x2.n());
       try { for (; i0 < n0; ++i0) { new (pd2 + i0) T(x[i0]); } } catch (...) {}
       if (i0 < n0) { this->_destroy(pd2, 0, i0); x2.realloc_0(0); _carr_asgx_t<t_a>::check_exc_alloc(); return false; }
       this->move(x2);
@@ -972,18 +1234,23 @@ namespace bmdx
 
     template<bool _ne> inline bool operator==(const carray_t<t_value, _ne>& x) const { return this->is_eq(x); }
     template<bool _ne> inline bool operator!=(const carray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
-    template<bool _ne> inline bool operator==(const cpparray_t<t_value, _ne>& x) const { return this->is_eq(x); }
-    template<bool _ne> inline bool operator!=(const cpparray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
+    template<bool _ne, class _bs2> inline bool operator==(const cpparray_t<t_value, _ne, _bs2>& x) const { return this->is_eq(x); }
+    template<bool _ne, class _bs2> inline bool operator!=(const cpparray_t<t_value, _ne, _bs2>& x) const { return !this->is_eq(x); }
     template<bool _ne> inline bool operator==(const carray_r_t<t_value, _ne>& x) const { return this->is_eq(x._base()); }
     template<bool _ne> inline bool operator!=(const carray_r_t<t_value, _ne>& x) const { return !this->is_eq(x._base()); }
   };
+
+
+
+  //== struct carray_r_t
 
     // Simple string class.
     //  Difference from std::string:
     //    1. Default constructor does not generate exceptions in principle.
     //    2. The object may be used in other binary module (not where it was created).
-    //    3. To create C-string, use ensure_cstr(). This reserves 1 elem. and sets it to T().
-    //      This will be valid till the next modification.
+    //    3. To create C-string, use ensure_cstr(): this reserves 1 additional elem. and sets it to T().
+    //      (Container size (n()) is not changed.)
+    //      The additional elem. remains valid until the next modification of the container.
     //  Difference from carray_t, cpparray_t:
     //    1. The object is automatically resizable.
     //      May be appended with single element (T) or some number of elements (from T*).
@@ -1009,19 +1276,20 @@ namespace bmdx
 
     carray_r_t() throw() : _nrsv(0) {}
       // NOTE on copying, new nrsv() == x.n().
-    carray_r_t(const t_a& x) : carray_t<T, no_exc_asg>(), _nrsv(0) { if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return; } if (x.n()) { std::memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
+    carray_r_t(const t_a& x) : carray_t<T, no_exc_asg>(), _nrsv(0) { if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
     carray_r_t(_s_ll n, const t_value& x) : _nrsv(0) { if (!append_nx(n, x)) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     carray_r_t(const t_value* px, _s_ll n) : _nrsv(0) { if (!append_n(px, n)) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
-    carray_r_t(const arrayref_t<t_value>& x) : _nrsv(0) { if (!append_n(x.pd(), x.n())) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
+    explicit carray_r_t(const arrayref_t<t_value>& x) : _nrsv(0) { if (!append_n(x.pd(), x.n())) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
+    template<class Tr, class A> carray_r_t(const std::basic_string<t_value, Tr, A>& x) : _nrsv(0) { if (x.size() > 0 && !append_n(x.c_str(), x.size())) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     ~carray_r_t() throw() {}
 
 
-    void move(t_a& src) throw() { if (this == &src) { return; } this->~carray_r_t(); std::memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; src._nrsv = 0; }
-    void swap(t_a& src) throw() { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; std::memcpy(x, &src, sizeof(t_a)); std::memcpy(&src, this, sizeof(t_a)); std::memcpy(this, x, sizeof(t_a)); }
+    void move(t_a& src) throw() { if (this == &src) { return; } this->~carray_r_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; src._nrsv = 0; }
+    void swap(t_a& src) throw() { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
     void clear() throw() { this->resize(0, false, true); } // deallocate the array (nrsv() becomes 0)
       // NOTE On assignment, if old reserve is enough to hold values, no memory reallocation occurs.
       //    Otherwise, new nrsv() == x.n(). Exact behavior: see also resize() with b_minimize_rsv true.
-    bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { std::memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } return true; }
+    bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } return true; }
 
     std::basic_string<t_value> str() const { const T z = T(); return std::basic_string<T>(this->_data ? this->_data : &z, _t_size(this->_n)); }
 
@@ -1037,13 +1305,13 @@ namespace bmdx
       //    This mode should be used to minimize both memory overhead and reallocations,
       //      esp. when the array size is set once and increased rarely or never.
       //  b_minimize_rsv false:
-      //    - if n2 > nrsv(), new nrsv = 2 * n2 (similar to std vector).
+      //    - if n2 > nrsv(), new nrsv = 2 * n2 (similar to std::vector).
       //    - if n2 <= nrsv(), no memory reallocation or deallocation occurs, even if n2 == 0.
-      //    This mode should be used when the array size changes frequently and unpredictibly.
+      //    This mode should be used when the array size changes frequently and unpredictably.
       //    For finer control over the reserve, consider using reserve() together with resize().
       //  px
       //    != 0: if resizing to larger size, write *px to the newly added positions.
-      //    == 0: keep the added or created poisitions zero-initialized:
+      //    == 0: keep the added or created positions zero-initialized:
       //      a) If reallocation occurs due to reserve change,
       //        1) whole the new array is filled with zero bytes,
       //        2) b_copy true copies elements from the prev. array.
@@ -1061,18 +1329,18 @@ namespace bmdx
       const _s_ll ncp = n2 < this->_n ? n2 : this->_n;
       if (pd2 != this->_data) // reallocation done, all is 0 now
       {
-        if (b_copy && ncp) { std::memcpy(pd2, this->_data, _t_size(ncp) * sizeof(T)); }
+        if (b_copy && ncp) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2, this->_data, _t_size(ncp) * sizeof(T)); }
         if (this->_data) { this->_free(this->_data); }
         this->_data = pd2; _nrsv = nrsv2;
       }
       else // no reallocation
       {
-        if (pd2 && !b_copy) { std::memset(pd2, 0, ncp * sizeof(T)); } // erase existing values if !b_copy
+        if (pd2 && !b_copy) { std::memset(pd2, 0, _t_size(ncp * sizeof(T))); } // erase existing values if !b_copy
       }
       if (n2 > this->_n) // init. new positions
       {
-        if (px) { for (_s_ll i0 = this->_n; i0 < n2; ++i0) { std::memcpy(pd2 + _t_size(i0), px, sizeof(T)); } }
-          else { std::memset(pd2 + this->_n, 0, (n2  - this->_n) * sizeof(T)); }
+        if (px) { for (_s_ll i0 = this->_n; i0 < n2; ++i0) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2 + _t_size(i0), px, sizeof(T)); } }
+          else { std::memset(pd2 + this->_n, 0, _t_size(n2  - this->_n) * sizeof(T)); }
       }
       this->_n = n2;
       return true;
@@ -1093,18 +1361,21 @@ namespace bmdx
       if (nrsv2 == 0) { pd2 = 0; }
         else { pd2 = (T*)this->_alloc(nrsv2 * sizeof(T)); if (!pd2) { if (nrsv2 > _nrsv) { return false; } nrsv2 = _nrsv; pd2 = this->_data; } }
       const _t_size ncp = _t_size(this->_n);
-      if (ncp > 0 && pd2 != this->_data) { std::memcpy(pd2, this->_data, ncp * sizeof(T)); }
+      if (ncp > 0 && pd2 != this->_data) { bmdx_str::words::memmove_t<T>::sf_memcpy(pd2, this->_data, ncp * sizeof(T)); }
       if (pd2 != this->_data) { if (this->_data) { this->_free(this->_data); } this->_data = pd2; _nrsv = nrsv2; }
       return true;
     }
 
-      // Ensure resirving n() + 1 element. Set element at n()+1 to T().
+      // Ensure reserving n() + 1 element. Set element at n()+1 to T().
     bool ensure_cstr() throw() { if (nrsv() <= n()) { if (!reserve(n() + 1)) { return false; } } pd()[n()] = T(); return true; }
 
       // Appending, similar to basic_string operator +=.
       //  Keeps reserved space >= n() + new elements + 1.
       //  The after-end element is kept = bytewise 0.
-      //  const t_value* is interpreted as a C-string.
+      //  const t_value* px arg.:
+      //    a) if taken without additional args, it is interpreted as a C-string (null-terminated).
+      //    b) if taken with arg. z, it is interpreted as a z-terminated.
+      //    c) if taken with arg. n, it is interpreted as string of n values.
       // If n() + new elements + 1 is within the current reserve, the functions always succeed.
     bool append_1(const t_value& x) throw()
     {
@@ -1113,6 +1384,7 @@ namespace bmdx
       T* p = this->_data + this->_n; *p = x; this->_n += 1; p += 1; *p = T();
       return true;
     }
+      // append_n: appends *px++ max(0, n) times.
     bool append_n(const t_value* px, _s_ll n) throw()
     {
       if (n > 0 && !px) { return false; }
@@ -1121,10 +1393,11 @@ namespace bmdx
       if (nr < 0) { return false; }
       if (nr > _nrsv && !reserve(2 * nr)) { return false; }
       T* p = this->_data + this->_n;
-      if (n > 0) { std::memcpy(p, px, _t_size(n) * sizeof(T)); }
+      if (n > 0) { bmdx_str::words::memmove_t<T>::sf_memcpy(p, px, _t_size(n) * sizeof(T)); }
       this->_n += n; p += n; *p = T();
       return true;
     }
+      // append_nx: appends x max(0, n) times.
     bool append_nx(_s_ll n, const t_value& x) throw()
     {
       if (n < 0) { n = 0; }
@@ -1162,10 +1435,14 @@ namespace bmdx
 
     template<bool _ne> inline bool operator==(const carray_t<t_value, _ne>& x) const { return this->is_eq(x); }
     template<bool _ne> inline bool operator!=(const carray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
-    template<bool _ne> inline bool operator==(const cpparray_t<t_value, _ne>& x) const { return this->is_eq(x); }
-    template<bool _ne> inline bool operator!=(const cpparray_t<t_value, _ne>& x) const { return !this->is_eq(x); }
+    template<bool _ne, class _bs> inline bool operator==(const cpparray_t<t_value, _ne, _bs>& x) const { return this->is_eq(x); }
+    template<bool _ne, class _bs> inline bool operator!=(const cpparray_t<t_value, _ne, _bs>& x) const { return !this->is_eq(x); }
     template<bool _ne> inline bool operator==(const carray_r_t<t_value, _ne>& x) const { return this->is_eq(x._base()); }
     template<bool _ne> inline bool operator!=(const carray_r_t<t_value, _ne>& x) const { return !this->is_eq(x._base()); }
+    template<class Tr, class A> bool operator==(const std::basic_string<t_value, Tr, A>& x) const { return this->is_eq(x.begin(), x.size()); }
+    template<class Tr, class A> bool operator!=(const std::basic_string<t_value, Tr, A>& x) const { return !this->is_eq(x.begin(), x.size()); }
+    bool operator==(const t_value* px) const { return this->is_eq_z(px, t_value()); }
+    bool operator!=(const t_value* px) const { return !this->is_eq_z(px, t_value()); }
 
 
     const carray_t<t_value, no_exc_asg>& _base() const { return *this; }
@@ -1180,8 +1457,15 @@ namespace bmdx
   struct _arrayref_adapter_t
     { static void* Fp(const Q& x) { if (sizeof(x)) {} return 0; } static _s_ll Fn(const Q& x) { if (sizeof(x)) {} return 0; } };
 
-    // Weak reference to an array of elements in memory.
-    //  The number of referenced elements is specified when the reference object is created.
+
+
+
+  //== struct arrayref_t
+
+    // Simplistic weak reference to an array of elements in memory.
+    //    Contains a pointer to the first element, and the number of elements.
+    // The object may be automatically constructed
+    //    from std strings, C strings, BMDX arrays (carray_t, cpparray_t, carray_r_t).
   template<class T>
   struct arrayref_t
   {
@@ -1189,7 +1473,9 @@ namespace bmdx
     typedef size_t t_size;
     typedef arrayref_t t_a;
 
-    inline _s_ll n() const throw()  { return _n; }
+    inline _s_ll n() const throw()    { return _n; }
+    inline _s_ll size() const throw()    { return _n; }
+    inline _s_ll length() const throw()    { return _n; }
 
     inline const t_value* pd() const throw() { return _data; }
     inline t_value* pd() throw() { return _data; }
@@ -1197,26 +1483,33 @@ namespace bmdx
     inline const t_value& operator[] (_s_ll i) const throw() { return _data[t_size(i)]; }
     inline t_value& operator[] (_s_ll i) throw() { return _data[t_size(i)]; }
 
+          // Same as operator[].
+        inline const t_value& opsub (_s_ll i) const throw() { return _data[t_size(i)]; }
+        inline t_value& opsub (_s_ll i) throw() { return _data[t_size(i)]; }
+
+    inline bool is_valid() const throw() { return (_data && _n >= 0) || (!_data && _n == 0); }
+
     arrayref_t() throw() { __pad1 = 0; unlink(); }
     ~arrayref_t() throw() { unlink(); }
 
     bool link(const t_value* px, _s_ll n) throw() { _n = n; if (_n < 0 || (_n > 0 && !px)) { _n = 0; _data = 0; return false; } _data = const_cast<T*>(px); return true; }
     void unlink() throw() { _n = 0;_data = 0; }
+    void clear() throw() { unlink(); }
 
-    arrayref_t(const t_value* px) throw() { __pad1 = 0; link(0, 0); if (px) { while (*px++ != T()) { ++_n; } } }
+    arrayref_t(const t_value* px) throw() { __pad1 = 0; link(px, 0); if (px) { while (*px++ != T()) { ++_n; } } }
     arrayref_t(const t_value* px, _s_ll n) throw() { __pad1 = 0; link(px, n); }
     arrayref_t(const arrayref_t& x) throw() : _n(x._n) { __pad1 = 0; _data = x._data; }
     template<bool _ne> arrayref_t(const carray_t<t_value, _ne>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<bool _ne> arrayref_t(const cpparray_t<t_value, _ne>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<bool _ne, class _bs> arrayref_t(const cpparray_t<t_value, _ne, _bs>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
     template<bool _ne> arrayref_t(const carray_r_t<t_value, _ne>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    arrayref_t(const std::basic_string<t_value>& x) throw() { __pad1 = 0; *this = x; }
+    template<class Tr, class A> arrayref_t(const std::basic_string<t_value, Tr, A>& x) throw() { __pad1 = 0; *this = x; }
     template<class Q> explicit arrayref_t(const Q& x __bmdx_noarg) { __pad1 = 0; _data = (T*)_arrayref_adapter_t<T>::Fp(x); _n = _arrayref_adapter_t<T>::Fn(x); }
 
     arrayref_t& operator=(const arrayref_t& x) throw() { _data = x._data; _n = x._n; return *this; }
     template<bool _ne> arrayref_t& operator=(const carray_t<t_value, _ne>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<bool _ne> arrayref_t& operator=(const cpparray_t<t_value, _ne>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<bool _ne, class _bs> arrayref_t& operator=(const cpparray_t<t_value, _ne, _bs>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
     template<bool _ne> arrayref_t& operator=(const carray_r_t<t_value, _ne>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    arrayref_t& operator=(const std::basic_string<t_value>& x) throw() { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; _data = 0; return *this; } _data = const_cast<T*>(&x[0]); return *this; }
+    template<class Tr, class A> arrayref_t& operator=(const std::basic_string<t_value, Tr, A>& x) throw() { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; } _data = const_cast<T*>(&x[0]); return *this; }
 
       // Set all existing (or [i0..i2) cut to [0..n()) elements to x, using operator=.
       //  Returns: 1 - all set successfully, 0 - all assignments failed, -1 - part of assignments failed.
@@ -1237,15 +1530,1084 @@ namespace bmdx
     }
 
       // Element-by-element equality check.
-    inline bool is_eq(const arrayref_t<t_value>& x) const { if (this->_n != x._n) { return false; } if (this->_data == x._data) { return true; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x[i])) { return false; } } return true; }
+    bool is_eq(const arrayref_t<t_value>& x)            const { if (this->_n != x._n) { return false; } if (this->_data == x._data) { return true; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x[i])) { return false; } } return true; }
 
-    inline void swap(arrayref_t& src) throw() { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; std::memcpy(x, &src, sizeof(t_a)); std::memcpy(&src, this, sizeof(t_a)); std::memcpy(this, x, sizeof(t_a)); }
+      // Returns true if *this and x are equal as such (i.e. their pd(), n()).
+    bool is_eq_pn(const arrayref_t<t_value>& x)        const { return x.pd() == this->pd() && x.n() == this->n(); }
 
+    inline void swap(arrayref_t& src) throw() { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; bmdx_str::words::memmove_t<t_value>::sf_memcpy(x, &src, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(&src, this, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(this, x, sizeof(t_a)); }
+
+      // NOTE operator==, operator!= do comparison by value.
+      //  See also is_eq, is_eq_pn.
     inline bool operator==(const arrayref_t<t_value>& x) const { return this->is_eq(x); }
     inline bool operator!=(const arrayref_t<t_value>& x) const { return !this->is_eq(x); }
   private:
     _s_ll _n; union { T* _data; _s_ll __pad1; };
   };
+
+
+
+  //== struct cringbuf1_t
+
+    // Single-channel ringbuffer (fixed-size queue).
+    //  Data supplier and consumer may run as pair of threads and use it concurrently, without any blocking.
+    //  Data values are treated as plain C data (like in carray_t).
+    //  The container allows for efficient random access to existing elements (O(1)).
+    //  push*() and pop*() do NOT move the existing elements.
+    //  The container is suitable for passing across binary modules of one process,
+    //    under the same conditions as described for struct carray_t (item 4).
+  template<class T>
+  struct cringbuf1_t
+  {
+    typedef T t_value;
+
+    // OWNER part
+
+      // On default construction, the ringbuffer makes no allocations and cannot contain data.
+      //  Copying and assignment of such object is exceptionless.
+      // To make the working ringbuffer, able to contain > 0 values, resize it with set_cap().
+    cringbuf1_t() throw() { _ipush = _ipop = 0; }
+
+      // Default copy ctor. and dtor. are working correctly.
+    //cringbuf1_t(const cringbuf1_t& x);
+    //~cringbuf1_t() throw();
+
+    cringbuf1_t& operator=(const cringbuf1_t& x) { cringbuf1_t a2(x); swap(a2); return *this; }
+
+      // Remove all values, release all dynamic allocations.
+      //  Set the container capacity to 0. Set navl(), ipush(), ipop() = 0.
+      //  The container copying becomes trivial and faultless.
+      //  The container will not be able to contain data until resized again with set_cap().
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    void clear() throw() { a.clear(); _ipush = _ipop = 0; }
+
+      // Change the container capacity (ncap()), i.e. max. number of elements that can be held at the same time.
+      //  a) (b_rmv_el == true)
+      //      Remove all existing elements - equivalent to pop_n(-1).
+      //      Set the capacity to n.
+      //      Keep ipush() unchanged, set ipop() = ipush().
+      //      Return 1.
+      //  b) (b_rmv_el == false)
+      //      If n == ncap(): do nothing, return 1.
+      //      Otherwise:
+      //        Set the capacity to n.
+      //        Move existing values (up to the last n values) so that they occupied the same positions
+      //          related to ipush(), as in original container.
+      //        Keep ipush() unchanged.
+      //        Set ipop() = ipush() - min(navl(), n), where navl() is taken before resizing.
+      //        Return 1.
+      //  c) On failure, the object is not modified (logically).
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+      // Returns:
+      //    1 - success.
+      //    -1 - n < 0.
+      //    -2 - failure (mem. alloc.).
+    _s_long set_cap(_s_ll n, bool b_rmv_el) throw()
+    {
+      if (n < 0) { return -1; }
+      if (!b_rmv_el && n == a.n()) { return 1; }
+      if (n == 0 && a.n() == 0) { return 1; }
+      cringbuf1_t a2;
+      if (!a2.a.resize(n)) { return -2; }
+      if (b_rmv_el) { a2._ipush = a2._ipop = _ipush; swap(a2); return 1; }
+      const _s_ll ncp = bmdx_minmax::myllmin(navl(), n);
+      const _s_ll i0 = _ipush - ncp;
+      _a_copy_n_u(a2.a, i0, a, i0, ncp);
+      a2._ipush = _ipush; a2._ipop = i0; swap(a2);
+      return 1;
+    }
+
+      // Swap this container with x.
+      // NOTE The container is bytewise movable and swappable.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    void swap(cringbuf1_t& x) throw() { bmdx_str::words::swap_bytes(*this, x); }
+
+    // COMMON part
+
+      // ipush(): abs. index of the next of value to be pushed.
+      // ipop(): abs. index of the next of value to be popped.
+      // Concurrency:
+      //    can change at any time as side effect of value pushing and popping by Supplier and Consumer, respectively.
+    _s_ll ipush() const throw() { return _ipush; }
+    _s_ll ipop() const throw() { return _ipop; }
+
+      // Max. number of values that can be kept in the buffer.
+      // Concurrency:
+      //    can be changed as side effect of resize() by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    _s_ll ncap() const throw() { return a.n(); }
+
+    // SUPPLIER part
+
+      // Max. number of values that can be currently pushed into the buffer w/o resizing.
+      //  Value is equivalent to ncap() - navl().
+      // Concurrency:
+      //    navl() is mainly for use by Supplier.
+      //    a) from Supplier side: nfree() may only increase, up to ncap(), at any time, as side effect of value popping by Consumer.
+      //    b) from Consumer side: nfree() may only decrease, down to 0, at any time, as side effect of value pushing by Supplier.
+    _s_ll nfree() const throw() { return a.n() - navl(); }
+
+      // Push new value (using operator=).
+      // Returns:
+      //    1 - success,
+      //    -1 - no place in the buffer currently.
+      //    -3 - failure on elem. assignment (not expected).
+      // Concurrency: may be called by Supplier only.
+    _s_long push_1(const t_value& s) throw() { if (navl() >= a.n()) { return -1; } try { tail(0) = s; } catch (...) { return -3; } _ipush += 1; return 1; }
+
+      // Push n (>= 0) values, using operator=. n must be [0..nfree()] to succeed.
+      // Returns:
+      //    1 - success. n values are pushed.
+      //    0 - pss == 0.
+      //    -1 - a) n < 0, b) there's no place for n elements in the buffer currently.
+      //    -3 - failure on elem. assignment (not expected).
+      // Concurrency: may be called by Supplier only.
+    _s_long push_n(const t_value* pss, _s_ll n) throw()
+    {
+      if (!pss) { return 0; }
+      if (n < 0) { return -1; }
+      if (n == 0) { return 1; }
+      if (n > nfree()) { return -1; }
+      _s_ll np2 = n;
+      t_value* p2 = a.pd() + _ipush % a.n();
+      const t_value* const pe = a.pd() + a.n();
+      try { do { *p2++ = *pss++; if (p2 == pe) { p2 = a.pd(); } } while (--np2); } catch (...) { return -3; }
+      _ipush += n;
+      return 1;
+    }
+
+      // Returns ref. to absolute pos. (ipush() + ineg) (internally: by modulus ncap()).
+      //    ineg must be negative, in [-navl()..-1], to point to valid position.
+      //    I.e. ineg == -1 points to the last pushed value, -2 - one back from it etc.
+      // NOTE tail may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
+      // Concurrency:
+      //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
+    t_value& tail(_s_ll ineg) throw() { _s_ll i = (_ipush + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
+    const t_value& tail(_s_ll ineg) const throw() { return ((cringbuf1_t*)this)->tail(ineg); }
+
+    // CONSUMER part
+
+      // The currently available number of values.
+      // Concurrency:
+      //    navl() may be called by any side, but is mainly for use by Consumer.
+      //    a) from Consumer side: navl() may only increase, up to ncap(), at any time, as side effect of value pushing by Supplier.
+      //    b) from Supplier side: navl() may only decrease, down to 0, at any time, as side effect of value popping by Consumer.
+    _s_ll navl() const throw() { return _ipush - _ipop; }
+
+      // Returns max. number of contiguous values, available for efficient reading and popping.
+      //    A pointer to the first available value is &(*this)[0].
+      //    Additionally (single-threaded mode only):
+      //      Let n2 = navl() - navl_contig().
+      //      If n2 > 0, the second contiguous part (n2 values), starts at &(*this)[navl_contig()].
+      // Concurrency:
+      //    same as navl(), only navl_contig() may not be used to access the second contiguous part of values.
+    _s_ll navl_contig() const throw() { return bmdx_minmax::myllmin(a.n() - _ipop % a.n(), navl()); }
+
+      // Pop one value.
+      // Returns:
+      //    true - popped successfully,
+      //    false - not popped because the buffer is currently empty.
+      // Concurrency: may be called by Consumer only.
+    bool pop_1() throw() { if (_ipush <= _ipop) { return false; } _ipop += 1; return true; }
+
+      // Pop multiple values.
+      //    n >= 0 specifies max. number of values to be popped.
+      //      Really, min(n, navl()) values will be popped.
+      //    n == -1 pops all currently available values.
+      //    n <= -2 does nothing (same as n == 0).
+      // Concurrency: may be called by Consumer only.
+      // Returns:
+      //    the number of elements actually popped. The function does not fail.
+    _s_ll pop_n(_s_ll n) throw() { if (n == 0 || n <= -2) { return 0; } const _s_ll na = navl(); if (n == -1 || n > na) { n = na; } _ipop += n; return n; }
+
+      // Returns ref. to absolute pos. (ipop() + i) (internally: by modulus ncap()).
+      //    To point to valid position, i must be in [0..navl()).
+      //    [0] - is the element that would be popped next.
+      // NOTE operator[] may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
+      // Concurrency: may be called by Consumer only.
+    t_value& operator[] (_s_ll i) throw() { _s_ll j = (_ipop + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
+    const t_value& operator[] (_s_ll i) const throw() { return ((cringbuf1_t&)*this)[i]; }
+
+  private:
+    carray_t<t_value, false> a; // values
+    volatile _s_ll _ipush, _ipop; // the next push position, corresponding pos. in bc == _ipush % ncap(); the next pop position; _ipop <= _ipush; corresponding position in bc == _ipop % ncap()
+
+    static void _a_copy_n_u(carray_t<t_value, false>& adest, _s_ll idest, const carray_t<t_value, false>& asrc, _s_ll isrc, _s_ll n) // memory copying (without array capacity and other checks)
+    {
+      if (n <= 0) { return; }
+      const _s_ll i1 = isrc % asrc.n(); const _s_ll i2 = idest % adest.n();
+      _s_ll n1 = asrc.n() - i1; _s_ll n2 = adest.n() - i2; const t_value* p1 = asrc.pd() + i1; t_value* p2 = adest.pd() + i2;
+      _s_ll ncp = bmdx_minmax::myllmin(n1, n2, n);
+      bmdx_str::words::memmove_t<t_value>::sf_memcpy(p2, p1, sizeof(t_value) * ncp);
+      if (n <= ncp) { return; }
+      n1 -= ncp; n2 -= ncp; p1 += ncp; p2 += ncp; if (n1 <= 0) { p1 = asrc.pd(); n1 = asrc.n(); } if (n2 <= 0) { p2 = adest.pd(); n2 = adest.n(); }
+      n -= ncp; ncp = bmdx_minmax::myllmin(n1, n2, n);
+      bmdx_str::words::memmove_t<t_value>::sf_memcpy(p2, p1, sizeof(t_value) * ncp);
+      if (n <= ncp) { return; }
+      n1 -= ncp; n2 -= ncp; p1 += ncp; p2 += ncp; if (n1 <= 0) { p1 = asrc.pd(); n1 = asrc.n(); } if (n2 <= 0) { p2 = adest.pd(); n2 = adest.n(); }
+      n -= ncp;
+      bmdx_str::words::memmove_t<t_value>::sf_memcpy(p2, p1, sizeof(t_value) * n);
+    }
+  };
+
+
+
+  //== struct cppringbuf1_t
+
+    // Single-channel ringbuffer (fixed-size queue) for objects with non-trivial construction, destruction and copying.
+    //  Data supplier and consumer may run as pair of threads and use it concurrently, without any blocking.
+    //  The container allows for efficient random access to existing elements (O(1)).
+    //  push*() and pop*() do NOT move the existing elements.
+    //  The container is suitable for passing across binary modules of one process,
+    //    under the same conditions as described for struct cpparray_t (item 4).
+  template<class T, class _bs = bmdx_meta::nothing>
+  struct cppringbuf1_t
+  {
+    typedef T t_value;
+    struct exc_cc : std::exception { const char* what() const throw() { return "cppringbuf1_t(const cppringbuf1_t&)"; } };
+
+    // OWNER part
+
+      // On default construction, the ringbuffer makes no allocations and cannot contain data.
+      //  Copying and assignment of such object is exceptionless.
+      // To make the working ringbuffer, able to contain > 0 values, resize it with set_cap().
+    cppringbuf1_t() throw() { _ipush = _ipop = 0; }
+
+    cppringbuf1_t(const cppringbuf1_t& x) { if (!a.resize(x.a.n())) { throw exc_cc(); } if (!_a_copy_n_u(a, x._ipop, x.a, x._ipop, x._ipush - x._ipop)) { throw exc_cc(); } _ipush = x._ipush; _ipop = x._ipop; }
+
+    ~cppringbuf1_t() throw() { _a_pop_n(navl()); }
+
+    cppringbuf1_t& operator=(const cppringbuf1_t& x) { cppringbuf1_t a2(x); swap(a2); return *this; }
+
+      // Remove all values, release all dynamic allocations.
+      //  Set the container capacity to 0. Set navl(), ipush(), ipop() = 0.
+      //  The container copying becomes trivial and faultless.
+      //  The container will not be able to contain data until resized again with set_cap().
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    void clear() throw() { _a_pop_n(navl()); a.clear(); _ipush = _ipop = 0; }
+
+      // Change the container capacity (ncap()), i.e. max. number of elements that can be held at the same time.
+      //  a) (b_rmv_el == true)
+      //      Remove all existing elements - equivalent to pop_n(-1).
+      //      Set the capacity to n.
+      //      Keep ipush() unchanged, set ipop() = ipush().
+      //      Return 1.
+      //  b) (b_rmv_el == false)
+      //      If n == ncap(): do nothing, return 1.
+      //      Otherwise:
+      //        Set the capacity to n.
+      //        Move existing values (up to the last n values) so that they occupied the same positions
+      //          related to ipush(), as in original container.
+      //        Keep ipush() unchanged.
+      //        Set ipop() = ipush() - min(navl(), n), where navl() is taken before resizing.
+      //        Return 1.
+      //  c) On failure, the object is not modified (logically).
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+      // Returns:
+      //    1 - success.
+      //    -1 - n < 0.
+      //    -2 - failure (mem. alloc.).
+      //    -3 - failure (existing elements copying).
+    _s_long set_cap(_s_ll n, bool b_rmv_el) throw()
+    {
+      if (n < 0) { return -1; }
+      if (!b_rmv_el && n == a.n()) { return 1; }
+      if (n == 0 && a.n() == 0) { return 1; }
+      cppringbuf1_t a2;
+      if (!a2.a.resize(n)) { return -2; }
+      if (b_rmv_el) { a2._ipush = a2._ipop = _ipush; swap(a2); return 1; }
+      const _s_ll ncp = bmdx_minmax::myllmin(navl(), n);
+      if(!_a_copy_n_u(a2.a, _ipush - ncp, a, _ipush - ncp, ncp)) { return -3; }
+      a2._ipush = _ipush; a2._ipop = _ipush - ncp; swap(a2);
+      return 1;
+    }
+
+      // Swap this container with x.
+      // NOTE The container is bytewise movable and swappable.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    void swap(cppringbuf1_t& x) throw() { bmdx_str::words::swap_bytes(*this, x); }
+
+    // COMMON part
+
+      // ipush(): abs. index of the next of value to be pushed.
+      // ipop(): abs. index of the next of value to be popped.
+      // Concurrency:
+      //    can change at any time as side effect of value pushing and popping by Supplier and Consumer, respectively.
+    _s_ll ipush() const throw() { return _ipush; }
+    _s_ll ipop() const throw() { return _ipop; }
+
+      // Max. number of values that can be kept in the buffer.
+      // Concurrency:
+      //    can be changed as side effect of resize() by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    _s_ll ncap() const throw() { return a.n(); }
+
+    // SUPPLIER part
+
+      // Max. number of values that can be currently pushed into the buffer w/o resizing.
+      //  Value is equivalent to ncap() - navl().
+      // Concurrency:
+      //    navl() is mainly for use by Supplier.
+      //    a) from Supplier side: nfree() may only INCREASE, up to ncap(), at any time, as side effect of value popping by Consumer.
+      //    b) from Consumer side: nfree() may only decrease, down to 0, at any time, as side effect of value pushing by Supplier.
+    _s_ll nfree() const throw() { return a.n() - navl(); }
+
+    struct new_dflt { void operator()(T* p) const { new (p) T(); } }; // creates a T() at p
+    struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p) const { new (p) T(x); } }; // creates a T(x) at p
+    struct new_cp_seq { mutable const T* psrc; new_cp_seq(const T* psrc_) : psrc(psrc_) {} void operator()(T* p) const { new (p) T(*psrc++); } }; // creates a T(*psrc++) at each call
+
+      // push_1(x): push a copy of x.
+      // push_1f(f): accepts a client-defined functor f that is able to create an element,
+      //    see e.g. new_dflt, new_cp.
+      // Returns:
+      //    1 - success,
+      //    -1 - no place in the buffer currently,
+      //    -3 - element copying failed.
+      // Concurrency: may be called by Supplier only.
+    _s_long push_1(const t_value& x) throw() { return _push_1(new_cp(x)); }
+    template<class F> _s_long push_1f(const F& f) throw() { return _push_1(f); }
+
+      // Push n (>= 0) values. n must be [0..nfree()] to succeed.
+      // push_n(n): uses copy constructor to create elements.
+      // push_nf(f, n): accepts a client-defined functor f that is able to sequentially create n values,
+      //    see e.g. new_dflt, new_cp, new_cp_seq.
+      // Returns:
+      //    1 - success. n values are pushed.
+      //    0 - pss == 0.
+      //    -1 - a) n < 0, b) there's no place for n elements in the buffer currently.
+      //    -3 - failure (element creation or copying).
+      // Concurrency: may be called by Supplier only.
+    _s_long push_n(const t_value* pss, _s_ll n) throw() { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
+    template<class F> _s_long push_nf(const F& f, _s_ll n) throw() { return _push_n(f, n); }
+
+      // Returns ref. to absolute pos. (ipush() + ineg) (internally: by modulus ncap()).
+      //    ineg must be negative, in [-navl()..-1], to point to valid position.
+      //    I.e. ineg == -1 points to the last pushed value, -2 - one back from it etc.
+      // NOTE tail() may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
+      // Concurrency:
+      //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
+    t_value& tail(_s_ll ineg) throw() { _s_ll i = (_ipush + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
+    const t_value& tail(_s_ll ineg) const throw() { return ((cppringbuf1_t*)this)->tail(ineg); }
+
+    // CONSUMER part
+
+      // The currently available number of values.
+      // Concurrency:
+      //    navl() may be called by any side, but is mainly for use by Consumer.
+      //    a) from Consumer side: navl() may only increase, up to ncap(), at any time, as side effect of value pushing by Supplier.
+      //    b) from Supplier side: navl() may only decrease, down to 0, at any time, as side effect of value popping by Consumer.
+    _s_ll navl() const throw() { return _ipush - _ipop; }
+
+      // Returns max. number of contiguous values, available for efficient reading and popping.
+      //    A pointer to the first available value is &(*this)[0].
+      //    Additionally (single-threaded mode only):
+      //      Let n2 = navl() - navl_contig().
+      //      If n2 > 0, the second contiguous part (n2 values), starts at &(*this)[navl_contig()].
+      // Concurrency:
+      //    same as navl(), only navl_contig() may not be used to access the second contiguous part of values.
+    _s_ll navl_contig() const throw() { return bmdx_minmax::myllmin(a.n() - _ipop % a.n(), navl()); }
+
+      // Pop one element.
+      // Returns:
+      //    true - popped successfully,
+      //    false - not popped because the buffer is currently empty.
+      // Concurrency: may be called by Consumer only.
+    bool pop_1() throw() { if (_ipush <= _ipop) { return false; } _a_pop_1(); return true; }
+
+      // Pop multiple elements.
+      //    n >= 0 specifies max. number of values to be popped.
+      //      Really, min(n, navl()) values will be popped.
+      //    n == -1 pops all currently available elements.
+      //    n <= -2 does nothing (same as n == 0).
+      // Concurrency: may be called by Consumer only.
+      // Returns:
+      //    the number of elements actually popped. The function does not fail.
+    _s_ll pop_n(_s_ll n) throw() { return _a_pop_n(n == -1 ? a.n() : n); }
+
+      // Same as pop_1(), but does not call element destructor.
+      //  (For use with efficient memory copying on popping elements of movable types.)
+    bool discard_1() throw() { if (_ipush <= _ipop) { return false; } _ipop += 1; return true; }
+
+      // Same as pop_n(), but does not call elements' destructors.
+      //  (For use with efficient memory copying on popping elements of movable types.)
+    _s_ll discard_n(_s_ll n) throw() { if (n == 0 || n <= -2) { return 0; } const _s_ll na = navl(); if (n == -1 || n > na) { n = na; } _ipop += n; return n; }
+
+      // Returns ref. to absolute pos. (ipop() + i) (internally: by modulus ncap()).
+      //    To point to valid position, i must be in [0..navl()).
+      //    [0] - is the element that would be popped next.
+      // NOTE operator[] may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
+      // Concurrency: may be safely called by Consumer only.
+    t_value& operator[] (_s_ll i) throw() { _s_ll j = (_ipop + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
+    const t_value& operator[] (_s_ll i) const throw() { return ((cppringbuf1_t&)*this)[i]; }
+
+  private:
+    carray_t<t_value, false> a; // certain part of entries contains C++ objects
+    volatile _s_ll _ipush, _ipop; // the next push position, corresponding pos. in bc == _ipush % ncap(); the next pop position; _ipop <= _ipush; corresponding position in bc == _ipop % ncap()
+
+    struct __a2 : carray_t<t_value, false> { typedef carray_t<t_value, false> t; void _destroy(T* pd_, typename t::_t_size i0, typename t::_t_size i2) { this->t::_destroy(pd_, i0, i2); } void _destroy1(T* pd_) { this->t::_destroy1(pd_); } };
+    void _a_pop_1() { const _s_ll j = _ipop; static_cast<__a2&>(a)._destroy1(a.pd() + j % a.n()); _ipop = j + 1; }
+    _s_ll _a_pop_n(_s_ll n) { const _s_ll j = _ipop; n = bmdx_minmax::myllmin(n, _ipush - j, a.n()); if (n <= 0) { return 0; } _a_destroy_n_u(a, j, n); _ipop = j + n; return n; }
+    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = ind0 % a.n(); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2&>(a)._destroy(a.pd(), i0, i2); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2&>(a)._destroy(a.pd(), 0, i2); } }
+    static bool _a_copy_n_u(carray_t<t_value, false>& adest, _s_ll idest, const carray_t<t_value, false>& asrc, _s_ll isrc, _s_ll n) // transactional copying (without array capacity and other checks)
+    {
+      if (n <= 0) { return true; }
+      _s_ll n2 = n;
+      const t_value* p1 = asrc.pd() + isrc % asrc.n(); const t_value* p1e = asrc.pd() + asrc.n();
+      t_value* p2 = adest.pd() + idest % adest.n(); const t_value* const p2e = adest.pd() + adest.n();
+      try { do { new (p2) t_value(*p1); ++p2; ++p1; if (p1 == p1e) { p1 = asrc.pd(); } if (p2 == p2e) { p2 = adest.pd(); } } while (--n2); }
+      catch (...) { _a_destroy_n_u(adest, idest, n - n2); return false; }
+      return true;
+    }
+    template<class F> _s_long _push_1(const F& f) { if (navl() >= a.n()) { return -1; } try { f(&tail(0)); } catch (...) { return -3; } _ipush += 1; return 1; }
+    template<class F> _s_long _push_n(const F& f, _s_ll n)
+    {
+      if (n < 0) { return -1; }
+      if (n == 0) { return 1; }
+      if (n > nfree()) { return -1; }
+      _s_ll np2 = n;
+      t_value* p2 = a.pd() + _ipush % a.n();
+      const t_value* const pe = a.pd() + a.n();
+      try { do { f(p2); ++p2; if (p2 == pe) { p2 = a.pd(); } } while (--np2); }
+      catch (...) { _a_destroy_n_u(a, _ipush, n - np2); return -3; }
+      _ipush += n;
+      return 1;
+    }
+  };
+
+
+
+  //== struct vnnqueue_t
+
+    // Variable-size, non-blocking, non-moving (elements) queue.
+    //
+    //  Similarity to cppringbuf1_t (fixed-size queue).
+    //    1. Data supplier and consumer may run as pair of threads and use it concurrently, without any blocking.
+    //    2. push*() and pop*() do NOT move the existing elements.
+    //    3. The container is suitable for passing across binary modules of one process,
+    //        under the same conditions as described for struct cpparray_t (item 4).
+    //
+    //  Specific features.
+    //    1. vnnqueue_t is multi-part container.
+    //        By default, any push*() operation may cause automatic queue growth,
+    //          and any pop*() operation may cause automatic queue shrinking.
+    //          Thus dynamic memory allocation/freeing does not guarantee fixed time for pushing and popping.
+    //        If growth/shrinking is disabled, pushing and popping take fixed time per element, same as in cppringbuf1_t.
+    //    2. front(), back() take fixed time.
+    //        Random access may be slower, depending on m() (column size).
+    //
+    //  Comparison with STL containers.
+    //      1. Efficiency:
+    //        Access, push, pop efficiency: average of STL vector, list, queue.
+    //        Elements are not moved since construction, as in std::list.
+    //        Random access speed with small m() (column size) is O(N) as in std::list.
+    //        Random access speed with considerably large m() is O(1) as in std::vector.
+    //      2. Storage:
+    //        by dflt., memory consumption is ~= that of std::list.
+    //        Large excessive place, e.g. as in vector, can be reserved with explicit call (set_rsv()).
+    //      3. Advanced features:
+    //        1) non-blocking push/pop,
+    //        2) same container object can be safely manipulated in different binary modules of the process,
+    //        3) controllable automatic reserve management, according to the specified min./max. limits.
+    //
+  template<class T, class _bs = bmdx_meta::nothing>
+  struct vnnqueue_t
+  {
+    #ifndef __bmdx_vnncol_alloc
+      #define __bmdx_vnncol_alloc(m) this->_vnncol_alloc(m)
+      #define __bmdx_vnncol_free(p) this->_free(p)
+    #endif
+
+    // COMMON part
+
+    struct exc_iter : std::exception { const char* what() const throw() { return "vnnqueue_t::iterator_t op."; } };
+    struct exc_range : std::exception { const char* what() const throw() { return "vnnqueue_t range chk."; } };
+    struct exc_cc : std::exception { const char* what() const throw() { return "vnnqueue_t(const vnnqueue_t&)"; } };
+
+    struct column { T* data() { return (T*)(this + 1); } column* prev() const { return _prev; } column* next() const { return _next; } private: friend struct vnnqueue_t; column *_prev, *_next; column(); };
+
+      // Iterator is recommended for efficient peeking or modifying (e.g. sorting) multiple pushed values.
+      //  Any dereferencing is range-checked.
+      //  NOTE Iterator remembers absolute bounds of data at the time when it's created.
+      //    During iterator lifetime, it's safe to push additional elements (including concurrently!)
+      //    but UNSAFE to pop any number of elements.
+      // Concurrency:
+      //    on concurrent access, iterator_t may be used by Consumer ONLY.
+    template<bool is_const>
+    class iterator_t : public std::iterator<std::random_access_iterator_tag, T>
+    {
+      vnnqueue_t* _ct; column* _c; _s_ll _i, _ic, _ipop, _ipush; // _ipop, _ipush == const during iterator lifetime
+    public:
+      typedef T value_type; typedef T t_value;
+      typedef typename bmdx_meta::if_t<is_const, const t_value*, t_value*>::result  pointer;
+      typedef typename bmdx_meta::if_t<is_const, const t_value&, t_value&>::result reference;
+      typedef std::random_access_iterator_tag iterator_category; typedef iterator_t iterator_type; typedef _s_ll difference_type;
+
+        // The default iterator is not bound to any container, thus not practically useful.
+      inline iterator_t() throw() { _ct = 0; _c = 0; _i = _ic = _ipop = _ipush = 0; }
+        // Front or end pos. iterator creation.
+      inline iterator_t(const vnnqueue_t& ct_, bool b_front) throw() { _ct = (vnnqueue_t*)&ct_;  _ipop = ct_._ipop; _ipush = ct_._ipush; if (b_front) { _i = _ic = _ipop; _c = ct_._cpop; } else { _s_ll i1 = _ipush; column* c = ct_._cpush; _s_ll i2 = _ipush; if (i2 == i1) { _i = _ic = i1; _c = c; return; } i1 = _ipush; c = ct_._cpush; i2 = _ipush; if (i2 == i1) { _i = _ic = i1; _c = c; return; } *this = iterator_t(ct_, true); move_by(navl()); } }
+        // Direct conversion from const to non-const and back, for simplicity.
+      inline iterator_t(const iterator_t<false>& x) throw() { *this = (iterator_t&)x; }
+      inline iterator_t(const iterator_t<true>& x) throw() { *this = (iterator_t&)x; }
+
+        // (Constant)
+        // Number of elements in the addressed sequence.
+        //  Fixed at the moment when the iterator is created by parent container.
+      _s_ll navl() const throw() { return _ipush - _ipop; }
+        // (Constant)
+        // Number of elements in a column (single contiguous storage).
+      _s_ll m() const throw() { return _m; }
+        // (Constant)
+        // Absolute indices to the beginning and the end of sequence.
+        //  Fixed at the moment when the iterator is created by parent container.
+      _s_ll ipop() const throw() { return _ipop; }
+      _s_ll ipush() const throw() { return _ipush; }
+
+        // The absolute index of the addressed element.
+      _s_ll ind() const throw() { return _i; }
+
+        // Index of the currently addressed element in the current column.
+        //  The value is valid only if col() != 0. See also col().
+      _s_ll irow() const throw() { return _i % _ct->_m; }
+
+        // Returns true if iterator points to valid element, false otherwise.
+      bool b_elem() const throw() { return _i >= _ipop && _i < _ipush; }
+
+        // Returns true if the current iterator position is before the beginning of sequence.
+      bool b_bbeg() const throw() { return _i < _ipop; }
+
+        // Returns true if the current iterator position >= end of sequence.
+      bool b_aend() const throw() { return _i >= _ipush; }
+
+        // This function may be used to access the current element or any element in the currently addressed column.
+        // Returns:
+        //    a) The column, to which the currently addressed element belongs.
+        //        In this case,
+        //        col()->data()[irow()] is equivalent to iterator dereferencing.
+        //        col()->data()[i], where i is in [0..m()), addresses elements in the same column (should be used only on existing elements).
+        //    b) 0: iterator does not point to valid element.
+      column* col() const throw() { if (!b_elem()) { return 0; } return _c; }
+
+        // The parent container.
+        //  NOTE Iterators from different containers may not be compared or in any other way related.
+      vnnqueue_t* ctnr() const throw() { return _ct; }
+
+      inline reference operator*() const { if (!(_i >= _ipop && _i < _ipush)) { throw exc_range(); } return _c->data()[_i % _ct->_m]; }
+      inline pointer operator->() const { return &**this; }
+
+
+        // Returns a ref. to element, relative to the current iterator position.
+        // Concurrency:
+        //    1. operator[] may be safely called by Consumer only.
+        //    2. For Supplier, operator[] is UNSAFE, because the Consumer may exhaust the queue at any time, making cached index bounds invalid.
+      inline reference operator[](difference_type delta) const { return *iterator_t(*this).move_by(delta); }
+
+        // Iterator position change. Does not fail.
+        //  Iterator position is always treated as plain 64-bit signed value.
+        //  When iterator points to anywhere out of sequence (e.g. after-after-end), it can be safely moved back to valid position,
+        //    and then dereferenced in usual way.
+        // Time taken: proportional to abs(delta) / m().
+        // NOTE All iterator changes are implemented via move_by().
+      iterator_type& move_by(_s_ll delta) throw()
+      {
+        if (delta == 0) { return *this; }
+        const _s_ll i2 = _i + delta;
+        const bool bl = i2 < _ipop, br = i2 > _ipush;
+        if (!_c || bl || br || _ipush == _ipop) { _i = i2; return *this; } // if i2 is out of valid range, _ic continues to hold a real position
+        const _s_ll nsteps = (bl ? _ipop : (br ? _ipush : i2)) - (_ic - _ic % _ct->_m); // valid pos. rel. to c beginning
+        if (nsteps > 0) { _s_ll icol = nsteps / _ct->_m; while (icol--) { _c = _c->_next; } }
+        else if (nsteps < 0) { _s_ll icol = (nsteps + 1 - _ct->_m) / _ct->_m; while (icol++) { _c = _c->_prev; } }
+        _i = _ic = i2;
+        return *this;
+      }
+
+        // Movement to absolute position.
+        //  The position itself may be anything, but the valid element is addressed only by i in [ipop() .. ipush()).
+      iterator_type& move_to(_s_ll i) throw() { return move_by(i - _i); }
+
+      inline iterator_type& operator++() throw() { return move_by(1); }
+      inline iterator_type& operator--() throw() { return move_by(-1); }
+      inline iterator_type operator++(int) throw() { iterator_t i(*this); move_by(1); return i; }
+      inline iterator_type operator--(int) throw() { iterator_t i(*this); move_by(-1); return i; }
+
+      inline iterator_type& operator+=(difference_type delta) throw() { return move_by(delta); }
+      inline iterator_type& operator-=(difference_type delta) throw() { return move_by(-delta); }
+      inline iterator_type operator+(difference_type delta) const throw() { return iterator_t(*this).move_by(delta); }
+      inline iterator_type operator-(difference_type delta) const throw() { return iterator_t(*this).move_by(-delta); }
+
+        // NOTE The operation generates an exception if operands belong to different containers.
+      inline difference_type operator-(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return this->_i - x._i; }
+
+        // NOTE Comparisons generate an exception if compared iterators belong to different containers.
+      inline bool operator==(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i == x._i; }
+      inline bool operator!=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i != x._i; }
+      inline bool operator>(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i > x._i; }
+      inline bool operator<(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i < x._i; }
+      inline bool operator>=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i >= x._i; }
+      inline bool operator<=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i <= x._i; }
+    };
+    typedef iterator_t<false> iterator; typedef iterator_t<true> const_iterator;
+    typedef T value_type; typedef T t_value;
+
+    // OWNER part
+
+      // m_ is automatically adjusted to be >= 1.
+      // NOTE The default construction does not make any allocations.
+      //  Such container copying is trivial and faultless.
+      //  Capacity change (growth, auto-shrinking) is not limited in any way, equivalent to
+      //    set_cap_hints(0, -2);
+      //  After the default construction, the client may
+      //    1) optionally call set_m() (set chunk size) + set_rsv() (reserve some place for elements) + set_cap_hints() (adjust capacity limits),
+      //    2) push an element. NOTE Doing that without the above settings, at once allocates 2 columns (2 * max(m_, 1) places for elements).
+    vnnqueue_t(_s_ll m_ = 10) throw() { _m = m_ >= 1 ? m_ : 1; _scalars_reset(); _pff_reset(); }
+
+    vnnqueue_t(const vnnqueue_t& q)
+    {
+      new (this) vnnqueue_t(q._m);
+      _capmin = q._capmin; _capmax = -2;
+      _ipop = q._ipop; _ipush = _ipop;
+      _s_long res = set_rsv(q.ncapp());
+      if (res != 1) { this->~vnnqueue_t(); throw exc_cc(); }
+      for (iterator i = q.begin(); !i.b_aend(); ++i) { res = push_1(*i); if (res != 1) { this->~vnnqueue_t(); throw exc_cc(); } }
+      _capmax = q._capmax;
+    }
+
+    vnnqueue_t& operator=(const vnnqueue_t& q) { vnnqueue_t q2(q); bmdx_str::words::swap_bytes(*this, q2); return *this; }
+
+    ~vnnqueue_t() throw() { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); }
+
+      // Remove all values, release all dynamic allocations.
+      //  Set min. capacity to 0, max. capacity to unlimited. (May be changed later with set_cap_hints()).
+      //  Keep m() unchanged. (May be changed later with set_m()).
+      //  The current capacity becomes 0. The container copying becomes trivial and faultless.
+      //  navl(), ipush(), ipop() become 0.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    void clear() throw() { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); _scalars_reset(); }
+
+      // Swap this container with x.
+      // NOTE The container is bytewise movable and swappable.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    void swap(vnnqueue_t& x) throw() { bmdx_str::words::swap_bytes(*this, x); }
+
+
+      // Sets the new column (place reservation chunk) size.
+      //    This operation may succeed only when the container contains no columns:
+      //      a) default-initialized,
+      //      b) after popping all elements + set_rsv(0);
+      // Returns:
+      //    1 - success.
+      //    -1 - m_ < 1.
+      //    -3 - cannot do because the container is not empty.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    _s_long set_m(_s_ll m_) throw() { if (m_ < 1) { return -1; } if (_cpush || _cpop) { return -3; } _m = m_; return 1; }
+
+      // Sets values of ncapmin(), ncapmax() - hints for container autoresizing on pop and push, respectively.
+      //  Rules:
+      //  1. Factual capacity (reserved place) is usually larger than the specified values, because the container allocates place
+      //    in fixed-size chunks (see m()), and also because some part of chunks may be unused at the moment by both push and pop side.
+      //    (They get used each time when pushing reaches the end of its current chain of chunks.)
+      //  2. When new limited (nmax >= 0) max. capacity is set, it does not remove the existing elements, even if their number exceeds the limit.
+      //    But the limits are approached as closely as possible during sequences of pop or push operations.
+      //  nmin:
+      //    a) -1 - the container may not shrink from the current reserve.
+      //      In this mode, freeing the dynamic memory for columns is disabled (but this does not disable what T ctor/dtor may make),
+      //      and the number of managed columns does not decrease.
+      //    b) >= 0 the container may shrink on pop until nmin places (or the closest larger value) are allocated.
+      //      See also ncapp(), ncapeff().
+      //  nmax:
+      //    a) -2 - no limit to queue growth.
+      //    b) -1 - the number of elements cannot exceed the currently reserved place.
+      //      In this mode allocating the dynamic memory for columns is disabled (but this does not disable what T ctor/dtor may make),
+      //      and the number of managed columns does not increase.
+      //    c) >= 0 (must be >= nmin if nmin >= 0) - exact limit of max. number of elements in the container.
+      //      After nmax elements are pushed, any push operation is denied until some popping,
+      //        even if the really reserved place is larger than nmax.
+      //      Also, after the place reserve reaches nmax or pre-set to >= nmax (see set_rsv()),
+      //      further allocating the dynamic memory for columns is disabled (because not necessary),
+      //        same as with nmax == -1.
+      // NOTE To imitate fixed-size queue (like cppringbuf1_t), use
+      //    set_cap_hints(-1, cap); set_rsv(cap);
+      //    Here, cap is the desired fixed capacity.
+      // NOTE vnnqueue_t default constructor disables any capacity limits, equivalent to:
+      //    set_cap_hints(0, -2);
+      // Returns:
+      //    1 - success: ncapmin() == nmin, ncapmax() == nmax().
+      //    -1 - no changes: argument constraints are not satisfied.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    _s_long set_cap_hints(_s_ll nmin, _s_ll nmax) throw() { if (!(nmin >= -1 && nmax >= -2)) { return -1; } if (nmin >= 0 && nmax >= 0 && nmax < nmin) { return -1; } _capmin = nmin; _capmax = nmax; return 1; }
+
+      // Modify the current place reserve for elements to be as close as possible to nrsv.
+      //    The container will be capable of holding approx. >= nrsv elements without additional dynamic allocations.
+      //  Rules:
+      //    1. The operation ignores ncapmin(), ncapmax().
+      //    2. On nrsv > 0, the number of allocated places is ((nrsv + m() - 1) / m() * m()) + m().
+      //    3. On nrsv == 0, all existing free columns are removed.
+      //      In case if navl() == 0, all columns are removed (because no data at all),
+      //      and the queue is put into default state:
+      //      no memory allocated, queue copying is faultless, column size may be changed (see set_m()).
+      // NOTE To imitate fixed-size queue (like cppringbuf1_t), use
+      //    set_cap_hints(-1, cap); set_rsv(cap);
+      //    Here, cap is the desired fixed capacity.
+      // Returns:
+      //    1 - success: the new real reserve is >=, but close to max(nrsv, navl()).
+      //    -1 - nrsv < 0.
+      //    -2 - failed to allocate memory.
+      // Concurrency:
+      //    may be called by Owner only.
+      //    Both Supplier and Consumer must not be active at that time.
+    _s_long set_rsv(_s_ll nrsv) throw()
+    {
+      if (nrsv < 0) { return -1; }
+      if (_cpush)
+      {
+        const _s_ll na = navl();
+        _link_free_to_cpush(1, 1);
+        if (nrsv == 0 && na == 0) { _cols_release(); _col_scalars_reset(); _caps_reset(); }
+        else
+        {
+          const _s_ll n0 = na - _ipush % _m;
+          _s_ll nrfact = n0 <= 0 ? 0 : (n0 + _m - 1) / _m * _m;
+          column* cf = _cpush;
+          while (nrfact < nrsv)
+          {
+            if (!cf->_next) { break; }
+            nrfact += _m; cf = cf->_next;
+          }
+          _cfree_prv = _cfree_last = 0; _ilnknew = _ilnkused = 0;
+          _cpop->_prev = 0;
+          if (nrfact >= nrsv) { column* cf1 = cf->_next; cf->_next = 0; while (cf1) { column* cf2 = cf1->_next; __bmdx_vnncol_free(cf1); _cap_pop -= 1; cf1 = cf2; } _caps_normalize(); }
+          else { while (nrfact < nrsv) { column* cnew = __bmdx_vnncol_alloc(_m); if (!cnew) { _caps_normalize(); return -2; } cnew->_prev = cf; cnew->_next = 0; cf->_next = cnew; cf = cnew; nrfact += _m; _cap_push += 1; } _caps_normalize(); }
+        }
+      }
+      else { return _set_rsv_initial(nrsv); }
+      return 1;
+    }
+
+
+      // (Constant, informational)
+      // Number of elements in a column (single linear part of sequence).
+      // Value: >= 1.
+    _s_ll m() const throw() { return _m; }
+
+      // Min. and max. capacity, to which the container shrinks or grows automatically.
+      //    ncapmax() >= 0 also serves as the exact limit for max. number of elements at push op.
+      //    See also set_cap_hints().
+      // Values:
+      //    ncapmax: -2 (infinite growth allowed), -1 (no growth allowed), or >=0 (single push will succeed only if navl() < ncapmax()).
+      //    ncapmin: -1 (no shrinking allowed), or >= 0.
+    _s_ll ncapmax() const throw() { return _capmax; }
+    _s_ll ncapmin() const throw() { return _capmin; }
+
+      // The pessimistic estimate of the container capacity:
+      //    the guaranteed min. number of places for elements,
+      //    available at any time (after any popping), and can be used without additional dynamic allocations,
+      //    unless limited by ncapmax() >= 0.
+      // The exact effective value of capacity at the moment depends on elements placement (ipop()),
+      //    see ncapeff().
+      // Notes:
+      //    1. ncapp() is multiple of m().
+      //    2. The number of actually allocated places for elements is exactly (ncapp() > 0 ? ncapp() + m() : 0).
+      //    3. ncapp() itself may be partially unused, if the specified ncapmax() limits the number of pushed elements.
+      //    4. On popping, ncapp() will decrease unless the container shrinking is disabled. See also set_cap_hints (nmin arg.).
+      // Concurrency:
+      //    the returned value is reliable for Consumer only.
+      //    (For Supplier, the guaranteed capacity is max(0, min(ncapp(), ncapmin())).
+      //      Use pre-set reserve and cap. hints to ensure enough place.)
+    _s_ll ncapp() const throw() { _s_ll n = _cap_push; n += _cap_pop; n -= 1; n *= _m; if (n < 0) { n = 0; } return n; }
+
+      // The exact effective value of the current container capacity:
+      //    (ncapeff() - navl()) is the guaranteed min. number of places for elements,
+      //    currently available for pushing without additional dynamic allocations.
+      // The ncapeff() value is always in range
+      //    min(  [ncapp() .. ncapp() + m() - 1], (ncapmax() >= 0 ? ncapmax() : infinity)  ).
+      // Concurrency:
+      //    the returned value is reliable for Consumer only.
+      //    (For Supplier, the capacity may decrease at any time between ncapeff() and value pushing.
+      //      Use pre-set reserve and cap. hints to ensure enough place.)
+    _s_ll ncapeff() const throw() { _s_ll n = ncapp(); if (n == 0) { return 0; } n = n + _m - 1 - _ipop % _m; if (_capmax >= 0) { n = bmdx_minmax::myllmin(n, _capmax); } return n; }
+
+      // Absolute indices to the beginning and the end of sequence.
+    _s_ll ipop() const throw() { return _ipop; }
+    _s_ll ipush() const throw() { return _ipush; }
+
+      // Number of elements available to pop.
+    _s_ll navl() const throw() { return _ipush - _ipop; }
+
+    // SUPPLIER part
+
+    struct new_dflt { void operator()(T* p) const { new (p) T(); } }; // creates a T() at p
+    struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p) const { new (p) T(x); } }; // creates a T(x) at p
+    struct new_cp_seq { mutable const T* psrc; new_cp_seq(const T* psrc_) : psrc(psrc_) {} void operator()(T* p) const { new (p) T(*psrc++); } }; // creates a T(*psrc++) at each call
+
+      // push_1(x): push a copy of x.
+      // push_1f(f): accepts a client-defined functor f that is able to create an element,
+      //    see e.g. new_dflt, new_cp.
+      // Returns:
+      //    1 - success.
+      //    -1 - not pushed because of limited capacity.
+      //    -2 - failure (mem. alloc. or similar).
+      //    -3 - failed to construct the new element.
+      // Concurrency: may be called by Supplier only.
+    _s_long push_1(const t_value& x) throw() { return _push_1(new_cp(x)); }
+    template<class Fcreate> _s_long push_1f(const Fcreate& f) throw() { return _push_1(f); }
+
+      // Push n (>= 0) values.
+      // push_n(n): uses copy constructor to create elements.
+      // push_nf(f, n): accepts a client-defined functor f that is able to sequentially create n values,
+      //    see e.g. new_dflt, new_cp, new_cp_seq.
+      // NOTE On error during operation, all new elements are removed, but the increased reserve (new columns) is not reverted.
+      // Returns:
+      //    1 - success. n values are pushed.
+      //    0 - pss == 0.
+      //    -1 - a) not pushed because of limited capacity, b) n < 0.
+      //    -2 - failure (mem. alloc. or similar).
+      //    -3 - failed to construct the new element.
+      // Concurrency: may be called by Supplier only.
+    _s_long push_n(const t_value* pss, _s_ll n) throw() { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
+    template<class F> _s_long push_nf(const F& f, _s_ll n) throw() { return _push_n(f, n); }
+
+      // Returns ref. to the last pushed element.
+      // Generates an exception on no elements in queue.
+      // Concurrency:
+      //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
+    t_value& back() { if (navl() <= 0) { throw exc_range(); } const _s_ll j = _ipush % _m - 1; if (j >= 0) { return _cpush->data()[j]; } else { return _cpush->_prev->data()[_m-1]; } }
+    const t_value& back() const { return ((vnnqueue_t*)this)->back(); }
+
+      // Returns ref. to absolute pos. (ipush() + ineg).
+      //    ineg must be negative, in [-navl()..-1], to point to valid position.
+      //    I.e. ineg == -1 points to the last pushed value, -2 - one back from it etc.
+      //    (If the position is invalid, an exception is generated.)
+      // Concurrency:
+      //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
+    t_value& tail(_s_ll ineg) { return *end().move_by(ineg); }
+    const t_value& tail(_s_ll ineg) const { return *cend().move_by(ineg); }
+
+    // CONSUMER part
+
+      // Returns ref. to the element that would be popped next.
+      // Generates an exception on no elements in queue.
+      // Concurrency: may be safely called by Consumer only.
+    t_value& front() { if (navl() <= 0) { throw exc_range(); } return _cpop->data()[_ipop % _m]; }
+    const t_value& front() const { return ((vnnqueue_t*)this)->front(); }
+
+      // Iterators may be safely created and their position manipulated at any time
+      //    between two successive pop operations.
+      //    (Push operation adds elements, but they are simply ignored by previously created iterators.)
+      // Concurrency: iterators may be safely used by Consumer only.
+    iterator begin() const throw() { return iterator(*this, true); }
+    iterator end() const throw() { return iterator(*this, false); }
+    const_iterator cbegin() const throw() { return const_iterator(*this, true); }
+    const_iterator cend() const throw() { return const_iterator(*this, false); }
+
+      // Returns ref. to absolute pos. (ipop() + i).
+      //    To point to valid position, i must be in [0..navl()).
+      //    (If the position is invalid, an exception is generated.)
+      //    [0] - is the element that would be popped next, same as front().
+      // Access time: proportional to i / m(). Hint: use iterator for sequential access.
+      // Concurrency: may be safely called by Consumer only.
+    t_value& operator[](_s_ll i) { const _s_ll na = navl(); if (!(i >= 0 && i < na)) { throw exc_range(); } i += _ipop % _m; _s_ll icol = i / _m; column* c = _cpop; while (icol--) { c = c->_next; } return c->data()[i % _m]; }
+    const t_value& operator[](_s_ll i) const { return ((vnnqueue_t&)*this)[i]; }
+
+      // Removes one element.
+      //  NOTE See pop_n() for comment on shrinking.
+      //  Returns
+      //    a) true if element existed (it was anyway removed).
+      //    b) false otherwise.
+    bool pop_1() throw() { const _s_ll i0 = _ipop; const _s_ll i2 = _ipush; if (i2 > i0) { _pop_range(i0, i0 + 1); return true; } return false; }
+
+      // Removes multiple elements.
+      //    n >= 0 specifies max. number of values to be popped.
+      //      Really, min(n, navl()) values will be popped.
+      //    n == -1 pops all currently available elements.
+      //    n <= -2 does nothing (same as n == 0).
+      // Shrinking behavior:
+      //    a) on factually popping one or more elements, with ncapmin() >= 0: the freed columns are deleted,
+      //      until the reserve reaches a value closest to ncapmin().
+      //    b) with ncapmin() == -1: the container capacity is not modified, i.e. no automatic column deletion occurs.
+      //      The columns that are left unoccupied by removal, are treated as reserved space for later pushing.
+      // Returns:
+      //    the number of elements actually removed (>=0). The function does not fail.
+      // Concurrency:
+      //    the function may be safely called by Consumer only.
+      //    Note that Supplier may safely continue pushing elements during any pop*() operation.
+    _s_ll pop_n(_s_ll n) throw() { if (n == 0 || n <= -2) { return 0; } const _s_ll i0 = _ipop; _s_ll na = _ipush - i0; if (n == -1 || n > na) { n = na; } if (n > 0) { _pop_range(i0, i0 + n); } return n; }
+
+  private:
+    typedef void* (*F_alloc)(_s_ll nbytes); typedef void (*F_free)(void* p);
+    inline void* _alloc(_s_ll nbytes) throw() { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_calloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
+    inline void _free(void* p) throw() { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
+    inline void _destroy1(T* pd_) throw() { (void)pd_; try { pd_->~T(); } catch (...) {} }
+    inline column* _vnncol_alloc(_s_ll m) throw() { return (column*)_alloc(sizeof(column) + m * sizeof(T)); }
+
+    void _pop_range(_s_ll i0, _s_ll i2) // constraints: i0 == _ipop, i2 <= _ipush
+    {
+      _s_ll ir = i0 % _m;
+      _s_ll nccurr = _cap_push; nccurr += _cap_pop;
+      const _s_ll ncmin = _capmin >= 0 ? 2 + _capmin / _m : 2;
+      while (i0 < i2)
+      {
+        _destroy1(_cpop->data() + ir);
+        ++i0;
+        ++ir;
+        if (ir < _m) { _ipop = i0; continue; }
+        ir = 0;
+        if (nccurr - 1 >= ncmin) { nccurr -= 1; _cap_pop -= 1; column* cf = _cpop; _cpop = cf->_next; _cpop->_prev = _cfree_last; __bmdx_vnncol_free(cf); }
+        else
+        {
+            // NOTE the free columns are single-linked list: _prev are valid pointers, _next contains unique serial number of free column occurrence
+          column* cnx = _cpop->_next;
+          const _s_ll inew = _ilnknew + 1;
+          _cpop->_prev = _cfree_last;
+          _cpop->_next = (column*)(__bmdx_null_pchar + inew);
+          _cfree_last = _cpop;
+          _ilnknew = inew;
+          _cpop = cnx;
+        }
+          _ipop = i0;
+      }
+    }
+
+      // Reusable part of _push_1.
+      //  1) Links all columns that are currently free, to the end of _cpush's chain. This is enough to hold at least one additional element.
+      //  2) If no free columns, allocates a column (2 cols. if the container is empty), to be able to hold one additional element.
+    _s_long _link_free_to_cpush(bool b_ignore_limit, bool b_may_alloc)
+    {
+      if (!_cpush) { if (!b_may_alloc) { return 0; } return _set_rsv_initial(1); }
+      column* cend = _cpush;
+      while (cend->_next) { cend = cend->_next; }
+      _s_ll inew = _ilnknew; // written (by pop side) after changing _cfree_last, read (by push side) before reading _cfree_last
+      column* const cfl = _cfree_last;
+      if (inew == _ilnkused && cfl == _cfree_prv)
+      {
+        if (!b_may_alloc) { return 0; }
+        if (!b_ignore_limit)
+        {
+          if (_capmax == -1) { return -1; }
+          if (_capmax >= 0) { if (ncapp() - _capmax >= _m) { return -1; } }
+        }
+        column* cnew = __bmdx_vnncol_alloc(_m); if (!cnew) { return -2; }
+        cnew->_prev = cend; cnew->_next = 0; cend->_next = cnew; _cap_push += 1;
+        return 1;
+      }
+      // cfl != 0 here (but _cfree_prv may be anything)
+
+      inew = (char*)cfl->_next - (char*)0;
+      column* cf = cfl;
+      if (1) { cfl->_next = 0; _s_ll i = inew; while (--i > _ilnkused) { column* c = cf->_prev; c->_next = cf; cf = c; } }
+      cend->_next = cf; cf->_prev = cend; _cfree_prv = cfl; _ilnkused = inew;
+
+      return 1;
+    }
+
+    _s_long _set_rsv_initial(_s_ll nrsv)
+    {
+      if (nrsv < 0) { return -1; }
+      if (_cpush || _cpop) { return -2; }
+      _cfree_last = _cfree_prv = 0; _ilnknew = _ilnkused = 0;
+      _caps_reset();
+      if (nrsv == 0) { return 1; }
+
+      column* chead = 0; column* cf = 0; _s_ll nplaces = 0;
+      while (nplaces - _m < nrsv) // NOTE one column cannot be counted as guaranteed reserve for client, because _ipush < _ipop in the same column is not allowed
+      {
+        column* cnew = __bmdx_vnncol_alloc(_m); if (!cnew) { break; }
+        cnew->_prev = cf; cnew->_next = 0;
+        if (cf) { cf->_next = cnew; } else { chead = cnew; }
+        cf = cnew; nplaces += _m;
+      }
+      const bool bf = nplaces - _m < nrsv;
+      if (bf && nplaces == _m) { __bmdx_vnncol_free(chead); chead = 0; }
+      _cpush = chead; _cap_push = nplaces / _m; _cpop = chead;
+      if (bf) { return -2; }
+      return 1;
+    }
+
+    void _scalars_reset() { _col_scalars_reset(); _cap_limits_reset(); _caps_reset(); _ipp_reset(); }
+    void _col_scalars_reset() { _cpush = _cpop = _cfree_prv = _cfree_last = 0; _ilnknew = _ilnkused = 0; }
+    void _cap_limits_reset() { _capmin = 0; _capmax = -2; }
+    void _ipp_reset() { _ipush = _ipop = 0; }
+    void _pff_reset() { _psf1 = _carray_tu_alloc_t<T>::_s_psf1(); _pff = _carray_tu_alloc_t<T>::_spff; }
+    void _cols_release() { column* cf = _cpop; while (cf) { column* cf2 = cf->_next; __bmdx_vnncol_free(cf); cf = cf2; } }
+    void _caps_reset() { _cap_pop = _cap_push = 0; }
+    void _caps_normalize() { _s_ll a = _cap_pop; _s_ll b = _cap_push; b += a; a = 0; _cap_push = b; _cap_pop = a; }
+
+    template<class Fcreate>
+    _s_long _push_1(const Fcreate& f)
+    {
+      const _s_ll na = navl();
+      if (_capmax >= 0 && na >= _capmax) { return -1; }
+      const _s_ll ir = _ipush % _m;
+      const bool b_lastpos = ir + 1 == _m;
+      if (!_cpush || (b_lastpos && !_cpush->_next)) { _s_long res = _link_free_to_cpush(0, 1); if (res != 1) { return res; } }
+      try { f(_cpush->data() + ir); } catch (...) { return -3; }
+      if (b_lastpos) { _cpush = _cpush->_next; }
+      _ipush += 1;
+      return 1;
+    }
+
+    _s_long _incr_rsv(_s_ll ndelta)
+    {
+      if (ndelta < 0) { return -1; }
+      if (ndelta == 0) { return 1; }
+      const _s_ll na = navl();
+      if (_capmax >= 0 && na + ndelta > _capmax) { return -1; }
+      const _s_ll ir = _ipush % _m;
+      if (!_cpush || (ir + ndelta >= _m && !_cpush->_next)) { _s_long res = _link_free_to_cpush(0, 1); if (res != 1) { return res; } }
+      ndelta -= (_m - ir); if (ndelta < 0) { return 1; }
+      column* cf = _cpush;
+      while (1)
+      {
+        column* cnx = cf->_next;
+        if (!cnx) { if (_capmax == -1) { return -2; } cnx = __bmdx_vnncol_alloc(_m); if (!cnx) { return -2; } cnx->_prev = cf; cnx->_next = 0; cf->_next = cnx; _cap_push += 1; }
+        ndelta -= _m; if (ndelta < 0) { return 1; }
+        cf = cnx;
+      }
+      return 1;
+    }
+
+    template<class F> _s_long _push_n(const F& f, _s_ll n2)
+    {
+      if (n2 < 0) { return -1; }
+      if (n2 == 0) { return 1; }
+      _s_long res = _incr_rsv(n2); if (res != 1) { return res; }
+      const _s_ll ir = _ipush % _m;
+      column* cf = _cpush; _s_ll npushed = 0, ir2 = ir;
+      for (; npushed < n2; ++npushed) { try { f(cf->data() + ir2); } catch (...) { break; } ir2 += 1; if (ir2 >= _m) { cf = cf->_next; ir2 = 0; } }
+      if (npushed < n2) { for (_s_ll i = 0; i < npushed; ++i) { ir2 -= 1; if (ir2 < 0) { cf = cf->_prev; ir2 = _m - 1; } _destroy1(cf->data() + ir2); } return -3; }
+      _cpush = cf; _ipush += n2;
+      return 1;
+    }
+
+    column * volatile _cpush, * volatile _cfree_prv, * volatile _cfree_last, * volatile _cpop; // on _cpush == 0 (by dflt. construction or set_rsv(0)), all others are also kept 0
+    void* _psf1; void** _pff;
+    _s_ll _m; // column size (>=1)
+    volatile _s_ll _cap_pop, _cap_push; // the current real allocated place == _m * (_cap_pop + _cap_push), >= 0; NOTE one column cannot be counted as guaranteed reserve for client, because reaching _ipush < _ipop in the same column is not allowed
+    _s_ll _capmin, _capmax; // min. capacity to which auto-shrinking is allowed (-1: no shrinking allowed); max. capacity to which auto-growth is allowed (-2: no limit, -1: no growth allowed)
+    volatile _s_ll _ipush, _ipop; // the next push position, if valid: _cpush->data()[_ipush % _m]; the next pop position, if valid: _cpop->data()[_ipop % _m]
+    volatile _s_ll _ilnknew; _s_ll _ilnkused;
+  };
+  template<class T, bool b> typename vnnqueue_t<T>::template iterator_t<b> operator+(typename vnnqueue_t<T>::template iterator_t<b>::difference_type delta, const typename vnnqueue_t<T>::template iterator_t<b>& x) throw() { typename vnnqueue_t<T>::template iterator_t<b> i(x); i += delta; return i; }
+
 }
 
 
@@ -1293,7 +2655,7 @@ namespace bmdx
 
 typedef HANDLE _t_threadctl_nat_handle;
 static void _threadctl_thproc_impl(void* _p) throw();
-static DWORD WINAPI _threadctl_thproc(LPVOID _p) throw()  { _threadctl_thproc_impl(_p); return 1; }
+static DWORD WINAPI _threadctl_thproc(LPVOID _p) throw()    { _threadctl_thproc_impl(_p); return 1; }
   // NOTE this object may be implemented differently (except the 1st member) in different binary modules.
 template<class T> struct _critsec_data0_t
 {
@@ -1389,8 +2751,8 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     x.stg1 = 1; bool b = *p == 1; x.stg1 = 0;
     x.stg2 = 0;
     const int n = sizeof(nat_id) <= 16 ? sizeof(nat_id) : 16;
-    if (b || n >= 8) { std::memcpy(p, p0, n); }
-      else { std::memcpy(p + 8 - n, p0, n); }
+    if (b || n >= 8) { bmdx_str::words::memmove_t<char>::sf_memcpy(p, p0, n); }
+      else { bmdx_str::words::memmove_t<char>::sf_memcpy(p + 8 - n, p0, n); }
   }
   static _s_long tid_is_eq(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2) throw()
   {
@@ -1642,7 +3004,7 @@ static pthread_key_t* _threadctl_psjstg()
       _u x2; std::memset(&x2, 0, sizeof(x2));
       try { x2.__1 = bmdx_str::conv::strn2i(pe, -1, 0, 0); }
         catch (...) { pe = 0; }
-      if (pe) { std::memcpy(&x, &x2, sizeof(_u)); }
+      if (pe) { bmdx_str::words::memmove_t<char>::sf_memcpy(&x, &x2, sizeof(_u)); }
     }
     if (!pe)
     {
@@ -1733,7 +3095,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
     if (!(_p && _p->psm)) { return; }
     _critsec_data1_t<T>* _pg_dat = (_critsec_data1_t<T>*)_p->psm(0); if (!_pg_dat) { return; }
     if (_p == &_pg_dat->_trecur) { pthread_mutex_lock(&_pg_dat->_tglobal._m); if (++_pg_dat->_cnt == 1) { csdata_init(&_pg_dat->_trecur); } pthread_mutex_unlock(&_pg_dat->_tglobal._m); }
-    if (_p->_kind == 1)  { pthread_mutex_lock(&_pg_dat->_tglobal._m); if (_p->_b_lk1 && pthread_equal((*(pthread_t*)&_p->_tid), pthread_self()) == 0) { pflags->_bl = 1; pflags->_brec = 1; } pthread_mutex_unlock(&_pg_dat->_tglobal._m); if (pflags->_brec) { return; } }
+    if (_p->_kind == 1) { pthread_mutex_lock(&_pg_dat->_tglobal._m); if (_p->_b_lk1 && pthread_equal((*(pthread_t*)&_p->_tid), pthread_self()) == 0) { pflags->_bl = 1; pflags->_brec = 1; } pthread_mutex_unlock(&_pg_dat->_tglobal._m); if (pflags->_brec) { return; } }
     double t0(0.); bool b(false);
     while (pthread_mutex_trylock(&_p->_m) != 0)
     {
@@ -1783,8 +3145,8 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     x.stg1 = 1; bool b = *p == 1; x.stg1 = 0;
     x.stg2 = 0;
     const int n = sizeof(nat_id) <= 16 ? sizeof(nat_id) : 16;
-    if (b || n >= 8) { std::memcpy(p, p0, n); }
-      else { std::memcpy(p + 8 - n, p0, n); }
+    if (b || n >= 8) { bmdx_str::words::memmove_t<char>::sf_memcpy(p, p0, n); }
+      else { bmdx_str::words::memmove_t<char>::sf_memcpy(p + 8 - n, p0, n); }
   }
   static _s_long tid_is_eq(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2) throw()
   {
@@ -1804,8 +3166,8 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
 
     _threadctl_tid_data::t_native_tid t1, t2;
     _s_ll x = 1; bool b = *(char*)&x == 1;
-    if (b || n >= 8) { std::memcpy(&t1, &p_my->stg1, n); std::memcpy(&t2, &p_my->stg2, n); }
-      else { std::memcpy(&t1, (char*)&p_my->stg1 + 8 - n, n); std::memcpy(&t2, (char*)&p_my->stg2 + 8 - n, n); }
+    if (b || n >= 8) { bmdx_str::words::memmove_t<char>::sf_memcpy(&t1, &p_my->stg1, n); bmdx_str::words::memmove_t<char>::sf_memcpy(&t2, &p_my->stg2, n); }
+      else { bmdx_str::words::memmove_t<char>::sf_memcpy(&t1, (char*)&p_my->stg1 + 8 - n, n); bmdx_str::words::memmove_t<char>::sf_memcpy(&t2, (char*)&p_my->stg2 + 8 - n, n); }
 
     return pthread_equal(t1, t2) == 0;
   }
@@ -1931,8 +3293,8 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
       (void*)th_in_ctl_incr, // 13
       0, // 14
       0, // 15
-      (void*)((char*)0 + -942002180), // 16 // cmti_base_t<int,2017,7,11,20,4>::ind()
-      (void*)((char*)0 + sizeof(_threadctl_tid_data::t_native_tid)), // 17
+      (void*)(__bmdx_null_pchar + -942002180), // 16 // cmti_base_t<int,2017,7,11,20,4>::ind()
+      (void*)(__bmdx_null_pchar + sizeof(_threadctl_tid_data::t_native_tid)), // 17
       0, // 18
       (void*)tid_is_eq, // 19
     };
@@ -2005,7 +3367,7 @@ namespace bmdx
     private: csdata(const csdata&); void operator=(const csdata&);
     };
 
-      // Critical section data object, refrenced by the current lock.
+      // Critical section data object, referenced by the current lock.
       //  The returned pointer is non-zero, referring to the valid object,
       //  provided that critsec_t had been constructed correctly.
     _critsec_data0_t<T>* pcsd0() const { return _p; }
@@ -2055,8 +3417,8 @@ namespace bmdx
 
     public:
         // Thread proc. must check this flag and return when it's true.
-        //  From thread side, b_stop() may be set to 1 with signal_stop(),
-        //  or to any value via *pflag().
+        //  From thread side, b_stop() may be set to 1 with associated threadctl's signal_stop(),
+        //    or to any value via its *pflag().
       volatile _s_long& b_stop() const { return __dat.bs; }
         // Thread proc. must know the real type of data (T must match the real type).
       template<class T> T* pdata() const { return reinterpret_cast<T*>(__dat.pthdata); }
@@ -2223,7 +3585,7 @@ namespace bmdx
       return b;
     }
 
-      // Sets thread priority in realtion to process priority class.
+      // Sets thread priority in relation to process priority class.
       // Allowed values:
       //  4 - normal priority (same as assigned by default),
       //  5 - above normal,
@@ -2268,7 +3630,7 @@ namespace bmdx
       //      checking thread state and returns on timeout or thread having exited.
       //    0 - yields once (sleep(0)), then checks thread state and returns.
       //    -1 - Sets b_stop() to 1 if it was 0. Detaches from thread context.
-      //    -2 - Sets b_stop() to 1 if it was 0 -- only if the current threadctl is the last one
+      //    -2 - Sets b_stop() to 1 if it was 0 - only if the current threadctl is the last one
       //      referencing the thread context. Detaches from thread context.
       //    -3 - detaches from thread context without modifying b_stop() flag.
       //      Thread signaling and ending is responsibility of the client and the thread procedure.
@@ -2296,11 +3658,11 @@ namespace bmdx
       //      2. terminate() call may cause process crash on any kind of system except explicitly tested ones (listed in arch_notes.txt).
       //      3. On older generation mobile devices, terminate() call may hang whole application (possibility ~= 0.01).
       //  flags OR-ed: determine platform-specific method allowed to terminate the thread:
-      //    1 -- QueueUserAPC --> release thread context --> ExitThread --> system release: stack area, thread object.
+      //    1 - QueueUserAPC --> release thread context --> ExitThread --> system release: stack area, thread object.
       //          1) Thread context and data objects, passed via start_auto, ARE released.
       //          2) Any dynamic allocations and resources acquired, except the above, are NOT released.
-      //    2 (ignored if 1 is set) -- TerminateThread --> system release: stack area, thread object.
-      //          All resouces, allocated by the thread,
+      //    2 (ignored if 1 is set) - TerminateThread --> system release: stack area, thread object.
+      //          All resources, allocated by the thread,
       //          + thread data, passed via start_auto,
       //          + thread context object, are NOT released.
       //    0x100 - pthread_kill --> SIGUSR1 --> siglongjmp --> release thread context --> return -->
@@ -2314,7 +3676,7 @@ namespace bmdx
       //        on the chosen method.
       //    1 - thread already exited. threadctl is cleared.
       //    0 - thread was not running (threadctl is empty).
-      //    -3 - failure (flags specify no valid method, or by other reason). threadctl is not modifed.
+      //    -3 - failure (flags specify no valid method, or by other reason). threadctl is not modified.
     int terminate(_s_long flags = 0x101) throw()
     {
       if (!_pctx) { return 0; }
@@ -2407,6 +3769,14 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
 
       bool has_ref() const throw() { return !!_hp; }
       operator bool() const throw() { return !!_hp; }
+
+        //  NOTE (Platform-dependent: This function is not protected against PID reuse.)
+      bool is_running() const throw()
+      {
+        if (!has_ref()) { return false; }
+        DWORD res = WaitForSingleObject(_hp, 0);
+        return res == WAIT_TIMEOUT;
+      }
 
         // On has_ref() == true, pid() has meaningful value.
       typedef DWORD t_pid;
@@ -2511,14 +3881,6 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
         return 2;
       }
 
-        //  NOTE (Platform-dependent: This function is not protected against PID reuse.)
-      bool is_running() const throw()
-      {
-        if (!has_ref()) { return false; }
-        DWORD res = WaitForSingleObject(_hp, 0);
-        return res == WAIT_TIMEOUT;
-      }
-
       struct ff_mc
       {
         t_pid pid_self() throw() { return t_pid(GetCurrentProcessId()); }
@@ -2566,12 +3928,23 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
 
     struct console_io
     {
+        // b_enabled_ == false makes all in console_io a no-op.
+      console_io(bool b_enabled_ = true) { _b_enabled = b_enabled_; }
+
       unsigned int ugetch(unsigned int no_char = 0) throw()
-      #if defined(__BORLANDC__) // && defined(__clang__) && defined(_WIN64)
-        { return kbhit() ? getch() : no_char; }
-      #else
-        { return _kbhit() ? _getch() : no_char; }
-      #endif
+      {
+        if (!b_enabled()) { return no_char; }
+        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
+        #if defined(__BORLANDC__)
+          return kbhit() ? getch() : no_char;
+        #else
+          return _kbhit() ? _getch() : no_char;
+        #endif
+      }
+
+      bool b_enabled() const { return _b_enabled; }
+    private:
+      bool _b_enabled;
     };
 
 
@@ -2620,6 +3993,14 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
       bool has_ref() const throw() { return _pid > 0; }
       operator bool() const throw() { return _pid > 0; }
+
+        //  NOTE This function is not protected against PID reuse.
+      bool is_running() const throw()
+      {
+        if (!has_ref()) { return false; }
+        int res = kill(pid_t(_pid), 0);
+        return res == 0;
+      }
 
         // On has_ref() == true, pid() has meaningful value.
       typedef pid_t t_pid;
@@ -2774,14 +4155,6 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         return 0;
       }
 
-      //  NOTE This function is not protected against PID reuse.
-      bool is_running() const throw()
-      {
-        if (!has_ref()) { return false; }
-        int res = kill(pid_t(_pid), 0);
-        return res == 0;
-      }
-
       struct ff_mc
       {
         t_pid pid_self() throw() { return t_pid(getpid()); }
@@ -2828,11 +4201,15 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
     struct console_io
     {
-      console_io() throw() { static termios t; static _s_long n(0); __pt = &t; __pnr = &n;_set_unbuf(true); }
+        // b_enabled_ == false makes all in console_io a no-op.
+        //  NOTE When 2 or more co-processes are run inside the same terminal window,
+        //    console_io may be enabled in only one of them, otherwise its behavior is undefined.
+      console_io(bool b_enabled_ = true) throw() { static termios t; static _s_long n(0); __pt = 0; __pnr = 0; if (b_enabled_) { __pt = &t; __pnr = &n; _set_unbuf(true); } }
       ~console_io() throw() { _set_unbuf(false); }
 
       unsigned int ugetch(unsigned int no_char = 0) throw()
       {
+        if (!b_enabled()) { return no_char; }
         critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
         int f0 = fcntl(STDIN_FILENO, F_GETFL, 0);
         fcntl(STDIN_FILENO, F_SETFL, f0 | O_NONBLOCK);
@@ -2841,12 +4218,14 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         if (ch != EOF) { return ch; } else { return no_char; }
       }
 
+      bool b_enabled() const { return !!__pt; }
     private:
       termios* __pt; _s_long* __pnr;
       void _set_unbuf(bool on) throw()
       {
         critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
-        _s_long n = *__pnr; termios& t0 = *__pt;
+        if (!b_enabled()) { return; }
+        termios& t0 = *__pt; _s_long n = *__pnr;
         n += on ? 1 : -1;
         if (n == 1)
         {
@@ -3001,6 +4380,16 @@ _s_long _threadctl_tu_static_t<_>::th_terminate(_threadctl_ctx_data* p, _s_long 
     template<> struct bytes::type_index_t<bmdx::threadctl::tid> : cmti_base_t<bmdx::threadctl::tid, 2017, 6, 7, 13> {};
     namespace { bytes::type_index_t<bmdx::threadctl> __cmti_inst_threadctl; }
     namespace { bytes::type_index_t<bmdx::threadctl::tid> __cmti_inst_threadctl_tid; }
+
+    template<class T, class L> struct vecm::spec<bmdx::cref_t<T, L> > { typedef bmdx::cref_t<T, L> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+
+    template<class T, bool b> struct vecm::spec<bmdx::carray_t<T, b> > { typedef bmdx::carray_t<T, b> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+    template<class T, bool b, class _bs> struct vecm::spec<bmdx::cpparray_t<T, b, _bs> > { typedef bmdx::cpparray_t<T, b, _bs> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+    template<class T, bool b> struct vecm::spec<bmdx::carray_r_t<T, b> > { typedef bmdx::carray_r_t<T, b> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+    template<class T> struct vecm::spec<bmdx::arrayref_t<T> > { typedef bmdx::arrayref_t<T> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+    template<class T> struct vecm::spec<bmdx::cringbuf1_t<T> > { typedef bmdx::cringbuf1_t<T> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+    template<class T, class _bs> struct vecm::spec<bmdx::cppringbuf1_t<T, _bs> > { typedef bmdx::cppringbuf1_t<T, _bs> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
+    template<class T, class _bs> struct vecm::spec<bmdx::vnnqueue_t<T, _bs> > { typedef bmdx::vnnqueue_t<T, _bs> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
   }
 #endif
 
@@ -3043,12 +4432,12 @@ namespace bmdx
 
 
       // Returns true if the specified path points to the existing file, false in all other cases.
-    static bool is_ex_file(const char* ppath __bmdx_noarg) throw()        { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
-    static inline bool is_ex_file(const std::string& path __bmdx_noarg) throw()        { return is_ex_file(path.c_str()); }
+    static bool is_ex_file(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
+    static inline bool is_ex_file(const std::string& path __bmdx_noarg) throw()    { return is_ex_file(path.c_str()); }
 
       // Returns true if the specified path points to the existing directory, false in all other cases.
-    static bool is_ex_dir(const char* ppath __bmdx_noarg) throw()        { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
-    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) throw()        { return is_ex_dir(path.c_str()); }
+    static bool is_ex_dir(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
+    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) throw()    { return is_ex_dir(path.c_str()); }
 
 
 
@@ -3363,7 +4752,7 @@ namespace bmdx
       }
     }
 
-    static bool does_locking()        { return true; }
+    static bool does_locking()    { return true; }
     operator bool() const        { return this->is_locked(); }
   };
 
@@ -3372,10 +4761,10 @@ namespace bmdx
   template<> struct _cref_lock_t<cref_nonlock>
   {
     typedef bmdx_meta::nothing t_impl;
-    _cref_lock_t(bool b_wait)        { (void)b_wait; }
-    template<class T> _cref_lock_t(const cref_t<T, cref_nonlock>&)        {}
-    bool try_lock()       { return true; }
-    static bool does_locking()        { return false; }
+    _cref_lock_t(bool b_wait)    { (void)b_wait; }
+    template<class T> _cref_lock_t(const cref_t<T, cref_nonlock>&)    {}
+    bool try_lock()    { return true; }
+    static bool does_locking()    { return false; }
     operator bool() const        { return true; }
   };
 
@@ -3413,11 +4802,10 @@ namespace bmdx
   };
 
   struct iref2_flags
-  {
-    enum {
+  { enum e {
         // a) Cross-module strong reference: do not delete the object on ref. count == 0.
         //    (The flag may be used to refer to static objects. It disables "delete p" call in the original module
-        //    where object was created.)
+        //    where the object was created.)
         // b) Multi-functional strong reference: do not call handler with ev_des.
         //    Effective only in use_hst mode. Note that object memory is part of internal handler, and freed automatically.
         //    (To refer to static objects, i.e. avoid both destruction and memory freeing,
@@ -3475,7 +4863,7 @@ namespace bmdx
 
         // Multi-functional ref. only: do not call handler with ev_aux_des.
         //  Aux. object is not destroyed, and its memory is freed automatically by cref_t.
-      disbale_aux_des = 0x8,
+      disable_aux_des = 0x8,
 
         // Multi-functional ref. only: enable ref. count change events (ev_nrefs).
         //  ev_nrefs occurs
@@ -3484,7 +4872,7 @@ namespace bmdx
         //  3) after removing a reference (during cref_t reset or overwriting).
       gen_nrefs = 0x80,
 
-      // ==== ====
+      //  ======== ======== ======== ========
 
       ev_des = 0x100, // the handler should destroy the object (~T(), but not deallocate)
       ev_delete = 0x200, // the handler should call operator delete on the object, or release the object and free its memory in other way
@@ -3498,10 +4886,9 @@ namespace bmdx
       ev_aux_con = 0x1000,
         // The handler should destroy the aux. object (~Aux(), but not free memory).
         //  NOTE Main object (T) is not available at the time of this event.
-        //  NOTE This events occurs only when valid aux. object should be destroyed, unless disbale_aux_des flag is set.
+        //  NOTE This events occurs only when valid aux. object should be destroyed, unless disable_aux_des flag is set.
       ev_aux_des = 0x2000
-    };
-  };
+  }; };
 
   template<class T, class _ = __vecm_tu_selector>
   struct iref2_args_t : iref2_flags
@@ -3558,7 +4945,7 @@ namespace bmdx
     typedef void (*F_free)(void* p);
     typedef void (*F_des)(T* p);
     typedef void (*F_del)(T* p);
-    static void* sf_alloc(_s_ll nb) throw() { return _carray_tu_alloc_t<T>::_sf_alloc(nb); }
+    static void* sf_alloc(_s_ll nb) throw() { return _carray_tu_alloc_t<T>::_sf_calloc(nb); }
     static void sf_free(void* p) throw() { return _carray_tu_alloc_t<T>::_sf_free(p); }
     static void sf_destroy1(T* p) throw() { return _carray_tu_alloc_t<T>::_sf_destroy1(p); }
     static void sf_delete1(T* p) throw() { return _carray_tu_alloc_t<T>::_sf_delete1(p); }
@@ -3600,14 +4987,16 @@ namespace bmdx
   {
 
       // Type of the referenced value.
-    typedef T t_value;
+    typedef T
+      t_value;
 
 
       // Smart lock, used by cref_t for ref. counting. _cref_lock_t must not be redefined by client.
-    typedef _cref_lock_t<LockSelector> t_lock;
+    typedef _cref_lock_t<LockSelector>
+      t_lock;
 
 
-      // Type for ref. counting. In 32-bit program: s_long, in 64-bit program: s_ll.
+      // Type for ref. counting variable. In 32-bit program: s_long, in 64-bit program: s_ll.
     typedef typename bmdx_meta::if_t<(sizeof(void*) > 4), _s_ll, _s_long>::result
       t_cnt;
 
@@ -3615,6 +5004,7 @@ namespace bmdx
       // The type of common event handler for multi-functional references. See also struct iref2.
       //    s_long (s_long optype, s_ll flags, s_ll nrefs, s_ll dnrefs, _critsec_data0_t<>* pcsd, void* pobj, void* pinterface, void* paux)
     typedef _s_long (*F_ev_handler_iref2)(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll dnrefs, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux);
+
 
 
     struct exc_ref : _cref_t_exceptions::exc_ref {};
@@ -3646,70 +5036,20 @@ namespace bmdx
     struct exc_refcast_d_u : _cref_t_exceptions::exc_refcast_d_u {};
     struct exc_iref2_create_any : _cref_t_exceptions::exc_iref2_create_any {};
     struct exc_iref2_assign : _cref_t_exceptions::exc_iref2_assign {};
-
-
-  private:
-    friend struct _cref_lock_t<LockSelector>;
-    typedef _carray_tu_alloc_t<T> _a;
-    static const t_cnt _f3 = t_cnt(1) << (sizeof(t_cnt) * 8 - 3);
-    static const t_cnt _f2 = _f3 << 1;
-    static const t_cnt _f23 = _f2 | _f3; // ==0 - in-module ref. (type 0), ==_f2 - cross-module ref. (type 1), ==_f3 - multi-func. ref. (type 2), ==_f23 - reserved
-    static const t_cnt _f1 = _f3 << 2; // "detached (== destructor disabled)"
-    static const t_cnt _m = ~(_f1 | _f2 | _f3); // mask for reference counting bits in _ph->cnt
-
-    typedef typename iref2_args_t<T>::F_alloc F_alloc;
-    typedef typename iref2_args_t<T>::F_free F_free;
-    typedef typename iref2_args_t<T>::F_des F_des;
-    typedef typename iref2_args_t<T>::F_del F_del;
-    struct _cref_handle
-    {
-      volatile t_cnt cnt;
-      t_cnt flags;
-      F_free f_free;
-      void* f_handler;
-
-      void _init(t_cnt n0, _s_long flags_) { cnt = (n0 & _m) | _f2; flags = flags_; f_free = _a::_sf_free; f_handler = (void*)_a::_sf_delete1; }
-
-      bool b_v0() const throw() { return (cnt & _f23) == 0; } // *this is just a t_cnt
-      bool b_v1() const throw() { return (cnt & _f23) == _f2; } // *this is a _cref_handle
-      bool b_v2() const throw() { return (cnt & _f23) == _f3; } // *this is variable size _cref_handle2
-      bool b_detached() const throw() { return !!(cnt & _f1); }
-    };
-    struct _cref_handle2
-    {
-      _cref_handle h;
-      _critsec_data0_t<LockSelector>* pcsd;
-      void* pobj;
-    };
-    static _cref_handle2* _s_ph2(_cref_handle* ph) throw() { return (_cref_handle2*)((char*)ph - offsetof(_cref_handle2, h)); }
-
-    static const int _nbalign = 8; // must be power of two and >= sizeof(double)
-    static const int _nbd = sizeof(double);
-    static _s_ll _s_roundup_size(_s_ll nb) { return (nb + (_nbalign - 1)) & ~_s_ll(_nbalign - 1); }
-    static void* _s_next_aligned(void* p, _s_ll nbsize) { return (char*)0 + _s_roundup_size(_s_ll((char*)p - (char*)0) + nbsize); }
-    static void* _s_paux(_cref_handle2* ph) throw() { return _s_next_aligned(ph, sizeof(_cref_handle2)); }
-    static void* _s_pobj(_cref_handle2* ph, bool b_aux, _s_ll nb_aux) throw() { return b_aux ? _s_next_aligned(_s_paux(ph), nb_aux) : _s_paux(ph); }
-    static _s_ll _s_nb_h_iref2(bool b_aux, bool b_hst, _s_ll nb_aux, _s_ll nb_hst) throw()
-    {
-      if (b_aux || b_hst)
-      {
-        _s_ll n = _s_roundup_size(_s_ll((_nbalign > _nbd ?  _nbalign - _nbd - 1 : 0) + sizeof(_cref_handle2)));
-        if (b_aux) { n += _s_roundup_size(nb_aux); }
-        if (b_hst) { n += _s_roundup_size(nb_hst); }
-        return n;
-      }
-      return _s_ll(sizeof(_cref_handle2));
-    }
-
+  private: friend struct _cref_lock_t<LockSelector>; typedef _carray_tu_alloc_t<T> _a; struct _cref_handle; struct _cref_handle2;
   public:
+
+
 
       // ref():
       //  a) on has_ref() == true, returns a ref. to valid object.
       //  b) on has_ref() == false, generates an exception.
       // The reference, returned by ref(), may be unsafe at the time
       //  when cref_t object is overwritten by another thread.
-    const T& ref() const throw(exc_ref)        { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
-    const T* ptr() const throw()        { return const_cast<const T*>(_p); }
+    const T& ref() const throw(exc_ref)    { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+    const T* ptr() const throw()    { return const_cast<const T*>(_p); }
+
+
 
       // ref_ts()():
       //  same as ref(), but the wrapped object reference
@@ -3731,25 +5071,29 @@ namespace bmdx
       const cref_t& ref;
       T& xnc;
 
-      const T& operator()() const throw()        { return xnc; }
+      const T& operator()() const throw()    { return xnc; }
 
       safe_refnc(const cref_t& r) throw(exc_ref_ts)        : __lock(r), ref(r), xnc(_ref(r)) {}
 
         // Copying and assignment do not generate exceptions,
         //  because the reference remains valid and locked.
       safe_refnc(const safe_refnc& x) throw()        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
-      void operator=(const safe_refnc& x) throw()        { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
+      void operator=(const safe_refnc& x) throw()    { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
     private:
-      static T& _ref(const cref_t& r __bmdx_noarg) throw(exc_ref_ts)        { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
+      static T& _ref(const cref_t& r __bmdx_noarg) throw(exc_ref_ts)    { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
     };
-    safe_refnc ref_ts() const throw(exc_ref_ts)        { return *this; }
+    safe_refnc ref_ts() const throw(exc_ref_ts)    { return *this; }
 
 
-      // Non-const pointer to object, returned without any locking.
+
+      // _pnonc_u(): non-const pointer to object, returned without any locking.
+      // _rnonc(): non-const reference to object, returned without any locking (if ptr. is null, generates an exception).
       // NOTE Original meaning of cref_t is "reference to constant object".
       //   Treating constant as variable is an agreement and may be unsafe.
       //   Only the client is responsible for logically correct and synchronized modifications.
-    T* _pnonc_u() const throw()        { return const_cast<T*>(_p); }
+    T* _pnonc_u() const throw()    { return const_cast<T*>(_p); }
+    T& _rnonc() const { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+
 
 
       // Smart pointer functionality.
@@ -3764,6 +5108,7 @@ namespace bmdx
     T* operator->() const        { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return p; }
 
 
+
       // Returns a copy of this cref_t. Useful to safely call the wrapped object,
       //  when the original cref_t may be concurrently modified.
       // cref_t<T> p; ... p--->method(); ... p--.ref().constant_method();
@@ -3772,48 +5117,49 @@ namespace bmdx
       //    the last one during call.
       //    This can lead to unpredictable delays and cannot be used in time-critical routines, like drive callbacks.
       //    I.e. in cref_t, "--->" action is quite different from "->".
-    cref_t operator--(int) const throw()        { return *this; }
+    cref_t operator--(int) const throw()    { return *this; }
+
 
 
       // false only if
       //  a) no-exception construction from const T& failed,
       //  b) after cref_t().
-    bool has_ref() const throw()        { return !!_p; }
-    operator bool() const throw()        { return !!_p; }
+    bool has_ref() const throw()    { return !!_p; }
+    operator bool() const throw()    { return !!_p; }
 
       // true if this object contains a strong reference, false - weak reference or empty.
-    bool is_own() const throw()        { return !!_ph; }
+    bool is_own() const throw()    { return !!_ph; }
 
       // true if this object contains a strong reference in detached state (i.e. ref. counting continues, but object pointer is not deleted automatically, see _detach_u()).
-    bool is_detached() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_detached(); }
+    bool is_detached() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_detached(); }
 
       // true if cref_t contains a cross-module object, namely,
       //  a) cross-module strong reference (i.e. type 1), or
       //  b) multi-functional strong reference  (type 2).
       // "if (is_cm()) { ... }" is equivalent of "int type; flags(&type); if (type == 1 || type ==2) { .... }".
-    bool is_cm() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && (_ph->b_v1() || _ph->b_v2()); }
+    bool is_cm() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && (_ph->b_v1() || _ph->b_v2()); }
 
       // n_refs():
       //  0 - unknown (weak ref., is_own() == false).
       //  >=1 - number of strong references (on is_own() == true).
-    t_cnt n_refs() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph ? _ph->cnt & _m : 0; }
+    t_cnt n_refs() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph ? _ph->cnt & _m : 0; }
 
       // Return a pointer to the crit. sec. data object, that is used by this cref_t for locking (if locking is not disabled).
       //  The returned pointer is non-0.
-    _critsec_data0_t<LockSelector>* pcsd0() const throw()        { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
-    typename critsec_t<LockSelector>::csdata* pcsd() const throw()        { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
+    _critsec_data0_t<LockSelector>* pcsd0() const throw()    { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
+    typename critsec_t<LockSelector>::csdata* pcsd() const throw()    { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
 
       // Returns true is this object actually uses locking, false otherwise.
     bool b_cs() const { if (!t_lock::does_locking()) { return false; } t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph && _ph->b_v2()) { return !!_ps; } return true; }
 
       // Return aux. object pointer or 0 if this cref_t does not contain aux. object.
       //  Only multi-functional cref_t may contain aux. object. See also struct iref2.
-    void* paux() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() && (_ph->flags & iref2_flags::use_aux) ? _s_paux(_s_ph2(_ph)) : 0; }
+    void* paux() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() && (_ph->flags & iref2_flags::use_aux) ? _s_paux(_s_ph2(_ph)) : 0; }
 
       // Multi-functional reference only: return the main pointer to the referenced object, that had been initially assigned
       //    to the first cref_t that holds this object. The object is deleted by the last destroyed cref_t by calling handler with this pointer.
       //  For all other ref. types: returns 0.
-    void* pobj() const throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() ? (_s_ph2(_ph))->pobj : 0; }
+    void* pobj() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() ? (_s_ph2(_ph))->pobj : 0; }
 
       // Returns flags of the object, and optionally, reference type.
       //  *ptype -2: null reference. flags == 0.
@@ -3831,303 +5177,6 @@ namespace bmdx
       if (_ph->b_v2()) { if (ptype) { *ptype = 2; } return _ph->flags; }
       if (ptype) { *ptype = -3; } return 0;
     }
-
-      // Object creation with 0..8 arguments.
-      //    On success, the previous object reference is correctly removed, and the new is set on its place.
-      //    On failure, the previous object reference remains unchanged.
-      // NOTE create1 with A1 == T behaves same as copy().
-    bool create0(bool no_exc)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create0(); } return false; }
-    template<class A1> bool create1(bool no_exc, const A1& x1)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
-    template<class A1, class A2> bool create2(bool no_exc, const A1& x1, const A2& x2)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
-    template<class A1, class A2, class A3> bool create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
-    template<class A1, class A2, class A3, class A4> bool create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5> bool create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
-
-          // Same as create#(), but calling T constructor with all arguments cast to non-const.
-        template<class A1> bool create1nc(bool no_exc, const A1& x1)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
-        template<class A1, class A2> bool create2nc(bool no_exc, const A1& x1, const A2& x2)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
-        template<class A1, class A2, class A3> bool create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
-        template<class A1, class A2, class A3, class A4> bool create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5> bool create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
-
-      // Cross-module object creation with 0..8 arguments.
-      // pcsd, flags, no_exc: see cm_copy.
-      // NOTE If flags contain disable_des, the client is responsible for deleting the object after the last reference destruction.
-    bool cm_create0(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(); } catch (...) {} } else { try { p2 = new T(); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create0(); } return false; }
-    template<class A1> bool cm_create1(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1); } catch (...) {} } else { try { p2 = new T(x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
-    template<class A1, class A2> bool cm_create2(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2); } catch (...) {} } else { try { p2 = new T(x1, x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
-    template<class A1, class A2, class A3> bool cm_create3(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3); } catch (...) {} } else { try { p2 = new T(x1, x2, x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
-    template<class A1, class A2, class A3, class A4> bool cm_create4(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5> bool cm_create5(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
-
-          // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
-        template<class A1> bool cm_create1nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1); } catch (...) {} } else { try { p2 = new T((A1&)x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
-        template<class A1, class A2> bool cm_create2nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
-        template<class A1, class A2, class A3> bool cm_create3nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
-        template<class A1, class A2, class A3, class A4> bool cm_create4nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5> bool cm_create5nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
-
-    template<class I, class LS = I, class _ = __vecm_tu_selector> struct iref
-    {
-        // Create object of type T, which is subclass of I. Assign it as strong reference to cref_t<I, LS>.
-        //  Return the result. If creation failed, an empty cref_t is returned (or exception generated on no_exc == false).
-        // NOTE The object lock is associated with interface type (I), not with object type (T).
-        //  (This works because particular object is held only by pointer of only one inteface type.)
-        // NOTE LockSelector of the outer cref_t is ignored, critsec_t<LS>::csdata is used.
-      static cref_t<I, LS> create0(bool no_exc)        { cref_t<I, LS> rx; try { I* pbase = new T(); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr0(); } return rx; }
-      template<class A1> static cref_t<I, LS> create1(bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
-      template<class A1, class A2> static cref_t<I, LS> create2(bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
-      template<class A1, class A2, class A3> static cref_t<I, LS> create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
-      template<class A1, class A2, class A3, class A4> static cref_t<I, LS> create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
-
-            // Same as create#(), but calling T constructor with all arguments cast to non-const.
-          template<class A1> static cref_t<I, LS> create1nc(bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
-          template<class A1, class A2> static cref_t<I, LS> create2nc(bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
-          template<class A1, class A2, class A3> static cref_t<I, LS> create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
-          template<class A1, class A2, class A3, class A4> static cref_t<I, LS> create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
-
-        // Create cross-module object of type T, which is I or subclass of I. Assign it as strong reference to cref_t<I, LS>.
-        //  Return the result. If creation failed, an empty cref_t is returned (or exception generated on no_exc == false).
-        //  pcsd, flags: see cm_copy.
-        // NOTE If I is base class of T, the destructor of I or any of its bases must be declared virtual.
-        // NOTE LockSelector of the outer cref_t is ignored.
-        // NOTE If flags contain disable_des, the client is responsible for deleting the object after the last reference destruction.
-      static cref_t<I, LS> cm_create0(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc)        { cref_t<I, LS> rx; try { I* pbase = new T(); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr0(); } return rx; }
-      template<class A1> static cref_t<I, LS> cm_create1(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
-      template<class A1, class A2> static cref_t<I, LS> cm_create2(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
-      template<class A1, class A2, class A3> static cref_t<I, LS> cm_create3(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
-      template<class A1, class A2, class A3, class A4> static cref_t<I, LS> cm_create4(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> cm_create5(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> cm_create6(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> cm_create7(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> cm_create8(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
-
-            // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
-          template<class A1> static cref_t<I, LS> cm_create1nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
-          template<class A1, class A2> static cref_t<I, LS> cm_create2nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
-          template<class A1, class A2, class A3> static cref_t<I, LS> cm_create3nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
-          template<class A1, class A2, class A3, class A4> static cref_t<I, LS> cm_create4nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> cm_create5nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> cm_create6nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> cm_create7nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> cm_create8nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
-    }; // end of struct iref
-
-
-      // Multi-functional reference creation and type casting. Features:
-      //  1. The type of cref_t may be T or any superclass of T, i.e. cref_t may contain interface reference (const I&).
-      //  2. Same object T may be referred by 2 or more cref_t of different interface types.
-      //  3. T may be created (stored) a) inside the internal object handler (default), b) in dynamic memory, c) at user-specified location.
-      //  4. Inside the internal object handler, an auxiliary user object (Aux) may be created, to assist in handling the main object (T).
-      //  5. Destruction of the handled objects is customizable, done by user event handler.
-      //  6. The multi-functional cref_t is safe to pass and use between binary modules boundary (inside the same process).
-      // NOTE Compatibility: iref2 objects cannot be notified and destroyed correctly by library rev. less than 2019-06-23.
-    template<class I = T, class Aux = int, class _ = __vecm_tu_selector>
-    struct iref2
-    {
-
-        // Typical return values:
-        //  1 - the event is handled.
-        //  0 - the event is ignored or not recognized.
-        //  -1 - bad argument.
-        //  <= -2 failure.
-      static _s_long handler_dflt(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll dnrefs, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux)
-      {
-        (void)flags; (void)nrefs; (void)dnrefs; (void)pinterface; (void)pcsd;
-        struct f : iref2_flags {};
-        if (optype == f::ev_delete) { delete (T*)pobj; return 1; }
-        if (optype == f::ev_des) { ((T*)pobj)->~T(); return 1; }
-        if (optype == f::ev_release) { return 1; }
-        if (optype == f::ev_aux_des) { ((Aux*)paux)->~Aux(); return 1; }
-        return 0;
-      }
-
-        // Creates multi-functional reference with the given object of type T, constructed of any arguments,
-        //    with optional auxiliary object construction.
-        //    Aux. object is stored/created/destroyed together with reference internal data.
-        // no_exc:
-        //    true: on any failure, return empty object.
-        //    false: on any failure, generate an exception.
-        // args: anything, inheriting from i_new. May be usual constructor invocation (via new),
-        //    or ready pointer passing etc.
-        // pcsd: if 0 - use the default section for T, otherwise use the given pcsd.
-        //    NOTE pcsd (either default or user-specified) is later interpreted as critsec_t<I>::csdata*.
-        //      In all client code, crit. sec. data (csdata), associated with LockSelector and with any subclass I of T,
-        //      is expected to be of the same default structure, not modified by user template specialization.
-        // flags: see iref2_flags.
-        //    Exactly one of storage flags must be set: use_hst, use_delete, use_release.
-        //    Setting use_critsec is always recommended.
-        //    Also, any user flags may be stored
-        //    under mask 0xffffffffff000000 on 64-bit system,
-        //    and 0xff000000 on 32-bit system.
-        // h: a function that should specifically process events: object destruction and optionally,
-        //    ref. counting and aux object creation/destruction.
-        //    See, for example, handler_dflt. Also iref2_flags.
-        // args_aux: same as args, but for auxiliary object. If no use_aux flag specified, args_aux is ignored.
-        // NOTE Even if I is base class of T, the destructor of I does not need to be virtual,
-        //  because object destruction occurs on the original type (~T()).
-      static cref_t<I> create_any(
-        bool no_exc,
-        const typename iref2_args_t<T>::i_new& args,
-        typename critsec_t<LockSelector>::csdata* pcsd = 0,
-        t_cnt flags = 0x14, // use_hst | use_critsec
-        F_ev_handler_iref2 h = handler_dflt,
-        const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()
-      ) {
-        flags &= ~t_cnt(0xffff00);
-        struct f : iref2_flags {};
-        const bool b_aux = !!(flags & f::use_aux);
-        const bool b_nrefs = !!(flags & f::gen_nrefs);
-        const bool b_hst = !!(flags & f::use_hst);
-        const bool b_del = !!(flags & f::use_delete);
-        const bool b_rel = !!(flags & f::use_release);
-        const bool b_cs = !!(flags & f::use_critsec);
-        if (int(b_hst) + b_del + b_rel != 1) { if (!no_exc) { throw exc_iref2_create_any(); } return cref_t<I>(); }
-        if (!h) { h = handler_dflt; }
-        if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
-        _cref_handle2* ph = _new_ph2<Aux>(1, pcsd, flags, h, args_aux);
-        if (ph)
-        {
-          T* p2(0);
-          t_lock __lock(pcsd); if (sizeof(__lock)) {}
-          if (b_cs) { __lock.try_lock(true); }
-          try {
-            if (!b_hst) { p2 = args(0); } else { p2 = args((T*)_s_pobj(ph, b_aux, sizeof(Aux))); }
-            ph->pobj = p2;
-          } catch (...) {}
-          if (p2)
-          {
-            cref_t<I> rv;
-            I* pint = p2; // p2 of T must be I or subclass of I
-            ((void**)&rv)[0] = &ph->h; ((void**)&rv)[1] = pint; ((void**)&rv)[2] = b_cs ? pcsd : 0;
-            if (b_nrefs) { try { F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->h.f_handler; peh(f::ev_nrefs, ph->h.flags, ph->h.cnt & _m, ph->h.cnt & _m, pcsd, p2, pint, b_aux ? _s_paux(ph) : 0); } catch (...) {} }
-            return rv;
-          }
-          _del_ph(&ph->h);
-        }
-        if (!no_exc) { throw exc_cm_copy(); }
-        return cref_t<I>();
-      }
-
-        // See create_any.
-      static cref_t<I> create0(bool no_exc, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::args(), pcsd, flags, h, args_aux); }
-      template<class A1> static cref_t<I> create1(bool no_exc, const A1& x1, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1>(x1), pcsd, flags, h, args_aux); }
-      template<class A1, class A2> static cref_t<I> create2(bool no_exc, const A1& x1, const A2& x2, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2>(x1, x2), pcsd, flags, h, args_aux); }
-      template<class A1, class A2, class A3> static cref_t<I> create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3>(x1, x2, x3), pcsd, flags, h, args_aux); }
-      template<class A1, class A2, class A3, class A4> static cref_t<I> create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4>(x1, x2, x3, x4), pcsd, flags, h, args_aux); }
-      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I> create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5>(x1, x2, x3, x4, x5), pcsd, flags, h, args_aux); }
-      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I> create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6>(x1, x2, x3, x4, x5, x6), pcsd, flags, h, args_aux); }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I> create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6, A7>(x1, x2, x3, x4, x5, x6, x7), pcsd, flags, h, args_aux); }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I> create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6, A7, A8>(x1, x2, x3, x4, x5, x6, x7, x8), pcsd, flags, h, args_aux); }
-
-            // Same as create#, but all args. are cast to non-const when passed into constructor.
-          template<class A1> static cref_t<I> create1nc(bool no_exc, const A1& x1, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1>(x1), pcsd, flags, h, args_aux); }
-          template<class A1, class A2> static cref_t<I> create2nc(bool no_exc, const A1& x1, const A2& x2, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2>(x1, x2), pcsd, flags, h, args_aux); }
-          template<class A1, class A2, class A3> static cref_t<I> create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3>(x1, x2, x3), pcsd, flags, h, args_aux); }
-          template<class A1, class A2, class A3, class A4> static cref_t<I> create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4>(x1, x2, x3, x4), pcsd, flags, h, args_aux); }
-          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I> create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5>(x1, x2, x3, x4, x5), pcsd, flags, h, args_aux); }
-          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I> create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6>(x1, x2, x3, x4, x5, x6), pcsd, flags, h, args_aux); }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I> create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6, A7>(x1, x2, x3, x4, x5, x6, x7), pcsd, flags, h, args_aux); }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I> create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6, A7, A8>(x1, x2, x3, x4, x5, x6, x7, x8), pcsd, flags, h, args_aux); }
-
-      private: struct _x_assigner;
-      public:
-
-        // Convenience function.
-        //    If use_hst is set (dflt.): x is copied, and the copy is completely managed by cref_t.
-        //      NOTE assign() with use_hst is equivalent to create1() with use_hst,
-        //          just making an x copy into preallocated memory.
-        //        In contrary, with use_delete, create1() creates a copy "new T(x)",
-        //        but assign() only takes ownership on the pointer &x.
-        //    If use_delete is set: x is assumed to be dynamically created by client (by def. using operator new).
-        //      cref_t gains ownership on the object. (On assign() failure, ownership remains on the client side.)
-        //      When the last cref_t is destroyed, ev_delete occurs, which by default calls "delete p".
-        //      NOTE If real type of x (some T2) is not T, the destructor of T or any of its bases must be declared virtual,
-        //      because object destruction occurs on the given original type (~T()).
-        //    If use_release is set: x is assumed to be created statically or in some other uncontrollable way.
-        //      When the last cref_t is destroyed, ev_release occurs, which by default does nothing to the object.
-        //  In other respecs, assign() is the same as create_any().
-      static cref_t<I> assign(
-        bool no_exc,
-        const T& x,
-        typename critsec_t<LockSelector>::csdata* pcsd = 0,
-        t_cnt flags = 0x14, // use_hst (copy x) | use_critsec
-        F_ev_handler_iref2 h = handler_dflt,
-        const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args()
-      ) {
-        struct f : iref2_flags {};
-        const bool b_hst = !!(flags & f::use_hst);
-        const bool b_del = !!(flags & f::use_delete);
-        const bool b_rel = !!(flags & f::use_release);
-        if (int(b_hst) + b_del + b_rel != 1) { if (!no_exc) { throw exc_iref2_assign(); } return cref_t<I>(); }
-        return create_any(no_exc, _x_assigner(x, b_hst), pcsd, flags, h, args_aux);
-      }
-
-        // Creates a new reference to the same object, but through other interface.
-        // NOTE Reference casting works only with
-        //   1) weak references (flags(): type -1),
-        //   2) multi-functional references (flags(): type 2).
-        // In both _refcast*, T is the type of reference (src.ref() is const T&),
-        //    not the original type of object, which is unknown to the client.
-        // _refcast_s_u: static cast T --> I is used.
-        //    This is unsafe if I is a sublass of T, but the object src is really not a type I.
-        // _refcast_d_u: tries to use dynamic_cast T --> I.
-        //    On few systems, this may cause system-level exception if the original object
-        //    is from another binary module.
-        //    Do not use dynamic cast in this way or check it in all target systems.
-        // NOTE The returned object refers to src critical section data, even in case of null ref.
-      static cref_t<I> _refcast_s_u(cref_t src, bool no_exc)
-      {
-        cref_t<I> rv; ((void**)&rv)[2] = src._ps; if (!src._p) { return rv; } // rv._ph == 0 by constr.
-        volatile const I* p2 = 0; if (!src._ph || src._ph->b_v2())
-          { p2 = static_cast<volatile const I*>(src._p); } // I and T must be statically related
-        if (!p2) { if (!no_exc) { throw exc_refcast_s_u(); } return rv; }
-        ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
-        return rv;
-      }
-      static cref_t<I> _refcast_d_u(cref_t src, bool no_exc)
-      {
-        cref_t<I> rv; ((void**)&rv)[2] = src._ps; if (!src._p) { return rv; } // rv._ph == 0 by constr.
-        volatile const I* p2 = 0; if (!src._ph || src._ph->b_v2())
-          { p2 = dynamic_cast<volatile const I*>(src._p); }
-        if (!p2) { if (!no_exc) { throw exc_refcast_d_u(); } return rv; }
-        ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
-        return rv;
-      }
-
-      private:
-        struct _x_assigner : iref2_args_t<T>::i_new
-        {
-          _x_assigner(const T& x, bool b_copy_) { px = &x; b_copy = b_copy_; }
-          virtual T* operator()(T* p) const
-          {
-            if (p) { if (b_copy) { new (p) T(*px); return p; } throw exc_iref2_assign(); }
-              else { if (b_copy) { return new T(*px); } return (T*)px; }
-          }
-          private: const T* px; bool b_copy;
-        };
-
-    }; // end of struct iref2
 
 
 
@@ -4171,17 +5220,17 @@ namespace bmdx
         _p = x._p;
       }
 
-    ~cref_t() throw()        { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    ~cref_t() throw()    { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
-    cref_t& operator=(const cref_t& x) throw()        { cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
+    cref_t& operator=(const cref_t& x) throw()    { cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
 
       // NOTE Clearing does not change the critical section used for object locking, only ensures it to be non-0.
       //  Assign another empty cref_t instead of clear(), for guaranteed setting the default critical section.
-    void clear() throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    void clear() throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
       // Same as clear(), but does not delete the object if it's strongly referenced.
       //    The client becomes responsible for object lifetime.
-      //    Detaching is useful for re-gaining the ownership on the dynamically created object.
+      //    Detaching is useful for regaining the ownership on the dynamically created object.
       // NOTE Detaching influences all other cref_t's with strong reference to the same object -
       //    they continue to keep a pointer to that object, but do not delete it when the refs. counter becomes 0.
       //    This allows for ref.-counting with "manual" control of object lifetime.
@@ -4193,7 +5242,8 @@ namespace bmdx
       //    and ensure releasing the object correctly.
       //    For example, take into account that the object may be kept together with internal cref_t data (use_hst),
       //    in which case it's memory is freed automatically when the last reference is destroyed.
-    void _detach_u() throw()        { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
+    void _detach_u() throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
+
 
 
       // Assigns x (by reference) to this cref_t, and/or changes ownership on x.
@@ -4206,7 +5256,7 @@ namespace bmdx
       // NOTE assign() may be used to change the kind of ownership on its referenced object.
       //    If the last strong ref. was changed to weak, the object may be deleted,
       //    but its pointer is still kept.
-      // NOTE assign() does not copy x in any way. Do not assign references to temporary objects.
+      // NOTE assign() does not copy x in any way. Do not pass temporary object as x.
     bool assign(const T& x, bool is_own_, bool no_exc)
     {
       t_lock __lock(*this); if (sizeof(__lock)) {}
@@ -4248,14 +5298,14 @@ namespace bmdx
       //    (If the previous object was already strong-referenced x, it's detached instead of being released,
       //    so that the current cref_t becomes single owner of the object.)
       // pcsd, flags: see cm_copy.
-      // NOTE If flags contain disable_des, the client is responsible for deleting the object after the last reference destruction.
+      // NOTE If flags contain disable_des (0x2), the client is responsible for deleting the object after the last reference destruction.
       // The resulting cref_t may be thread-safely copied and passed across binary module boundary.
       // Returns:
       //    true on success,
       //    false on failure with no_exc == true,
       //    or generates exception on failure with no_exc == false.
       //    On failure, the current reference is kept.
-      // NOTE cm_assign() does not copy x in any way. Do not assign references to temporary objects.
+      // NOTE cm_assign() does not copy x in any way. Do not pass temporary object as x.
     bool cm_assign(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)
     {
       if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
@@ -4274,8 +5324,9 @@ namespace bmdx
       //      pcsd == 0: use critsec_t<LockSelector(dflt.==T)>'s ::pdefcsd().
       //  flags OR-ed (0 for default):
       //    0x1 - reserved, must be 0.
-      //    0x2 - disable "delete p". On ref. count reaching 0, the client is responsible for deleting
-      //      the object (or destruction + memory freeing).
+      //    0x2 - "disable_des" - disable "delete p" on ref. count reaching 0.
+      //      The flag should be used mostly to refer to static objects.
+      //      (But if the object is created dynamically, the client is responsible for releasing the object after ref. count going to 0.)
       //    0x4 - protect x copying by pcsd.
       //      When copying completed, the lock on pcsd is released,
       //      and cref_t modification is done under lock on cref_t's csd.
@@ -4305,10 +5356,371 @@ namespace bmdx
       return false;
     }
 
+
+
+      // Object creation with 0..8 arguments.
+      //    On success, the previous object reference is correctly removed, and the new is set on its place.
+      //    On failure, the previous object reference remains unchanged.
+      // NOTE create1 with A1 == T behaves same as copy().
+    bool create0(bool no_exc)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create0(); } return false; }
+    template<class A1> bool create1(bool no_exc, const A1& x1)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
+    template<class A1, class A2> bool create2(bool no_exc, const A1& x1, const A2& x2)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
+    template<class A1, class A2, class A3> bool create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
+    template<class A1, class A2, class A3, class A4> bool create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
+
+          // Same as create#(), but calling T constructor with all arguments cast to non-const.
+        template<class A1> bool create1nc(bool no_exc, const A1& x1)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
+        template<class A1, class A2> bool create2nc(bool no_exc, const A1& x1, const A2& x2)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
+        template<class A1, class A2, class A3> bool create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
+        template<class A1, class A2, class A3, class A4> bool create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
+
+      // Cross-module object creation with 0..8 arguments.
+      // pcsd, flags, no_exc: see cm_copy.
+      // NOTE If flags contain disable_des (0x2), the client is responsible for deleting the object after the last reference destruction.
+    bool cm_create0(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(); } catch (...) {} } else { try { p2 = new T(); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create0(); } return false; }
+    template<class A1> bool cm_create1(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1); } catch (...) {} } else { try { p2 = new T(x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
+    template<class A1, class A2> bool cm_create2(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2); } catch (...) {} } else { try { p2 = new T(x1, x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
+    template<class A1, class A2, class A3> bool cm_create3(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3); } catch (...) {} } else { try { p2 = new T(x1, x2, x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
+    template<class A1, class A2, class A3, class A4> bool cm_create4(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool cm_create5(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
+
+          // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
+        template<class A1> bool cm_create1nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1); } catch (...) {} } else { try { p2 = new T((A1&)x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
+        template<class A1, class A2> bool cm_create2nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
+        template<class A1, class A2, class A3> bool cm_create3nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
+        template<class A1, class A2, class A3, class A4> bool cm_create4nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool cm_create5nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
+
+    template<class I, class LS = I, class _ = __vecm_tu_selector> struct iref
+    {
+        // Create object of type T, which is subclass of I. Assign it as strong reference to cref_t<I, LS>.
+        //  Return the result. If creation failed, an empty cref_t is returned (or exception generated on no_exc == false).
+        // NOTE The object lock is associated with interface type (I), not with object type (T).
+        //  (This works because particular object is held only by pointer of only one interface type.)
+        // NOTE LockSelector of the outer cref_t is ignored, critsec_t<LS>::csdata is used.
+      static cref_t<I, LS> create0(bool no_exc)    { cref_t<I, LS> rx; try { I* pbase = new T(); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr0(); } return rx; }
+      template<class A1> static cref_t<I, LS> create1(bool no_exc, const A1& x1)    { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+      template<class A1, class A2> static cref_t<I, LS> create2(bool no_exc, const A1& x1, const A2& x2)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+      template<class A1, class A2, class A3> static cref_t<I, LS> create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+      template<class A1, class A2, class A3, class A4> static cref_t<I, LS> create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
+
+            // Same as create#(), but calling T constructor with all arguments cast to non-const.
+          template<class A1> static cref_t<I, LS> create1nc(bool no_exc, const A1& x1)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+          template<class A1, class A2> static cref_t<I, LS> create2nc(bool no_exc, const A1& x1, const A2& x2)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+          template<class A1, class A2, class A3> static cref_t<I, LS> create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+          template<class A1, class A2, class A3, class A4> static cref_t<I, LS> create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (!rx.assign(*pbase, true, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
+
+        // Create cross-module object of type T, which is I or subclass of I. Assign it as strong reference to cref_t<I, LS>.
+        //  Return the result. If creation failed, an empty cref_t is returned (or exception generated on no_exc == false).
+        //  pcsd, flags: see cm_copy.
+        // NOTE If I is base class of T, the destructor of I or any of its bases must be declared virtual.
+        // NOTE LockSelector of the outer cref_t is ignored.
+        // NOTE If flags contain disable_des (0x2), the client is responsible for deleting the object after the last reference destruction.
+      static cref_t<I, LS> cm_create0(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc)    { cref_t<I, LS> rx; try { I* pbase = new T(); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr0(); } return rx; }
+      template<class A1> static cref_t<I, LS> cm_create1(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)    { cref_t<I, LS> rx; try { I* pbase = new T(x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+      template<class A1, class A2> static cref_t<I, LS> cm_create2(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+      template<class A1, class A2, class A3> static cref_t<I, LS> cm_create3(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+      template<class A1, class A2, class A3, class A4> static cref_t<I, LS> cm_create4(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> cm_create5(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> cm_create6(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> cm_create7(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> cm_create8(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { cref_t<I, LS> rx; try { I* pbase = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
+
+            // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
+          template<class A1> static cref_t<I, LS> cm_create1nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr1(); } return rx; }
+          template<class A1, class A2> static cref_t<I, LS> cm_create2nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr2(); } return rx; }
+          template<class A1, class A2, class A3> static cref_t<I, LS> cm_create3nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr3(); } return rx; }
+          template<class A1, class A2, class A3, class A4> static cref_t<I, LS> cm_create4nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr4(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I, LS> cm_create5nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr5(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I, LS> cm_create6nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr6(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I, LS> cm_create7nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr7(); } return rx; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I, LS> cm_create8nc(typename critsec_t<LS>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { cref_t<I, LS> rx; try { I* pbase = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (!rx.cm_assign(*pbase, pcsd, flags, true)) { delete pbase; } } catch (...) {} if (!rx && !no_exc) { throw exc_irefcr8(); } return rx; }
+    }; // end of struct iref
+
+
+
+      // Multi-functional reference creation and type casting. Features:
+      //  1. The type of cref_t may be T or any superclass of T, i.e. cref_t may contain interface reference (const I&).
+      //  2. Same object T may be referred by 2 or more cref_t of different interface types.
+      //  3. T may be created (stored) a) inside the internal object handler (default), b) in dynamic memory, c) at user-specified location.
+      //  4. Inside the internal object handler, an auxiliary user object (Aux) may be created, to assist in handling the main object (T).
+      //  5. Destruction of the handled objects is customizable, done by user event handler.
+      //  6. The multi-functional cref_t is safe to pass and use between binary modules boundary (inside the same process).
+      // NOTE Compatibility: iref2 objects cannot be notified and destroyed correctly by library rev. less than 2019-06-23.
+    template<class I = T, class Aux = int, class _ = __vecm_tu_selector>
+    struct iref2
+    {
+
+        // Typical return values:
+        //  1 - the event is handled.
+        //  0 - the event is ignored or not recognized.
+        //  -1 - bad argument.
+        //  <= -2 failure.
+      static _s_long handler_dflt(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll dnrefs, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux)
+      {
+        (void)flags; (void)nrefs; (void)dnrefs; (void)pinterface; (void)pcsd;
+        struct f : iref2_flags {};
+        if (optype == f::ev_delete) { delete (T*)pobj; return 1; }
+        if (optype == f::ev_des) { ((T*)pobj)->~T(); return 1; }
+        if (optype == f::ev_release) { return 1; }
+        if (optype == f::ev_aux_des) { ((Aux*)paux)->~Aux(); return 1; }
+        return 0;
+      }
+
+        // Creates multi-functional reference with the given object of type T, constructed of any arguments,
+        //    with optional auxiliary object construction.
+        //    Aux. object is stored/created/destroyed together with reference internal data.
+        // NOTE Even if I is base class of T, the destructor of I does not need to be virtual,
+        //    because object destruction occurs on the original type (~T()).
+        // no_exc:
+        //    true: on any failure, return empty object.
+        //    false: on any failure, generate an exception.
+        // args: anything, inheriting from i_new. May be usual constructor invocation (via new),
+        //    or ready pointer passing etc.
+        // pcsd: if 0 - use the default section for T, otherwise use the given pcsd.
+        //    NOTE pcsd (either default or user-specified) is later interpreted as critsec_t<I>::csdata*.
+        //      In all client code, crit. sec. data (csdata), associated with LockSelector and with any subclass I of T,
+        //      is expected to be of the same default structure, not modified by user template specialization.
+        // flags: see iref2_flags.
+        //    Exactly one of storage flags must be set: use_hst, use_delete, use_release.
+        //    Setting use_critsec is always recommended.
+        //    Also, any user flags may be stored
+        //    under mask 0xffffffffff000000 on 64-bit system,
+        //    and 0xff000000 on 32-bit system.
+        // h: a function that should specifically process events: object destruction and optionally,
+        //    ref. counting and aux object creation/destruction.
+        //    See, for example, handler_dflt. Also iref2_flags.
+        // args_aux: same as args, but for auxiliary object. If no use_aux flag specified, args_aux is ignored.
+        // nb_aux: if >= 0, allocate nb_aux bytes of storage for Aux, instead of sizeof(Aux).
+        //    Use it to create object whose size may be different depending on context.
+        //    NOTE Be careful if nb_aux >= 0, but < sizeof(Aux): Aux constructor may attempt
+        //      to modify fields, for which no place has been allocated.
+        //      The safest way is to specify at least nb_aux == sizeof(Aux), even if Aux object won't be used in full.
+        //      For example: see make_rba fn. below.
+      static cref_t<I> create_any(
+        bool no_exc,
+        const typename iref2_args_t<T>::i_new& args,
+        typename critsec_t<LockSelector>::csdata* pcsd = 0,
+        t_cnt flags = 0x14, // use_hst | use_critsec
+        F_ev_handler_iref2 h = handler_dflt,
+        const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(),
+        _s_ll nb_aux = -1
+      ) {
+        flags &= ~t_cnt(0xffff00);
+        struct f : iref2_flags {};
+        const bool b_aux = !!(flags & f::use_aux);
+        const bool b_nrefs = !!(flags & f::gen_nrefs);
+        const bool b_hst = !!(flags & f::use_hst);
+        const bool b_del = !!(flags & f::use_delete);
+        const bool b_rel = !!(flags & f::use_release);
+        const bool b_cs = !!(flags & f::use_critsec);
+        if (int(b_hst) + b_del + b_rel != 1) { if (!no_exc) { throw exc_iref2_create_any(); } return cref_t<I>(); }
+        if (!h) { h = handler_dflt; }
+        if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
+        _cref_handle2* ph = _new_ph2<Aux>(1, pcsd, flags, h, args_aux, nb_aux);
+        if (ph)
+        {
+          T* p2(0);
+          t_lock __lock(pcsd); if (sizeof(__lock)) {}
+          if (b_cs) { __lock.try_lock(true); }
+          try {
+            if (!b_hst) { p2 = args(0); } else { p2 = args((T*)_s_pobj(ph, b_aux, nb_aux >= 0 ? nb_aux : _s_ll(sizeof(Aux)))); }
+            ph->pobj = p2;
+          } catch (...) {}
+          if (p2)
+          {
+            cref_t<I> rv;
+            I* pint = p2; // p2 of T must be I or subclass of I
+            ((void**)&rv)[0] = &ph->h; ((void**)&rv)[1] = pint; ((void**)&rv)[2] = b_cs ? pcsd : 0;
+            if (b_nrefs) { try { F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->h.f_handler; peh(f::ev_nrefs, ph->h.flags, ph->h.cnt & _m, ph->h.cnt & _m, pcsd, p2, pint, b_aux ? _s_paux(ph) : 0); } catch (...) {} }
+            return rv;
+          }
+          _del_ph(&ph->h);
+        }
+        if (!no_exc) { throw exc_cm_copy(); }
+        return cref_t<I>();
+      }
+
+        // See create_any.
+      static cref_t<I> create0(bool no_exc, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::args(), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1> static cref_t<I> create1(bool no_exc, const A1& x1, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1>(x1), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2> static cref_t<I> create2(bool no_exc, const A1& x1, const A2& x2, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2>(x1, x2), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2, class A3> static cref_t<I> create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3>(x1, x2, x3), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2, class A3, class A4> static cref_t<I> create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4>(x1, x2, x3, x4), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2, class A3, class A4, class A5> static cref_t<I> create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5>(x1, x2, x3, x4, x5), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I> create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6>(x1, x2, x3, x4, x5, x6), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I> create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6, A7>(x1, x2, x3, x4, x5, x6, x7), pcsd, flags, h, args_aux, nb_aux); }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I> create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template args<A1, A2, A3, A4, A5, A6, A7, A8>(x1, x2, x3, x4, x5, x6, x7, x8), pcsd, flags, h, args_aux, nb_aux); }
+
+            // Same as create#, but all args. are cast to non-const when passed into constructor.
+          template<class A1> static cref_t<I> create1nc(bool no_exc, const A1& x1, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1>(x1), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2> static cref_t<I> create2nc(bool no_exc, const A1& x1, const A2& x2, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2>(x1, x2), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2, class A3> static cref_t<I> create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3>(x1, x2, x3), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2, class A3, class A4> static cref_t<I> create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4>(x1, x2, x3, x4), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2, class A3, class A4, class A5> static cref_t<I> create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5>(x1, x2, x3, x4, x5), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> static cref_t<I> create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6>(x1, x2, x3, x4, x5, x6), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> static cref_t<I> create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6, A7>(x1, x2, x3, x4, x5, x6, x7), pcsd, flags, h, args_aux, nb_aux); }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> static cref_t<I> create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8, typename critsec_t<LockSelector>::csdata* pcsd = 0, t_cnt flags = 0x14, F_ev_handler_iref2 h = handler_dflt, const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(), _s_ll nb_aux = -1) { return create_any(no_exc, iref2_args_t<T>::template argsnc<A1, A2, A3, A4, A5, A6, A7, A8>(x1, x2, x3, x4, x5, x6, x7, x8), pcsd, flags, h, args_aux, nb_aux); }
+
+      private: struct _x_assigner;
+      public:
+
+        // Convenience function.
+        //  Arguments: see create_any.
+        //    If use_hst is set (dflt.): x is copied, and the copy is completely managed by cref_t.
+        //      NOTE assign() with use_hst is equivalent to create1() with use_hst,
+        //          just making an x copy into preallocated memory.
+        //        In contrary, with use_delete, create1() creates a copy "new T(x)",
+        //        but assign() only takes ownership on the pointer &x.
+        //    If use_delete is set: x is assumed to be dynamically created by client (by def. using operator new).
+        //      cref_t gains ownership on the object. (On assign() failure, ownership remains on the client side.)
+        //      When the last cref_t is destroyed, ev_delete occurs, which by default calls "delete p".
+        //      NOTE If real type of x (some T2) is not T, the destructor of T or any of its bases must be declared virtual,
+        //      because object destruction occurs on the given original type (~T()).
+        //    If use_release is set: x is assumed to be created statically or in some other uncontrollable way.
+        //      When the last cref_t is destroyed, ev_release occurs, which by default does nothing to the object.
+        //  In other respecs, assign() is the same as create_any().
+      static cref_t<I> assign(
+        bool no_exc,
+        const T& x,
+        typename critsec_t<LockSelector>::csdata* pcsd = 0,
+        t_cnt flags = 0x14, // use_hst (copy x) | use_critsec
+        F_ev_handler_iref2 h = handler_dflt,
+        const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(),
+        _s_ll nb_aux = -1
+      ) {
+        struct f : iref2_flags {};
+        const bool b_hst = !!(flags & f::use_hst);
+        const bool b_del = !!(flags & f::use_delete);
+        const bool b_rel = !!(flags & f::use_release);
+        if (int(b_hst) + b_del + b_rel != 1) { if (!no_exc) { throw exc_iref2_assign(); } return cref_t<I>(); }
+        return create_any(no_exc, _x_assigner(x, b_hst), pcsd, flags, h, args_aux, nb_aux);
+      }
+
+        // Creates a new reference to the same object, but through other interface.
+        // NOTE Reference casting works only with
+        //   1) weak references (flags(): type -1),
+        //   2) multi-functional references (flags(): type 2).
+        // In both _refcast*, T is the type of reference (src.ref() is const T&),
+        //    not the original type of object, which is unknown to the client.
+        // _refcast_s_u: static cast T --> I is used.
+        //    This is unsafe if I is a subclass of T, but the object src is really not a type I.
+        // _refcast_d_u: tries to use dynamic_cast T --> I.
+        //    On few systems, this may cause system-level exception if the original object
+        //    is from another binary module.
+        //    Do not use dynamic cast in this way or check it in all target systems.
+        // NOTE The returned object refers to src critical section data, even in case of null ref.
+      static cref_t<I> _refcast_s_u(cref_t src, bool no_exc)
+      {
+        cref_t<I> rv; ((void**)&rv)[2] = src._ps; if (!src._p) { return rv; } // rv._ph == 0 by constr.
+        const I* p2 = 0; if (!src._ph || src._ph->b_v2())
+          { p2 = static_cast<const I*>(src._p); } // I and T must be statically related
+        if (!p2) { if (!no_exc) { throw exc_refcast_s_u(); } return rv; }
+        ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
+        return rv;
+      }
+      static cref_t<I> _refcast_d_u(cref_t src, bool no_exc)
+      {
+        cref_t<I> rv; ((void**)&rv)[2] = src._ps; if (!src._p) { return rv; } // rv._ph == 0 by constr.
+        const I* p2 = 0; if (!src._ph || src._ph->b_v2())
+          { p2 = dynamic_cast<const I*>(src._p); }
+        if (!p2) { if (!no_exc) { throw exc_refcast_d_u(); } return rv; }
+        ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
+        return rv;
+      }
+
+    private:
+      struct _x_assigner : iref2_args_t<T>::i_new
+      {
+        _x_assigner(const T& x, bool b_copy_) { px = &x; b_copy = b_copy_; }
+        virtual T* operator()(T* p) const
+        {
+          if (p) { if (b_copy) { new (p) T(*px); return p; } throw exc_iref2_assign(); }
+            else { if (b_copy) { return new T(*px); } return (T*)px; }
+        }
+        private: const T* px; bool b_copy;
+      };
+
+    }; // end of struct iref2
+
+
+
   private:
     _cref_handle* _ph; // _p == 0 => _ph == 0, but not vice versa
-    mutable volatile const T* _p;
+    mutable const T* volatile _p;
     _critsec_data0_t<LockSelector>* _ps;
+
+    static const t_cnt _f3 = t_cnt(1) << (sizeof(t_cnt) * 8 - 3);
+    static const t_cnt _f2 = _f3 << 1;
+    static const t_cnt _f23 = _f2 | _f3; // ==0 - in-module ref. (type 0), ==_f2 - cross-module ref. (type 1), ==_f3 - multi-func. ref. (type 2), ==_f23 - reserved
+    static const t_cnt _f1 = _f3 << 2; // "detached (== destructor disabled)"
+    static const t_cnt _m = ~(_f1 | _f2 | _f3); // mask for reference counting bits in _ph->cnt
+
+    typedef typename iref2_args_t<T>::F_alloc F_alloc;
+    typedef typename iref2_args_t<T>::F_free F_free;
+    typedef typename iref2_args_t<T>::F_des F_des;
+    typedef typename iref2_args_t<T>::F_del F_del;
+    struct _cref_handle
+    {
+      volatile t_cnt cnt;
+      t_cnt flags;
+      F_free f_free;
+      void* f_handler;
+
+      void _init(t_cnt n0, _s_long flags_) { cnt = (n0 & _m) | _f2; flags = flags_; f_free = _a::_sf_free; f_handler = (void*)_a::_sf_delete1; }
+
+      bool b_v0() const throw() { return (cnt & _f23) == 0; } // *this is just a t_cnt
+      bool b_v1() const throw() { return (cnt & _f23) == _f2; } // *this is a _cref_handle
+      bool b_v2() const throw() { return (cnt & _f23) == _f3; } // *this is variable size _cref_handle2
+      bool b_detached() const throw() { return !!(cnt & _f1); }
+    };
+    struct _cref_handle2
+    {
+      _cref_handle h;
+      _critsec_data0_t<LockSelector>* pcsd;
+      void* pobj;
+    };
+    static _cref_handle2* _s_ph2(_cref_handle* ph) throw() { return (_cref_handle2*)((char*)ph - offsetof(_cref_handle2, h)); }
+
+    static const int _nbalign = 8; // must be power of two and >= sizeof(double)
+    static const int _nbd = sizeof(double);
+    static _s_ll _s_roundup_size(_s_ll nb) { return (nb + (_nbalign - 1)) & ~_s_ll(_nbalign - 1); }
+    static void* _s_next_aligned(void* p, _s_ll nbsize) { return __bmdx_null_pchar + _s_roundup_size(_s_ll((char*)p - __bmdx_null_pchar) + nbsize); }
+    static void* _s_paux(_cref_handle2* ph) throw() { return _s_next_aligned(ph, sizeof(_cref_handle2)); }
+    static void* _s_pobj(_cref_handle2* ph, bool b_aux, _s_ll nb_aux) throw() { return b_aux ? _s_next_aligned(_s_paux(ph), nb_aux) : _s_paux(ph); }
+    static _s_ll _s_nb_h_iref2(bool b_aux, bool b_hst, _s_ll nb_aux, _s_ll nb_hst) throw()
+    {
+      if (b_aux || b_hst)
+      {
+        _s_ll n = _s_roundup_size(_s_ll((_nbalign > _nbd ?  _nbalign - _nbd - 1 : 0) + sizeof(_cref_handle2)));
+        if (b_aux) { n += _s_roundup_size(nb_aux); }
+        if (b_hst) { n += _s_roundup_size(nb_hst); }
+        return n;
+      }
+      return _s_ll(sizeof(_cref_handle2));
+    }
 
     void _reset(__bmdx_noarg1) throw()
     {
@@ -4319,14 +5731,14 @@ namespace bmdx
         _del_onrc0(_ph, const_cast<T*>(_p));
         if ((_ph->cnt & _m) == 0) { _del_ph(_ph); }
         _ph = 0;
-     }
-     if (!_ps) { _ps = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
+      }
+      if (!_ps) { _ps = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
       _p = 0;
     }
-    static t_cnt* _new_pcnt(t_cnt n0 __bmdx_noarg) throw() { t_cnt* p = (t_cnt*)_a::_sf_alloc(sizeof(t_cnt)); if (p) { *p = n0; }  return p; }
+    static t_cnt* _new_pcnt(t_cnt n0 __bmdx_noarg) throw() { t_cnt* p = (t_cnt*)_a::_sf_calloc(sizeof(t_cnt)); if (p) { *p = n0; }  return p; }
     static _cref_handle* _new_ph(t_cnt n0, _s_long flags __bmdx_noarg) throw()
     {
-      _cref_handle* ph = (_cref_handle*)_a::_sf_alloc(sizeof(_cref_handle));
+      _cref_handle* ph = (_cref_handle*)_a::_sf_calloc(sizeof(_cref_handle));
       if (ph) { new (ph) _cref_handle(); ph->_init(n0, (flags & 0x2) | 0x4); } // use_critsec is forced in this type of handler, the flag only indicates that it's enabled
       return ph;
     }
@@ -4335,15 +5747,16 @@ namespace bmdx
       typename critsec_t<LockSelector>::csdata* pcsd,
       t_cnt flags,
       F_ev_handler_iref2 peh,
-      const typename iref2_args_t<Aux>::i_new& args_aux
+      const typename iref2_args_t<Aux>::i_new& args_aux,
+      _s_ll nb_aux // if < 0, use sizeof(Aux)
       __bmdx_noarg
     ) throw()
     {
       struct f : iref2_flags {};
       const bool b_aux = !!(flags & f::use_aux);
       const bool b_hst = !!(flags & f::use_hst);
-      _s_ll nbh = _s_nb_h_iref2(b_aux, b_hst, sizeof(Aux), sizeof(T));
-      _cref_handle2* ph = (_cref_handle2*)_a::_sf_alloc(nbh);
+      _s_ll nbh = _s_nb_h_iref2(b_aux, b_hst, nb_aux >= 0 ? nb_aux : _s_ll(sizeof(Aux)), sizeof(T));
+      _cref_handle2* ph = (_cref_handle2*)_a::_sf_calloc(nbh);
         if (!ph) { return 0; }
       if (b_aux) { try { args_aux((Aux*)_s_paux(ph)); } catch (...) { _a::_sf_free(ph); return 0; } }
       ph->h.cnt = (n0 & _m) | _f3;
@@ -4384,7 +5797,7 @@ namespace bmdx
       if (ph->b_v1()) { ph->f_free(ph); return; }
       if (ph->b_v2())
       {
-        if ((ph->flags & f::use_aux) && !(ph->flags & f::disbale_aux_des))
+        if ((ph->flags & f::use_aux) && !(ph->flags & f::disable_aux_des))
         {
           _cref_handle2* ph2 = _s_ph2(ph); F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->f_handler;
           try { peh(f::ev_aux_des, ph->flags, 0, 0, ph2->pcsd, 0, 0, _s_paux(ph2)); } catch (...) {}
@@ -4554,7 +5967,7 @@ namespace bmdx
       virtual void mt_proc() = 0;
 
 
-      ictx(__bmdx_noarg1) throw() : _pm(0), _cb(), _nth(1), _ith(0), _pr(4), _rb_run(), _rth()  {}
+      ictx(__bmdx_noarg1) throw() : _pm(0), _cb(), _nth(1), _ith(0), _pr(4), _rb_run(), _rth() {}
 
         // Parent multithread object.
         //  This pointer is valid only if the client did not detach from the running threads.
@@ -4581,12 +5994,12 @@ namespace bmdx
         //  so the resulting range may be empty or shorter than in other threads.
         // Returns:
         //    true - the resulting [i0..i2) is not empty.
-        //    false - in any other case.
-      template<class N> inline bool range(s_ll n, N& i0, N& i2) const
+        //    false - in any other case. Range [i0..i2) is empty.
+      template<class N> inline bool range(_s_ll n, N& i0, N& i2) const
       {
         i0 = 0; i2 = 0;
         if (n <= 0) { return false; }
-        s_ll dn = (n + _nth - 1) / _nth;
+        _s_ll dn = (n + _nth - 1) / _nth;
         i0 = N(_ith * dn); if (i0 >= N(n)) { i0 = N(n); }
         i2 = N((_ith + 1) * dn); if (i2 >= N(n)) { i2 = N(n); }
         return i2 > i0;
@@ -4627,7 +6040,7 @@ namespace bmdx
         //    -1 - i-th job started,
         //    -2 - i-th job completed (msg == 1: success, 0: failure),
         //    -3 - all jobs completed.
-      virtual void cb_proc(t_ictx* pctx, s_long ith, s_long msgtype, s_ll msg) = 0;
+      virtual void cb_proc(t_ictx* pctx, _s_long ith, _s_long msgtype, _s_ll msg) = 0;
 
 
       virtual ~icb() {}
@@ -4665,29 +6078,7 @@ namespace bmdx
 
 
 
-
-#undef _s_long
-#undef _s_ll
-#undef _u_ll
-
-#endif // bmdx_cpiomt_H
-
-
-
-// NOTE This is EXPERIMENTAL part of the library.
-//  Define bmdx_part_shm 1 to use this part.
-//  Differences from other parts:
-//  1. Interfaces will change in the newer versions.
-//  2. The code is not automatically tested and may contain errors
-//    or be incompatible with certain platforms or with its own prev. versions.
-
-#if bmdx_part_shm
-#ifndef bmdx_shmem_H
-#define bmdx_shmem_H
-
-#include <deque>
 #include <map>
-
 
 #ifdef _bmdxpl_Psx
   #include <sys/mman.h>
@@ -4712,17 +6103,15 @@ namespace bmdx
 
 
 
-  // Main namespace.
+  // Main namespace for shared memory API .
 namespace bmdx_shm
 {
+namespace _bmdx_shm { namespace _api {} } using namespace _bmdx_shm::_api;
 
 
-namespace _bmdx_shm { namespace _api {} }
-using namespace _bmdx_shm::_api;
-
-
-
-typedef bmdx_str::flstr_t<300> t_name_shm;
+#undef __bmdx_shm_name_length
+#define __bmdx_shm_name_length 300
+typedef bmdx_str::flstr_t<__bmdx_shm_name_length> t_name_shm;
 typedef t_name_shm (*f_shm_name_prefix)();
 
   // System-global object name prefixes may be customized at compile time.
@@ -4764,9 +6153,6 @@ namespace _bmdx_shm
 {
 
 using namespace bmdx;
-using bmdx_meta::u_long;
-using bmdx_meta::s_long;
-using bmdx_meta::s_ll;
 using namespace bmdx_str::words;
 
 
@@ -4776,12 +6162,12 @@ using namespace bmdx_str::words;
   struct _socket_msg_1fd
   {
       // fd specifies the initial value of the descriptor field in the message.
-    _socket_msg_1fd(int fd = -1)        { _ndesc[0] = 1; _v1.iov_base = _ndesc; _v1.iov_len = sizeof(_ndesc); _m.msg_name = 0; _m.msg_namelen = 0; _m.msg_iov = &_v1; _m.msg_iovlen = 1; _m.msg_flags = MSG_DONTWAIT; _m.msg_control = _cmsg.buf; _m.msg_controllen = sizeof(_cmsg.buf);  struct cmsghdr* pcm1 = CMSG_FIRSTHDR(&_m);  pcm1->cmsg_level = SOL_SOCKET; pcm1->cmsg_type = SCM_RIGHTS; pcm1->cmsg_len = CMSG_LEN(sizeof(int) * 1);  int* pdata = (int*)CMSG_DATA(pcm1); pdata[0] = fd; }
+    _socket_msg_1fd(int fd = -1)    { _ndesc[0] = 1; _v1.iov_base = _ndesc; _v1.iov_len = sizeof(_ndesc); _m.msg_name = 0; _m.msg_namelen = 0; _m.msg_iov = &_v1; _m.msg_iovlen = 1; _m.msg_flags = MSG_DONTWAIT; _m.msg_control = _cmsg.buf; _m.msg_controllen = sizeof(_cmsg.buf);  struct cmsghdr* pcm1 = CMSG_FIRSTHDR(&_m);  pcm1->cmsg_level = SOL_SOCKET; pcm1->cmsg_type = SCM_RIGHTS; pcm1->cmsg_len = CMSG_LEN(sizeof(int) * 1);  int* pdata = (int*)CMSG_DATA(pcm1); pdata[0] = fd; }
 
     int fd() const        { int* pdata = (int*)CMSG_DATA(CMSG_FIRSTHDR(&_m)); return pdata[0]; }
-    int& fd()        { int* pdata = (int*)CMSG_DATA(CMSG_FIRSTHDR(&_m)); return pdata[0]; }
+    int& fd()    { int* pdata = (int*)CMSG_DATA(CMSG_FIRSTHDR(&_m)); return pdata[0]; }
 
-    struct msghdr& m()        { return _m; }
+    struct msghdr& m()    { return _m; }
     const struct msghdr& m() const        { return _m; }
 
   private:
@@ -4798,18 +6184,18 @@ using namespace bmdx_str::words;
 
     bool b_srv() const { return _b_srv; }
     bool b_connected() const { return _state == 2; }
-    s_long res() const { return _res; }
+    _s_long res() const { return _res; }
 
       // Factual socket name, used in socket creation. Starts with char '\0'. See key() for original name processing scheme.
     const t_name& name() const        { return _name; }
       // -1..99999. See key() for original socket name processing scheme.
-    s_long n_role() const { return _n_role; }
+    _s_long n_role() const { return _n_role; }
 
       // Socket name: limit_length('\0' + name_prefix + str(n_role >= 0 ? n_role % 100000 : "") + name, sizeof(sockaddr_un::sun_path)).
-    static t_name key(const t_name& name_orig, s_long n_role = -1, const char* name_prefix = "")        { t_name _name; _name += '\0'; _name += name_prefix; if (n_role >= 0) { _name += n_role % 100000; } _name += name_orig; if (_name.n() > s_long(sizeof(_a.sun_path))) { _name.resize(s_long(sizeof(_a.sun_path))); } return _name; }
+    static t_name key(const t_name& name_orig, _s_long n_role = -1, const char* name_prefix = "")    { t_name _name; _name += '\0'; _name += name_prefix; if (n_role >= 0) { _name += n_role % 100000; } _name += name_orig; if (_name.n() > _s_long(sizeof(_a.sun_path))) { _name.resize(_s_long(sizeof(_a.sun_path))); } return _name; }
 
       // b_srv true: server side, false: client side. See key() for name processing scheme.
-    _asocket_io(bool b_srv, const t_name& name_orig, s_long n_role = -1, const char* name_prefix = "")        { _name = key(name_orig, n_role, name_prefix); _n_role = n_role < 0 ? -1 : n_role % 100000; _b_srv = b_srv; _h1 = _h2 = -1; _state = 0;  _state = 0; _res = -4; _a.sun_family = PF_LOCAL; memcpy(&_a.sun_path, _name.c_str(), size_t(_name.n())); }
+    _asocket_io(bool b_srv, const t_name& name_orig, _s_long n_role = -1, const char* name_prefix = "")    { _name = key(name_orig, n_role, name_prefix); _n_role = n_role < 0 ? -1 : n_role % 100000; _b_srv = b_srv; _h1 = _h2 = -1; _state = 0;  _state = 0; _res = -4; _a.sun_family = PF_LOCAL; memcpy(&_a.sun_path, _name.c_str(), size_t(_name.n())); }
 
 
       // Automatically connects or accepts if necessary, then sends message m.
@@ -4817,7 +6203,7 @@ using namespace bmdx_str::words;
       //  Returns:
       //    1 - completed.
       //    0 - partially completed. Sleep and retry.
-      //    -1 - Server: no peer connected yet. Client: server is not reponding (does not exist?). Maybe sleep and retry.
+      //    -1 - Server: no peer connected yet. Client: server is not responding (does not exist?). Maybe sleep and retry.
       //    -2 - peer socket failure during sending. close_h2() and retry.
       //    -3 - server socket failure. close_h1h2() and retry.
       // The result is also returned by res().
@@ -4838,7 +6224,7 @@ using namespace bmdx_str::words;
       //  Returns:
       //    1 - completed.
       //    0 - no message yet sent by peer on established connection, or receival is partially completed. Sleep and retry.
-      //    -1 - Server: no peer connected yet. Client: server is not reponding (does not exist?). Maybe sleep and retry.
+      //    -1 - Server: no peer connected yet. Client: server is not responding (does not exist?). Maybe sleep and retry.
       //    -2 - peer socket failure during receival. close_h2() and retry.
       //    -3 - server socket failure. close_h1h2() and retry.
       //  The result is also returned by res().
@@ -4855,11 +6241,11 @@ using namespace bmdx_str::words;
     }
 
       // Sets non-blocking behavior for file or socket descriptor.
-    static bool fcntl_set_nonblock(int fd)        { int f = fcntl(fd, F_GETFL); if (f != -1) { f = fcntl(fd, F_SETFL, f | O_NONBLOCK); } return f == 0; }
+    static bool fcntl_set_nonblock(int fd)    { int f = fcntl(fd, F_GETFL); if (f != -1) { f = fcntl(fd, F_SETFL, f | O_NONBLOCK); } return f == 0; }
 
       // Try to automatically create a socket, bind/listen/accept or connect.
       // 1 - done. try_send, try_receive ready to transfer data.
-      // -1 - Server: no peer connected yet (accept returned "wait" state). Client: server is not reponding (does not exist?), or connection pending. Maybe sleep and retry.
+      // -1 - Server: no peer connected yet (accept returned "wait" state). Client: server is not responding (does not exist?), or connection pending. Maybe sleep and retry.
       // -2 - Socket accept failed (permission or other error). h2 is closed, h1 may be valid.
       // -3 - Socket create/bind/listen failed. h1, h2 are closed.
     int try_connect()
@@ -4909,7 +6295,7 @@ using namespace bmdx_str::words;
     void close_h1h2() { if (_h2 != -1) { ::close(_h2); } _h2 = -1; if (_h1 != -1) { ::close(_h1); _h1 = -1; } if (_state != 0) { _state = 0; } }
     ~_asocket_io() { close_h1h2(); }
 
-  private: bool _b_srv; int _h1, _h2; t_name _name; sockaddr_un _a; mutable s_long _state; mutable s_long _res; s_long _n_role;
+  private: bool _b_srv; int _h1, _h2; t_name _name; sockaddr_un _a; mutable _s_long _state; mutable _s_long _res; _s_long _n_role;
   };
 
 
@@ -4940,9 +6326,9 @@ using namespace bmdx_str::words;
       //    -1 - "invalid" fd is associated with this name.
       //    -2 - failure (multiple cases).
       //    -3 (only on t_retry_mcs < 0)  - name not found.
-      //    -4 - search in progress, file descriptor is still unknown. On t_retry_mcs == 0, this means that curently no fd exposed by any process.
-      //    -5 - file descriptor exists, but too large delay during transfer occured. The client must assume that the descriptor exists and call fd_search again later.
-    int fd_search(const t_name& name_orig, s_long t_retry_mcs, s_long n_role_expose) throw()        { return ((p_fd_search)pff[0])(*this, name_orig, t_retry_mcs, n_role_expose); }
+      //    -4 - search in progress, file descriptor is still unknown. On t_retry_mcs == 0, this means that currently no fd exposed by any process.
+      //    -5 - file descriptor exists, but too large delay during transfer occurred. The client must assume that the descriptor exists and call fd_search again later.
+    int fd_search(const t_name& name_orig, _s_long t_retry_mcs, _s_long n_role_expose) throw()    { return ((p_fd_search)pff[0])(*this, name_orig, t_retry_mcs, n_role_expose); }
 
       // Try to share a duplicate of the given *io_fd with other processes under the given name.
       //  fd:
@@ -4951,7 +6337,7 @@ using namespace bmdx_str::words;
       //    -2. Do not process fd, n_role, b_overwrite, instead, if name exists, set only b_expose for this name.
       //  n_role: [-1..n_role_max]. A number to prepend to original name. -1 - do not prepend anything.
       //  b_expose:
-      //    true - if an association exists or just created, enable exposing the asociated fd to other processes.
+      //    true - if an association exists or just created, enable exposing the associated fd to other processes.
       //    false - disable exposing is it was enabled (but do not remove name-fd association as such).
       // Returns:
       //  1 - success.
@@ -4959,38 +6345,38 @@ using namespace bmdx_str::words;
       //  -1 - wrong fd (<= -3).
       //  -2 - failure (multiple cases).
       //  -3 (only on fd == -2) - failed to enable exposing - name not found.
-    int fd_expose(const t_name& name_orig, int fd, s_long n_role, bool b_overwrite, bool b_expose) throw()        { return ((p_fd_expose)pff[1])(*this, name_orig, fd, n_role, b_overwrite, b_expose); }
+    int fd_expose(const t_name& name_orig, int fd, _s_long n_role, bool b_overwrite, bool b_expose) throw()    { return ((p_fd_expose)pff[1])(*this, name_orig, fd, n_role, b_overwrite, b_expose); }
 
       // Remove the name and all associated tasks, close file descriptor if it exists.
       //  1 - removed.
       //  0 - object with the given name does not exist.
       //  -2 - failure.
-    int fd_remove(const t_name& name_orig) throw()        { return ((p_fd_remove)pff[2])(*this, name_orig); }
+    int fd_remove(const t_name& name_orig) throw()    { return ((p_fd_remove)pff[2])(*this, name_orig); }
 
       // Remove all names and search tasks, stop (join with) service thread.
-    void reset(bool b_wait) throw()        { ((p_reset)pff[3])(*this, b_wait); }
+    void reset(bool b_wait) throw()    { ((p_reset)pff[3])(*this, b_wait); }
 
     _fd_sharing() { pff[0] = (void*)&_fd_search; pff[1] = (void*)&_fd_expose; pff[2] = (void*)&_fd_remove; pff[3] = (void*)&_reset; }
 private:
-    typedef int (*p_fd_search)(_fd_sharing& par, const t_name& name_orig, s_long t_retry_mcs, s_long n_role_expose);
-    typedef int (*p_fd_expose)(_fd_sharing& par, const t_name& name_orig, int fd, s_long n_role, bool b_overwrite, bool b_expose);
+    typedef int (*p_fd_search)(_fd_sharing& par, const t_name& name_orig, _s_long t_retry_mcs, _s_long n_role_expose);
+    typedef int (*p_fd_expose)(_fd_sharing& par, const t_name& name_orig, int fd, _s_long n_role, bool b_overwrite, bool b_expose);
     typedef int (*p_fd_remove)(_fd_sharing& par, const t_name& name_orig);
     typedef void (*p_reset)(_fd_sharing& par, bool b_wait);
     void* pff[4];
 
     struct job
     {
-      s_long state; // 0 - fd is unknown and search disabled, 1 - fd is unknown, but searching, 2 - fd is known (+ sending fd to other processes on b_mayexpose == true)
+      _s_long state; // 0 - fd is unknown and search disabled, 1 - fd is unknown, but searching, 2 - fd is known (+ sending fd to other processes on b_mayexpose == true)
       volatile int fd; // may be read w/o locking; -1 - "no file", -2 - "fd still unknown", >=0 - known fd
       bool b_mayexpose;
       bool b_conn1;
-      s_long nrexp;
-      s_long nrsrch;
+      _s_long nrexp;
+      _s_long nrsrch;
       critsec_t<job>::csdata csd; // individual lock for this job instance
       t_name name; // original name, associated with file descriptor (not formatted/prefixed to serve as socket name)
       _asocket_io s;
       _socket_msg_1fd m1;
-      job(const t_name& name_, s_long n_role_expose_) : name(name_), s(false, name_, -1, "F\t") { state = 0; fd = -2; b_mayexpose = true; nrexp = n_role_expose_; b_conn1 = true; nrsrch = -1; if (nrexp < 0) { nrexp = -1; } else if (nrexp > n_role_max) { nrexp = n_role_max; } } // cm_create0 may gen. exc.
+      job(const t_name& name_, _s_long n_role_expose_) : name(name_), s(false, name_, -1, "F\t") { state = 0; fd = -2; b_mayexpose = true; nrexp = n_role_expose_; b_conn1 = true; nrsrch = -1; if (nrexp < 0) { nrexp = -1; } else if (nrexp > n_role_max) { nrexp = n_role_max; } } // cm_create0 may gen. exc.
       ~job() { if (fd >= 0) { ::close(fd); } }
       int periodic() // ret. 1 if done something, 0 if done nothing
       {
@@ -5027,7 +6413,7 @@ private:
     typedef std::map<t_name, cref_t<job> > t_map1;
     inline static cref_t<t_map1> rmap1() { static bool b_des = false; if (b_des) { return cref_t<t_map1>(); } static cref_t<t_map1> x; static struct _local_des { ~_local_des() { b_des = true; } } __des; if (!x) { x.cm_create0(0, 0, 1); } return x; }
     inline static cref_t<threadctl> rth() { static bool b_des = false; if (b_des) { return cref_t<threadctl>(); } static cref_t<threadctl> x; static struct _local_des { ~_local_des() { b_des = true; _fd_sharing().reset(true); } } __des; if (!x) { x.cm_create0(0, 0, 1); } if (x && !x.ref()) { x._pnonc_u()->start_auto<_th>(int(0)); } return x; }
-    static int _fd_search(_fd_sharing& par, const t_name& name_orig, s_long t_retry_mcs, s_long n_role_expose)
+    static int _fd_search(_fd_sharing& par, const t_name& name_orig, _s_long t_retry_mcs, _s_long n_role_expose)
     {
       rth();
       bool b_insert = t_retry_mcs >= 0;
@@ -5051,7 +6437,7 @@ private:
       {
         critsec_t<job> __lock(5, -1, &j.csd); if (sizeof(__lock)) {}
         if (j.state == 0) { j.state = 1; }
-        s_long nrprev;
+        _s_long nrprev;
         while (true)
         {
           nrprev = j.nrsrch;
@@ -5071,7 +6457,7 @@ private:
       }
       return -4;
     }
-    static int _fd_expose(_fd_sharing& par, const t_name& name_orig, int fd, s_long n_role, bool b_overwrite, bool b_expose)
+    static int _fd_expose(_fd_sharing& par, const t_name& name_orig, int fd, _s_long n_role, bool b_overwrite, bool b_expose)
     {
       rth();
       if (fd <= -3) { return -1; }
@@ -5137,11 +6523,11 @@ private:
               cref_t<t_map1>::t_lock __lock(false, rm.pcsd());
               if (!__lock) { break; }
               const t_map1& m = rm.ref();
-              if (!jj.resize(s_ll(m.size()))) { break; }
-              s_ll i = 0;
+              if (!jj.resize(_s_ll(m.size()))) { break; }
+              _s_ll i = 0;
               for (t_map1::const_iterator q = m.begin(); q != m.end(); ++q, ++i) { jj[i] = q->second; }
             }
-            for (s_ll i = 0; i < jj.n(); ++i) { if (jj[i]) { nj += jj[i]._pnonc_u()->periodic(); } }
+            for (_s_ll i = 0; i < jj.n(); ++i) { if (jj[i]) { nj += jj[i]._pnonc_u()->periodic(); } }
           } catch (...) {} } while (false);
           if (nj == 0) { sleep_mcs(10000); }
         }
@@ -5156,22 +6542,17 @@ private:
 namespace _api // public declarations (merged into namespace bmdx_shm)
 {
 
-    // Non-blocking, non-locking, by-reference queue for bytes, for two threads (sender, receiver).
-    // Designed to work as shared object in IPC.
-    // NOTE Size of rfifo_nbl11 as such is fixed: 32 bytes, this includes 12 bytes for data.
-    //    When used by reference (on a memory block), the number of bytes for data depends on that block size.
-    //    See init() for details.
+    // Non-blocking, non-locking queue for bytes, for two threads (sender, receiver).
+    //  Designed to work as shared object in IPC (may also be used by threads inside one process).
+    //  Details: see rfifo_nbl11::init_ref().
   struct rfifo_nbl11
   {
-    typedef bmdx_meta::s_ll s_ll; // 64-bit signed integer
-    static inline s_ll myllmin(s_ll a, s_ll b) { return a < b ? a : b; }
-
-      // NOTE Buffer object, created with constructor, will have size == n0 bytes.
+      // NOTE Buffer object, created with constructor, will have minimal size == n0 bytes.
       //  Buffer object, referenced by pointer cast, will have size >= n0 bytes.
     enum { n0 = 8 };
 
       // NOTE Copying and assignment do not copy anything from source object.
-      //   This is not the main intended way of using rbufipc. See init().
+      //   This is not the main intended way of using rfifo_nbl11. See init().
     rfifo_nbl11() : _ipush(0), _ipop(0), _n(n0) {}
     rfifo_nbl11(const rfifo_nbl11&) : _ipush(0), _ipop(0), _n(n0) {}
     void operator=(const rfifo_nbl11&) {}
@@ -5180,60 +6561,63 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
     // Initializer side.
 
-      // rbufipc should be used as reference (cast from pre-allocated memory area).
-      // When the client has allocated a memory of size N at location P to use as rbufipc,
-      // it must call ((rbufipc*)P)->init(N-20, ...) to construct the buffer.
-      // Byte data offset is P+20 (in case when priming is needed).
-    void init_ref(s_ll n_, s_ll ipush_ = 0, s_ll ipop_ = 0) { if (sizeof(size_t) < 8) { n_ = myllmin(n_, 1ll << 31); } _n = n_ < 1 ? 1 : n_; _ipush = ipush_; _ipop = ipop_; }
+      // Initialize the buffer object.
+      // n_ - place (number of bytes) for queued data.
+      // rfifo_nbl11 is kept in memory together with queue data, in single linear area.
+      //  Queue data array starts inside rfifo_nbl11 object (offset == +24).
+      //  Fixed area for data, included into rfifo_nbl11 object, is n0 == 8 bytes.
+      // If n_ > n0, additional place for data is taken adjacent to the end of rfifo_nbl11 object.
+    void init_ref(_s_ll n_, _s_ll ipush_ = 0, _s_ll ipop_ = 0) throw() { if (sizeof(void*) < 8) { n_ = bmdx_minmax::myllmin(n_, 1ll << 31); } _n = n_ < 1 ? 1 : n_; _ipush = ipush_; _ipop = ipop_; }
 
       // Data buffer size.
-    s_ll n() const { return _n; }
+    _s_ll n() const throw() { return _n; }
 
 
 
     // Supplier side.
 
       // The current push position, and the number of bytes (volatile) that may be pushed now.
-    s_ll ipush() const { return (s_ll)_ipush; }
-    s_ll npush() const { return _n - npop(); }
+    _s_ll ipush() const throw() { return _ipush; }
+    _s_ll nfree() const throw() { return _n - navl(); }
+    void _sndr_set_ipush(_s_ll ipush) throw() { _ipush = ipush; } // for "manual" updating push position if needed
 
-      // If nmax > 0, pushes min(nmax, npush()) bytes from p into this ipcbuf.
+      // If nmax > 0, pushes min(nmax, npush()) bytes from p into the queue.
       // Returns the number of bytes actually pushed (>=0).
-      // NOTE if p != 0, and the buffer is valid (not damaged), push() guarantees the correct pushing for at least npush() bytes.
-      // NOTE pushing is transactional (ipush() is increased only once, at the end of successful operation).
-    s_ll push(const char* p, s_ll nmax)
+      // If the buffer is valid (indexes are not corrupted), push() is faultless.
+      // Pushing is transactional: ipush() is increased only once, at the end of successful operation.
+    _s_ll push(const char* p, _s_ll nmax) throw()
     {
       if (!p) { return 0; }
       if (nmax <= 0) { return 0; }
-      s_ll i2 = (s_ll)_ipush, i1 = (s_ll)_ipop;
-      s_ll n = _n - (i2 - i1);
-      s_ll __np = nmax >= n ? n : s_ll(nmax);
-      s_ll n1 = myllmin(__np, myllmin(n, _n - s_ll(i2 % _n)));
+      _s_ll i2 = _ipush, i1 = _ipop;
+      _s_ll n = _n - (i2 - i1);
+      _s_ll __np = nmax >= n ? n : _s_ll(nmax);
+      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - _s_ll(i2 % _n));
       if (n1 > 0)
       {
-        std::memcpy(&d[0] + _ipush % _n, p, size_t(n1));
+        bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + _ipush % _n, p, size_t(n1));
         p += n1;
-        s_ll n2 = __np - n1;
-        if (n2 > 0) { std::memcpy(&d[0] + (_ipush + n1) % _n, p, size_t(n2)); }
+        _s_ll n2 = __np - n1;
+        if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + (_ipush + n1) % _n, p, size_t(n2)); }
         _ipush += __np; // the last action "commits" pushing (important if the object is in shared memory)
        }
       return __np;
     }
 
       // Same as push(), only pushes byte b up to nmax times.
-      // NOTE if the buffer is valid (not damaged), push() guarantees the correct pushing for at least npush() bytes.
-      // NOTE pushing is transactional (ipush() is increased only once, at the end of successful operation).
-    s_ll push_bytes(char b, s_ll nmax)
+      // If the buffer is valid (indexes are not corrupted), push_bytes() is faultless.
+      // Pushing is transactional: ipush() is increased only once, at the end of successful operation.
+    _s_ll push_bytes(char b, _s_ll nmax) throw()
     {
       if (nmax <= 0) { return 0; }
-      s_ll i2 = (s_ll)_ipush, i1 = (s_ll)_ipop;
-      s_ll n = _n - (i2 - i1);
-      s_ll __np = nmax >= n ? n : s_ll(nmax);
-      s_ll n1 = myllmin(__np, myllmin(n, _n - i2 % _n));
+      _s_ll i2 = _ipush, i1 = _ipop;
+      _s_ll n = _n - (i2 - i1);
+      _s_ll __np = nmax >= n ? n : _s_ll(nmax);
+      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - i2 % _n);
       if (n1 > 0)
       {
         std::memset(&d[0] + _ipush % _n, b, size_t(n1));
-        s_ll n2 = __np - n1;
+        _s_ll n2 = __np - n1;
         if (n2 > 0) { std::memset(&d[0] + (_ipush + n1) % _n, b, size_t(n2)); }
         _ipush += __np; // the last action "commits" pushing (important if the object is in shared memory)
       }
@@ -5244,55 +6628,58 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     // Receiver side.
 
       // The current pop position, and the number of bytes (volatile) that may be popped now.
-    s_ll ipop() const { return (s_ll)_ipop; }
-    s_ll npop() const { return _ipush - _ipop; }
+    _s_ll ipop() const throw() { return _ipop; }
+    _s_ll navl() const throw() { return _ipush - _ipop; }
+    void _rcv_set_ipop(_s_ll ipop) throw() { _ipop = ipop; } // for skipping data if needed
 
       // How many bytes, which may be popped, are located contiguously. [0..npop()].
-    s_ll npop_contig() const { s_ll i2 = (s_ll)_ipush, i1 = (s_ll)_ipop; return myllmin(i2 - i1, _n - i1 % _n); }
+    _s_ll navl_contig() const throw() { _s_ll i2 = _ipush, i1 = _ipop; return bmdx_minmax::myllmin(i2 - i1, _n - i1 % _n); }
 
       // Pointer to the next byte that would be popped.
-    const char* peek1() const { return &d[0] + _ipop % _n; }
+    const char* peek1() const throw() { return &d[0] + _ipop % _n; }
 
-      // If nmax > 0, pops min(nmax, npop()) bytes from ipcbuf into pdest.
+      // If nmax > 0, pops min(nmax, npop()) bytes from the queue into pdest.
       // If b_do_pop == false, ipop() is not increased, so the client just gets a copy of buffer data.
+      // pchs: signed 32-bit checksum accumulator (each char unsigned value is added to *pchs).
       // Returns the number of bytes actually popped (>=0).
       // NOTE popping is transactional (ipop() is increased only once, at the end of successful operation).
-    s_ll pop(char* pdest, s_ll nmax, bool b_do_pop = true)
+    _s_ll pop(char* pdest, _s_ll nmax, bool b_do_pop = true, _s_long* pchs = 0) throw()
     {
       if (!pdest) { return 0; }
       if (nmax <= 0) { return 0; }
-      s_ll i1 = (s_ll)_ipop, i2 = (s_ll)_ipush;
-      s_ll n = i2 - i1;
-      s_ll __np = nmax >= n ? n : s_ll(nmax);
-      s_ll n1 = myllmin(__np, myllmin(n, _n - i1 % _n));
+      _s_ll i1 = _ipop, i2 = _ipush;
+      _s_ll n = i2 - i1;
+      _s_ll __np = nmax >= n ? n : _s_ll(nmax);
+      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - i1 % _n);
       if (n1 > 0)
       {
-        std::memcpy(pdest, &d[0] + _ipop % _n, size_t(n1));
+        bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + _ipop % _n, size_t(n1), pchs);
         pdest += n1;
-        s_ll n2 = __np - n1;
-        if (n2 > 0) { std::memcpy(pdest, &d[0] + (_ipop + n1) % _n, size_t(n2)); }
+        _s_ll n2 = __np - n1;
+        if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + (_ipop + n1) % _n, size_t(n2), pchs); }
         if (b_do_pop) { _ipop += __np; } // the last action "commits" popping (important if the object is in shared memory)
       }
       return __np;
     }
 
+
       // If nmax > 0, skip min(nmax, npop()) bytes.
       // Returns the number of bytes actually skipped (>=0).
       // NOTE discarding is transactional (ipop() is increased only once, at the end of successful operation).
-    s_ll discard(s_ll nmax)
+    _s_ll discard(_s_ll nmax) throw()
     {
       if (nmax <= 0) { return 0; }
-      s_ll i2 = (s_ll)_ipush, i1 = (s_ll)_ipop;
-      s_ll n = i2 - i1;
-      s_ll __np = nmax >= n ? n : nmax;
+      _s_ll i2 = _ipush, i1 = _ipop;
+      _s_ll n = i2 - i1;
+      _s_ll __np = nmax >= n ? n : nmax;
       _ipop += __np; // the last action "commits" discarding (important if the object is in shared memory)
       return __np;
     }
 
   private:
-    volatile s_ll _ipush;
-    volatile s_ll _ipop;
-    s_ll _n;
+    volatile _s_ll _ipush;
+    volatile _s_ll _ipop;
+    _s_ll _n;
     char d[n0]; // first bytes of the buffer
   };
 
@@ -5300,7 +6687,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
 
 
-    // Global (inter-process) named lock (mutex) control.
+    // Global (interprocess) named lock (mutex) control.
     //    The lock works between processes, threads, and inside a thread.
     //    Only one critsec_gn object with particular name may have its lock set at any moment.
     //    At the same time, locking any other objects with same name will fail.
@@ -5308,138 +6695,228 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     // NOTE critsec_gn object is not associated with the thread that created it or successfully locked it.
     //  It can be shared between threads, e.g. with smart pointer,
     //    and deleted by thread other than one that had set successful lock.
-    //  The current limitations:
+    //  Limitations:
     //    1. critsec_gn itself is not protected from concurrent access.
     //      This is responsibility of the client.
     //    2. critsec_gn lock() and unlock() are not counted.
     //      This should be done by the client if it needs.
-    //      lock() tries to lock is the object is not locked, and does nothing if it's already locked.
-    //      unlock() does unlocking if the object is locked.
-    //    3. If a thread contains or references locked critsec_gn,
+    //      lock() tries to lock if the object is not locked, and does nothing if it's already locked.
+    //      unlock() does unlocking if the object is locked, otherwise it does nothing.
+    //    3. If a thread contains or references locked critsec_gn object,
     //      and that thread has been terminated such that the object is not deleted,
-    //      the lock is not released until the process exits or terminates.
-    //      (After process ending, the lock may be set by any thread in any process, as normal.)
+    //      the lock is not released until the process exits or terminates, or anyone else, referring
+    //      to the same critsec_gn object, unlocks it.
   struct critsec_gn
   {
     typedef t_name_shm t_name;
 
-    critsec_gn(const char* name, f_shm_name_prefix prefix_cs = &f_prefix_critsec_gn __bmdx_noarg) { __pad1 = 0; _b_locked = false;  _setname(name, prefix_cs ? prefix_cs() : f_prefix_critsec_gn()); _init0(); } // critsec_gn(name): copy object name, do nothing else.
-    const t_name& name() const { return _name; } // factual object name (n() > 0, includes system-dependent prefix and maybe few other characters, length limited to allowed by system, may contain null characters)
-    bool b_opened(__bmdx_noarg1) const { return _b_handle(); } // true: the lockable object is opened or created (may still be unnamed)
-    bool b_locked(__bmdx_noarg1) const { return _b_locked; } // true: the object is named and locked; false: anything else
-    bool cr_op(__bmdx_noarg1) { _init1(); return b_opened(); } // try to create or open existing named object and associated objects if any, but do not lock yet
-    bool lock(__bmdx_noarg1) { _lock(); return _b_locked; } // try lock (if not opened, tries to create or open automatically)
-    void unlock(__bmdx_noarg1) { _unlock(); } // unlock, but do not close the named object
-    void close(__bmdx_noarg1) { _reset(); } // unlock and close the named object
-    ~critsec_gn() throw(__bmdx_noargt1) { _reset(); } // unlock and close the named object
+      // critsec_gn(name_): copies object name with possible formatting, suitable for system,
+      //  and does nothing more.
+      //  See also name().
+    critsec_gn(const char* name_, f_shm_name_prefix prefix_cs = &f_prefix_critsec_gn __bmdx_noarg) throw()
+      { __pad1 = 0; _b_locked = false; _setname(name_, prefix_cs ? prefix_cs() : f_prefix_critsec_gn()); _init0(); }
+
+      // Factual name, used for creating the global object in the system.
+      //  1. name() is different from name_ arg. of critsec_gn constructor.
+      //  2. name() usually includes system-dependent prefix and maybe few additional characters.
+      //  3. name().n() > 0, and may be limited as system requires (e.g. MAX_PATH).
+      //  4. name() may contain null characters.
+    const t_name& name() const throw() { return _name; }
+
+      // true: the named object already exists, is opened and is locked.
+      // false: in any other case.
+    bool b_opened(__bmdx_noarg1) const throw() { return _b_handle(); }
+
+      // true: the named object already exists, is opened and is locked.
+      // false: in any other case.
+    bool b_locked(__bmdx_noarg1) const throw() { return _b_locked; }
+
+      // 1. If the named object already exists, return true.
+      // 2. Otherwise, open or create the named object. Return true (success) or false (failure).
+    bool cr_op(__bmdx_noarg1) throw() { _init1(); return b_opened(); }
+
+      // 1. If the named object already exists and is locked, return true.
+      // 2. Otherwise, open or create the named object if this is not done yet. Return false if failed.
+      // 3. Lock the named object. Return true (success) or false (failure).
+    bool lock(__bmdx_noarg1) throw() { _lock(); return _b_locked; }
+
+      // Unlock the named object (but do not release it).
+    void unlock(__bmdx_noarg1) throw() { _unlock(); }
+
+      // Unlock and release the named object.
+      //  The next call to lock() will re-open the object + lock it.
+    void close(__bmdx_noarg1) throw() { _reset(); }
+
+      // The destructor automatically unlocks and releases the named object.
+    ~critsec_gn() throw(__bmdx_noargt1) { _reset(); }
 
   private:
     critsec_gn(const critsec_gn&); void operator=(const critsec_gn&);
     t_name _name;
-    union { bool _b_locked; s_long __pad1; };
+    union { bool _b_locked; _s_long __pad1; };
 
     #ifdef _bmdxpl_Wnds
+
       HANDLE hs;
       bool _b_handle(__bmdx_noarg1) const { return !!hs; } // true: named object created or opened
       void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '\\') { c = '_'; } _name += c; } }
       void _init0(__bmdx_noarg1) { hs = 0; } // platf.-dependent constructor
-      void _init1(__bmdx_noarg1) { if (!hs) { hs = CreateSemaphoreA(0, 1, 1, _name.c_str()); } if (!hs) { return; } }
+      void _init1(__bmdx_noarg1) { if (!hs) { hs = CreateSemaphoreA(0, 1, 1, _name.c_str()); } }
       void _lock(__bmdx_noarg1) { _init1(); if (_b_locked || !_b_handle()) { return; } DWORD res_s = WaitForSingleObjectEx(hs, 0, FALSE); _b_locked = res_s == WAIT_OBJECT_0; }
       void _unlock(__bmdx_noarg1) { if (_b_locked) { BOOL b = ReleaseSemaphore(hs, 1, 0); (void)b; _b_locked = false; } }
       void _reset(__bmdx_noarg1) { if (hs) { _unlock(); CloseHandle(hs); hs = 0; } }
+
     #endif
     #ifdef _bmdxpl_Psx
-    #if 0
-    #elif defined(__SUNPRO_CC) || defined (__sun)
-      int h; int _perm; mutex_t* pm; s_long uid; s_long uid_fsh;
-      bool _b_handle(__bmdx_noarg1) const { return !!pm; } // true: named object created or opened
-      void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } }
-      void _init0(__bmdx_noarg1) { h = 0; pm = 0; _perm = 0666; uid = 0; } // platf.-dependent constructor
-      void _init1(__bmdx_noarg1)
-      {
-        const size_t lkfsize = sizeof(mutex_t) + 3 * 4;
-        bool b_creating = false;
-        if (pm) { return; }
-        int h2 = ::open(_name.c_str(), O_CREAT | O_EXCL | O_RDWR , _perm);
-        if (h2 != -1) { b_creating = true; if (0 != ftruncate(h2, lkfsize)) { ::unlink(_name.c_str()); ::close(h2); return; } }
-        else
+      #if 0
+      #elif defined(__SUNPRO_CC) || defined (__sun)
+
+        int h; int _perm; mutex_t* pm; _s_long uid; _s_long uid_fsh;
+        bool _b_handle(__bmdx_noarg1) const { return !!pm; } // true: named object created or opened
+        void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } }
+        void _init0(__bmdx_noarg1) { h = 0; pm = 0; _perm = 0666; uid = 0; } // platf.-dependent constructor
+        void _init1(__bmdx_noarg1)
         {
-          h2 = ::open(_name.c_str(), O_RDWR , _perm);
-          if (h2 == -1) { return; }
-          struct stat s; std::memset(&s, 0, sizeof(s));
-          if (0 != fstat(h2, &s)) { ::close(h2); return; }
-          b_creating = size_t(s.st_size) < lkfsize;
-          if (b_creating) { if (0 != ftruncate(h2, lkfsize)) { ::unlink(_name.c_str()); ::close(h2); return; } }
+          const size_t lkfsize = sizeof(mutex_t) + 3 * 4;
+          bool b_creating = false;
+          if (pm) { return; }
+          int h2 = ::open(_name.c_str(), O_CREAT | O_EXCL | O_RDWR , _perm);
+          if (h2 != -1) { b_creating = true; if (0 != ftruncate(h2, lkfsize)) { ::unlink(_name.c_str()); ::close(h2); return; } }
+          else
+          {
+            h2 = ::open(_name.c_str(), O_RDWR , _perm);
+            if (h2 == -1) { return; }
+            struct stat s; std::memset(&s, 0, sizeof(s));
+            if (0 != fstat(h2, &s)) { ::close(h2); return; }
+            b_creating = size_t(s.st_size) < lkfsize;
+            if (b_creating) { if (0 != ftruncate(h2, lkfsize)) { ::unlink(_name.c_str()); ::close(h2); return; } }
+          }
+
+          mutex_t* pm2 = (mutex_t*)mmap(NULL, lkfsize, PROT_READ|PROT_WRITE, MAP_SHARED, h2, 0);
+          if (!pm2) { ::close(h2); return; }
+
+          _s_long* puidgen = (_s_long*)(pm2+1); _s_long* pflag = puidgen + 1;
+          _s_long pid1 = pflag[1];
+          if (b_creating  || (pid1 != 0 && kill(pid1, 0) != 0))
+          {
+            pflag[0] = 0;
+            pflag[1] = 0;
+            mutex_init(pm2, USYNC_PROCESS|LOCK_ROBUST|LOCK_ERRORCHECK|LOCK_PRIO_INHERIT, 0);
+          }
+          int res = mutex_lock(pm2); if (res == EOWNERDEAD) { mutex_consistent(pm2); pflag[0] = 0; pflag[1] = 0; mutex_unlock(pm2); res = mutex_lock(pm2); }
+            if (res != 0) { ::close(h2); return; }
+
+          h = h2; pm = pm2;
+          uid = ++*puidgen;
+
+          mutex_unlock(pm2);
+        }
+        void _lock(__bmdx_noarg1)
+        {
+          _init1(); if (_b_locked || !_b_handle()) { return; }
+          int h2 = h; mutex_t* pm2 = pm; _s_long* puidgen = (_s_long*)(pm2+1); _s_long* pflag = puidgen + 1;
+
+          int res = mutex_lock(pm2); if (res == EOWNERDEAD) { mutex_consistent(pm2); pflag[0] = 0; mutex_unlock(pm2); res = mutex_lock(pm2); }
+          if (res != 0) { _b_locked = false; return; }
+          if (pflag[0] != 0) { mutex_unlock(pm2); _b_locked = false; return; }
+          pflag[1] = getpid();
+          pflag[0] = uid;
+          mutex_unlock(pm2);
+          _b_locked = true; return;
+        }
+        void _unlock2(__bmdx_noarg)
+        {
+          if (!_b_locked) { return; }
+          if (!_b_handle()) { _b_locked = false; return; }
+          int h2 = h; mutex_t* pm2 = pm; _s_long* puidgen = (_s_long*)(pm2+1); _s_long* pflag = puidgen + 1;
+
+          int res = mutex_lock(pm2); if (res == EOWNERDEAD) { mutex_consistent(pm2); pflag[0] = 0; pflag[1] = 0; mutex_unlock(pm2); _b_locked = false; return; }
+          if (pflag[0] == uid) { pflag[0] = 0; pflag[1] = 0; }
+          if (res == 0) { mutex_unlock(pm2); }
+          _b_locked = false;
+          return;
+        }
+        void _unlock(__bmdx_noarg1) { _unlock2(); }
+        void _reset(__bmdx_noarg1) { _unlock2(); if (pm) { munmap(pm, sizeof(mutex_t)); pm = 0; } if (h) { ::close(h); h = 0; } uid = 0; }
+
+      #elif defined(__ANDROID__)
+
+        int h; bool _bsock;
+        bool _b_handle(__bmdx_noarg1) const { return _bsock; } // true: named object created or opened
+        void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } _s_long nmax = sizeof(sockaddr_un) - sizeof(sa_family_t); if (_name.n() > nmax - 1) { _name.resize(nmax - 1); } }
+        void _init0(__bmdx_noarg1) { h = -1; _bsock = false; } // platf.-dependent constructor
+        void _init1(__bmdx_noarg1) { if (h != -1) { return; } int h2 = ::socket(PF_LOCAL, SOCK_STREAM, 0); if (h2 != -1) { h = h2; _bsock = true; } } // named object creation
+        void _lock(__bmdx_noarg1) { _init1(); if (_b_locked || !_b_handle()) { return; } sockaddr_un a; a.sun_family = PF_LOCAL; bmdx_str::words::memmove_t<char>::sf_memcpy(&a.sun_path, _name.c_str(), size_t(_name.n())); _b_locked = ::bind(h, (sockaddr*)&a, sizeof(sa_family_t) + size_t(_name.n())) != -1; } // check b_locked() after return
+        void _unlock(__bmdx_noarg1) { if (_b_locked) { ::close(h); h = -1; _b_locked = false; } }
+        void _reset(__bmdx_noarg1) { if (h != -1) { ::close(h); h = -1; _b_locked = false; _bsock = false; } } // unlock mutex, release (close) the named object
+
+      #elif __APPLE__ && __MACH__
+
+        // NOTE critsec_gn uses flock to implement global, thread-independent locks on temporary files.
+        //    There's potential issue: files in /tmp may survive system reboot,
+        //    and the simple open/create/lock approach would leave uncontrolled number of files in /tmp
+        //    for undefined term.
+        //  The below implementation overcomes the problem by deleting the referred file on critsec_gn object reset.
+        //  See _reset() and _lock(): they are implemented differently from dflt. for *nix systems.
+
+        static int cmp_fd(int h1, const char* name2 __bmdx_noarg) { struct stat s[2]; std::memset(&s[0], 0, 2 * sizeof(s[0])); if (::fstat(h1, &s[0]) != 0 || ::stat(name2, &s[1]) != 0) { return -1; } return (s[0].st_dev == s[1].st_dev) && (s[0].st_ino == s[1].st_ino); }
+        int h; int _perm;
+        bool _b_handle(__bmdx_noarg1) const { return !!h; } // true: named object created or opened
+        void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } }
+        void _init0(__bmdx_noarg1) { h = 0; _perm = 0666; } // platf.-dependent constructor
+        void _init1(__bmdx_noarg1) { if (h) { return; } int h2 = ::open(_name.c_str(), O_CREAT, _perm); if (h2 != -1) { h = h2; } } // named object creation
+
+          // Since _reset() in any other critsec_gn may delete the file during owning the lock,
+          //  the valid handle this->h may point to "stale" file without name in the file system.
+          // To overcome that:
+          //  _lock() makes an attempt of locking this->h,
+          //    and after that checks if this->_name exists and points to the same file as this->h.
+          //  If yes (this->h <=> this->_name), _lock() assumes the obtained locking result
+          //    (winning/losing the concurrency) as actual, and returns.
+          //  If not (i.e. this->h is "stale"):
+          //    1. unlock (if was locked) and close this->h.
+          //      (The file will disappear automatically, because it has no name already.)
+          //    2. repeat open/create/lock/check_for_stale sequence,
+          //      until the gained locking result will refer to the actual, named file.
+          // See also _reset().
+        void _lock(__bmdx_noarg1)
+        {
+          if (_b_locked) { return; }
+          while (1)
+          {
+            _init1();
+            if (!_b_handle()) { return; }
+            _b_locked = flock(h, LOCK_NB | LOCK_EX) == 0;
+            if (cmp_fd(h, _name.c_str()) == 1) { return; }
+            _unlock(); ::close(h); h = 0;
+          }
         }
 
-        mutex_t* pm2 = (mutex_t*)mmap(NULL, lkfsize, PROT_READ|PROT_WRITE, MAP_SHARED, h2, 0);
-        if (!pm2) { ::close(h2); return; }
+        void _unlock(__bmdx_noarg1) { if (_b_locked) { flock(h, LOCK_NB | LOCK_UN); _b_locked = false; } }
 
-        s_long* puidgen = (s_long*)(pm2+1); s_long* pflag = puidgen + 1;
-        s_long pid1 = pflag[1];
-        if (b_creating  || (pid1 != 0 && kill(pid1, 0) != 0))
-        {
-          pflag[0] = 0;
-          pflag[1] = 0;
-          mutex_init(pm2, USYNC_PROCESS|LOCK_ROBUST|LOCK_ERRORCHECK|LOCK_PRIO_INHERIT, 0);
-        }
-        int res = mutex_lock(pm2); if (res == EOWNERDEAD) { mutex_consistent(pm2); pflag[0] = 0; pflag[1] = 0; mutex_unlock(pm2); res = mutex_lock(pm2); }
-          if (res != 0) { ::close(h2); return; }
+          // On resetting critsec_gn, if it owns a lock or succeeds in setting it,
+          //  the file that is locked is deleted.
+          // This not only signals that the lock is unset,
+          //  but keeps /tmp directory as clean as possible.
+          // See also _lock().
+        void _reset(__bmdx_noarg1) { if (h) { _lock(); if (_b_locked) { ::unlink(_name.c_str()); } _unlock(); ::close(h); h = 0; } }
 
-        h = h2; pm = pm2;
-        uid = ++*puidgen;
+      #else
 
-        mutex_unlock(pm2);
-      }
-      void _lock(__bmdx_noarg1)
-      {
-        _init1(); if (_b_locked || !_b_handle()) { return; }
-        int h2 = h; mutex_t* pm2 = pm; s_long* puidgen = (s_long*)(pm2+1); s_long* pflag = puidgen + 1;
+        // The default implementation of global lock: based on flock() on temporary file.
 
-        int res = mutex_lock(pm2); if (res == EOWNERDEAD) { mutex_consistent(pm2); pflag[0] = 0; mutex_unlock(pm2); res = mutex_lock(pm2); }
-        if (res != 0) { _b_locked = false; return; }
-        if (pflag[0] != 0) { mutex_unlock(pm2); _b_locked = false; return; }
-        pflag[1] = getpid();
-        pflag[0] = uid;
-        mutex_unlock(pm2);
-        _b_locked = true; return;
-      }
-      void _unlock2(__bmdx_noarg)
-      {
-        if (!_b_locked) { return; }
-        if (!_b_handle()) { _b_locked = false; return; }
-        int h2 = h; mutex_t* pm2 = pm; s_long* puidgen = (s_long*)(pm2+1); s_long* pflag = puidgen + 1;
+        int h; int _perm;
+        bool _b_handle(__bmdx_noarg1) const { return !!h; } // true: named object created or opened
+        void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } }
+        void _init0(__bmdx_noarg1) { h = 0; _perm = 0666; } // platf.-dependent constructor
+        void _init1(__bmdx_noarg1) { if (h) { return; } int h2 = ::open(_name.c_str(), O_CREAT, _perm); if (h2 != -1) { h = h2; } } // named object creation
+        void _lock(__bmdx_noarg1) { _init1(); if (_b_locked || !_b_handle()) { return; } _b_locked = flock(h, LOCK_NB | LOCK_EX) == 0; } // check b_locked() after return
+        void _unlock(__bmdx_noarg1) { if (_b_locked) { flock(h, LOCK_NB | LOCK_UN); _b_locked = false; } }
+        void _reset(__bmdx_noarg1) { if (h) { _unlock(); ::close(h); h = 0; } } // unlock mutex, release (close) the named object
 
-        int res = mutex_lock(pm2); if (res == EOWNERDEAD) { mutex_consistent(pm2); pflag[0] = 0; pflag[1] = 0; mutex_unlock(pm2); _b_locked = false; return; }
-        if (pflag[0] == uid) { pflag[0] = 0; pflag[1] = 0; }
-        if (res == 0) { mutex_unlock(pm2); }
-        _b_locked = false;
-        return;
-      }
-      void _unlock(__bmdx_noarg1) { _unlock2(); }
-      void _reset(__bmdx_noarg1) { _unlock2(); if (pm) { munmap(pm, sizeof(mutex_t)); pm = 0; } if (h) { ::close(h); h = 0; } uid = 0; }
-    #elif defined(__ANDROID__)
-      int h; bool _bsock;
-      bool _b_handle(__bmdx_noarg1) const { return _bsock; } // true: named object created or opened
-      void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } s_long nmax = sizeof(sockaddr_un) - sizeof(sa_family_t); if (_name.n() > nmax - 1) { _name.resize(nmax - 1); } }
-      void _init0(__bmdx_noarg1) { h = -1; _bsock = false; } // platf.-dependent constructor
-      void _init1(__bmdx_noarg1) { if (h != -1) { return; } int h2 = ::socket(PF_LOCAL, SOCK_STREAM, 0); if (h2 != -1) { h = h2; _bsock = true; } } // named object creation
-      void _lock(__bmdx_noarg1) { _init1(); if (_b_locked || !_b_handle()) { return; } sockaddr_un a; a.sun_family = PF_LOCAL; memcpy(&a.sun_path, _name.c_str(), size_t(_name.n())); _b_locked = ::bind(h, (sockaddr*)&a, sizeof(sa_family_t) + size_t(_name.n())) != -1; } // check b_locked() after return
-      void _unlock(__bmdx_noarg1) { if (_b_locked) { ::close(h); h = -1; _b_locked = false; } }
-      void _reset(__bmdx_noarg1) { if (h != -1) { ::close(h); h = -1; _b_locked = false; _bsock = false; } } // unlock mutex, release (close) the named object
-    #else
-      int h; int _perm;
-      bool _b_handle(__bmdx_noarg1) const { return !!h; } // true: named object created or opened
-      void _setname(const char* name, const t_name& prefix __bmdx_noarg) { _name = prefix; if (!name) { return; } while(*name) { char c = *name++; if (c == '/') { c = '_'; } _name += c; } }
-      void _init0(__bmdx_noarg1) { h = 0; _perm = 0666; } // platf.-dependent constructor
-      void _init1(__bmdx_noarg1) { if (h) { return; } int h2 = ::open(_name.c_str(), O_CREAT, _perm); if (h2 != -1) { h = h2; } } // named object creation
-      void _lock(__bmdx_noarg1) { _init1(); if (_b_locked || !_b_handle()) { return; } _b_locked = flock(h, LOCK_NB | LOCK_EX) == 0; } // check b_locked() after return
-      void _unlock(__bmdx_noarg1) { if (_b_locked) { flock(h, LOCK_NB | LOCK_UN); _b_locked = false; } }
-      void _reset(__bmdx_noarg1) { if (h) { _unlock(); ::close(h); h = 0; } } // unlock mutex, release (close) the named object
-    #endif
+      #endif
     #endif
   };
-
 
 
 
@@ -5449,7 +6926,6 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
   {
     private: struct _shm_sems;
     public:
-    typedef t_name_shm t_name;
     struct exc_shmobj2s : std::exception { exc_shmobj2s(__bmdx_noarg1) {} const char* what() const throw() { return "exc_shmobj2s::operator->: p==0"; } };
 
 
@@ -5457,7 +6933,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //   or created and successfully initialized.
       // Otherwise 0.
     T* p() const { return _p; }
-    T* operator->() const throw (exc_shmobj2s __bmdx_noargt)        { if (!_p) { throw exc_shmobj2s(); } return _p; }
+    T* operator->() const throw (exc_shmobj2s __bmdx_noargt)    { if (!_p) { throw exc_shmobj2s(); } return _p; }
 
 
       // (Constructor-defined parameter.)
@@ -5466,15 +6942,23 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
       // Returns:
       //    >= 0 - the amount of memory for placement of T, allocated on shared memory area creation.
-      //    0 - a) the shared memory cannot be accessed now, or b) not initialized yet.
+      //      This value may be != ctor. arg. nb, if object already exists. Should be checked to satisfy client needs.
+      //      For creating side - if the object already exists with wrong size, it can be destroyed and recreated as necessary.
+      //      For non-creating side - if the object already exists with wrong size, it should be closed
+      //        and reopened after the creating side making some corrections (if it can do it at all).
+      //    0 - a) the shared memory cannot be accessed now, b) not initialized yet.
       // NOTE Positive nb() >= nb arg., passed to shmobj2s_t constructor.
-    s_ll nb(__bmdx_noarg1) const        { return _pdesc() ? _pdesc()->nb : 0; }
+    _s_ll nb(__bmdx_noarg1) const        { return _pdesc() ? _pdesc()->nbt : 0; }
 
-      // Factual system name of the shared object.
-      //  May differ from name, passed to shmobj2s_t constructor.
-      //  Also, system may ignore part of the name. ~!!! check MAX_PATH
-      //  The pointer is always != 0.
-    const char* name() const       { return _name.c_str(); }
+      // Name of the shared object, as passed to shmobj2s_t constructor.
+      //  The name, really used as argument to shm_open or CreateFileMapping,
+      //    may differ from name():
+      //      a) cut to MAX_PATH or PATH_MAX characters,
+      //      b) converted to shorter form, in the style of hash function, to match more severe name length limitation.
+      //        See e.g. __bmdx_shm_name_max.
+      // Returns:
+      //  non-0 pointer to the name.
+    const t_name_shm& name() const        { return _name; }
 
 
       // Determines if this shmobj2s_t holds the specified lock on the referenced object.
@@ -5486,17 +6970,17 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    c)) side == 4 on b_side1() == true - the lock of side 1 is checked.
       //    d)) side == 4 on b_side1() == false - the lock of side 2 is checked.
       // b) False is returned if the lock is not valid or side arg. wrong.
-    bool b_locked(s_long side = 4 __bmdx_noarg) const        { if (side == 4) { side = b_side1() ? 1 : 2; } if (side == 1) { return _lkmyside.b_lk1(); } if (side == 2) { return _lkmyside.b_lk2(); } return false; }
+    bool b_locked(_s_long side = 4 __bmdx_noarg) const        { if (side == 4) { side = b_side1() ? 1 : 2; } if (side == 1) { return _lkmyside.b_lk1(); } if (side == 2) { return _lkmyside.b_lk2(); } return false; }
 
       // The contained object state:
       //  0 - not constructed yet, 1 - constructed (valid), 2 - destroyed. p() != 0.
       //  -1 - unknown (failure). p() == 0.
-    s_long f_constructed(__bmdx_noarg1) const        { if (!_pdesc()) { return -1; } if (_pdesc()->b_destroyed) { return 2; } if (_pdesc()->b_constructed) { return 1; } return 0; }
+    _s_long f_constructed(__bmdx_noarg1) const { if (!_pdesc()) { return -1; } if (_pdesc()->b_destroyed) { return 2; } if (_pdesc()->b_constructed) { return 1; } return 0; }
 
 
 
       // (Informational) Shared memory overhead to keep shmobj2s_t's _shmdesc structure.
-    static s_long nbover(__bmdx_noarg1)        { return sizeof(_shmdesc); }
+    static _s_long nbover(__bmdx_noarg1)    { return sizeof(_shmdesc); }
 
 
 
@@ -5510,7 +6994,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         //        Default is sizeof(T).
         //        Customizing: supply a negative value, uniquely specifying custom category of the referenced object,
         //          known to all processes that are using it.
-      s_long htype;
+      _s_long htype;
 
         // prefix_cs(): returns system and application-dependent semaphore name prefix.
         //        Default: == f_prefix_critsec_gn.
@@ -5523,24 +7007,34 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       t_name (*prefix_m)();
 
 
-      hints() : htype(s_long(sizeof(T))), prefix_cs(&f_prefix_critsec_gn), prefix_m(&f_prefix_shmobj2s) {}
-      hints(s_long htype_) : htype(htype_), prefix_cs(&f_prefix_critsec_gn), prefix_m(&f_prefix_shmobj2s) {}
+      hints() : htype(_s_long(sizeof(T))), prefix_cs(&f_prefix_critsec_gn), prefix_m(&f_prefix_shmobj2s) {}
+      hints(_s_long htype_) : htype(htype_), prefix_cs(&f_prefix_critsec_gn), prefix_m(&f_prefix_shmobj2s) {}
     };
 
 
 
 
       // Remembers the name, role, memory size, parameters. Does nothing else.
-      //    name: unique object name. (0 or "" is acceptable, but not recommended.)
-      //      NOTE To create global system object, the name is pre-pended by platform-dependent string,
-      //        which can be customized (see "prefix" arg.) by the client.
+      //    name: unique object name (C-string).
+      //      May be 0 or "", but this is not recommended.
+      //      The corresponding real name for global system object may be a modified form of name arg, suitable for particular platform.
+      //      Guidelines for name arg., working well across platforms:
+      //        1. Do not use slashes (/, \) in the name.
+      //        2. Preferably, do not use non-alphanumeric characters except (_, -, !, space).
+      //        3. Keep name length <250 characters.
       //    Role (b_side1):
       //      a) true: on prepare(), side 1 will automatically create/initialize shared memory area.
       //      b) false: on prepare(), side 2 only tries to open the memory and check if it's already initialized with compatible
       //          shmobj2s_t from this or other project.
-      //    nb: number of bytes to allocate for T.
-      //        May be unrelated to sizeof(T), but prepare() will fail f the shared memory is already initialized
-      //        NOTE Total number of allocated bytes for an object is max(0, nb) + nbover().
+      //    nb (autolimited to >= 0): hint for number of bytes to allocate for object of type T.
+      //        May be larger than sizeof(T) for objects of variable size.
+      //        nb is used
+      //            1) by creating side (side 1), when the shared memory object header is initialized first time.
+      //            2) by any side, at the first attempt to open the existing shared memory.
+      //              If the existing memory is larger, it is at once reopened at the size, specified in the object header.
+      //            When the memory is open (prepare() returned 1), this->nb() specifies the factual size.
+      //              The client should check this->nb(), to ensure that existing area size satisfies application-specific constraints.
+      //            NOTE Gross size of allocated shared memory is max(0, nb) + nbover().
       // Work sequence example, from the side that creates the object:
       //    shmobj2s_t s(...);
       //    prepare();
@@ -5554,7 +7048,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    (optional) while !(f_constructed() == 1 || b_bad()): sleep
       //    (optional) check !b_bad();
       //    use p or operator->
-    shmobj2s_t(const char* name, bool b_side1, s_ll nb = sizeof(T), const hints& hints_ = hints() __bmdx_noarg) throw()        { _p = 0; _b_side1 = b_side1; _hh = hints_; _hh.htype = hints_.htype != 0 ? hints_.htype : -1; _name = hints_.prefix_m ? hints_.prefix_m() : f_prefix_shmobj2s(); _name += name; _local_nb = nb > 0 ? nb : 0; _rsems.cm_create2(0, 0, 1, _name.c_str(), hints_.prefix_cs); _shm_init0(); }
+    shmobj2s_t(const char* name, bool b_side1, _s_ll nb = sizeof(T), const hints& hints_ = hints() __bmdx_noarg) throw()    { _p = 0; _b_side1 = b_side1; _hh = hints_; _hh.htype = hints_.htype != 0 ? hints_.htype : -1; _name = hints_.prefix_m ? hints_.prefix_m() : f_prefix_shmobj2s(); _name += name; _ctor_nbt = bmdx_minmax::myllmax(nb, 0); _rsems.cm_create2(0, 0, 1, _name.c_str(), hints_.prefix_cs); _shm_init0(); }
 
 
       // Open/create/initialize/lock the shared memory in role as specified by b_side1 on shmobj2s_t construction.
@@ -5575,7 +7069,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    1 - the memory is available (created and initialized, or already opened). b_opened() == true.
       //    -1 - the shared memory exists, but its structure is not compatible (see htype arg. in shmobj2s_t()).
       //        The memory handle (in the current shmobj2s_t) has been closed.
-      //    -2 - failure during operation (it's denerally unknown if the shared object is available).
+      //    -2 - failure during operation (it's generally unknown if the shared object is available).
       //    -3 - lock of side 1 (for b_side1()==true) or side 2 (for b_side1()==false) is set by someone else.
       //        The memory has been closed (in the current process).
       //    -4 - the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side.
@@ -5588,7 +7082,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //      b) the communicating processes have root privileges,
       //      c) permissive SELinux policy mode is set in the system. E.g. "su 0 setenforce 0", which implies root access as well.
       //      If all conditions are false, shmobj2s_t will work only between different threads of its own process.
-    s_long prepare(bool b_keeplk, s_long sides_cr = 1 __bmdx_noarg)        { return _prep(b_keeplk, sides_cr); }
+    _s_long prepare(bool b_keeplk, _s_long sides_cr = 1 __bmdx_noarg)    { return _prep(b_keeplk, sides_cr); }
 
 
 
@@ -5599,25 +7093,25 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    true: shared memory is open and this->p now points to valid object (constructed or already existed).
       //    false: otherwise.
       //    exception: only if no_exc == false, and T() generated an exception.
-    bool obj_create0(bool no_exc) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1> bool obj_create1(bool no_exc, const A1& x1) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2> bool obj_create2(bool no_exc, const A1& x1, const A2& x2) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3> bool obj_create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4> bool obj_create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5> bool obj_create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7, x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    bool obj_create0(bool no_exc) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1> bool obj_create1(bool no_exc, const A1& x1) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2> bool obj_create2(bool no_exc, const A1& x1, const A2& x2) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3> bool obj_create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4> bool obj_create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool obj_create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7, x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
 
           // Same as obj_create#(), but args. are cast to non-const when passed to constructor.
-        template<class A1> bool obj_create1nc(bool no_exc, const A1& x1) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2> bool obj_create2nc(bool no_exc, const A1& x1, const A2& x2) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3> bool obj_create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4> bool obj_create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5> bool obj_create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1> bool obj_create1nc(bool no_exc, const A1& x1) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2> bool obj_create2nc(bool no_exc, const A1& x1, const A2& x2) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3> bool obj_create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4> bool obj_create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool obj_create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
 
       // Explicitly call the destructor, if it can be done (!b_bad() && f_constructed() == 1).
       // If T is accessible and currently constructed, obj_destroy calls ~T(), and after, marks the object it destroyed.
@@ -5627,13 +7121,13 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       // NOTE 1) Calling ~T most probably is not needed, because the object T disappears once shared memory is released,
       //      and, by design, does not keep any resource handles.
       //      (Such keeping would lead to inconsistent state in case of failure of the process responsible for destructor calling.)
-      //    2) From other side, creating/destroyng an object may be used as simple 1-element queue between processes,
+      //    2) From other side, creating/destroying an object may be used as simple 1-element queue between processes,
       //      because of clear tracking via f_constructed().
     void obj_destroy(__bmdx_noarg1) { if (!(!b_bad() && f_constructed() == 1)) { return; } try { _p->~T(); } catch (...) {} set_f_constructed(2); }
 
       // Sets f_constructed to new value (0, 1, 2) if possible. Check f_constructed() after that.
       //  NOTE set_f_constructed is not synchronized (this is responsibility of the client, depending on its implementation).
-    void set_f_constructed(s_long state) const        { if (!_pdesc()) { return; } if (state == 0) { _pdesc()->b_constructed = 0; _pdesc()->b_destroyed = 0; } if (state == 1) { _pdesc()->b_constructed = 1; _pdesc()->b_destroyed = 0; } if (state == 2) { _pdesc()->b_destroyed = 1; _pdesc()->b_constructed = 1; } }
+    void set_f_constructed(_s_long state) const        { if (!_pdesc()) { return; } if (state == 0) { _pdesc()->b_constructed = 0; _pdesc()->b_destroyed = 0; } if (state == 1) { _pdesc()->b_constructed = 1; _pdesc()->b_destroyed = 0; } if (state == 2) { _pdesc()->b_destroyed = 1; _pdesc()->b_constructed = 1; } }
 
 
 
@@ -5660,11 +7154,11 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     struct shared_lock
     {
         // true if side 1 lock is set.
-      bool b_lk1() const throw()        { return vlk1 >= 0; }
+      bool b_lk1() const throw()    { return vlk1 >= 0; }
         // true if side 2 lock is set.
-      bool b_lk2() const throw()        { return vlk2 >= 0; }
+      bool b_lk2() const throw()    { return vlk2 >= 0; }
         // true if any of he locks is set.
-      bool b_lk_any() const throw()        { return b_lk1() || b_lk2(); }
+      bool b_lk_any() const throw()    { return b_lk1() || b_lk2(); }
 
         // Create an empty object (no any locks).
       shared_lock(__bmdx_noarg1) : vlk1(-1), vlk2(-1) {}
@@ -5687,24 +7181,24 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         //      If this is not acceptable, it must be additionally protected with conventional multi-thread critical section.
         // NOTE shared_lock is useful only if prepare() was called with b_keeplk == false,
         //    or if the client needs to additionally set a lock for side other than (b_side1() ? 1 : 2) of the parent shmobj2s_t.
-      shared_lock(shmobj2s_t& parent, s_long sides = 4, s_long timeout_ms = 0 __bmdx_noarg) throw();
+      shared_lock(shmobj2s_t& parent, _s_long sides = 4, _s_long timeout_ms = 0 __bmdx_noarg) throw();
 
-      ~shared_lock() throw(__bmdx_noargt1)        { clear(); }
+      ~shared_lock() throw(__bmdx_noargt1)    { clear(); }
 
         // After clear(), the client may safely execute new (p) shared_lock(...).
-      void clear(__bmdx_noarg1) throw()        { if (r) { r._pnonc_u()->unlock_normal(*this); } vlk1 = -1; vlk2 = -1; r.clear(); }
+      void clear(__bmdx_noarg1) throw()    { if (r) { r._pnonc_u()->unlock_normal(*this); } vlk1 = -1; vlk2 = -1; r.clear(); }
 
         // May be used if a new object is created with another set of locks than some other existing one.
-      void swap(shared_lock& x __bmdx_noarg) throw()        { bmdx_str::words::swap_bytes(*this, x); }
+      void swap(shared_lock& x __bmdx_noarg) throw()    { bmdx_str::words::swap_bytes(*this, x); }
 
-    private: friend struct _shm_sems; cref_t<_shm_sems> r; s_ll vlk1, vlk2; shared_lock(const shared_lock&); void operator=(const shared_lock&);
+    private: friend struct _shm_sems; cref_t<_shm_sems> r; _s_ll vlk1, vlk2; shared_lock(const shared_lock&); void operator=(const shared_lock&);
     };
 
 
-      // This flag indicates that both sides are recognized that the object is damaged.
+      // This flag indicates that both sides are marked the object as corrupted.
       //  The flag resides in shared memory.
       // Recovery sequence (optional):
-      // When b_bad() == true (means "both sides recognized data damage by setting f_state1 and f_state2 to -1"):
+      // When b_bad() == true (means "both sides marked the object as corrupted, by setting f_state1 and f_state2 to -1"):
       //    1) Statically assigned side (e.g. side 1) calls do_recover().
       //        1)) do_recover sets all T bytes to 0,
       //        2)) initializes _shmdesc area according to the current shmobj2s_t state,
@@ -5719,8 +7213,9 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //  The flags reside in shared memory.
       //  The pointers are 0 or non-0 together with p(). (0 only when shared memory is not open.)
       //  Initial flags value: 0.
-      //  Special value: -1, meaning "invariant lost". When both flags are -1, b_bad() returns true,
-      //    and side 1 may perform an attempt to reinitialize shared area.
+      //  Special value: -1, meaning "invariant lost".
+      //    Must be set by side having found a problem that cannot be solved without object reinitialization.
+      //    When both flags become -1, b_bad() returns true, side 1 may notice that and reinitialize shared area.
       //  Other values meaning: user-defined.
       //    Sides may use state flags for keeping object states and simple communication.
       // NOTE Each signed char* here points to 1 char only.
@@ -5732,22 +7227,22 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
     struct _shmdesc_base
     {
-      s_long handler_type; // in the just opened shared memory, this is initialized last
-      s_long n_shmdesc; // == sizeof(_shmdesc)
-      s_ll nb; // number of bytes allocated in shared memory for T
+      _s_long handler_type; // in the just opened shared memory, this is initialized last
+      _s_long n_shmdesc; // == sizeof(_shmdesc)
+      _s_ll nbt; // number of bytes allocated in shared memory for T
     };
     struct _shmdesc : _shmdesc_base
     {
-      unsigned char b_constructed; // 0 - not constructed, 1 - constructed (and does not change when b_destroyed becomes 1)
+      unsigned char b_constructed; // (NOTE must be 1st member) 0 - not constructed, 1 - constructed (and does not change when b_destroyed becomes 1)
       unsigned char b_destroyed; // 0 - not constructed or still constructed, 1 - destroyed
-      signed char f_state1; // 0 - normal, char(-1) - side 1 found data damage, any else - user-defined
-      signed char f_state2; // 0 - normal, char(-1) - side 2 found data damage, any else - user-defined
+      signed char f_state1; // 0 - normal, char(-1) - side 1 found bad data, any else - user-defined
+      signed char f_state2; // 0 - normal, char(-1) - side 2 found bad data, any else - user-defined
       // the below fields are version-dependent
-      s_long __pad1;
-      s_ll __pad2;
+      _s_long __pad1;
+      _s_ll __pad2;
     };
     _shmdesc* _pdesc(__bmdx_noarg1) const { return _p ? (_shmdesc*)_p - 1 : 0; }
-    void _reset_mem(__bmdx_noarg1) { if (!_pdesc()) { return; } if (_pdesc()->nb > 0) { std::memset(_p, 0, size_t(_pdesc()->nb)); } *(s_long*)&_pdesc()->b_constructed = 0; }
+    void _reset_mem(__bmdx_noarg1) { if (!_pdesc()) { return; } if (_pdesc()->nbt > 0) { std::memset(_p, 0, size_t(_pdesc()->nbt)); } *(_s_long*)&_pdesc()->b_constructed = 0; }
 
 
     struct _shm_sems
@@ -5755,24 +7250,24 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       typename critsec_t<_shm_sems>::csdata lkd;
       critsec_gn lkside1;
       critsec_gn lkside2;
-      s_long nlk1, nlk2;
-      s_ll vlk1, vlk2;
+      _s_long nlk1, nlk2;
+      _s_ll vlk1, vlk2;
       _shm_sems(const char* name, f_shm_name_prefix prefix_cs __bmdx_noarg) throw() : lkside1((critsec_gn::t_name("M1\t") += name).c_str(), prefix_cs), lkside2((critsec_gn::t_name("M2\t") += name).c_str(), prefix_cs), nlk1(0), nlk2(0), vlk1(0), vlk2(0) {}
 
         // If sides (ORed 0x1, 0x2) specify at least one lock,
         //  lock_normal removes all previous locks, then tries to set the new locks as specified.
-      static void lock_normal(shared_lock& target, s_long sides __bmdx_noarg) throw()
+      static void lock_normal(shared_lock& target, _s_long sides __bmdx_noarg) throw()
       {
         if (!(target.r && !!(sides & 3))) { return; }
         unlock_normal(target);
         _shm_sems* ps = target.r._pnonc_u();
         critsec_t<_shm_sems> __lock(10, -1, &ps->lkd); if (sizeof(__lock)) {}
-        if (!!(sides & 1)) { s_long n = ps->nlk1; if (ps->lkside1.lock()) { n += 1; target.vlk1 = ps->vlk1; ps->nlk1 = n; } }
-        if (!!(sides & 2)) { s_long n = ps->nlk2; if (ps->lkside2.lock()) { n += 1; target.vlk2 = ps->vlk2; ps->nlk2 = n; } }
+        if (!!(sides & 1)) { _s_long n = ps->nlk1; if (ps->lkside1.lock()) { n += 1; target.vlk1 = ps->vlk1; ps->nlk1 = n; } }
+        if (!!(sides & 2)) { _s_long n = ps->nlk2; if (ps->lkside2.lock()) { n += 1; target.vlk2 = ps->vlk2; ps->nlk2 = n; } }
       }
 
         // unlock_normal removes any locks held by target, then clears target's locks states.
-        //  Parent object refernce (target.r) is not cleared.
+        //  Parent object reference (target.r) is not cleared.
         //  NOTE _shm_sems works as counted shared lock,
         //    so only the last unlock does release the global mutex.
       static void unlock_normal(shared_lock& target __bmdx_noarg) throw()
@@ -5780,13 +7275,13 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         _shm_sems* ps = target.r._pnonc_u();
         if (!(ps && (target.vlk1 == ps->vlk1 || target.vlk2 == ps->vlk2))) { target.vlk1 = -1; target.vlk2 = -1; return; }
         critsec_t<_shm_sems> __lock(10, -1, &ps->lkd); if (sizeof(__lock)) {}
-        if (target.vlk1 == ps->vlk1) { s_long n = ps->nlk1; if (n == 1) { ps->lkside1.unlock(); } if (n > 0) { ps->nlk1 = n - 1; } }
-        if (target.vlk2 == ps->vlk2) { s_long n = ps->nlk2; if (n == 1) { ps->lkside2.unlock(); } if (n > 0) { ps->nlk2 = n - 1; } }
+        if (target.vlk1 == ps->vlk1) { _s_long n = ps->nlk1; if (n == 1) { ps->lkside1.unlock(); } if (n > 0) { ps->nlk1 = n - 1; } }
+        if (target.vlk2 == ps->vlk2) { _s_long n = ps->nlk2; if (n == 1) { ps->lkside2.unlock(); } if (n > 0) { ps->nlk2 = n - 1; } }
         target.vlk1 = -1; target.vlk2 = -1;
       }
 
         // Unconditional unlocking, only for ~shmobj2s_t / _close(true).
-      void unlock_forced(s_long sides __bmdx_noarg) throw()
+      void unlock_forced(_s_long sides __bmdx_noarg) throw()
       {
         if (!(sides & 3)) { return; }
         critsec_t<_shm_sems> __lock(10, -1, &lkd); if (sizeof(__lock)) {}
@@ -5797,52 +7292,54 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
 
     T* _p;
-    union { bool _b_side1; s_long __pad1; };
+    union { bool _b_side1; _s_long __pad1; };
     hints _hh;
-    t_name _name;
-    s_ll _local_nb;
+    t_name_shm _name;
+    _s_ll _ctor_nbt;
     cref_t<_shm_sems> _rsems;
     shared_lock _lkmyside;
 
 
 
-    s_long _prep(bool b_keeplk, s_long sides_cr __bmdx_noarg)
+    _s_long _prep(bool b_keeplk, _s_long sides_cr __bmdx_noarg)
     {
       // if b_keeplk or b_side1: _rsems ensure init (may fail), _sems ensure lock (may fail)
       // _shm_open
       // check init
-      //  a) check compat and size, if fact. size is larger, _shm_close, _shm_open(fact. size), (fail if size changed between close-open)
+      //  a) check compat. and size, if fact. size is larger, _shm_close, _shm_open(fact. size), (fail if size changed between close-open)
       //  b) initialize, set size and type tag
       // set p
       // if !b_keeplk: release lock
 
-      bool b_may_cr = !!((s_long(_b_side1) | 2 * s_long(!_b_side1)) & sides_cr);
+      bool b_may_cr = !!((_s_long(_b_side1) | 2 * _s_long(!_b_side1)) & sides_cr);
       shared_lock __slk(*this, (b_keeplk ? 4 : 0) | (b_may_cr ? sides_cr : 0));
       if ((b_keeplk || b_may_cr) && !__slk.b_lk_any()) { return _rsems ? -3 : -2; }
       if (_p) { if (b_keeplk) { _lkmyside.swap(__slk); } return 1; }
       _shmdesc* h2;
-      h2 = (_shmdesc*)_shm_open(b_may_cr, _local_nb + nbover());
+      const _s_ll nbt_open1 = _ctor_nbt;
+      h2 = (_shmdesc*)_shm_open(b_may_cr, nbt_open1 + nbover());
       if (!h2) { return -2; }
-      if (h2 == (void*)1) { return -4; } // memory handle tranfer pending
+      if (h2 == (void*)1) { return -4; } // memory handle transfer pending
       if (h2->handler_type == 0) // the memory area is accessible, but not initialized yet
       {
         if (!b_may_cr) { _shm_close(); return -4; }
         std::memset(&h2->b_constructed, 0, (char*)(h2 + 1) - (char*)&h2->b_constructed);
-        h2->n_shmdesc = s_long(sizeof(_shmdesc));
-        h2->nb = _local_nb;
+        h2->n_shmdesc = _s_long(sizeof(_shmdesc));
+        h2->nbt = nbt_open1;
         h2->handler_type = _hh.htype;
       }
       else
       {
-        if (!(h2->handler_type == _hh.htype && h2->n_shmdesc == s_long(sizeof(_shmdesc)))) { _shm_close(); return -1; }
-        if (_local_nb < h2->nb)
+        if (!(h2->handler_type == _hh.htype && h2->n_shmdesc == _s_long(sizeof(_shmdesc)))) { _shm_close(); return -1; }
+        // nbt_open1: h2 currently addresses nbt_open1 + nbover() bytes (assigned by system)
+        // nbobji: h2->nbt is the number of bytes to which the contained object was initialized
+        if (h2->nbt > nbt_open1) // actual object is larger than mapped memory window
         {
-          const s_ll nb2 = h2->nb;
+          const _s_ll nbt_open2 = h2->nbt;
           _shm_close();
-          h2 = (_shmdesc*)_shm_open(b_may_cr, nb2 + nbover());
-          if (!(h2->handler_type == _hh.htype && h2->n_shmdesc == s_long(sizeof(_shmdesc)))) { _shm_close(); return -1; }
-          if (nb2 < h2->nb) { return -2; }
-          h2->nb = nb2;
+          h2 = (_shmdesc*)_shm_open(b_may_cr, nbt_open2 + nbover());
+          if (!(h2->handler_type == _hh.htype && h2->n_shmdesc == _s_long(sizeof(_shmdesc)))) { _shm_close(); return -1; }
+          if (h2->nbt != nbt_open2) { _shm_close(); return -2; }
         }
       }
       _p = (T*)(h2 + 1);
@@ -5858,6 +7355,36 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     }
 
 
+    static t_name_shm _shmname_hashed_1_ff(const t_name_shm& src, _s_long nmax __bmdx_noarg)
+    {
+      const _s_long nsrc = src.n();
+      if (nsrc <= nmax)
+      {
+        t_name_shm n2(src);
+        for (_s_long i = 0; i < nsrc; ++i) { if (n2[i] == 0) { n2[i] = 1; } }
+        return n2;
+      }
+      t_name_shm n2(src.pd(), nmax); if (nmax <= 0) { return n2; }
+      for (_s_long i = nmax; i < nsrc; ++i) { char& c = n2[i % nmax]; c += src[i]; c -= 55; }
+      _s_ll h = 0;
+      for (_s_long i = 0; i < nsrc; ++i) { h *= 19; h -= src[i]; } h ^= nsrc; h ^= 53970;
+      for (_s_long i = 0; i < 8; ++i) { n2[i % nmax] ^= (unsigned char)h; h >>= 8; }
+      for (_s_long i = 0; i < nmax; ++i) { if (n2[i] == 0) { n2[i] = src[i]; } if (n2[i] == 0) { n2[i] = 1; } }
+      return n2;
+    }
+    static t_name_shm _shmname_limited_nb(const t_name_shm& src, _s_long nmax __bmdx_noarg)
+    {
+      _s_long nlim = bmdx_minmax::mylrange_lb(src.n(), 0, nmax);
+      return t_name_shm(src.pd(), nlim);
+    }
+    #if __APPLE__ && __MACH__
+      #define __bmdx_shm_name_max (29) // de-facto value of undeclared SHM_NAME_MAX constant
+    #elif defined(_bmdxpl_Wnds)
+      #define __bmdx_shm_name_max (MAX_PATH)
+    #else
+      #define __bmdx_shm_name_max (PATH_MAX)
+    #endif
+
     #if 0
         // Clear platform-specific handles (not including this->p).
       void _shm_init0() throw();
@@ -5872,7 +7399,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         //    (not initialized by other side, or memory handle transfer pending),
         //    return (void*)1.
         // d) On failure, close and clear platform-specific handles. Return 0.
-      void* _shm_open(bool b_maycreate, s_ll nbtotal) throw();
+      void* _shm_open(bool b_maycreate, _s_ll nbtotal) throw();
 
         // Close the shared memory area, if it's open. Clear platform-specific handles.
         // NOTE on ~shmobj2s_t, _shm_close is called automatically.
@@ -5882,7 +7409,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     #ifdef _bmdxpl_Wnds
       HANDLE __h; void* __p;
       void _shm_init0(__bmdx_noarg1) throw() { __h = 0; __p = 0; }
-      void* _shm_open(bool b_maycreate, s_ll nbtotal __bmdx_noarg) throw()
+      void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) throw()
       {
         if (nbtotal < 0) { nbtotal = 0; }
         bool b_reset = false;
@@ -5893,16 +7420,16 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
           if (__p) { UnmapViewOfFile(__p); __p = 0; }
           if (b_maycreate)
           {
-            h2 = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nbtotal >> 32), DWORD(nbtotal & 0xffffffffll), _name.c_str());
+            h2 = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nbtotal >> 32), DWORD(nbtotal & 0xffffffffll), _shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str());
             b_reset = h2 && GetLastError() != ERROR_ALREADY_EXISTS;
           }
           else
           {
-            h2 = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, _name.c_str());
+            h2 = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, _shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str());
           }
           if (!h2) { return 0; }
         }
-        s_long* p2 = (s_long*)MapViewOfFile(h2, FILE_MAP_ALL_ACCESS, 0, 0, SIZE_T(nbtotal));
+        _s_long* p2 = (_s_long*)MapViewOfFile(h2, FILE_MAP_ALL_ACCESS, 0, 0, SIZE_T(nbtotal));
         if (!p2) { CloseHandle(h2); __h = 0; return 0; }
         if (b_reset) { p2[0] = 0; }
         __h = h2; __p = p2;
@@ -5915,8 +7442,8 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       #elif defined(__ANDROID__)
         int __fd; size_t __nb; void* __p; _fd_sharing __sh;
         int __shmfd_getnb(int fd) throw() { int res = ioctl(fd, ASHMEM_GET_SIZE, 0); if (res < 0) { return -1; } return res; }
-        bool __shmfd_resize(int fd, s_ll nb) throw() { int res = ioctl(fd, ASHMEM_SET_SIZE, size_t(nb)); return res >= 0; }
-        int __shmfd_create(s_ll nb) throw()
+        bool __shmfd_resize(int fd, _s_ll nb) throw() { int res = ioctl(fd, ASHMEM_SET_SIZE, size_t(nb)); return res >= 0; }
+        int __shmfd_create(_s_ll nb) throw()
         {
           int fda = ::open("/dev/ashmem", O_RDWR);
             if (fda < 0) { return -1; }
@@ -5924,9 +7451,9 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
           if (ioctl(fda, ASHMEM_SET_PROT_MASK, (unsigned long)(PROT_READ | PROT_WRITE)) < 0) { ::close(fda); return -1; }
           return fda;
         }
-        void __shmfd_close(int fd __bmdx_noarg) throw() { ::close(fd); }
+        void __shmfd_close(int fd __bmdx_noarg) throw() { if (fd != -1) { ::close(fd); } }
         void _shm_init0(__bmdx_noarg1) throw() { __fd = -1; __p = 0; __nb = 0; }
-        void* _shm_open(bool b_maycreate, s_ll nbtotal __bmdx_noarg) throw()
+        void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) throw()
         {
           bool b_reset = false;
           if (nbtotal < 0) { nbtotal = 0; }
@@ -5946,7 +7473,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
             {
               __fd = __shmfd_create(nbtotal);
                 if (__fd < 0) { __fd = -1; return 0; }
-              s_long res = __sh.fd_expose(_name, __fd, _b_side1 ? 1 : 2, false, true);
+              _s_long res = __sh.fd_expose(_name, __fd, _b_side1 ? 1 : 2, false, true);
   //cout << "CREATED/exposed name fd res " << _name.c_str() << " " << __fd << " " << res << endl;
                 if (res < 1) { _shm_close(); return 0; }
               b_reset = true;
@@ -5959,7 +7486,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
           }
           __p = mmap(0, nbtotal, PROT_READ|PROT_WRITE, MAP_SHARED, __fd, 0);
             if (!__p) { _shm_close(); return 0; }
-          if (b_reset) { ((s_long*)__p)[0] = 0; }
+          if (b_reset) { ((_s_long*)__p)[0] = 0; }
           __nb = nbtotal;
           return __p;
         }
@@ -5970,23 +7497,23 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         }
       #else
         int __fd; int __perm; size_t __nb; void* __p;
-        int __shmfile_open(int flags) throw()
+        int __shmfile_open(int flags __bmdx_noarg) throw()
         {
           #if 0
             return -1;
           #elif __APPLE__ && __MACH__
-            return shm_open(_name.c_str(), flags, __perm);
+            return shm_open(_shmname_hashed_1_ff(_name, __bmdx_shm_name_max).c_str(), flags, __perm);
           #elif defined(__FreeBSD__)
-            return shm_open(_name.c_str(), flags, __perm);
+            return shm_open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
           #elif defined(__SUNPRO_CC) || defined (__sun)
-            return ::open(_name.c_str(), flags, __perm);
+            return ::open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
           #else
-            return ::open(_name.c_str(), flags, __perm);
+            return ::open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
           #endif
         }
         void __shmfd_close(int fd __bmdx_noarg) throw() { if (fd != -1) { ::close(fd); } }
         void _shm_init0(__bmdx_noarg1) throw() { __fd = -1; __p = 0; __nb = 0; __perm = 0666; }
-        void* _shm_open(bool b_maycreate, s_ll nbtotal __bmdx_noarg) throw()
+        void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) throw()
         {
           bool b_reset = false;
           int fd2 = -1;
@@ -6007,7 +7534,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
           #else
             int f = MAP_SHARED;
           #endif
-          s_long* p2 = (s_long*)mmap(0, n2, PROT_READ|PROT_WRITE, f, fd2, 0);
+          _s_long* p2 = (_s_long*)mmap(0, n2, PROT_READ|PROT_WRITE, f, fd2, 0);
           if (!p2) { __shmfd_close(fd2); __fd = -1; return 0; }
           if (b_reset) { p2[0] = 0; }
           __fd = fd2; __p = p2; __nb = n2;
@@ -6022,7 +7549,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     #endif
   };
 
-  template<class T> shmobj2s_t<T>::shared_lock::shared_lock(shmobj2s_t& parent, s_long sides, s_long timeout_ms __bmdx_noargt) throw()
+  template<class T> shmobj2s_t<T>::shared_lock::shared_lock(shmobj2s_t& parent, _s_long sides, _s_long timeout_ms __bmdx_noargt) throw()
     : vlk1(-1), vlk2(-1)
   {
     double t0 = clock_ms();
@@ -6039,573 +7566,1072 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
 
 
-#ifndef __bmdx_shmfifo_valtype_string
-  #define __bmdx_shmfifo_valtype_string 0
-#endif
-#if __bmdx_shmfifo_valtype_string
-  typedef std::string t_shmfifo_string;
-#else
-  typedef carray_r_t<char> t_shmfifo_string;
-#endif
 
-  // Must be >= ( 100 (MIN_RINGBUF_NBYTES) + sizeof(ripc_shmem) - rfifo_nbl11::n0) ).
-  //  ~!!! make it a hint in shmfifo_s ctor.
-const s_ll SHMEM_NBYTES = 100 * 1024;
-const s_ll MAX_MSG_NBYTES = ((1ull << 39) - 1); // (n_len * 8 - 1) bits
 
-struct msg_queue
+  // Shared memory part of msg_queue object.
+struct shmqueue_ctx_rso
 {
-  std::deque<cref_t<t_shmfifo_string> > msgs;
-  cref_t<t_shmfifo_string> rmsg1;
-  bool b_just_started; // initially true, used to check if the process was restarted, while buf was already existing in some state
-    // Size of structure: 96 (8*8 + 1*32)
-  struct ripc_shmem
-  {
-    volatile s_ll ipush2; // planned end pos. of the currently popped message (used for recovery if the sending process is restarted)
-    volatile s_ll ipop2; // planned end pos. of the currently popped message (used for recovery if the receiving process is restarted)
-    volatile s_ll __ripc_shmem_reserved[6];
+  volatile _s_ll ipush_plan; // planned end pos. of the currently pushed message (used for recovery if the sending process is restarted)
+  volatile _s_ll ipop_plan; // planned end pos. of the currently popped message (used for recovery if the receiving process is restarted)
+  volatile _s_ll __shmqueue_ctx_rso_reserved[6];
 
-      // NOTE Let total shared memory size == nb().
-      //  Then, data buffer size == nb() - sizeof(_shmdesc) - (sizeof(ripc_shmem) - rfifo_nbl11::n0)
-    rfifo_nbl11 ringbuf;
+    // NOTE Let total shared memory size == nb().
+    //  Then, data buffer size == nb() - sizeof(_shmdesc) - (sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0)
+  rfifo_nbl11 ringbuf;
 
-  private: ripc_shmem(); ripc_shmem(const ripc_shmem&); void operator=(const ripc_shmem&); // this object may be used only by reference
-  };
-  shmobj2s_t<ripc_shmem> buf; // fully valid buf has f_constructed() == 1
-
-    // Returns size of string in rmsg1 [0..MAX_MSG_NBYTES]. If no string object, returns 0.
-  s_ll msg1_nmax() { if (!rmsg1) { return 0; } s_ll n =
-  #if __bmdx_shmfifo_valtype_string
-      s_ll(rmsg1.ref().size())
-  #else
-      rmsg1.ref().n()
-  #endif
-  ; return n > MAX_MSG_NBYTES ? MAX_MSG_NBYTES : n; }
-
-    // mode_: see this->mode above.
-    // For mode_ > 0, p_mapname must be valid non-empty string, specifying buffer name
-    //    in the format required by operating system.
-    // Returns:
-    //    1 - success.
-    //    <= 0 - failure (only for b_enable == true), values: see shmobj2s_t::prepare
-  int reset(bool b_enable)
-  {
-    if (b_enable)
-    {
-      s_long res = buf.prepare(true);
-      #if SMART_IPC_DEBUG
-        static int nerr(0);
-        if (res <= 0) { cerr << ++nerr << " " << "ERR buf.prepare(true) failed. res name " << res << " " << buf.name() << endl; sleep_mcs(100000); }
-      #endif
-      if (res >= 1 && buf.f_constructed() != 1)
-      {
-        if (buf.b_side1() == false) { return 0; }
-        const s_ll nbuf = buf.nb() - s_ll(sizeof(ripc_shmem) - rfifo_nbl11::n0);
-          if (nbuf < 0 || s_long(nbuf) != nbuf) { return -2; }
-        buf.p()->ringbuf.init_ref(nbuf);
-        buf.set_f_constructed(1);
-      }
-      return res;
-    }
-    else
-    {
-      buf.close();
-      msgs.clear();
-      rmsg1.clear();
-      return 1;
-    }
-  }
-  //~!!! update msg_queue type index (now yk_c::bytes::cmti_base_t<bmdx_shm::shmfifo_s, 2018, 7, 31, 12>::ind())
-  msg_queue(const t_name_shm& name, bool b_receiver) : b_just_started(true), buf(name.c_str(), b_receiver, SHMEM_NBYTES, -943698244)  {}
-private:
-  msg_queue(const msg_queue&); void operator=(const msg_queue&); // the object cannot be copied
+private: shmqueue_ctx_rso(); shmqueue_ctx_rso(const shmqueue_ctx_rso&); void operator=(const shmqueue_ctx_rso&); // this object may be accessed only by pointer or reference
 };
 
-  // { shared memory buffer name (for system); ref. to associated objects }
-  // ~!!! implementation will change to be more compiler-independent.
-inline std::map<t_name_shm, cref_t<msg_queue> >& mqueues() { static std::map<t_name_shm, cref_t<msg_queue> > x; return x; }
-  // the current size of mqueues (ipc_thread copies mqueues under locks when notices that size increased aka new buffer added)
-inline size_t& nmqueues() { static size_t x(0); return x; }
 
-struct ipc_thread_handler
+#define __bmdx_shmfifo_ver (-1615777793) // In the current version, shmobj2s_t type index == yk_c::bytes::cmti_base_t<bmdx_shm::shmqueue_s, 2019, 12, 29, 20, 1>::ind()
+#define __bmdx_shmfifo_nbytes_min (rfifo_nbl11::n0) // minimal buffer space (8 bytes)
+#define __bmdx_shmfifo_msg_nbytes_max (((1ll << (5 * 8 - 1)) - 1)) // must be ( (1 << (_shmqueue_ctxx_impl::nb_mlen * 8 - 1)) - 1 )
+
+  // Dflt. bytes queue size in shared memory. (It may be specified by client individually for each queue, see shmqueue_s().)
+#define __bmdx_shmfifo_nbytes_dflt (100 * 1024ll)
+
+#define __bmdx_shmfifo_idle_t_long_mcs 10000
+#define __bmdx_shmfifo_idle_t_short_mcs 8 // NOTE transf. speed. approx. 3000 b/mcs; t_short should be of order 1/20000 of buf. capacity (see also __bmdx_shmfifo_nbytes_dflt)
+#define __bmdx_shmfifo_idle_t_enable_time_ms 2100
+#define __bmdx_shmfifo_push1_quot 5 // data is pushed in parts (1/quot) of the buffer capacity, to allow earlier (and shorter in time) popping; this is optimal for interprocess case
+#define __bmdx_shmfifo_push1_nbmin 3000
+
+struct shmqueue_ctx
 {
-  static inline s_long mylmin(s_long a, s_long b) { return a < b ? a : b; }
-  static inline s_ll myllmin(s_ll a, s_ll b) { return a < b ? a : b; }
+  typedef arrayref_t<char> t_stringref;
 
-  struct ipc_thread : threadctl::ctx_base
+  shmqueue_ctx(const t_name_shm& name, bool b_receiver, _s_ll nbhint)
+    : pmsend1(0), pmsend2(0), nmsend(0), b_just_started(true), b_sender_waitinit(false), b_enrq(true),
+      buf(name.c_str(), b_receiver, bmdx_minmax::myllmax(nbhint, __bmdx_shmfifo_nbytes_min, rfifo_nbl11::n0) + sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0, __bmdx_shmfifo_ver),
+      bufstate(0), _mprg_ver(0), _mprg_ver_proc(0), _mprg_iend_done(0)
+  { _mprg_cmd.tms = bmdx::clock_ms(); }
+
+
+  critsec_t<shmqueue_ctx>::csdata csd;
+  vnnqueue_t<cref_t<t_stringref> > msgs;
+  cref_t<t_stringref> msg_rcv;
+  t_stringref* pmsend1; // prefix to be sent
+  t_stringref* pmsend2; // main message to be sent
+  _s_ll nmsend;
+  bool b_just_started; // initially true, used to check if the process was restarted, while buf was already existing in some state
+  bool b_sender_waitinit; // when true, assume tr_send == -1, and wait until the buffer is constructed (which automatically sets tr_rcv == 0)
+  volatile bool b_enrq; // client's requirement to enable or disable the queue (by dflt. b_enrq == true)
+  shmobj2s_t<shmqueue_ctx_rso> buf;
+    // Buffer state copy for client non-blocking checks.
+    //  bufstate & 0xff:
+    //    0 - not initialized yet,
+    //    1 - during initialization,
+    //    2 - the last initialization attempt has failed ( (bufstate & 0xffffff00)>>8 contains negative error code ),
+    //    3 - initialized successfully,
+    //    4 - disabled.
+  volatile _s_long bufstate;
+
+  struct mprg_info { _s_ll iend; double tms; mprg_info() { iend = 0; tms = 0; } };
+  volatile _s_ll _mprg_ver;
+  _s_ll _mprg_ver_proc; // the last processed _mprg_ver
+  volatile mprg_info mprg_client; // if iend is set to >= 0, and the queue is sender, when clock reaches tms, purges all messages in range [msgs.ipop() .. ismprg_end); the currently unsent message is also terminated
+  mprg_info _mprg_cmd; // (required iend of sender's lq cleanup, time moment when it should be done)
+  _s_ll _mprg_iend_done;
+
+    // Returns size of string in msg_rcv [0..__bmdx_shmfifo_msg_nbytes_max]. If no string object, returns 0.
+  _s_ll msg_rcv_nmax() { if (!msg_rcv) { return 0; } return bmdx_minmax::myllmin(msg_rcv->n(), __bmdx_shmfifo_msg_nbytes_max); }
+    // Returns size of the currently sent parts of the message.
+  _s_ll msend1_n() { if (!pmsend1) { return 0; } return bmdx_minmax::myllmin(pmsend1->n(), __bmdx_shmfifo_msg_nbytes_max); }
+  _s_ll msend2_n() { if (!pmsend2) { return 0; } return bmdx_minmax::myllmin(pmsend2->n(), __bmdx_shmfifo_msg_nbytes_max - msend1_n()); }
+
+    // NOTE Must be protected by critsec_t<msg_queue> with this->csd.
+    // Returns:
+    //    1 - success.
+    //    0 - cannot initialize the buffer, because the current side is sender (b_side1() == false).
+    //      (Other side can be currently initializing the buffer.)
+    //    Codes for errors, returned by shmobj2s_t::prepare():
+    //      -1 - the shared memory exists, but its structure is not compatible (see htype arg. in shmobj2s_t()).
+    //      -2 - failure during operation (it's generally unknown if the shared object is available).
+    //      -3 - lock of side 1 (for b_side1()==true) or side 2 (for b_side1()==false) is set by someone else.
+    //      -4 - the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side.
+  int _reset()
+  {
+    _s_long res = buf.prepare(true);
+    if (res >= 1 && buf.f_constructed() != 1)
+    {
+      if (buf.b_side1() == false) { return 0; }
+      const _s_ll nbuf = buf.nb() - _s_ll(sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0);
+        if (nbuf < 0) { return -1; }
+      buf.p()->ringbuf.init_ref(nbuf);
+      buf.set_f_constructed(1);
+    }
+    return res;
+  }
+
+  void _clear_msend() throw()
+  {
+    if (pmsend1) { msgs.pop_n(3); }
+      else if (pmsend2) { msgs.pop_1(); }
+    pmsend1 = pmsend2 = 0;
+    nmsend = 0;
+  }
+  bool _lqsend_mprg_pending() const throw()
+  {
+    return _mprg_ver != _mprg_ver_proc || _mprg_cmd.iend < _mprg_iend_done;
+  }
+    // From sender queue, removes all message message refs. and pointers between [msgs.ipop() .. iend).
+    //  If anything has been removed, returns true.
+  bool _lqsend_mprg_update() throw()
+  {
+    if (buf.b_side1()) { return false; } // not a sender
+    if (_mprg_ver != _mprg_ver_proc)
+    {
+      mprg_info cmd; while (1) { _s_ll ver1 = _mprg_ver; cmd.iend = mprg_client.iend; cmd.tms = mprg_client.tms; _s_ll ver2 = _mprg_ver; if (ver1 == ver2) { _mprg_ver_proc = ver1; break; } }
+      _mprg_cmd = cmd;
+    }
+    if ((_mprg_cmd.iend - _mprg_iend_done) > 0 && bmdx::clock_ms() >= _mprg_cmd.tms)
+    {
+      const _s_ll ipop0 = msgs.ipop();
+      if (ipop0 < _mprg_cmd.iend)
+      {
+        _clear_msend();
+        while (msgs.ipop() < _mprg_cmd.iend && msgs.navl() > 0)
+        {
+          if (msgs.front()) { msgs.pop_1(); }
+            else { msgs.pop_n(3); }
+        }
+      }
+      _mprg_iend_done = msgs.ipop();
+      return _mprg_iend_done != ipop0;
+    }
+    return false;
+  }
+private:
+  shmqueue_ctx(const shmqueue_ctx&); void operator=(const shmqueue_ctx&); // the object cannot be copied
+};
+
+struct i_shmqueue_ctxx
+{
+    // autocreate_mode:
+    //    0 - return the sender-side queue object only if it already exists (do not create automatically),
+    //    1 - return the receiver-side queue object only if it already exists (do not create automatically),
+    //    2 - if the sender-side queue object does not exist, autocreate it,
+    //    3 - if the receiver-side queue object does not exist, autocreate it.
+    // nbhint:
+    //    >= 0 specifies the number of bytes in IPC buffer for the queue. Automatically adjusted to be not less than __bmdx_shmfifo_nbytes_min.
+    //    < 0 makes queue with buffer size == __bmdx_shmfifo_nbytes_dflt.
+  virtual cref_t<shmqueue_ctx> rqueue(const t_name_shm& name, _s_long autocreate_mode, _s_ll nbhint) = 0;
+  virtual ~i_shmqueue_ctxx() {}
+};
+
+struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
+{
+  typedef arrayref_t<char> t_stringref;
+  typedef char t_rstr_ct; // make_rba's cref_t Aux object of context-dependent size; pointer to the object is t_rstr_ct*, which is char*
+  // typedef carray_t<char> t_rstr_ct;
+  typedef _shmqueue_ctxx_impl t_lks_qq;
+
+  static const _s_ll nb_mlen = 5;
+
+  struct qmap_key
+  {
+    _s_long type; // 0 - sender, 1 - receiver
+    t_name_shm name;
+    qmap_key(_s_long type_, t_name_shm name_) : type(type_), name(name_) {}
+    struct less { bool operator() (const qmap_key& k1, const qmap_key& k2) const { return k1.type < k2.type || (k1.type == k2.type && k1.name < k2.name); } };
+  };
+  std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> m;
+  volatile _s_ll iver_m;
+
+
+  _shmqueue_ctxx_impl() { iver_m = 0; }
+
+  virtual cref_t<shmqueue_ctx> rqueue(const t_name_shm& name, _s_long autocreate_mode, _s_ll nbhint)
+  {
+    cref_t<shmqueue_ctx> rv;
+    if (autocreate_mode >= 0 && autocreate_mode <= 3)
+    {
+      critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+      size_t n1 = m.size();
+      qmap_key k(autocreate_mode & 1, name);
+      try { if (autocreate_mode >= 2 || m.count(k) > 0) {
+        cref_t<shmqueue_ctx>& rv2 = m[k];
+        if (!rv2)  { rv2.cm_create3(0, 0, 0, name, !!(autocreate_mode & 1), nbhint >= 0 ? nbhint : __bmdx_shmfifo_nbytes_dflt); }
+        rv = rv2;
+      } } catch (...) {}
+      if (m.size() != n1) { iver_m += 1; }
+    }
+    if (rv)
+    {
+      if (autocreate_mode >= 2 && (rv->bufstate & 0xff) < 3)
+      {
+        critsec_t<shmqueue_ctx> __lock(10, -1, &rv->csd); if (sizeof(__lock)) {}
+        const _s_long bsm = (rv->bufstate & 0xff);
+        if (bsm < 3 || (bsm != 4 && rv->buf.f_constructed() != 1))
+        {
+          shmqueue_ctx& q = rv._rnonc();
+          _s_long res = q._reset();
+          if (res >= 1) { rv->bufstate = 3; } else if (res == 0) { rv->bufstate = 1; } else { rv->bufstate = (res << 8) | 2; }
+        }
+      }
+    }
+    return rv;
+  }
+
+    // Creates a zero-initialized byte array of length nb.
+  static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd) throw()
+  {
+    typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
+    if (nb < 0) { return cref_t<t_stringref>(); }
+    cref_t<t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(t_rstr_ct), nb + bmdx_minmax::myllmax(nbadd, 0)));
+    t_rstr_ct* ps =  (t_rstr_ct*)rmsg.paux();
+    if (!ps) { rmsg.clear(); }
+      else { rmsg->link(ps, nb); }
+    return rmsg;
+  }
+    // Creates a byte array from msg, by value (self-contained), or by reference (msg->pd() must be valid until all referring cref_t's are destroyed).
+    //  nbadd > 0 (used only on b_byval == true): adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of msg data. E.g. nbadd == 1 makes conventional C string.
+  static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval, _s_ll nbadd = 0) throw()
+  {
+    typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
+    if (!msg.is_valid()) { return cref_t<t_stringref>(); }
+    cref_t<t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(t_rstr_ct), b_byval ? msg.n() + bmdx_minmax::myllmax(nbadd, 0) : 0));
+    t_rstr_ct* ps =  (t_rstr_ct*)rmsg.paux();
+    if (!ps) { rmsg.clear(); }
+      else if (b_byval) { if (msg.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, msg.pd(), msg.n()); } rmsg->link(ps, msg.n()); }
+      else { rmsg->link(msg.pd(), msg.n()); }
+    return rmsg;
+  }
+    // Creates a byte array as concatenated copies of the given parts.
+    //  nbadd > 0: adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of parts data. E.g. nbadd == 1 makes conventional C string.
+  static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) throw()
+  {
+    typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
+    if (!(part1.is_valid() && part2.is_valid() && part3.is_valid())) { return cref_t<t_stringref>(); }
+    const _s_ll nbvisible = part1.n() + part2.n() + part3.n();
+    cref_t<t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(t_rstr_ct), nbvisible + bmdx_minmax::myllmax(nbadd, 0)));
+    t_rstr_ct* ps =  (t_rstr_ct*)rmsg.paux();
+    if (!ps) { rmsg.clear(); }
+      else { rmsg->link(ps, nbvisible); if (part1.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part1.pd(), part1.n()); ps += part1.n(); } if (part2.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part2.pd(), part2.n()); ps += part2.n(); } if (part3.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part3.pd(), part3.n()); ps += part3.n(); } }
+    return rmsg;
+  }
+
+  struct th_handler { threadctl tc; ~th_handler() { if (tc) { tc.signal_stop(); while (tc) { sleep_mcs(5000); } } } };
+  struct _ipc_delivery_thread : threadctl::ctx_base
   {
     void _thread_proc()
     {
-      std::map<t_name_shm, cref_t<msg_queue> > mqueues2;
+      const _s_ll idle_t_long_mcs = __bmdx_shmfifo_idle_t_long_mcs;
+      const _s_ll idle_t_short_mcs = __bmdx_shmfifo_idle_t_short_mcs;
+      const _s_ll idle_t_enable_time_ms = __bmdx_shmfifo_idle_t_enable_time_ms;
+
+      cref_t<i_shmqueue_ctxx> mqq1;
+      _shmqueue_ctxx_impl* pqq1 = 0;
+      std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> m2;
+      _s_ll iver_m2 = -1;
+      double t0_idle_en = clock_ms();
       while (!b_stop())
       {
-          // mqueues size changes => new buffers added by client => try lock (if failed, will try on next iteration)
-          //  => copy mqueues as is for now => work on the updated set of queues
-        if (nmqueues() != mqueues2.size()) { critsec_t<msg_queue> __lock(10, 0); if (__lock.is_locked()) { mqueues2 = mqueues(); } }
+        if (1)
+        {
+          if (!mqq1) { mqq1 = mqq(); }
+          if (!pqq1) { pqq1 = static_cast<_shmqueue_ctxx_impl*>(mqq1._pnonc_u()); }
+          if (!pqq1) { sleep_mcs(idle_t_long_mcs); continue; }
+          bool b_succ = 1;
+          if (iver_m2 < pqq1->iver_m)
+          {
+            critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+            try { m2 = pqq1->m; iver_m2 = pqq1->iver_m; } catch (...) { b_succ = 0; }
+          }
+          if (!b_succ) { sleep_mcs(idle_t_long_mcs); continue; }
+        }
 
         bool b_changed = false;
-        const s_ll n_len = 5;
-        for (std::map<t_name_shm, cref_t<msg_queue> >::iterator i = mqueues2.begin(); i != mqueues2.end(); ++i)
+        for (std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less>::iterator i = m2.begin(); i != m2.end(); ++i)
         {
           if (!i->second) { continue; }
-          msg_queue& q = *i->second._pnonc_u();
-          if (q.buf.f_constructed() != 1)
-          {
-            critsec_t<msg_queue> __lock(10, 0);
-            if (!__lock.is_locked()) { continue; }
-            if (q.buf.f_constructed() != 1) { if (q.reset(true) < 1) { continue; } }
-            b_changed = true;
-          }
-          if (!q.buf.p()) { continue; } // should not occur
-          msg_queue::ripc_shmem& shm = *q.buf.p();
-          rfifo_nbl11& buf = shm.ringbuf;
+          shmqueue_ctx& q = *i->second._pnonc_u();
 
+          // 1. Process: enrq flag.
+
+          if (q.bufstate == 4) // the queue is currently disabled
+          {
+            if (!q.b_enrq)
+            {
+              if (!q.buf.b_side1() && q._lqsend_mprg_pending())
+              {
+                const bool b_purged = q._lqsend_mprg_update(); b_changed =  b_changed || b_purged;
+              }
+              continue;
+            }
+            critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+            q.bufstate = 0; q.b_just_started = true; // enable the queue as if initialized first time
+            b_changed = true;
+            continue;
+          }
+          else // the queue is currently enabled
+          {
+            if (!q.b_enrq) // try to disable as requested
+            {
+              bool b_may_disable = false;
+              critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+              const _s_long bsm = (q.bufstate & 0xff);
+              if (q.b_sender_waitinit) { b_may_disable = true; }
+              else if (bsm == 3 && q.buf.f_constructed() == 1)
+              {
+                if (q.buf.b_side1())
+                {
+                  signed char& tr_rcv = *q.buf.pf_state1();
+                  b_may_disable = tr_rcv == 0 || tr_rcv == 1 || tr_rcv == -1;
+                }
+                else
+                {
+                  signed char& tr_send = *q.buf.pf_state2();
+                  b_may_disable = tr_send == 0 || tr_send == 1 || tr_send == -1;
+                }
+              }
+              else { b_may_disable = true; }
+              if (b_may_disable)
+              {
+                q.buf.close();
+                q._clear_msend(); q.b_sender_waitinit = false;
+                q.msg_rcv.clear();
+                q.bufstate = 4;
+                b_changed = true;
+                continue;
+              }
+            }
+          }
+
+          // 2. Process: buffer construction, queue purge rq., working state setting.
+
+          bool b_q_constructed = true; // true if queue is constructed (i.e. in normal working state)
+          do { // once
+            if (q.b_sender_waitinit)
+            {
+              critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+              if (q.buf.f_constructed() != 1) { q.bufstate = 1; b_q_constructed = false; break; }
+              q.bufstate = 3;
+            }
+            else if ((q.bufstate & 0xff) < 3)
+            {
+              critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+              const _s_long bsm = (q.bufstate & 0xff);
+              if (bsm < 3 || (bsm != 4 && q.buf.f_constructed() != 1))
+              {
+                _s_long res = q._reset(); // NOTE this will return 0 if the current side is sender
+                if (res >= 1) { q.bufstate = 3; } else if (res == 0) { q.bufstate = 1; } else { q.bufstate = (res << 8) | 2; }
+                if (res < 1) { b_q_constructed = false; break; }
+                b_changed = true;
+              }
+            }
+            if (!q.buf.p()) { b_q_constructed = false; break; } // should not occur
+          } while (false);
+          // here: if b_q_constructed == true: q.bufstate == 3 && q.buf.f_constructed() == 1 && q.buf.p() != 0
+          if (!q.buf.b_side1() && q._lqsend_mprg_pending())
+          {
+            const bool b_purged = q._lqsend_mprg_update(); b_changed =  b_changed || b_purged;
+            const bool b_msg_pending = !!q.pmsend2;
+            if (b_q_constructed && b_purged && b_msg_pending) { signed char& tr_send = *q.buf.pf_state2(); tr_send = -2; } // the message that's currently being sent, will be canceled
+          }
+          if (!b_q_constructed) { continue; }
+
+          // 3. Process: msg. sending / receival / queue recovery.
+
+          shmqueue_ctx_rso& shm = *q.buf.p();
+          rfifo_nbl11& buf = shm.ringbuf;
           try {
             if (!q.buf.b_side1())
             {
               signed char& tr_send = *q.buf.pf_state2();
+              const signed char& _tr_rcv = *q.buf.pf_state1();
+
                 // Sender.
                 // tr_send
-                //    0 - initialize, goto 1
-                //    1 - wait while a message appears on the queue, pop, goto 2
+                //    0 - just started; set goto tr_send = 1
+                //    1 - wait while a message appears on the queue, pop, goto tr_send = 2
                 //    2 - push message length, bytes, end byte into the buffer, goto 1
-                //    -3 - probably process was terminated, try to recover state (push zero bytes up to the end of incomplete message, push end byte indicating an error)
-                //    -1 - permanent problem, the buffer cannot be used (invariant lost)
-                //    -2 - invariant lost, going to state -3
-              if (q.b_just_started)
-              {
-                q.b_just_started = false;
-                if (tr_send == 2 || (tr_send == 1 && shm.ipush2 > buf.ipush())) { tr_send = -3; continue; }
-              }
+                //    -1 - data buffer is broken and currently cannot be used; should wait for the receiver re-initializing the buffer
+                //    -2 - data sending sequence is broken (probably sender process is restarted); try to recover:
+                //      push zero bytes up to the end of incomplete message, then push the end byte indicating an error
 
-              if (tr_send == 0 || tr_send == 1)
+              if (q.b_just_started) { q.b_just_started = false; if (tr_send != 0) { tr_send = -2; b_changed = true; continue; } }
+              if (_tr_rcv == -1 && !q.b_sender_waitinit && tr_send != -1) { tr_send = -1; q.b_sender_waitinit = true; continue; } // on some of the next iterations, rcv side will re-init. the buffer
+
+              if (q.b_sender_waitinit || tr_send == -1)
+              {
+                q._clear_msend();
+                if (tr_send != 0) { continue; }
+                q.b_sender_waitinit = false; // here: tr_send == 0
+                b_changed = true;
+              }
+              else if (tr_send == 0 || tr_send == 1)
               {
                 if (tr_send == 0) { tr_send = 1; b_changed = true; }
-                if (!q.rmsg1) // try to make the first queued message the current, if not yet
+                if (!q.pmsend2) // needs to check for a message in local queue
                 {
-                  critsec_t<msg_queue> __lock(10, 0);
-                    if (!__lock.is_locked()) { continue; }
-                  if (q.msgs.empty()) { continue; }
-                  q.rmsg1 = q.msgs.front();
-                  try { q.msgs.pop_front(); } catch (...) { q.rmsg1.clear(); continue; }
+                  if (q.msgs.navl() <= 0) { continue; }
+                  const cref_t<t_stringref>& r0 = q.msgs.front();
+                  if (r0)
+                  {
+                    if (!r0._pnonc_u()->is_valid()) { q.msgs.pop_1(); continue; }
+                    q.pmsend2 = r0._pnonc_u();
+                    q.nmsend = q.msend2_n();
+                    shm.ipush_plan = (buf.ipush() + nb_mlen + q.nmsend + 1);
+                  }
+                  else
+                  {
+                    if (q.msgs.navl() < 3) { q.msgs.pop_1(); continue; }
+                    const cref_t<t_stringref>& r1 = q.msgs[1];
+                    const cref_t<t_stringref>& r2 = q.msgs[2];
+                    if (!(r1 && r2 && r1._pnonc_u()->is_valid() && r2._pnonc_u()->is_valid())) { q.msgs.pop_n(3); continue; }
+                    q.pmsend1 = r1._pnonc_u();
+                    q.pmsend2 = r2._pnonc_u();
+                    q.nmsend = q.msend1_n() + q.msend2_n();
+                    shm.ipush_plan = (buf.ipush() + nb_mlen + q.nmsend + 1);
+                  }
                   b_changed = true;
-                  if (!q.rmsg1) { continue; }
                 }
-                if (buf.npush() >= n_len) // the buffer has enough place to accept message length, so go to next stage
-                  { shm.ipush2 = (buf.ipush() + n_len + q.msg1_nmax() + 1); tr_send = 2; b_changed = true; }
+                if (buf.nfree() < nb_mlen) { continue; } // the shm. buffer has not enough free place yet, to accept message length
+                tr_send = 2; b_changed = true;
                 continue;
               }
               else if (tr_send == 2)
               {
-                if (!q.rmsg1) { tr_send = -3; b_changed = true; continue; } // unexpected, try to recover
-                s_ll n = q.msg1_nmax();
-                s_ll i1 = shm.ipush2 - 1 - n;
-                s_ll i0 = i1 - n_len;
-                if (buf.ipush() < i0 || (buf.ipush() < i1 && buf.ipush() > i0) || buf.ipush() > shm.ipush2) { tr_send = -2; b_changed = true; continue; } // invariant
+                const _s_ll i0 = shm.ipush_plan - 1 - q.nmsend - nb_mlen;
 
-                if (buf.ipush() < i1) // // push user message string length
+                if (!(q.pmsend2 && buf.ipush() >= i0 && buf.ipush() <= shm.ipush_plan)) // invariant check
+                  { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; continue; }
+
+                const _s_ll i1 = i0 + nb_mlen; // abs. index of the beginning of message prefix
+                if (buf.ipush() < i1) // push user message string length
+                  { if (buf.nfree() < nb_mlen) { continue; } char z[nb_mlen]; z[0] = char((q.nmsend >> 32) & 127); set_be4(z, 1, _s_long(q.nmsend)); buf.push(z, nb_mlen); b_changed = true; } // NOTE client data length bit 39 == 0 (reserved for possible protocol updates)
+
+                const _s_ll ndat1 = q.msend1_n();
+                const _s_ll i2 = i1 + ndat1; // abs. index of the beginning of main message(after prefix, if it exits)
+                if (buf.ipush() < i2) // push prefix
                 {
-                  if (buf.npush() < n_len) { continue; }
-                  char z[n_len]; z[0] = char(n >> 32) & 127; set_be4(z, 1, s_long(n));
-                  buf.push(z, n_len);
-                  b_changed = true;
+                  const _s_ll j = buf.ipush() - i1; const char* pd = q.pmsend1->pd();
+                  if (j >= ndat1) { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; continue; }
+                  const _s_ll n = bmdx_minmax::myllrange(buf.n() / __bmdx_shmfifo_push1_quot, __bmdx_shmfifo_push1_nbmin, ndat1 - j);
+                  if (0 != buf.push(pd + j, n)) { b_changed = true; }
+                  if (buf.ipush() < i2) { continue; }
                 }
 
-                if (buf.ipush() < shm.ipush2 - 1) // push data
+                const _s_ll i3 = shm.ipush_plan - 1;
+                if (buf.ipush() < i3) // push main message
                 {
-                  s_ll j = buf.ipush() - i1;
-                  if (j >= n) { tr_send = -3; b_changed = true; continue; } // unexpected, try to recover
-                  b_changed = 0 != buf.push(&q.rmsg1.ref()[j], n - j) || b_changed;
+                  const _s_ll j = buf.ipush() - i2; const _s_ll ndat2 = q.msend2_n(); const char* pd = q.pmsend2->pd();
+                  if (j >= ndat2) { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; continue; }
+                  const _s_ll n = bmdx_minmax::myllrange(buf.n() / __bmdx_shmfifo_push1_quot, __bmdx_shmfifo_push1_nbmin, ndat2 - j);
+                  if (0 != buf.push(pd + j, n)) { b_changed = true; }
+                  if (buf.ipush() < i3) { continue; }
                 }
 
-                if (buf.ipush() == shm.ipush2 - 1) // push end byte == 1, indicating successful msg. completion
-                {
-                  b_changed = 0 != buf.push_bytes(1, 1) || b_changed;
-                }
+                if (buf.ipush() < shm.ipush_plan) // push end byte == 1, indicating successful msg. completion
+                  { if (0 != buf.push_bytes(1, 1)) { b_changed = true; } }
 
-                if (buf.ipush() == shm.ipush2)
-                {
-                  q.rmsg1.clear();
-                  tr_send = 1;
-                  b_changed = true;
-                }
+                if (buf.ipush() == shm.ipush_plan)
+                  { q._clear_msend(); tr_send = 1; b_changed = true; }
 
                 continue;
               }
-              else if (tr_send == -3) // attempt to recover (push zero bytes until ipush2), then return to tr_send 1
+              else // anything except [-1..2]; attempt to recover
               {
-                if (q.rmsg1) { q.rmsg1.clear(); }
-                if (buf.ipush() < shm.ipush2) { if (buf.npush() > 0) { b_changed = 0 != buf.push_bytes(0, shm.ipush2 - buf.ipush()) || b_changed; } }
-                  else if (buf.ipush() == shm.ipush2) { tr_send = 1; b_changed = true; }
-                  else { tr_send = -2; } // invariant drop
-                continue;
-              }
-              else if (tr_send == -1) { continue; } // ignore this buffer (invariant lost, cannot be recovered until both sender and receiver exit and restart)
-              else // -2 or anything else, print message once, set bad flag and go to passive state
-              {
-                #if SMART_IPC_DEBUG
-                  cerr << "ERR The following output buffer is damaged (to fix, stop both client and server, and then restart): " << i->first << endl;
-                #endif
-                q.rmsg1.clear();
-                tr_send = -1;
+                if (tr_send != -2) { tr_send = -2; }
+                q._clear_msend();
+
+                if (buf.ipush() < shm.ipush_plan) { if (buf.nfree() > 0) { b_changed = 0 != buf.push_bytes(0, shm.ipush_plan - buf.ipush()) || b_changed; } }
+                  else if (buf.ipush() == shm.ipush_plan) { tr_send = 1; b_changed = true; }
+                  else { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; }
                 continue;
               }
             }
             else
             {
               signed char& tr_rcv = *q.buf.pf_state1();
+              const signed char& _tr_send = *q.buf.pf_state2();
+
                 // Recevier.
                 // tr_rcv
                 //    0 - initialize, goto 1
-                //    1 - wait until message length (fields of n_len bytes) appears in the buffer, peek into it, prep. string for input, goto 2
-                //    2 - discard msg. length, read msg. bytes, read end byte, [if end succeeded: push string into the queue], clear string, goto 1
-                //    -1 - recover from process restart (skip all bytes in buf. until ipop2)
-                //    -2, -3 - permanent problem, the buffer cannot be used (invariant dropped)
-              if (q.b_just_started)
-              {
-                q.b_just_started = false;
-                if (tr_rcv == 2) { tr_rcv = -3; continue; }
-              }
+                //    1 - wait until message length (fields of nb_mlen bytes) appears in the buffer, peek into it, prep. string for input, goto tr_rcv = 2
+                //    2 - discard msg. length, read msg. bytes, read end byte, [if end succeeded: push string into the queue], clear string, goto tr_rcv = 1
+                //    -1 - data buffer is broken and currently cannot be used; should wait for the sender setting tr_send = -1, and then re-initialize the buffer
+                //    -2 - data sending sequence is broken (probably receiver process is restarted); try to recover:
+                //      pop the current message bytes until message end, ignore this data; then goto tr_rcv = 1 (normal state)
 
-              if (tr_rcv == 0 || tr_rcv == 1)
+              if (q.b_just_started) { q.b_just_started = false;  if (_tr_send == -1) { tr_rcv = -1; } else if (tr_rcv != 0) { tr_rcv = -2; } else { tr_rcv = 1; } }
+
+              if (tr_rcv == -1) // wait for sender setting its tr_send = -1, then re=initialize the buffer
+              {
+                if (q.msg_rcv) { q.msg_rcv.clear(); }
+                if (_tr_send != -1) { continue; }
+
+                critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+                q.buf.set_f_constructed(0);
+                q.bufstate = 1;
+
+                b_changed = true;
+                continue;
+              }
+              else if (tr_rcv == 0 || tr_rcv == 1)
               {
                 if (tr_rcv == 0) { tr_rcv = 1; b_changed = true; }
-                if (buf.npop() < n_len) { continue; }
-                char z[n_len];
-                buf.pop(z, n_len, false); // peek into msg. length
-                s_ll n = (s_ll(z[0] & 127) << 32) + be4(z, 1); // user message string length
-                if (n < 0) { tr_rcv = -2; continue; } // invariant drop
-                shm.ipop2 = buf.ipop() + n_len + n + 1;
+                if (buf.navl() < nb_mlen) { continue; }
+                char z[nb_mlen];
+                buf.pop(z, nb_mlen, false); // peek into msg. length
+                const _s_ll ndatr = ((_s_ll(z[0]) & 127) << 32) + be4(z, 1); // NOTE client data length bit 39 is ignored (reserved for possible protocol updates)
+                shm.ipop_plan = buf.ipop() + nb_mlen + ndatr + 1;
                 b_changed = true;
-                q.rmsg1.create2(1, n, char(0));
-                if (q.rmsg1) { tr_rcv = 2; }
+
+                if (ndatr > __bmdx_shmfifo_msg_nbytes_max) { tr_rcv = -2; continue; } // skip too long messages (if the length is limited by compile-time constant)
+
+                q.msg_rcv = make_rba_z(ndatr, 1); // creates a string for input message, adds a zero byte to make the returned array more like to C string
+                  if (!q.msg_rcv) { continue; } // will retry herein on the next iteration
+                tr_rcv = 2;
                 continue;
               }
               else if (tr_rcv == 2)
               {
-                if (!q.rmsg1) { tr_rcv = -3; b_changed = true; continue; } // unexpected, try to recover
-                s_ll n = q.msg1_nmax();
-                s_ll i1 = shm.ipop2 - 1 - n;
-                s_ll i0 = i1 - n_len;
-                if (buf.ipop() < i0 || (buf.ipop() < i1 && buf.ipop() > i0) || buf.ipop() > shm.ipop2) { tr_rcv = -2; b_changed = true; continue; } // invariant
+                if (!q.msg_rcv)  { tr_rcv = -1; b_changed = true; continue; } // invariant check
+
+                const _s_ll ndatr = q.msg_rcv->n();
+                const _s_ll i1 = shm.ipop_plan - 1 - ndatr;
+                const _s_ll i0 = i1 - nb_mlen;
+
+                if (buf.ipop() < i0 || (buf.ipop() < i1 && buf.ipop() > i0) || buf.ipop() > shm.ipop_plan) // invariant check
+                  { tr_rcv = -1; b_changed = true; continue; }
 
                 if (buf.ipop() < i1) // pop length
+                  { if (buf.navl() < nb_mlen) { continue; } buf.discard(nb_mlen); b_changed = true; }
+
+                if (buf.ipop() < shm.ipop_plan - 1) // pop data
                 {
-                  if (buf.npop() < n_len) { continue; }
-                  buf.discard(n_len);
-                  b_changed = true;
+                  _s_ll j = buf.ipop() - i1;
+                  if (j >= ndatr) { tr_rcv = -1; b_changed = true; continue; }
+                  _s_ll npop2 = buf.pop(q.msg_rcv._pnonc_u()->pd() + j, ndatr - j);
+                  if (npop2 != 0) { b_changed = true; }
                 }
 
-                if (buf.ipop() < shm.ipop2 - 1) // pop data
+                if (buf.ipop() == shm.ipop_plan - 1) // pop end byte, check if it's 1 (if the message is correct), or otherwise
                 {
-                  s_ll j = buf.ipop() - i1;
-                  if (j >= n) { tr_rcv = -1; b_changed = true; continue; } // unexpected, try to recover
-                  b_changed = 0 != buf.pop((char*)&q.rmsg1.ref()[j], n - j) || b_changed;
+                  if (buf.navl() < 1) { continue; }
+                  char c_end(0); buf.pop(&c_end, 1); b_changed = true;
+                  if (c_end != 1) { q.msg_rcv.clear(); tr_rcv = 1; continue; }
                 }
 
-                if (buf.ipop() == shm.ipop2 - 1) // pop end byte, check if it's 1 (if the message is correct), or otherwise
-                {
-                  if (buf.npop() < 1) { continue; }
-                  char c_end(0);
-                  buf.pop(&c_end, 1);
-                  if (c_end != 1) { q.rmsg1.clear(); tr_rcv = 1; continue; }
-                  b_changed = true;
-                }
-
-                if (buf.ipop() == shm.ipop2)
-                {
-                  critsec_t<msg_queue> __lock(10, 0);
-                    if (!__lock.is_locked()) { continue; } // if cannot lock the message queue, try again later
-                  try { q.msgs.push_back(q.rmsg1); } catch (...) { continue; } // if queue push fails, try again later
-                  q.rmsg1.clear();
-                  tr_rcv = 1;
-                  b_changed = true;
-                }
+                if (buf.ipop() == shm.ipop_plan)
+                  { if (1 != q.msgs.push_1(q.msg_rcv)) { continue; } q.msg_rcv.clear(); tr_rcv = 1; b_changed = true; }
 
                 continue;
               }
-              else if (tr_rcv == -3) // attempt to recover (discard bytes until ipop2), then return to tr_rcv 1
+              else // anything except [-1..2]; attempt to recover
               {
-                if (q.rmsg1) { q.rmsg1.clear(); }
-                if (buf.ipop() < shm.ipop2) { b_changed = 0 != buf.discard(shm.ipop2 - buf.ipop()) || b_changed; }
-                  else if (buf.ipop() == shm.ipop2) { tr_rcv = 1; b_changed = true; }
-                  else { tr_rcv = -2; } // invariant drop
-                continue;
-              }
-              else if (tr_rcv == -1) { continue; } // ignore this buffer (invariant lost, cannot be recovered until both sender and receiver exit and restart)
-              else // -2 or anything else, print message once, set bad flag and go to passive state
-              {
-                #if SMART_IPC_DEBUG
-                  cerr << "ERR The following input buffer is damaged (to fix, stop both client and server, and then restart): " << i->first << endl;
-                #endif
-                q.rmsg1.clear();
-                tr_rcv = -1;
+                if (tr_rcv != -2) { tr_rcv = -2; }
+                if (q.msg_rcv) { q.msg_rcv.clear(); }
+
+                if (shm.ipush_plan < shm.ipop_plan) { tr_rcv = -1; b_changed = true; }
+                  else if (buf.ipop() < shm.ipop_plan) { const _s_ll nd = buf.discard(shm.ipop_plan - buf.ipop()); if (nd > 0) { b_changed = true; } }
+                  else if (buf.ipop() == shm.ipop_plan) { tr_rcv = 1; b_changed = true; }
+                  else { tr_rcv = -1; b_changed = true; }
                 continue;
               }
             }
           } catch (...) { b_changed = true; }
         }
-        if (!b_changed) { sleep_mcs(5000); }
+        if (b_changed) { t0_idle_en = clock_ms(); }
+          else { sleep_mcs(clock_ms() - t0_idle_en < idle_t_enable_time_ms ? idle_t_short_mcs : idle_t_long_mcs); }
       }
     }
   };
 
-  threadctl tc;
-  bool b_started;
+  struct deinit_handler { _s_long& s; deinit_handler(_s_long& s_) : s(s_) {} ~deinit_handler() { critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {} s = 1; } };
 
-    // Starts thread. If succeeds or thread already started, b_started will be true.
-  void start() { if (!b_started) { b_started = tc.start_auto<ipc_thread>(int()); } }
-  ipc_thread_handler() { b_started = false; start(); }
-    // Handler destruction waits until thread has exited, because it accesses static objects.
-    //  Only 1 instance of ipc_thread_handler is created, as static variable (see th() below).
-  ~ipc_thread_handler() { if (b_started && tc) { tc.signal_stop(); while (tc) { sleep_mcs(5000); } b_started = false; } }
+  static bool _th_enable()
+  {
+    static _s_long fl_deinit(0); static deinit_handler __local_dh(fl_deinit); if (sizeof(__local_dh)) {}
+    static cref_t<th_handler> x;
+    static volatile _s_long objstate(0);
+    if (objstate < 2 && !fl_deinit)
+    {
+      critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+      if (!fl_deinit)
+      {
+        if (objstate < 1) { x.cm_create0(0, 0, 1); if (x) { objstate = 1; } }
+        if (objstate == 1)
+        {
+          bool b = x->tc.start_auto<_ipc_delivery_thread>(int());
+          if (b)
+          {
+            objstate = 2;
+            #ifdef _bmdxpl_Psx
+              x->tc.set_priority(5);
+            #endif
+          }
+        }
+      }
+    }
+    return objstate == 2 && x;
+  }
+
+  static cref_t<i_shmqueue_ctxx> mqq()
+  {
+    static _s_long fl_deinit(0); static deinit_handler __local_dh(fl_deinit); if (sizeof(__local_dh)) {}
+    static cref_t<i_shmqueue_ctxx> x;
+    static volatile _s_long objstate(0);
+    if (objstate < 1 && !fl_deinit)
+    {
+      critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+      if (!fl_deinit)
+      {
+        if (objstate < 1) { x = cref_t<_shmqueue_ctxx_impl>::iref2<i_shmqueue_ctxx>::create0(1); if (x) { objstate = 1; } }
+      }
+    }
+    return x;
+  }
 };
 
 
-  // Calling th() ensures single IPC thread (struct ipc_thread) start.
-  // NOTE th() must be called under lock.
-inline ipc_thread_handler& th()
-{
-  static ipc_thread_handler x; // automatically initialized on first call
-  if (!x.b_started) { x.start(); }
-  return x;
-}
 
-namespace _api // public declarations (merged into namespace smart_ipc)
+
+
+
+
+
+
+
+namespace _api // public declarations (merged into namespace bmdx_shm)
 {
 
-    // IPC queue (FIFO buffer) of strings, based on shared memory.
-  struct shmfifo_s
+    // IPC queue of strings, based on shared memory (FIFO buffer).
+    //  The shmqueue_s object is designed to work with both sides of the queue, as separate objects.
+  struct shmqueue_s
   {
     typedef t_name_shm t_name;
+    typedef arrayref_t<char> t_stringref;
 
-      // Global name of the queue.
-    const t_name name;
+      // Global (interprocess) name of the queue.
+    const t_name name; // bmdx_str::flstr_t<300>
 
       // Cached result of the last operation.
-    mutable s_long res;
+    mutable _s_long res;
 
-      // Cached data reference of the last peek operation (pop_message with mode 0 or 1).
-      // NOTE If the client uses pop_str to retrieve messages, d is kept empty.
-    mutable cref_t<t_shmfifo_string> d;
+      // Cached data reference of the last pop or peek operation (see also mget()).
+      // NOTE If the client uses mget_str to retrieve messages, d is kept empty.
+    mutable cref_t<t_stringref> d;
 
-      // name: global name of the queue.
-    shmfifo_s(const t_name& name_) : name(name_.n() ? name_ : "_"), res(0) {}
 
-      // timeout_ms:
-      //    <0 - block until shared memory buffer creation by the receiving side, or till an error.
-      //    0 - try send message, and return the result immediately.
-      //    >0 - same as timeout_ms < 0, but returns 0 when timeout occured.
-      //      or any message is received, or error occurs.
-      // Returns:
-      //  2 - the message successfully pushed into the output queue.
-      //    (The receiving side exists, shared memory buffer is available. The message will be sent by servicing thread.)
-      //  1 (only on timeout_ms == 0) - the message is queued,
-      //      but existing shared memory buffer is not yet initialized.
-      //      This is optimistic stategy, relying on normal workflow.
-      //      Alternatively, small timeout_ms (e.g. 1) may be used, causing 0 to be returned in "not yet initialized" case.
-      //  0 (only on timeout_ms >= 1) - failure: timeout during shared memory initialization
-      //      by the receiving side (the program is not run, or more time needed?).
-      //  -1 - attempt to push message into the input queue.
-      //  -2 - failure (memory allocation, incompatibility, message too long etc.).
-      //  -3 - shared memory is locked by some other side.
-    s_long push_message(const arrayref_t<char>& msg, long timeout_ms = 0) const
+  private:
+    const _s_ll _nbdflt; const _s_long _flags; const _s_long _idle_t_mcs;
+    mutable cref_t<shmqueue_ctx> _rq; // cached reference to the queue with the specified name
+    struct exc_new_pack3 : std::exception { const char* what() const throw() { return "new_pack3::operator()(t*)"; } };
+    struct new_pack3 { typedef cref_t<t_stringref> t; const t &prefix, &msg; mutable _s_long ind; new_pack3(const t& prefix_, const t& msg_) : prefix(prefix_), msg(msg_), ind(-1) {} void operator()(t* p) const { ++ind; if (ind == 0) { new (p) t(); } else if (ind == 1) { new (p) t(prefix); } else if (ind == 2) { new (p) t(msg); } else { throw exc_new_pack3(); } } };
+  public:
+
+
+      // name_: global name of the queue.
+      // nbdflt_: IPC queue buffer size hint. Dflt. == -1, which means use __bmdx_shmfifo_nbytes_dflt.
+      // flags_ (ORed): see flags().
+      // idle_t_mcs_: sleep time at each iteration inside client-side blocking mget or msend (0..1e6 mcs). Dflt. 5000 mcs.
+    shmqueue_s(const t_name& name_, const _s_ll nbdflt_ = -1, _s_long flags_ = 1, _s_ll idle_t_mcs_ = -1) throw()
+      : name(name_.n() ? name_ : "_"), res(0), _nbdflt(nbdflt_), _flags(flags_), _idle_t_mcs(idle_t_mcs_ >= 0 ? _s_long(bmdx_minmax::myllmin(1000000, idle_t_mcs_)) : 5000)
+      {}
+
+      // Flags, set by constructor.
+      //    0x1 - use client-side locks when sending and receiving messages.
+      //      Dflt. value: the flag is set.
+      //      Needed only in case if on client side there that more than one thread
+      //        in the current process is sending or receiving messages through the same queue
+      //        (multiple shmqueue_s with same name).
+      //      NOTE shmqueue_s object itself is not protected from concurrency.
+      //        Unsetting this flag disables only locks on local queue push/pop
+      //        (queues as such are non-blocking by design).
+      //    0x2 - optimistic push on zero timeout.
+      //        Dflt. value: the flag is not set.
+      //        Responsibility for initializing the queue object in shared memory is on receiver's side.
+      //        If this flag is set, msend() will put
+      //          the message into the local queue:
+      //            a) (normal) if shared memory queue is completely initialized,
+      //            b) if timeout_ms == 0, and shared memory queue currently does not exist,
+      //            c) if timeout_ms == 0, and shared memory queue is not yet completely initialized.
+      //            NOTE This does NOT include cases when the shared memory object is locked, or the queue is disabled by the client.
+      //        If this flag not set, only the above case (a) works.
+      // NOTE flags() does not modify this->res.
+    _s_long flags() const { return _flags; }
+
+      // navl(bool): returns the number of available messages (>= 0),
+      //    depending on direction - ones that are not sent yet, or ones just received and not popped yet.
+      //  b_receiver:
+      //    specifies, for what end of the queue the function is called.
+      // navl_*: shortcut to navl(bool).
+      // NOTE navl*() value is volatile. May grow or shrink depending on "other" side working.
+      // NOTE navl*() do not make automatic initialization of queues (as msend, mget do).
+      // NOTE navl*() do not modify this->res.
+    _s_ll navl(bool b_receiver) const throw()
     {
-      if (!th().b_started) { res = -2; return -2; }
-      if (msg.n() > MAX_MSG_NBYTES) { res = -2; return -2; }
+      if (!_shmqueue_ctxx_impl::_th_enable()) { return 0; }
+      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, b_receiver ? 1 : 0, _nbdflt); } catch (...) {} }
+      if (!_rq) { return 0; }
+      return _rq->msgs.navl();
+    }
+    _s_ll navl_send() const throw() { return navl(false); }
+    _s_ll navl_get() const throw() { return navl(true); }
 
-      double t0 = clock_ms();
-
-      cref_t<msg_queue> rq_prot;
-      msg_queue* pq = 0;
-      try {
-        critsec_t<msg_queue> __lock(10, -1); if (sizeof(__lock)) {}
-        if (1)
-        {
-          cref_t<msg_queue>& rq = mqueues()[name];
-          pq = rq._pnonc_u();
-          nmqueues() = mqueues().size();
-          if (!pq) { rq.create2(1, name, false); } // false: sender
-          rq_prot = rq;
-        }
-        pq = rq_prot._pnonc_u();
-        if (pq)
-        {
-          int res2 = 0;
-          if (pq->buf.b_side1() != false) { res = -1; return -1; } // the queue already works in opposite direction
-          if (pq->buf.f_constructed() != 1)
-          {
-            res2 = pq->reset(true);
-            if (res2 == -4) { res2 = 0; }
-            if (res2 < 0) { res = res2 == -1 ? -2 : res2; return res; }
-          }
-
-          if (pq->buf.f_constructed() == 1 || (res2 == 0 && timeout_ms == 0)) // buffer is available, or initialization pending (push message optimistically)
-          {
-              // Push message into the queue under same lock as used to access mqueues.
-            try {
-              cref_t<t_shmfifo_string> rmsg;
-              char z = 0;
-              rmsg.create2(0, msg.pd() ? msg.pd() : &z, msg.n()); // create1 may throw
-              pq->msgs.push_back(rmsg); // push_back may throw
-              res = res2 > 0 ? 2 : 1; return res;
-            } catch (...) {}
-            res = -2; return -2;
-          }
-          // else reset() attempts will continue in a loop (see below)
-        }
-      } catch (...) {}
-      if (!pq) { res = -2; return -2; }
-
-        // Wait until the receiving side has created its input buffer (inside IPC thread), or exit on timeout.
-      if (pq->buf.f_constructed() != 1)
+      // Returns IPC buffer state, and optionally ensures the queue creation and enabling/disabling.
+      // rqtype:
+      //    0 - return the sender-side queue state, but do not autocreate or modify the queue,
+      //    1 - return the receiver-side queue state, but do not autocreate or modify the queue,
+      //    2 - if the sender-side queue does not exist, autocreate it,
+      //    3 - if the receiver-side queue does not exist, autocreate it,
+      //    NOTE "Autocreate" means:
+      //      if the shared object does not exist, the receiver queue will perform its complete initialization,
+      //      while the sender queue will only try to connect to the existing shared object.
+      //    4, 5 - if the (sender, receiver)-side queue already exists, request queue enabling.
+      //        NOTE By default, when the queue is first created/connected to, it's enabled.
+      //    6, 7 - if the (sender, receiver)-side queue already exists, request queue disabling.
+      //        The shared object will be closed, and after that, can be opened/used by another process
+      //        or another binary module of the current process.
+      //    NOTE rqtype's 4..7 are satisfied by internal thread after some delay,
+      //      when all necessary conditions are met.
+      //      When the queue is factually disabled, its bufstate becomes 4.
+      //      After it's reenabled, its bufstate becomes 0, and grows to 3, as in usual initialization sequence.
+      // Returns:
+      //    ret. code (also in this->res):
+      //      0, 1 - during shared object initialization by the receiver side.
+      //      2 - for receiver: the last  initialization attempt has failed (maybe retry once more);
+      //        for sender: failed to connect to shared memory (probably, the receiver, which is responsible for creation, does not yet exist).
+      //      3 - initialized successfully (normal work).
+      //      4 - disabled (see enrq below).
+      //      -1 - the local queue object is not created yet (use rqtype 2 or 3 to make it).
+      //      -2 - common case failure, no changes.
+      //      -3 - shared memory is locked by some other side.
+      //    *pipush, *pipop - the current (volatile) push/pop char index in the shared memory queue.
+      //      Meaningful values are set only if bufstate returns 3 (i.e. only when the queue is working normally).
+      //        Otherwise, values are set to -1.
+      //      Hint: in application-specific context, along with regular sending some messages,
+      //        *pipop may be used (in sender process) to check if the receiving process is alive and actively consumes messages.
+      //    enrq:
+    _s_long bufstate(_s_long rqtype, _s_ll* pipush = 0, _s_ll* pipop = 0) const throw()
+    {
+      if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
+      if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
+      const _s_long enrq = rqtype == 4 || rqtype == 5 ? 1 : (rqtype == 6 || rqtype == 7 ? 0 : -1);
+      if (enrq >= 0) { rqtype &= 1; }
+      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, rqtype, _nbdflt); } catch (...) {} }
+      if (!_rq) { res = -1; return -1; }
+      if ((rqtype >= 0 && rqtype <= 3) && _rq->buf.b_side1() != !!(rqtype & 1)) { res = -2; return -2; }
+      const _s_long st = _rq->bufstate;
+      if (st == 3 && (pipush || pipop)) { try { rfifo_nbl11& b = _rq->buf->ringbuf; if (pipush) { *pipush = b.ipush(); } if (pipop) { *pipop = b.ipop(); } } catch (...) { res = -2; return -2; } }
+      if (enrq == 0 || enrq == 1) { _rq->b_enrq = enrq == 1; }
+      _s_long stm = st & 0xff;
+      if (stm != 2) { res = stm; return res; }
+      stm = st >> 8;
+      if (_rq->buf.b_side1())
       {
-        while (true)
-        {
-          if (1)
-          {
-            critsec_t<msg_queue> __lock(10, -1); if (sizeof(__lock)) {}
-            if (pq->buf.f_constructed() == 1) { break; }
-          }
-          if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { res = 0; return 0; }
-          sleep_mcs(5000);
-        }
+        if (stm <= -4 || stm >= -1) { stm = -2; }
+          else if (stm == -2) { stm = 2; }
       }
-
-      try {
-        cref_t<t_shmfifo_string> rmsg;
-        char z = 0;
-        rmsg.create2(0, msg.pd() ? msg.pd() : &z, msg.n()); // create1 may throw
-        critsec_t<msg_queue> __lock(10, -1); if (sizeof(__lock)) {}
-        pq->msgs.push_back(rmsg); // push_back may throw
-        res = 2; return 2;
-      } catch (...) {}
-      res = -2; return -2;
+      else
+      {
+        if (stm == -4) { stm = 1; } // the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side
+          else if (stm < -4 || stm >= -1) { stm = -2; }
+          else if (stm == -2) { stm = 2; }
+      }
+      res = stm; return res;
     }
 
+      // 1. Returns the current local queue state, and ipush, ipop values (message count).
+      // 2. Optionally (if the queue is sender && iend_sender >= -1),
+      //    sets a signal to release, from local queue,
+      //    all messages that are currently unsent or partially sent (i.e. all messages with numbers in range [ipop .. ipush).
+      //    Messages are released by internal thread, by popping without any processing,
+      //      in short time after lqstate() returns.
+      //      Under normal conditions, the client may rely on or wait for release completion
+      //      (navl() == 0, lqstate() == 0) in 50..100 ms.
+      // b_receiver:
+      //    specifies, for what end of the queue the function is called.
+      // iend_sender, dtms_end:
+      //    a) -2 (normal mode) - send messages as normal. Ignore dtms_end.
+      //    b) -1 - for all msgs. that are available currently: after dtms_end ms from now, pop (lose) ones that are not yet sent.
+      //    c) >= 0: after dtms_end ms from now, pop (lose) messages with index in local queue < iend_sender.
+      //    d) invalid args.: dtms_end < 0, or iend_sender <= -3.
+      //    NOTE Cases (b) and (c) offer reliable way to release all client message objects (cref_t<t_stringref>)
+      //      during limited amount of time, which is approx. (dtms_end + __bmdx_shmfifo_idle_t_long_mcs/1000. + 10) ms.
+      //      Some of use cases in applications:
+      //        1) all client messages, created in the shared library B, but sent through shmfifo_s in module A (executable or shared library),
+      //            must be released before unloading library A (i.e. before its static deinitialization).
+      //        2) if immediate sending of messages appears to be impossible (no recipient or it's hanged),
+      //            it may be necessary to discard the currently existing messages.
+      //            The application may detect that the local queue is "hanged" (e.g. ipop, taken from bufstate or lqstate,
+      //            does not grow during 1 s or more).
+      // Returns:
+      //    ret. code (also in this->res):
+      //      -2 - common case failure, no changes,
+      //      -1 - the local queue object is not created yet,
+      //      0 - the local queue is currently empty (ipush == ipop),
+      //      1 - the local queue is currently not empty (ipush > ipop).
+      //    *pipush, *pipop - the current (volatile) push/pop message index in the local queue.
+      //      Meaningful values are set only if lqstate returns >= 0  (i.e. only when the queue exists).
+      //        Otherwise, values are set to -1.
+    _s_ll lqstate(bool b_receiver, _s_ll* pipush = 0, _s_ll* pipop = 0, _s_ll iend_sender = -2, double dtms_end = 0) const throw()
+    {
+      if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
+      if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
+      if (dtms_end < 0 || iend_sender <= -3) { res = -2; return -2; }
+      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, b_receiver ? 1 : 0, _nbdflt); } catch (...) {} }
+      if (!_rq) { res = -1; return -1; }
+      if (_rq->buf.b_side1() != b_receiver) { res = -2; return -2; }
+      vnnqueue_t<cref_t<t_stringref> >& lq = _rq->msgs;
+      _s_ll ipu = lq.ipush(); const _s_ll ipo = lq.ipop(); if (pipush) { *pipush = ipu; } if (pipop) { *pipop = ipo; }
+      if (iend_sender >= -1 && !b_receiver)
+      {
+        critsec_t<shmqueue_ctx> __lock(_flags & 1 ? 10 : -1, -1, &_rq->csd); if (sizeof(__lock)) {}
+        ipu = lq.ipush(); if (pipush) { *pipush = ipu; } // avoiding concurrency with msend
+        _rq->mprg_client.iend = iend_sender >= 0 ? bmdx_minmax::myllmin(iend_sender, ipu) : ipu;
+        _rq->mprg_client.tms = bmdx::clock_ms() + dtms_end;
+        _rq->_mprg_ver += 1;
+      }
+      res = ipu > ipo ? 1 : 0; return res;
+    }
+
+
+      // Convenience function for msend.
+      //    Creates a byte array from msg.
+      //  b_byval:
+      //    true (dflt.) - the returned cref_t strongly references a by value copy of msg.
+      //    false:
+      //      1. The returned array points the given data itself (msg->pd()).
+      //      2. The data must exist until the last cref_t, pointing to that data, is destroyed. (Responsibility of the client.)
+      //      NOTE Even with b_byval false, the function makes small dynamic allocation, i.e., theoretically may fail.
+      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
+      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref>,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba(msg, b_byval, nbadd); }
+      //
+      // Convenience function for msend.
+      //    Creates a byte array as concatenation of copies of the given parts.
+      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
+      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_mp(part1, part2, part3, nbadd); }
+      //
+      // Convenience function for msend.
+      //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref>,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_z(nb, nbadd); }
+      //
+      // Convenience function for msend.
+      //  Creates cref_t, pointing to the given arrayref_t object (msg).
+      //  This function is the most efficient way of creating references to constant strings.
+      // Returns:
+      //  valid non-empty cref_t<t_stringref>.
+      //    The function does not fail. It does no dynamic allocations.
+      // Example.
+      //    At global or function scope:
+      //      static arrayref_t<char> kw("keyword");
+      //    usage:
+      //      shmqueue_s q("shared queue name");
+      //      q.msend(shmqueue_s::make_rrba(kw));
+      //
+    static cref_t<t_stringref> make_rrba(t_stringref& msg) throw()    { cref_t<t_stringref> rv; rv.assign(msg, false, 1); return rv; }
+
+
+
+
+
+
+      // Send a message (put into local queue, for automatic sending via shared memory buffer by dedicated thread).
+      // msg:
+      //    any kind of reference to message string.
+      //    Efficiency hints:
+      //          a) msg and/or prefix may contain strings as hidden aux. objects, and refer to them from their main object
+      //            (t_stringref, which is arrayref_t<char>).
+      //            By default, creating such object (e.g. see make_rba()) makes a copy of original data, which costs
+      //            memory allocation and bytes copying.
+      //          b) The client may choose to create and handle data object at once as embedded aux. object of cref_t<t_stringref>.
+      //            This is the most efficient way.
+      //          c) msg and/or prefix may refer to any data in any storage.
+      //            In this case, the storage may not be destroyed at least until the message
+      //              has factually been sent via shared memory by internal delivering thread.
+      //            The client may ensure that in one the following ways:
+      //              1) after calling msend, wait for this->navl() == 0, and then release the data.
+      //                This method is not recommended, because it becomes too complex when the client needs to queue
+      //                multiple messages without waiting for any of them being factually sent.
+      //              2) embed application-specific weak data pointer into msg or prefix.
+      //                (Weak pointer reference count will tell when the data is not used anymore by delivering thread.)
+      //              3) if data objects are swappable: construct cref_t<t_stringref> with hidden aux. object of the same type as data,
+      //                but is empty, and then move (or swap) the data object into aux. object.
+      //          d) static constant strings may be sent without any allocations. See make_rrba().
+      // timeout_ms:
+      //    <0 - block until shared memory buffer creation by the receiving side, or till an error.
+      //    0 - try sending once, and return the result immediately.
+      //    >0 - same as timeout_ms < 0, but returns 0 when timeout occurred.
+      //      or any message is received, or error occurs.
+      // prefix: if non-null object is given, its contained string is prepended to msg.
+      //    The resulting single string, sent via shared queue, will be exact concatention of (prefix, msg).
+      //    Only the client on the receiving side is responsible for recognizing prefixes.
+      //    (shmqueue_s does not interpret data in prefix or msg in any special way.)
+      //    NOTE prefix should be used to avoid extra allocations and data copying before passing through shared memory,
+      //      when main message is very long (e.g. 100 MB), but must be prepended with some metadata,
+      //      which helps the recipient to interpret it correctly.
+      //      Instead of 3 copies,
+      //          1) made by client, joining the prefix and main message before passing to msend,
+      //          2) made by delivering thread, copying data into shared memory,
+      //          3) made by receiving thread, copying data from shared memory into local memory,
+      //      only 2 copies are made (2, 3), because prefix and msg are copied sequentially
+      //        into shared memory, directly by the delivering thread.
+      //        This costs only one dynamic allocation (3).
+      //        If the recipient needs to pass the received data elsewhere, without prefix, it can forcefully set
+      //        t_stringref's pd(), n() to main message factual data offset and length in the received string.
+      //        (The prefix remains invisible part of the received object, but no extra memory allocations are done,
+      //        as it would be in case of copying main message into another local container.)
+      //  *pipush_last - push index for the message in the local queue.
+      //      Purpose: for later comparison with *pipush from lqstate(), to figure out if the message
+      //        has been already put (in whole) into shared memory.
+      //      *pipush_last is set to meaningful value only if message is sent (locally pushed) successfully,
+      //          i.e. if msend returns 1 or 2.
+      //        Otherwise, *pipush_last = -1.
+      // Returns (also in this->res):
+      //    2 - the message successfully pushed into the output queue.
+      //      (The receiving side exists, shared memory buffer is available. The message will be sent by servicing thread.)
+      //    1 (only on timeout_ms == 0 && (flags() & 2) != 0, which is non-default) - the message is queued,
+      //        but shared memory buffer currently does not exist, or not initialized by the receiving side.
+      //        See also flags().
+      //    0 (only on timeout_ms >= 0) - failure: timeout during shared memory initialization
+      //        by the receiving side (the program is not run, or more time needed?).
+      //    -1 - attempt to push message into the input queue.
+      //    -2 - failure (memory allocation, incompatibility, message too long, the queue is disabled, etc.).
+      //    -3 - shared memory is locked by some other side.
+      //    -4 - shared memory exists, but not ready yet (during initialization by the receiver side).
+    _s_long msend(cref_t<t_stringref> msg, double timeout_ms = 0, cref_t<t_stringref> prefix = cref_t<t_stringref>(), _s_ll* pipush_last = 0) const throw()
+    {
+      double t0 = clock_ms();
+      if (pipush_last) { *pipush_last = -1; }
+      if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
+      if (!msg) { res = -2; return -2; }
+      if (msg->n() > __bmdx_shmfifo_msg_nbytes_max) { res = -2; return -2; }
+      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, 2, _nbdflt); } catch (...) {} }
+      if (!_rq) { res = -2; return -2; }
+      if (_rq->buf.b_side1() != false) { res = -1; return -1; } // not expected to occur
+      while (true)
+      {
+        _s_long bufstate = _rq->bufstate; if ((bufstate & 0xff) == 2) { const _s_long st2 = bufstate >> 8; if (st2 == -1 || st2 == -3) { res = bufstate; return res; } bufstate = 0; }
+        bufstate &= 0xff; if (bufstate >= 4) { res = -2; return -2; }
+        if (bufstate == 3 || (bufstate <= 1&& timeout_ms == 0 && !!(_flags & 2)))
+        {
+          critsec_t<shmqueue_ctx> __lock(_flags & 1 ? 10 : -1, -1, &_rq->csd); if (sizeof(__lock)) {}
+          vnnqueue_t<cref_t<t_stringref> >& lq = _rq->msgs;
+          if (prefix) { res = lq.push_nf(new_pack3(prefix, msg), 3); }
+            else { res =  lq.push_1(msg); }
+          if (res != 1) { res = -2; return -2; }
+          if (pipush_last) { *pipush_last = lq.ipush() - 1; }
+          res = bufstate == 3 ? 2 : 1; return res;
+        }
+        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { res = 0; return 0; }
+        sleep_mcs(_idle_t_mcs);
+      }
+    }
+
+      // Convenience function.
+      //  Sends a copy of the given string(s), through msend(cref_t...).
+    _s_long msend(t_stringref msg, double timeout_ms = 0) const throw()    { return msend(_shmqueue_ctxx_impl::make_rba(msg, true), timeout_ms); }
+    _s_long msend(t_stringref msg, double timeout_ms, t_stringref prefix) const throw()    { return msend(_shmqueue_ctxx_impl::make_rba(msg, true), timeout_ms, _shmqueue_ctxx_impl::make_rba(prefix, true)); }
+
+
+
+
+
+
+
+      // Get next message (one already received by dedicated thread in full from shared memory buffer).
+      //    The result is put into this->d. (If this occurs, old contents of this->d are released even if not empty.)
       // timeout_ms:
       //    <0 - block until any message is received or error occurs.
       //    0 - check once (no sleep), and return a message if available.
-      //    >0 - while the queue is empty, check with regular intervals (5 ms), until timeout occurs,
+      //    >0 - while the queue is empty, check with regular intervals, until timeout occurs,
       //      or any message is received, or error occurs.
       // b_do_pop:
       //      true: pop message (remove from the queue).
       //      false: do not pop (i.e. peek only).
-      // Returns:
+      // Returns (also in this->res):
       //    1 - the message is available (popped or peeked as specified in mode).
       //      this->d contains valid object.
-      //    0 - no message in the queue (if timeout_ms > 0 was specified, then it has passed already)
+      //      NOTE this->d->pd() points to this->d->n() bytes of message, plus 1 zero byte appended (may be used as C string).
+      //    0 - no message in the queue (in case if timeout_ms > 0 was specified, then the time has passed already)
       //      this->d is cleared.
       //    -1 - attempt to pop message from the output queue
-      //    -2 - failure (memory allocation, incompatibility etc.).
+      //    -2 - failure (memory allocation, incompatibility, the queue is disabled, etc.).
       //    -3 - shared memory is locked by some other side.
       //  On any result < 0, this->d is not modified.
-    s_long get_message(long timeout_ms = 0, bool b_do_pop = true) const
+    _s_long mget(double timeout_ms = 0, bool b_do_pop = true) const throw()
     {
       double t0 = clock_ms();
-
-      if (!th().b_started) { res = -2; return -2; }
-
-      msg_queue* pq = 0;
-      cref_t<msg_queue> rq_prot;
-      try {
-        critsec_t<msg_queue> __lock(10, -1); if (sizeof(__lock)) {}
-        if (1)
-        {
-          cref_t<msg_queue>& rq = mqueues()[name];
-          pq = rq._pnonc_u();
-          nmqueues() = mqueues().size();
-          if (!pq) { rq.create2(1, name, true); } // true: receiver
-          rq_prot = rq;
-        }
-        pq = rq_prot._pnonc_u();
-        if (pq)
-        {
-          if (pq->buf.b_side1() != true) { res = -1; return -1; } // the queue already works in opposite direction
-          if (pq->buf.f_constructed() != 1)
-          {
-            int res2 = pq->reset(true);
-            if (res2 == -4) { res2 = 0; }
-            if (res2 < 0) { res = res2 == -1 ? -2 : res2; return res; }
-          }
-          // else already initialized correctly
-        }
-      } catch (...) {}
-      if (!pq) { res = -2; return -2; }
-
-        // Wait until the sending side completes sending the shared memory descriptor, or exit on timeout.
-      if (pq->buf.f_constructed() != 1 && timeout_ms != 0)
-      {
-        while (true)
-        {
-          if (1)
-          {
-            critsec_t<msg_queue> __lock(10, -1); if (sizeof(__lock)) {}
-            if (pq->buf.f_constructed() == 1) { break; }
-          }
-          if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { res = 0; return 0; }
-          sleep_mcs(5000);
-        }
-      }
-
-        // Wait until timeout, or error, or getting a non-empty object with message from the queue.
+      if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
+      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, 3, _nbdflt); } catch (...) {} }
+      if (!_rq) { res = -2; return -2; }
+      if (_rq->buf.b_side1() != true) { res = -1; return -1; } // not expected to occur
       while (true)
       {
-        if (1)
+        _s_long bufstate = _rq->bufstate; if ((bufstate & 0xff) == 2) { bufstate >>= 8; if (bufstate >= -1 || bufstate <= -4) { bufstate = -2; } res = bufstate; return res; }
+        bufstate &= 0xff; if (bufstate >= 4) { res = -2; return -2; }
+        if (_rq->msgs.navl() > 0)
         {
-          critsec_t<msg_queue> __lock(10, -1); if (sizeof(__lock)) {}
-          while (pq->msgs.size() > 0)
-          {
-            if (!pq->msgs.front()) { try { pq->msgs.pop_front(); } catch (...) { res = -2; return -2; } continue; }
-            if (b_do_pop)
-            {
-              cref_t<t_shmfifo_string> d2;
-              bmdx_str::words::swap_bytes(pq->msgs.front(), d2);
-              try { pq->msgs.pop_front(); } catch (...) { bmdx_str::words::swap_bytes(pq->msgs.front(), d2); res = -2; return -2; }
-              this->d = d2;
-            }
-            else
-            {
-              this->d = pq->msgs.front();
-            }
-            res = 1; return 1;
-          }
+          critsec_t<shmqueue_ctx> __lock(_flags & 1 ? 10 : -1, -1, &_rq->csd); if (sizeof(__lock)) {}
+          while (!_rq->msgs.front()) { _rq->msgs.pop_1(); }
+          this->d = _rq->msgs.front();
+          if (b_do_pop) { _rq->msgs.pop_1(); }
+          res = 1; return 1;
         }
-        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { this->d.clear(); res = 0; return 0; }
-        sleep_mcs(5000);
+        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { if (this->d) { this->d.clear(); } res = 0; return 0; }
+        sleep_mcs(_idle_t_mcs);
       }
     }
 
-    struct exc__pop_str : std::exception { const char* what() const throw() { return "shmfifo_s::_pop_str"; } };
+    struct exc_mget_str : std::exception { const char* what() const throw() { return "shmqueue_s::_mget_str"; } };
 
       // Convenience function.
-      //  Pops message into this->d, then returns its copy as std string.
-      //  On no message, the returned string is empty, as well as this->d.
-      //  On any error, an exception is generated.
-      //  After exception, this->d may still contain a message, which will be returned on the next call to pop_str.
-    std::string pop_str(long timeout_ms = 0)
+      //  Gets the next message as std::string.
+      //    a) If this->d is not empty, returns its copy as std::string. At the same time, this->d is cleared.
+      //    b) If this->d is empty, gets the next message into this->d. If a message has been received: see (a).
+      //    c) If this->d is empty, and no next message available, returns std::string().
+      //    d) On failure (e.g. allocation), an exception is generated.
+      //      In this case, this->d is not cleared. It may still contain a message,
+      //      which will be returned on the next call to mget_str (or may be read directly by the client).
+      // Returns in this->res:
+      //    a) 1 if this->d already contained a message.
+      //    b) the result of mget() call (i.e. 1 if a new message has been popped and put into this->d, 0 if no new message, <0 on error).
+    std::string mget_str(long timeout_ms = 0)
     {
-      struct __local_des { shmfifo_s* p; __local_des(shmfifo_s& x_) : p(&x_) {} ~__local_des() { if (p) { p->d.clear(); } } };
-      if (!this->d)
+      struct __local_des { shmqueue_s* p; __local_des(shmqueue_s& x_) : p(&x_) {} ~__local_des() { if (p) { p->d.clear(); } } };
+      if (this->d) { res = 1; }
+      else
       {
-        s_long res2 = get_message(timeout_ms);
-        if (res2 < 0) { throw exc__pop_str(); }
-        if (res2 == 0) { return std::string(); }
+        mget(timeout_ms);
+        if (res < 0) { throw exc_mget_str(); }
+        if (res == 0) { return std::string(); }
       }
       __local_des des(*this);
-      #if __bmdx_shmfifo_valtype_string
-        try { return this->d.ref(); } catch (...) { des.p = 0; }
-      #else
-        try { return this->d.ref().str(); } catch (...) { des.p = 0; }
-      #endif
-      throw exc__pop_str();
+      try { return std::string(this->d->pd(), size_t(this->d->n())); } catch (...) { des.p = 0; }
+      throw exc_mget_str();
     }
   };
 
 
 }
 
-} using namespace _bmdx_shm::_api; } // end all namespaces
+} using namespace _bmdx_shm::_api; } // end namespace bmdx_shm
 
-#endif // bmdx_shmem_H
-#endif // bmdx_part_shm
+
+#undef _s_long
+#undef _s_ll
+#undef _u_ll
+
+#endif // bmdx_cpiomt_H
+
+
+

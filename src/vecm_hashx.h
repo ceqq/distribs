@@ -1,14 +1,39 @@
-// vecm_hashx.h 1.6
-// High-performance transactional vector and hash map with access by key and ordinal number.
-// rev. 2019-08-12
-// Author: Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine/ex-USSR, 2014-2019)
-// Project website: hashx.dp.ua
+// BMDX library 1.3 RELEASE for desktop & mobile platforms
+//  (binary modules data exchange)
+//  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
+// rev. 2020-04-09
+//
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
-// See also "Guidelines for using this file" at its end.
+// Project website: hashx.dp.ua
+//
+// Copyright 2004-2020 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+// The Software is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the Software or the use or other dealings in the Software.
+// https://opensource.org/licenses/MIT
+
+
+// In vecm_hashx.h:
+//
+//    struct vecm
+//    template struct hashx
+//    template struct vec2_t - alternative vector with O(N^0.5) insert/remove and memory-efficient appending.
+//    template struct ordhs_t - hashed map (ordered & hashed associative container) with access by key and ordinal number.
+//
+//    template struct storage_t - local variable storage with controllable automatic construction and destruction.
+//    template struct iterator_t - iterator for vec2_t.
+//
+// Usage notes and documentation:
+//    1. On vecm, hashx: see "Guidelines for using this file" at its end.
+//    2. arch_notes.txt.
 
 #ifndef yk_c_vecm_hashx_H
 #define yk_c_vecm_hashx_H
+
 #include <new>
+#include <iterator>
+#include <exception>
 
 #undef _yk_reg
 #if __cplusplus > 199711L
@@ -31,6 +56,7 @@
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
   #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wunused-function"
   #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
   #pragma GCC diagnostic ignored "-Wdeprecated"
@@ -38,8 +64,8 @@
 #endif
 #ifdef _MSC_VER
   #pragma warning(disable:4290)
+  #pragma warning(disable:4100)
 #endif
-
 #if __APPLE__ && __MACH__
   #define __vecm_noarg , yk_c::meta::t_noarg = yk_c::meta::t_noarg()
   #define __vecm_noarg1 yk_c::meta::t_noarg = yk_c::meta::t_noarg()
@@ -108,7 +134,7 @@ struct meta
   typedef find_size_n<8, signed long long int, signed long int, signed int>::result s_ll;
   typedef find_size_n<8, unsigned long long int, unsigned long int, unsigned int>::result u_ll;
 
-    // Type to hold signed diffirence of pointers.
+    // Type to hold signed difference of pointers.
   typedef if_t<(sizeof(void*) > 4), s_ll, s_long>::result t_pdiff;
 
     // is_ptr::result is true if T1 is a pointer, otherwise false
@@ -381,6 +407,9 @@ struct bytes
     //    will have pcd_o non-0 (for storage recovery).
   template<class TA, class Aux = meta::nothing> struct config_cd_t { enum { enable = false }; };
 
+  #undef __vecm_hashx_null_pchar
+  #define __vecm_hashx_null_pchar ((char*)1 - 1)
+
     // Type-ignorant moving memory blocks.
     //    n specifies the number of bytes.
     //    May be specialized for trivial types like char, short etc., but this is not recommended.
@@ -389,34 +418,77 @@ struct bytes
     //  NOTE In 32-bit system, max. size of moved memory block is 2^31-1.
   template<class T, class Aux = meta::nothing, class _ = __vecm_tu_selector> struct memmove_t
   {
-    static inline void F(void* dest, const void* src, meta::t_pdiff n) throw() // 1) dest, src are valid, 2) 32-bit arch. n == [0..2^31 - 1]
+    typedef meta::t_pdiff t_pdiff;
+    typedef meta::s_ll s_ll;
+    typedef meta::s_long s_long;
+    static inline void F(void* dest_, const void* src_, t_pdiff n) throw() // 1) dest, src are valid, 2) 32-bit arch. n == [0..2^31 - 1]
     {
-      if (n < 8)
+      if (dest_ == src_ || n <= 0) { return; }
+      char* s = (char*)src_;
+      char* d = (char*)dest_;
+      if (s > d)
       {
-        if (n == 4)
+        t_pdiff als = (s - __vecm_hashx_null_pchar) & 7;
+        t_pdiff ald = (d - __vecm_hashx_null_pchar) & 7;
+        char* const d3 = d + n;
+        if (als == ald)
         {
-          _yk_reg s_long h = s_long((reinterpret_cast<char*>(dest)-static_cast<char*>(0)) | (reinterpret_cast<const char*>(src)-static_cast<const char*>(0)));
-          h &= 3; if (h == 0 && dest != src) { *reinterpret_cast<s_long*>(dest) = *reinterpret_cast<const s_long*>(src); return; }
+          typedef s_ll word; enum { shift = 3 };
+          if (als) { char* d2 = d + sizeof(word) - als; if (d2 > d3) { d2 = d3; } do { *d++ = *s++; } while (d != d2); }
+          if (1) { word* d2 = (word*)d + ((d3 - d) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *qd++ = *qs++; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+          while (d != d3) { *d++ = *s++; }
+          return;
         }
-        if (n < 1) { return; }
-        if (dest < src) { _yk_reg meta::t_pdiff n1 = n; _yk_reg const char* q = reinterpret_cast<const char*>(src); _yk_reg char* q2 = reinterpret_cast<char*>(dest); do { *q2++ = *q++; } while (--n1); }
-        else if (dest > src) { _yk_reg meta::t_pdiff n1 = n; _yk_reg const char* q = reinterpret_cast<const char*>(src); q += n1; --q; _yk_reg char* q2 = reinterpret_cast<char*>(dest); q2 += n1; --q2; do { *q2-- = *q--; } while (--n1); }
+        if (!((als ^ ald) & 3))
+        {
+          als &= 3;
+          typedef s_long word; enum { shift = 2 };
+          if (als) { char* d2 = d + sizeof(word) - als; if (d2 > d3) { d2 = d3; } do { *d++ = *s++; } while (d != d2); }
+          if (1) { word* d2 = (word*)d + ((d3 - d) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *qd++ = *qs++; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+          while (d != d3) { *d++ = *s++; }
+          return;
+        }
+        if (1)
+        {
+          typedef s_ll word; enum { shift = 3 };
+          if (ald) { char* d2 = d + sizeof(word) - ald; if (d2 > d3) { d2 = d3; } do { *d++ = *s++; } while (d != d2); }
+          if (1) { word* d2 = (word*)d + ((d3 - d) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *qd++ = *qs++; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+          while (d != d3) { *d++ = *s++; }
+          return;
+        }
       }
       else
       {
-        _yk_reg s_long h = s_long((reinterpret_cast<char*>(dest)-static_cast<char*>(0)) | (reinterpret_cast<const char*>(src)-static_cast<const char*>(0)));
-        h &= 7;
-        if (dest < src)
+        char* const d0 = d; d += n; s += n;
+        t_pdiff als = (s - __vecm_hashx_null_pchar) & 7;
+        t_pdiff ald = (d - __vecm_hashx_null_pchar) & 7;
+        if (als == ald)
         {
-          if (h == 0) { _yk_reg const meta::s_ll* p = reinterpret_cast<const meta::s_ll*>(src); _yk_reg meta::s_ll* p2 = reinterpret_cast<meta::s_ll*>(dest); _yk_reg meta::t_pdiff n1 = n; n1 >>= 3; do { *p2++ = *p++; } while (--n1); n1 = n; n1 &= 7; if (n1) { _yk_reg const char* q = reinterpret_cast<const char*>(p); _yk_reg char* q2 = reinterpret_cast<char*>(p2); do { *q2++ = *q++; } while (--n1); } return; }
-          h &= 3; if (h == 0) { _yk_reg const s_long* p = reinterpret_cast<const s_long*>(src); _yk_reg s_long* p2 = reinterpret_cast<s_long*>(dest); _yk_reg meta::t_pdiff n1 = n; n1 >>= 2; do { *p2++ = *p++; } while (--n1); n1 = n; n1 &= 3; if (n1) { _yk_reg const char* q = reinterpret_cast<const char*>(p); _yk_reg char* q2 = reinterpret_cast<char*>(p2); do { *q2++ = *q++; } while (--n1); } return; }
-          _yk_reg meta::t_pdiff n1 = n; if (n1) { _yk_reg const char* q = reinterpret_cast<const char*>(src); _yk_reg char* q2 = reinterpret_cast<char*>(dest); do { *q2++ = *q++; } while (--n1); }
+          typedef s_ll word; enum { shift = 3 };
+          if (als) { char* d2 = d - (als < n ? als : n); do { *--d = *--s; } while (d != d2); }
+          if (d == d0) { return; }
+          if (1) { word* d2 = (word*)d - ((d - d0) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *--qd = *--qs; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+          while (d != d0) { *--d = *--s; }
+          return;
         }
-        else if (dest > src)
+        if (!((als ^ ald) & 3))
         {
-          if (h == 0) { _yk_reg meta::t_pdiff n1 = n; n1 &= 7; if (n1) { _yk_reg const char* q = reinterpret_cast<const char*>(src); q+=n; --q; _yk_reg char* q2 = reinterpret_cast<char*>(dest); q2+=n; --q2; do { *q2-- = *q--; } while (--n1); } n1 = n;  n1 >>= 3; _yk_reg const meta::s_ll* p = reinterpret_cast<const meta::s_ll*>(src); p += n1; --p; _yk_reg meta::s_ll* p2 = reinterpret_cast<meta::s_ll*>(dest); p2 += n1; --p2; do { *p2-- = *p--; } while (--n1); return; }
-          h &= 3; if (h == 0) { _yk_reg meta::t_pdiff n1 = n; n1 &= 3; if (n1) { _yk_reg const char* q = reinterpret_cast<const char*>(src); q+=n; --q; _yk_reg char* q2 = reinterpret_cast<char*>(dest); q2+=n; --q2; do { *q2-- = *q--; } while (--n1); } n1 = n;  n1 >>= 2; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(src); p += n1; --p; _yk_reg s_long* p2 = reinterpret_cast<s_long*>(dest); p2 += n1; --p2; do { *p2-- = *p--; } while (--n1); return; }
-          _yk_reg meta::t_pdiff n1 = n; if (n1) { _yk_reg const char* q = reinterpret_cast<const char*>(src); q+=n1; --q; _yk_reg char* q2 = reinterpret_cast<char*>(dest); q2+=n1; --q2; do { *q2-- = *q--; } while (--n1); }
+          als &= 3;
+          typedef s_long word; enum { shift = 2 };
+          if (als) { char* d2 = d - (als < n ? als : n); do { *--d = *--s; } while (d != d2); }
+          if (d == d0) { return; }
+          if (1) { word* d2 = (word*)d - ((d - d0) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *--qd = *--qs; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+          while (d != d0) { *--d = *--s; }
+          return;
+        }
+        if (1)
+        {
+          typedef s_ll word; enum { shift = 3 };
+          if (ald) { char* d2 = d - (ald < n ? ald : n); do { *--d = *--s; } while (d != d2); }
+          if (d == d0) { return; }
+          if (d - s >= 8) { word* d2 = (word*)d - ((d - d0) >> shift); if ((word*)d != d2) { _yk_reg word* qd = (word*)d; _yk_reg word* qs = (word*)s; do { *--qd = *--qs; } while (qd != d2); d = (char*)qd; s = (char*)qs; } }
+          while (d != d0) { *--d = *--s; }
+          return;
         }
       }
     }
@@ -514,15 +586,17 @@ public:
     // Type enumerator. T are types that are enumerated. Aux is reserved, must be meta::nothing.
     //    ind() performs synchronized unique index generation and setting xind once to that value.
     //    (Initially, xind == 0.)
-    //  Ways of run-time type checking:
+    //  NOTE Automatically generated indices start from 1.
+    //    0 stands for invalid value.
+    //    Negative values have special meaning.
+    //    Types with fixed binary structure may be assigned neg. indices, by static declaration.
+    //    This allows specially designed values and objects crossing binary module boundaries,
+    //    and being checked for compatibility on the side of target module.
+    //    For example, see bytes::type_index_t<char>.
+    //  NOTE struct vecm: ways of run-time type checking:
     //      if (_t_ind != bytes::type_index_t<T>::ind()) { ... }
     //      if (_t_ind != bytes::type_index_t<T>::xind) { if (_t_ind != bytes::type_index_t<T>::ind()) { ... } }
     //    The second way is generally faster.
-    //  NOTE Automatically generated indices start from 1. 0 stands for invalid value.
-    //    Negative values have special meaning.
-    //    (Types with fixed binary structure may be assigned neg. indices.
-    //    This allows for their high-level crossing module boundary as elements of vecm object.
-    //    For example, see bytes::type_index_t<char>.)
   template<class T, class Aux = meta::nothing, class _ = __vecm_tu_selector> struct type_index_t
   {
     static s_long xind; // (NOTE Keep const!) type index value (variable is allocated in each transl. unit, but values are kept same per module or per compiler)
@@ -618,7 +692,7 @@ protected:
   struct _column;
   struct _ff_mc1_base
   {
-    void* __p0; _ff_mc1_base() { __p0 = this; } // correct same in yk_cx
+    void* __p0; _ff_mc1_base() { __p0 = this; }
     virtual const type_descriptor& rtd() = 0;
     virtual ~_ff_mc1_base() {}
   };
@@ -792,7 +866,7 @@ protected:
   }
 
     // Local destructor.
-    //    Clears the container and marks it invalid by settting _t_ind = 0.
+    //    Clears the container and marks it invalid by setting _t_ind = 0.
   inline void _l_destroy(__vecm_noarg1) const throw()
   {
     if (!(this && _t_ind)) { return; }
@@ -1107,7 +1181,7 @@ protected:
     // Transactional, for this obj. only.
     // Copying *psrc to *pdest on transactional moving.
     //  Both *psrc and *pdest are considered as valid objects.
-    // ibu is the number of elements currenly occupying BU. BU must be at least sizeof(T)*(ibu+1) long.
+    // ibu is the number of elements currently occupying BU. BU must be at least sizeof(T)*(ibu+1) long.
     // 1. *pdest is backed up. 2. T(src) is invoked on pdest.
     //  No destructor call for pdest and psrc is made.
     // Returns:
@@ -1126,7 +1200,7 @@ protected:
     // Transactional, for this obj. only.
     // Copying *psrc to *pdest on transactional moving.
     //  *psrc is considered as valid object, *pdest is considered uninitialized.
-    // ibu is the number of elements currenly occupying BU. BU must be at least sizeof(T)*(ibu+1) long.
+    // ibu is the number of elements currently occupying BU. BU must be at least sizeof(T)*(ibu+1) long.
     // 1. T(src) is invoked on pdest. 2. If step 1 succeeds, src is backed up.
     //  No destructor call for pdest and psrc is made.
     // Returns:
@@ -1182,7 +1256,7 @@ protected:
 
     // 1: the element has been found (i == [0..n()-1], pk != 0).
     // 0: the element is not found (i == [0..n()] -- place of insertion, pk == 0).
-    // -2: an exception occured (i == -1, pk == 0).
+    // -2: an exception occurred (i == -1, pk == 0).
     //  NOTE Default less may be:
     //    bytes::less_t<K, K2>()
   template<class K, class K2, class C>
@@ -1368,7 +1442,7 @@ protected:
       }
     };
 
-      // Transactinal copying elements to the same positions in the new column.
+      // Transactional copying elements to the same positions in the new column.
       //    Destination column req.: 1) same capacity as source, 2) destination storages are not initialized.
       //  Returns 0 if all done successfully. -1 if copying is disallowed (cmode == 0).
       //    In case of error, all new elements in cdest are destroyed, and the number of errors is returned
@@ -1534,8 +1608,8 @@ public:
     //    3 - use meta::destroy_t (must be specialized for this case).
     //
     // moverMode:
-    //    4 - use memmove_t. Exceptioless moving by byte-level copying. Only for objects that do not depend on memory address change.
-    //    3 - use meta::safemove_t specialization, supplied by the client. It performs exceptioless moving + manipulations
+    //    4 - use memmove_t. Exceptionless moving by byte-level copying. Only for objects that do not depend on memory address change.
+    //    3 - use meta::safemove_t specialization, supplied by the client. It performs exceptionless moving + manipulations
     //          with object memory address, if necessary. In this mode, it's guaranteed that, as vecm element,
     //          only one object occupies the same memory location at a time. (Container modifications do not back up objects.)
     //    2 - use meta::trymove_t (must be specialized for this case). Moving is not guaranteed, even if trymove_t is internally faultless.
@@ -1543,7 +1617,7 @@ public:
     //          Nonetheless, in transactional mode, copier of copierMode + destructor of destructorMode will be called everywhere
     //          where >= 2 elements may be moved. (The transaction must first successfully copy all objects that should be moved,
     //          and then only destroy all unnecessary objects.)
-    //          The only remarkable exception is transactionsl el_remove_1 with move_last == true,
+    //          The only remarkable exception is transactional el_remove_1 with move_last == true,
     //          which in moverMode 2 really uses meta::trymove_t for moving the last element.
     //        In transactional mode with moverMode 1 and 2, 2 client objects may temporarily occupy the same address
     //          during single modification operation (due to backing up). The order of destruction may be different in each particular case.
@@ -1610,7 +1684,7 @@ public:
       //    A modifying operation on elements sequence normally results in only one of the two cases:
       //      a) operation has been completed in full.
       //      b) operation has failed on copying/moving an object.
-      //          All partial modifications of the elements sequence are cancelled.
+      //          All partial modifications of the elements sequence are canceled.
       //          (To ensure this for types whose objects cannot be safely moved,
       //          the modification functions temporarily allocate some memory
       //          and back up objects that will be overwritten.)
@@ -1771,7 +1845,7 @@ public:
 
     // Static information. Transactionality of modifying the elements sequence.
     //    true if all vecm modification (member) operations result in either full completion,
-    //      or in cancelling any changes. This is the default configuration for all types.
+    //      or in canceling any changes. This is the default configuration for all types.
     //    false if at least one of them may leave vecm element(s) in undefined or corrupted state.
     //    false also if the container is invalid.
     //  NOTE is_transactional reports only the worst case of the container behavior.
@@ -1786,7 +1860,7 @@ public:
     //      May be increased after any modifying function, even if it returns a success code.
     //      If a function accidentally finds an integrity assertion break, nexc() is also increased.
     //  nexc() is internally an integer value that is shorter than s_long.
-    //    It may become negative and not change any further. This means "too many errors occured".
+    //    It may become negative and not change any further. This means "too many errors occurred".
     //    To reset nexc() to 0, call vecm_set0_nexc().
     //  NOTE nexc() also becomes 0 after vecm_clear().
   inline s_long nexc() const throw() { return _nxf >> _xsh; }
@@ -1797,7 +1871,7 @@ public:
     //  Returns:
     //  1 - normal. nexc() == 0.
     //  0 - normal. All elements are correct. nexc() != 0.
-    //      This state indicates that during prev. operations, exceptions occured in element constructors and destructors
+    //      This state indicates that during prev. operations, exceptions occurred in element constructors and destructors
     //        on temporary and already removed elements.
     //      Positive nexc() is the exact number of exceptions.
     //      Negative nexc() means too many exceptions.
@@ -1835,10 +1909,10 @@ public:
     //    Only the client is responsible for correct processing in this case.
   inline s_long integrity(__vecm_noarg1) const throw() { if (!this) { return -3; } if (!_t_ind) { return -2; } if (!_ptd) { return -3; } if (_ptd->psig != __psig_i<>::F() &&  *_ptd->psig != *__psig_i<>::F()) { return -3; } if (_f_unsafe()) { return -1; } return _nxf & _xm ? 0 : 1; }
 
-    // Fast check if this container is created in this module or another module.
+    // Fast check if this container is created in this binary module or another module.
     //  NOTE integrity(), locality(), compatibility() work correctly independently on each other.
     //  Returns:
-    //    1 - the container is created in this module.
+    //    1 - the container is created in this binary module.
     //    0 - the container is created in another module.
     //    -1 - the container is invalid (integrity() is -2 or -3).
     //  NOTE If non-local object is dynamically created (new), it may be correctly deleted
@@ -1855,14 +1929,14 @@ public:
     //      locality() == 0 --> compatibility() may be [-2..1].
     //  NOTE This check doesn't distinguish integrity() -1, 0, 1 (when returns -1, 0, 1, 2).
     //  Returns:
-    //    2 - usable, the container is created in this module.
+    //    2 - usable, the container is created in this binary module.
     //    1 - usable, the container is created in another module. All operations are working.
     //    0 - partially usable. The container (x) is from another module.
     //        Informational and flag functions (n, nbase ... vecm_set* ... is_transactional ... null_state) succeed.
     //        Modifiers that succeed:
-    //          vecm(x) -- copying to a new local container. Only on x.inegrity() >= 0. The copy is fully usable in the current module.
-    //          c.vecm_copy(x) -- copying to a local container c. Only on x.inegrity() >= 0. The copy is fully usable in the current module.
-    //          x.vecm_copy(z) -- copying to the non-local x. If z.compatibiltiy() >= 0 in the binary module of x,
+    //          vecm(x) -- copying to a new local container. Only on x.integrity() >= 0. The copy is fully usable in the current module.
+    //          c.vecm_copy(x) -- copying to a local container c. Only on x.integrity() >= 0. The copy is fully usable in the current module.
+    //          x.vecm_copy(z) -- copying to the non-local x. If z.compatibility() >= 0 in the binary module of x,
     //              the function will succeed. x remains usable only in its module.
     //          x.vecm_clear -- always.
     //          x.vecm_delete (for x that is dynamically created) -- always.
@@ -1929,7 +2003,7 @@ public:
     //
     //  Requirements for T:
     //
-    //    1. T must have an accessible desturctor.
+    //    1. T must have an accessible destructor.
     //    2. By dflt., T must have an accessible copy constructor.
     //      This is for normal operations on elements:
     //      insert, remove, append, copy etc..
@@ -1975,7 +2049,7 @@ public:
     //        The container is empty. From x, only the element type and nbase() are copied.
     //          nexc():
     //              == 1 (copying failed),
-    //              >= 2 or negative (copying and some temp. elem. desructors are failed).
+    //              >= 2 or negative (copying and some temp. elem. destructors are failed).
     //          integrity() == 0.
     //    d) copying failed.
     //        x is invalid, unsafe or incompatible.
@@ -1990,7 +2064,7 @@ public:
   inline ~vecm() throw( __vecm_noargt1) { if (!(this && _t_ind && _ptd && (_ptd->psig == __psig_i<>::F() || *_ptd->psig == *__psig_i<>::F()))) { return; } _ptd->pvecm_destroy(this); }
 
     // Copying x to *this.
-    //  is_tr true: transactional copying. If it fails, all changes are cancelled.
+    //  is_tr true: transactional copying. If it fails, all changes are canceled.
     //      NOTE The old object is destroyed only after the new has been created.
     //  is_tr false: the operation behaves like ~vecm() + vecm(const vecm&).
     //      NOTE (!) is_tr false may not be used for copying between container and its own element,
@@ -1999,8 +2073,8 @@ public:
     //    this->nrsv() is set to min. value. not that of x or preserved.
     //  Returns:
     //    1 on success. (Also if this == &x.)
-    //        nexc() may be > 0 if a number of failures occured in the old object during destruction.
-    //    0 (only on is_tr == true) the operation failed, changes are cancelled.
+    //        nexc() may be > 0 if a number of failures occurred in the old object during destruction.
+    //    0 (only on is_tr == true) the operation failed, changes are canceled.
     //        nexc() is increased by 1 + the number of exceptions in destructors
     //        of the temporary objects.
     //    -1 (only on is_tr == false) copying has been completed unsuccessfully.
@@ -2042,7 +2116,7 @@ public:
     //    The space left is freed if can_shrink() is true.
     // Returns:
     //  >0 on success - the number of elements removed (previous n()).
-    //      nexc() may indicate errors occured during elements destruction.
+    //      nexc() may indicate errors occurred during elements destruction.
     //  0 if the container was empty (n() == 0). Nothing is done,
     //      except possible storage space reserve freeing.
     //  -1 if the container object is invalid (integrity() == -2). Nothing done.
@@ -2232,8 +2306,8 @@ public:
     //    1 if the element was successfully inserted.
     //    -1 on parameter checks error (integrity, x type, ind range). Nothing done.
     //    -2: failed before insertion. Not enough memory or an assertion failed. Nothing done.
-    //    -3: failed during transcational insertion (dflt. for all types).
-    //        All changes are CANCELLED. The place may be once left a bit larger than it was (like in el_append).
+    //    -3: failed during transactional insertion (dflt. for all types).
+    //        All changes are CANCELED. The place may be once left a bit larger than it was (like in el_append).
     //    -4: failed during non-transactional insertion.
     //        Operation is forcibly COMPLETED. n() is increased by 1. Integrity state is set to -1.
     //        >=1 arbitrary element may be left with invalid value.
@@ -2362,7 +2436,7 @@ public:
       s_long k01 = k0; if (nL <= nR) { --k01; if (k01 < 0) { k01 += cap_j; } }
       px1 = _pj[j].at_ku<T>(k01, cap_j);
       xc = 0; _copy_1u_t<TF, false>::F(_ptd, px1, x, xc);
-      if (xc) // cancelling
+      if (xc) // canceling
       {
         n = m2;
         if (n > m1) { k2 = k01; px1 = _pj[j].at_ku<T>(k2, cap_j); do { k2 -= dir; if (k2 < 0) { k2 += cap_j; } px2 = _pj[j].at_ku<T>(k2, cap_j); _ptd->p_move_1(px1, px2); --n; px1 = px2; } while (n > m1); }
@@ -2379,7 +2453,7 @@ public:
       ++_n; ++_size_k; if (b1) { ++_last_j; _size_k = 1; }
       return 1;
     }
-    else // non-transcational op.
+    else // non-transactional op.
     {
       if (_ptd->cmode == 0) { if (!meta::resolve_TF<TF, meta::tag_construct>::use_functor) { return -2; } }
       if (_ptd->mmode == 0) { return -2; }
@@ -2435,8 +2509,8 @@ public:
     //        (Additionally, nexc() > 0 may indicate that destructor of the last element has failed.)
     //    -1 on parameter checks error (integrity, x type, ind range). Nothing done.
     //    -2: failed before removal. Not enough memory or an assertion failed. Nothing done.
-    //    -3: failed during transcational removal (dflt. for all types).
-    //        All changes are CANCELLED.
+    //    -3: failed during transactional removal (dflt. for all types).
+    //        All changes are CANCELED.
     //    -4: failed during non-transactional removal.
     //        Operation is forcibly COMPLETED. n() is decreased by 1. Integrity state is set to -1.
     //        >=1 arbitrary element may be left with invalid value.
@@ -2480,7 +2554,7 @@ public:
           _tr_bu_free(bu);
         }
       }
-      else // non-transcational op.
+      else // non-transactional op.
       {
         if (_ptd->dmode) { if (_ptd->p_destroy_1(px) < 0) { if (_nxf >= 0) { _nxf += _xd; } } }
         _move_1u_t<T, true>::F(_ptd, px, px_last, _nxf, xc);
@@ -2551,7 +2625,7 @@ public:
           return 1;
         }
       }
-      else // non-transcational op.
+      else // non-transactional op.
       {
         s_long xc(0);
         if (j < _last_j) // remove el. from column j, shift el. pos. in all the next columns by 1 backw.
@@ -2595,7 +2669,7 @@ public:
     //    -1 on parameter checks error (integrity, x type or m<0). Nothing done.
     //    -2: failed before appending. Not enough memory or an assertion failed. Nothing done.
     //    -3: failed during elements appending.
-    //        All changes to the elements sequence are cancelled. The place reserve is also reverted.
+    //        All changes to the elements sequence are canceled. The place reserve is also reverted.
     //        (On the first failure on appending 1 element (m == 1),
     //        the place reserve may be left a bit larger than it was, due to using el_append.)
   template<class TF>
@@ -2669,8 +2743,8 @@ public:
     //    m (== 0): Nothing done.
     //    -1 on parameter checks error (integrity, x type, ind/m range). Nothing done.
     //    -2: failed before insertion. Not enough memory or an assertion failed. Nothing done.
-    //    -3: failed during transcational insertion (dflt. for all types).
-    //        All changes are CANCELLED. The place reserve is also reverted.
+    //    -3: failed during transactional insertion (dflt. for all types).
+    //        All changes are CANCELED. The place reserve is also reverted.
     //        (In case of appending 1 element (m == 1 and ind == nbase() + n()),
     //        the place reserve may be left a bit larger than it was, because of using el_append.)
     //    -4: failed during non-transactional insertion.
@@ -2768,7 +2842,7 @@ public:
       while (q < m1) { _ptd->p_move_1(ld.pval(), ls.pval()); ++q; ls.decr(); ld.decr(); }
       ld.set_ind0(ind); s_long xc(0); while (q2 < m) { _copy_1u_t<TF, false>::F(_ptd, ld.pval(), x, xc); if (xc) { break; } ++q2; ld.incr(); }
 
-      if (xc) // cancelling
+      if (xc) // canceling
       {
         if (q2 > 0 && _ptd->dmode) { ld.set_ind0(ind); do { if (_ptd->p_destroy_1(ld.pval()) < 0) { if (_nxf >= 0) { _nxf += _xd; } } --q2; ld.incr(); } while (q2 > 0); }
         if (q > 0) { ld.set_ind0(ind); ls.set_ind0(ind + m); do { _ptd->p_move_1(ld.pval(), ls.pval()); --q; ls.incr(); ld.incr(); } while (q > 0); }
@@ -2817,8 +2891,8 @@ public:
     //    m (== 0): Nothing done.
     //    -1 on parameter checks error (integrity, x type, ind/m range). Nothing done.
     //    -2: failed before removal. Not enough memory or an assertion failed. Nothing done.
-    //    -3: failed during transcational removal (dflt. for all types).
-    //        All changes are CANCELLED.
+    //    -3: failed during transactional removal (dflt. for all types).
+    //        All changes are CANCELED.
     //    -4: failed during non-transactional removal.
     //        Operation is forcibly COMPLETED. n() is decreased by m. Integrity state is set to -1.
     //        >=1 arbitrary element may be left with invalid value.
@@ -3169,7 +3243,7 @@ namespace
 
       // Search for type descriptor able to copy data from vecm with p.
       //  Returns (in order of preference):
-      //      a) p if p is from this module.
+      //      a) p if p is from this binary module.
       //      b) on allow_ta == true, if found: cross-module descriptor compatible with p->ta_ind.
       //      c) on allow_t == true, if found: cross-module descriptor compatible with p->t_ind.
       //      d) 0 if no match.
@@ -3262,7 +3336,7 @@ template<class T, bool b, class _bs> struct meta::type_equi<vecm::link1_t<T, b, 
 struct hashx_common
 {
   enum { no_elem = -1 };
-  enum EHashOpExc { hoxOpFailed = 1 };
+  enum EHashOpExc { hoxOpFailed = 1, hoxKeyNotFound = 2 };
 
   template<class KA, class VA> struct _select_entry;
 
@@ -3343,7 +3417,7 @@ struct hashx_common
 
     template<class T> struct _hashf_t<T, 1> { _vecm_hashx_hdfd s_long F(double key) { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; } };
     template<class T> struct _hashf_t<T, 2> { _vecm_hashx_hdfd s_long F(s_long key) { return key >> 17 ^ key * 37; } };
-    template<class T> struct _hashf_t<T, 3> { _vecm_hashx_hdfd s_long F(const T& key) { const T k[1] = { key }; _yk_reg s_long h = 0; _yk_reg const char* p = reinterpret_cast<const char*>(&k[0]); _yk_reg s_long n = sizeof(T); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= 53970; return h; } };
+    template<class T> struct _hashf_t<T, 3> { _vecm_hashx_hdfd s_long F(const T& key) { const T k[1] = { key }; _yk_reg s_long h = 0; _yk_reg const char* p = reinterpret_cast<const char*>(&k[0]); _yk_reg s_long n = sizeof(T); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(sizeof(T)); h ^= 53970; return h; } };
 
     template<class T> struct _hashf_t<T, 4> { _vecm_hashx_hdfd s_long F(const void* p) { return _hashf_t<T, 2>().F(reinterpret_cast<const char*>(p)-static_cast<const char*>(0)); } };
     template<class T> struct _hashf_t<T, 6> { _vecm_hashx_hdfd s_long F(const void* p) { return _hashf_t<T, 3>().F(p); } };
@@ -3375,8 +3449,8 @@ struct hashx_common
   template<class S, int __kind, class _> struct _kf_string<S, __kind, typename S::value_type, typename S::traits_type::char_type, _>
   {
     enum { _kf_kind = __kind }; typedef typename S::value_type t_char;
-    inline s_long operator () (const S& key) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg meta::t_pdiff n = key.size(); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= 53970; return h; }
-    inline s_long operator () (const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= 53970; return h; }
+    inline s_long operator () (const S& key) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg meta::t_pdiff n = key.size(); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(key.size()); h ^= 53970; return h; }
+    inline s_long operator () (const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
     inline bool operator () (const S& k1, const S& k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2.c_str(), k1.size(), k2.size()); }
     inline bool operator () (const S& k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2, k1.size(), -1); }
   };
@@ -3391,22 +3465,23 @@ struct hashx_common
   template<class S, class _> struct _skf_string<S, typename S::value_type, typename S::traits_type::char_type, _>
   {
     enum { _is_pc = false, _is_string = true }; typedef typename S::value_type t_char;
-    void Fcnew(S* p, const S& x) { new (p) S(x); }
-    void Fcnew(S* p, const t_char* x) { new (p) S(x); }
-    void Fcnew(const t_char** p, const t_char* x) { *p = x; }
-    void Fcnew(const t_char** p, const S& x) { *p = x.c_str(); }
-    s_long Fhash(const t_char* p0) { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= 53970; return h; }
-    s_long Fhash(const S& key) { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg s_long n = key.size(); while (n > 0) { h *= 31; h += *p++; --n; } return h; }
-    bool Fis_eq(const S& k1, const S& k2) { return _bytes_tu::is_eq_str(k1.c_str(), k2.c_str(), k1.size(), k2.size()); }
-    bool Fis_eq(const S& k1, const t_char* k2) { return _bytes_tu::is_eq_str(k1.c_str(), k2, k1.size(), -1); }
-    bool Fis_eq(const t_char* k1, const t_char* k2) { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
+    void Fcnew(S* p, const S& x) const { new (p) S(x); }
+    void Fcnew(S* p, const t_char* x) const { new (p) S(x); }
+    void Fcnew(const t_char** p, const t_char* x) const { *p = x; }
+    void Fcnew(const t_char** p, const S& x) const { *p = x.c_str(); }
+    s_long Fhash(const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
+    s_long Fhash(const S& key) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg s_long n = s_long(key.size() < 0x7fffffff ? key.size() : 0x7fffffff); while (n > 0) { h *= 19; h += *p++; --n; } h ^= s_long(key.size()); h ^= 53970; return h; }
+    bool Fis_eq(const S& k1, const S& k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2.c_str(), k1.size(), k2.size()); }
+    bool Fis_eq(const S& k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2, k1.size(), -1); }
+    bool Fis_eq(const t_char* k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
   };
   template<class C, class _ = meta::nothing> struct _skf_pchars
   {
     enum { _is_pc = true, _is_string = false }; typedef C t_char;
-    void Fcnew(const t_char** p, const t_char* x) { *p = x; }
-    s_long Fhash(const t_char* p0) { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= 53970; return h; }
-    bool Fis_eq(const t_char* k1, const t_char* k2) { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
+    void Fcnew(const t_char** p, const t_char* x) const { *p = x; }
+    s_long Fhash(const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
+    s_long Fhash(const t_char* p0, meta::s_ll n0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg s_long n = s_long(n0 < 0x7fffffff ? n0 : 0x7fffffff); while (n > 0) { h *= 19; h += *p++; --n; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
+    bool Fis_eq(const t_char* k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
   };
   template<class T1, class T2, class _ = meta::nothing, int __s1 = _select_kf<T1, _>::_kf_kind, int __s2 = _select_kf<T2, _>::_kf_kind> struct _select_skf {};
   template<class S, class _> struct _select_skf<S, S, _, 1, 1> : _skf_string<S, char, char, _> {};
@@ -3623,7 +3698,7 @@ struct hashx : protected vecm
     //          *this is empty, with dflt. key fn. and space reserve.
     //          nexc():
     //              == 1 (either x < 0, or copying failed),
-    //              >= 2 up to negative (copying failed + >=1 dtors. failed on cancelling).
+    //              >= 2 up to negative (copying failed + >=1 dtors. failed on canceling).
     //          integrity() == 0.
     //    d) If primary initialization failed,
     //          *this is empty. It will be reinitialized automatically on the next call of a public function.
@@ -3643,7 +3718,7 @@ struct hashx : protected vecm
   }
 
     // Copying x to *this.
-    //  is_tr true: transactional copying. If it fails, all changes are cancelled.
+    //  is_tr true: transactional copying. If it fails, all changes are canceled.
     //      NOTE The old object is destroyed only after the new has been created.
     //  is_tr false: the operation behaves like ~hashx() + hashx(const hashx&).
     //      It does not cancel changes if anything fails during copying.
@@ -3652,8 +3727,8 @@ struct hashx : protected vecm
     //  NOTE this->can_shrink() is set to dflt. true (not copied or preserved). this->nrsv() is set to min. value (not that of x or preserved).
     //  Returns:
     //    1 on success. (Also if this == &x.)
-    //        nexc() may be > 0 if a number of failures occured in the old object during destruction.
-    //    0 (only on is_tr == true) the operation failed, changes are cancelled.
+    //        nexc() may be > 0 if a number of failures occurred in the old object during destruction.
+    //    0 (only on is_tr == true) the operation failed, changes are canceled.
     //        nexc() is increased by 1 + number of exceptions in destructors
     //        of the temporary objects.
     //    -1 (only on is_tr == false) the operation is completed. The old object is destroyed.
@@ -3699,6 +3774,9 @@ struct hashx : protected vecm
     //      b) throws hoxOpFailed when failed to insert (e.g. memory allocation / object construction error).
   inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
   inline t_v& opsub(const t_k& k __vecm_noarg) throw (hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
+
+    // Same as operator[] and opsub(), but does not insert new key and value if k is not found (instead, hoxKeyNotFound is generated).
+  inline t_v& opsub_c(const t_k& k __vecm_noarg) const throw (hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { this->_find(k, _pz->_kf.hash(k), _pz->_kf, e, ind); if (e) { return e->v; } } catch (...) { ind = no_elem - 1; } throw hashx_common::EHashOpExc(ind == no_elem ? hashx_common::hoxKeyNotFound : hashx_common::hoxOpFailed); }
 
     // The number of entries in the hash.
   inline s_long n() const throw() { return _n; } // >=0
@@ -3769,7 +3847,7 @@ struct hashx : protected vecm
     //    Unlike hashx_clear, the function keeps can_shrink, nexc, key functor etc. unchanged.
     // Returns:
     //  >0 on success - the number of entries removed (previous n()).
-    //      nexc() may be increased by the number of errors occured during elements destruction.
+    //      nexc() may be increased by the number of errors occurred during elements destruction.
     //  0 if the container was empty (n() == 0). Nothing is done,
     //      except possible storage space reserve freeing.
     //  -2 internal error. The container is not changed.
@@ -3784,14 +3862,23 @@ struct hashx : protected vecm
     return n_prev;
   }
 
+
     // Normally, returns a valid ptr. to key hash/equality functor.
     //  On error, returns 0.
   inline const f_kf* pkf(__vecm_noarg1) const throw() { if (!_pz) { if (!_d_reinit()) { return 0; } } return &_pz->_kf; }
+
+    // Same as pkf(), only checks the pointer for 0.
+  inline const f_kf& rkf(__vecm_noarg1) const throw(hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } return _pz->_kf; }
+
 
     // Normally, returns a valid ptr. to key hash/equality functor, used for creating default values (t_v).
     //    It may be modified or replaced if necessary.
     //  On error, returns 0.
   inline f_ctf* pctf(__vecm_noarg1) const throw() { if (!_pz) { if (!_d_reinit()) { return 0; } } return &_pz->_c; }
+
+    // Same as pctf(), only checks the pointer for 0.
+  inline f_ctf& rctf(__vecm_noarg1) const throw(hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } return _pz->_c; }
+
 
     // Sets the new key hash/equality functor. (Only if n() == 0.)
     //    On success, returns true.
@@ -4214,19 +4301,773 @@ template<class KA, class VA, int kind> struct vecm::spec<hashx_common::entry<KA,
   {
     _ck = cfgk::cmode, _cv = cfgv::cmode,  _dk = cfgk::dmode, _dv = cfgv::dmode,  _mk = cfgk::mmode, _mv = cfgv::mmode, _gmk = cfgk::gm, _gmv = cfgv::gm,
     _dq = (_dk == 0 && _dv == 0 ? 0 : 3),
-    _cq = (_ck == 1 && _cv ==1 ? 1 : (_ck == 4 && _cv == 4 ? 4 : (_ck >= 3 && _cv >= 3 ? 3 :  2 * (_ck && _cv)))),
-    _mq = (_mk == 4 && _mv == 4 ? 4 : (_gmk && _gmv ? 3 : 2 * (_mk && _mv)))
+    _cq = (_ck == 1 && _cv ==1 ? 1 : (_ck == 4 && _cv == 4 ? 4 : (_ck >= 3 && _cv >= 3 ? 3 :  2 * (!!_ck && !!_cv)))),
+    _mq = (_mk == 4 && _mv == 4 ? 4 : (_gmk && _gmv ? 3 : 2 * (!!_mk && !!_mv)))
   };
   typedef hashx_common::_entry_da<KA, VA, kind, (_dk == 0 ? 0 : 1) | (_dv == 0 ? 0 : 2)> D;
   typedef hashx_common::__aux1_t<E, D> aux;
   typedef config_t<E, _dq,  _mq, _cq, aux> config;
 };
-
 template<class KA, class VAF, class Kf> struct vecm::spec<hashx<KA, VAF, Kf> > { typedef hashx<KA, VAF, Kf> H; typedef hashx_common::__aux2_t<H> aux; typedef config_t<H, 1, 4, 2, aux> config; };
-
 template<class KA, class VAF, class Kf> struct meta::copy_t<hashx<KA, VAF, Kf> > { typedef hashx<KA, VAF, Kf> H; struct exc_copy {}; static inline void F(H* pdest, const H* psrc) { new (pdest) H(*psrc); if (pdest->nexc() != 0) { pdest->~H(); throw exc_copy(); } } };
 
+
+namespace _yk_c2
+{
+  namespace _decl
+  {
+      // storage_t(-1) == storage only, no automatic initialization and destruction.
+      //    The client may do it manually or with try_init(), try_deinit().
+      //  storage_t(0) == storage with automatic T destruction on bool(inited) == true. Initialization is done, if necessary,
+      //    by the client, either manually (+ setting inited true on success), or with try_init().
+      //  storage_t(1) == storage with automatic T construction and destruction.
+      //  In all modes, try_init(), try_deinit() work correctly.
+      //  _bs (binding selector) = dflt. nothing or __vecm_tu_selector: see struct construct_f in vecm_hashx.h.
+    template<class T, class Aux = meta::nothing, class _bs = meta::nothing>
+    struct storage_t
+    {
+      template<int n1 = sizeof(T)  / sizeof(meta::s_ll), int n2 = sizeof(T)  % sizeof(meta::s_ll)> struct place { meta::s_ll x1[n1]; char x2[n2]; };
+      template<int n> struct place<n, 0> { meta::s_ll x1[n]; };
+      template<int n> struct place<0, n> { char x2[n]; };
+      mutable place<> pl;
+      char inited;
+      const signed char mode;
+      inline storage_t(s_long mode_) throw() : inited(false), mode((signed char)(mode_)) { if (mode >= 1) { try_init(); } }
+      inline ~storage_t() throw() { if (mode >= 0) { try_deinit(); } }
+        // 1 - success, 0 - already initialized; -1 - failed to initialize, nothing changed.
+      inline s_long try_init() throw() { if (inited) { return 0; } try { meta::construct_f<T, Aux, _bs>().f(ptr()); inited = true; return 1; } catch (...) {} return -1; }
+      inline s_long try_init(const T& x) throw() { if (inited) { return 0; } try { new (ptr()) T(x); inited = true; return 1; } catch (...) {} return -1; }
+        // 1 - success, 0 - was not initialized; -1 - destructor failed, so just set inited to false.
+      inline s_long try_deinit() throw() { if (inited) { try { T* p = ptr(); (void)p; p->~T(); inited = false; return 1; } catch (...) {} inited = false; return -1; } return 0; }
+      inline operator T*() const throw() { return reinterpret_cast<T*>(&pl); }
+      inline T* ptr() const throw() { return reinterpret_cast<T*>(&pl); }
+      inline operator T&() const throw() { return reinterpret_cast<T&>(*ptr()); }
+    };
+
+
+
+      // Iterator for struct vec2_t.
+    template<class T, bool is_const, class _bs = meta::nothing>
+    class iterator_t : public yk_c::vecm::link1_t<T, is_const, _bs>, public std::iterator<std::random_access_iterator_tag, T>
+    {
+    public:
+      typedef yk_c::s_long s_long; typedef yk_c::vecm vecm;
+      typedef T t_value; typedef t_value value_type;
+      typedef typename yk_c::meta::if_t<is_const, const t_value*, t_value*>::result  pointer;
+      typedef typename yk_c::meta::if_t<is_const, const t_value&, t_value&>::result reference;
+      typedef yk_c::vecm::link1_t<t_value, is_const, _bs> t_link;
+      typedef typename t_link::t_ctnr t_ctnr;
+      typedef std::random_access_iterator_tag iterator_category; typedef iterator_t iterator_type; typedef meta::t_pdiff difference_type;
+
+      inline iterator_t() throw() {}
+      inline iterator_t(t_ctnr& v) throw() : t_link(v) {} // end pos.
+      inline iterator_t(const t_link& l) throw() : t_link(l) {}
+      inline iterator_t(t_ctnr& v, s_long ind) throw() : t_link(v, ind) {}
+      inline iterator_t(const iterator_t<T, false, _bs>& x) throw() : t_link(x) {}
+      inline iterator_t(const iterator_t<T, true, _bs>& x) throw() : t_link(x) {}
+
+      inline reference operator*() const throw() { return *this->_px; }
+      inline pointer operator->() const throw() { return this->_px; }
+      inline reference operator[](difference_type delta) const throw() { return *this->_pv->template pval_0u<t_value>(this->_i + s_long(delta)); }
+      inline iterator_type& operator++() throw() { this->incr(); return *this; }
+      inline iterator_type& operator--() throw() { this->decr(); return *this; }
+      inline iterator_type& operator+=(difference_type delta) throw() { this->move_by(s_long(delta)); return *this; }
+      inline iterator_type& operator-=(difference_type delta) throw() { this->move_by(s_long(-delta)); return *this; }
+      inline iterator_type operator++(int) throw() { iterator_type i = *this; this->incr(); return i; }
+      inline iterator_type operator--(int) throw() { iterator_type i = *this; this->decr(); return i; }
+      inline iterator_type operator+(difference_type delta) const throw() { iterator_type i = *this; i.move_by(s_long(delta)); return i; }
+      inline iterator_type operator-(difference_type delta) const throw() { iterator_type i = *this; i.move_by(s_long(-delta)); return i; }
+      inline difference_type operator-(const iterator_type& x) const throw() { return this->ind0() - x.ind0(); }
+      inline bool operator==(const iterator_type& x) const throw() { return this->is_eq(x); }
+      inline bool operator!=(const iterator_type& x) const throw() { return !this->is_eq(x); }
+      inline bool operator>(const iterator_type& x) const throw() { return this->ind0() > x.ind0(); }
+      inline bool operator<(const iterator_type& x) const throw() { return this->ind0() < x.ind0(); }
+      inline bool operator>=(const iterator_type& x) const throw() { return this->ind0() >= x.ind0(); }
+      inline bool operator<=(const iterator_type& x) const throw() { return this->ind0() <= x.ind0(); }
+    };
+    template<class T, bool b, class _bs> iterator_t<T, b, _bs> operator+(typename iterator_t<T, b, _bs>::difference_type delta, const iterator_t<T, b, _bs>& x) throw() { iterator_t<T, b, _bs> i(x); i.move_by(delta); return i; }
+//    namespace yk_c { template<class T, bool b, class _bs> struct meta::type_equi<iterator_t<T, b, _bs>, meta::tag_construct> { typedef meta::tag_construct t_3; }; }
+//    namespace yk_c { template<class T, bool b, class _bs> struct meta::type_equi<iterator_t<T, b, _bs>, meta::tag_functor> { typedef meta::tag_functor t_3; }; }
+  }
 }
+using namespace _yk_c2::_decl;
+
+template<class T, bool b, class _bs> struct meta::type_equi<iterator_t<T, b, _bs>, meta::tag_construct> { typedef meta::tag_construct t_3; };
+template<class T, bool b, class _bs> struct meta::type_equi<iterator_t<T, b, _bs>, meta::tag_functor> { typedef meta::tag_functor t_3; };
+
+namespace _yk_c2
+{
+  struct _vec2_t_exceptions
+  {
+    struct exc_vec2_t : std::exception { const char* _p; exc_vec2_t(const char* pmsg) throw() : _p(pmsg) {} const char* what() const throw() { return _p; } };
+  };
+  struct _vec2_td
+  {
+    s_long version;
+    s_long link2_flags; // 0x1 f_perm, 0x2 f_sync
+    s_long* psig;
+    s_long (*pvec2_copy)(void* pdest, const void* psrc, const vecm* pvecm, s_long mode);
+    s_long (*pvec2_delete)(const void* pdest);
+    s_long (*_p_tr_start)();
+    void (*_p_tr_end)(s_long commit);
+    s_long (*_p_tr_notify)(void* psrc, void* pdest, s_long opflag);
+    s_long (*_pexpand_n)(void* p, s_long n2);
+    s_long (*_pswap)(void* p1, void* p2);
+    s_long (*_p_tr_start_2)(void* pct, s_long nrsv);
+    void (*_p_tr_end_2)(void* pct, s_long commit);
+  };
+  template<class TA> struct _v2ta_a {};
+  template<class TA, class Ctnr, bool bsync> struct _v2ta_b {};
+  template<class T, class Itr> struct _v2insert_arg {};
+  struct _link2_reg_base // NOTE link2_t impl. is removed in this version, only stub code remains.
+  {
+    struct _ff_mc4_base
+    {
+      void* __p0; _ff_mc4_base() { __p0 = this; }
+      virtual s_long detach_p(bool f_sync, void* p, bool forced) throw() = 0;
+      virtual ~_ff_mc4_base() {}
+    };
+    struct _ff_mc4_impl : _ff_mc4_base
+    {
+      virtual s_long detach_p(bool f_sync, void* p, bool forced) throw() { return 0; }
+    };
+    template<class _> static _ff_mc4_base* _ff_mc4_p() { typedef _ff_mc4_impl t_var; static char bi(0); union u { char x[sizeof(t_var)]; meta::s_ll __; }; static u x; if (!bi) { new (&x.x[0]) t_var; bi = 1; } t_var* p = (t_var*)&x.x[0]; return p; }
+    static _ff_mc4_base& ff_mc(meta::t_noarg = meta::t_noarg()) { return *_ff_mc4_p<__vecm_tu_selector>(); }
+  };
+  template<class _ = meta::nothing> struct _link2_reg_t : _link2_reg_base { };
+  namespace _decl { template<class TA, class _bs = meta::nothing> struct vec2_t; }
+  namespace
+  {
+    struct _vec2_tu_td_ver
+    {
+      struct s1 { s_long a; s_long b; void* c; };
+      enum { nsig = 1, ver = nsig }; // ver == sig. length + 0x100 * incompat. version
+      static s_long* __psig() throw();
+    };
+    s_long* _vec2_tu_td_ver::__psig() throw() { static s_long x[nsig + 1] = { sizeof(_vec2_td) * 0x100 + sizeof(s1), 0 }; return x; }
+
+    template<class T> struct _ccstop_t { typedef meta::nothing t; };
+    template<class TA>
+    struct _vec2_tu_aux_t
+    {
+      static s_long _ls_copy(void* pdest, const void* psrc, const vecm* pvecm, s_long mode) throw() { if (!(psrc && pdest)) { return -3; } return reinterpret_cast<vec2_t<TA, __vecm_tu_selector>*>(pdest)->_l_copy(psrc, *pvecm, mode); }
+      static s_long _ls_delete(const void* p) throw() { try { delete reinterpret_cast<const vec2_t<TA, __vecm_tu_selector>*>(p); return 1; } catch (...) { return 0; } }
+      static s_long _ls_expand_n(void* p, s_long n2) throw()
+      {
+        vec2_t<TA, __vecm_tu_selector>* pct = reinterpret_cast<vec2_t<TA, __vecm_tu_selector>*>(p); if (!(pct->_t_ind && n2 >= 0)) { return false; }
+        if (n2 < pct->_n && pct->f_perm()) { vecm::link1_t<typename vec2_t<TA, __vecm_tu_selector>::t_value, false, __vecm_tu_selector> l(*pct, pct->_nbase + n2); while (!l.is_aend()) { _link2_reg_t<typename _ccstop_t<TA>::t>::ff_mc().detach_p(pct->f_sync(), l.pval(), true); l.incr(); } }
+        return pct->vecm::el_expand_n(n2);
+      }
+      static s_long _ls_swap(void* p1, void* p2) throw()
+      {
+        typedef vec2_t<TA, __vecm_tu_selector> Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
+        Q* pct1 = reinterpret_cast<Q*>(p1); Q* pct2 = reinterpret_cast<Q*>(p2);
+        if (pct1->locality() != 1 || pct2->locality() != 1) { return false; }
+        meta::s_ll _st[_nst]; Q* p = reinterpret_cast<Q*>(_st); meta::safemove_t<vec2_t<TA, __vecm_tu_selector> >::F(p, pct1); meta::safemove_t<vec2_t<TA, __vecm_tu_selector> >::F(pct1, pct2); meta::safemove_t<vec2_t<TA, __vecm_tu_selector> >::F(pct2, p);
+        return true;
+      }
+    };
+  }
+}
+template<class TA> struct vecm::_ptd2_t<_yk_c2::_v2ta_a<TA> >
+{
+  static _yk_c2::_vec2_td td; static bool init; // storage unique to transl. unit
+  static void* F(const type_descriptor& parent, s_long lock_state)
+  {
+    if (!init)
+    {
+      td.version = _yk_c2::_vec2_tu_td_ver::ver;
+      td.link2_flags = 0;
+      td.psig = _yk_c2::_vec2_tu_td_ver::__psig();
+      td.pvec2_copy = _yk_c2::_vec2_tu_aux_t<TA>::_ls_copy;
+      td.pvec2_delete = _yk_c2::_vec2_tu_aux_t<TA>::_ls_delete;
+      td._p_tr_start = 0;
+      td._p_tr_end = 0;
+      td._p_tr_notify = 0;
+      td._pexpand_n = _yk_c2::_vec2_tu_aux_t<TA>::_ls_expand_n;
+      td._pswap = _yk_c2::_vec2_tu_aux_t<TA>::_ls_swap;
+      td._p_tr_start_2 = 0;
+      td._p_tr_end_2 = 0;
+      init = true;
+    }
+    return &td;
+  }
+};
+namespace _yk_c2 { struct __vecm_x : vecm { template<class TA, class Ctnr, bool bsync, class _> struct  _ptd2_b_base_t : vecm::_ptd2_t<_yk_c2::_v2ta_a<TA> > { }; }; }
+template<class TA> _yk_c2::_vec2_td vecm::_ptd2_t<_yk_c2::_v2ta_a<TA> >::td;
+template<class TA> bool vecm::_ptd2_t<_yk_c2::_v2ta_a<TA> >::init(false);
+
+
+namespace _yk_c2
+{
+  namespace _decl
+  {
+    template<class TA, class Aux = meta::nothing, class _bs = meta::nothing> struct link2_t; // NOTE link2_t impl. is removed in this version, only stub code remains.
+      // Integer result code, convertible to bool success / failure.
+    template<s_long eq_i> struct _result_eq { const s_long res; inline _result_eq(s_long res_) throw() : res(res_) {} inline operator bool() throw() { return res == eq_i; } };
+    template<s_long ge_i> struct _result_ge { const s_long res; inline _result_ge(s_long res_) throw() : res(res_) {} inline operator bool() throw() { return res >= ge_i; } };
+
+
+
+      // Strongly-typed vector with most of vecm features.
+      //    Applications:
+      //    1) Efficient replacement for std vector in algorithms with frequent 1 el. insertion/removal.
+      //    2) Efficient replacement for std vector for elements no or inefficient copy constructor (appending never moves existing elements).
+      //    3) As element in multilevel containers with efficient moving (element's vecm config_t gm true).
+      //    4) High-level passing between binary modules.
+    template<class TA, class _bs> struct vec2_t : protected yk_c::vecm
+    {
+    public:
+      typedef yk_c::s_long s_long; typedef yk_c::vecm vecm;
+      typedef TA ta_value; typedef typename specf<ta_value>::t_value t_value; struct exc_vec2_t : _vec2_t_exceptions::exc_vec2_t { exc_vec2_t(const char* pmsg) throw() : _vec2_t_exceptions::exc_vec2_t(pmsg) {} };
+      typedef s_long size_type; typedef t_value value_type; typedef t_value& reference; typedef const t_value& const_reference; typedef s_long difference_type;
+      typedef iterator_t<t_value, false> iterator; typedef iterator_t<t_value, true> const_iterator;
+#ifndef _RWSTD_NO_CLASS_PARTIAL_SPEC
+      typedef std::reverse_iterator<iterator> reverse_iterator; typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+#else
+      typedef std::reverse_iterator<iterator, std::random_access_iterator_tag, t_value> reverse_iterator; typedef std::reverse_iterator<const_iterator, std::random_access_iterator_tag, const t_value> const_reverse_iterator;
+#endif
+      typedef vec2_t<ta_value, _bs> t_ctnr;
+      template<class F> struct _fcheck { enum { result = meta::assert<meta::resolve_TF<F, meta::tag_construct>::use_functor>::result }; };
+
+      // partial replication of std vector
+      //==section 1==============================================
+
+      inline vec2_t(__vecm_noarg1) throw() : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) {}
+
+        // NOTE vec2_t(const vec2_t&) and operator= set all destination flags to dflt., not that of x.
+        // NOTE If operator= fails (gen. exception), the container is left with 0 size and default flags.
+      inline vec2_t(const vec2_t& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t&)"); }
+        template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
+      inline vec2_t& operator=(const vec2_t& x) throw (exc_vec2_t  __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
+
+        // Copying between vectors with same elem. type but different TA arg.
+      template<class TA2> inline vec2_t(const vec2_t<TA2, _bs>& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0)
+      {
+        enum { __check = meta::assert<meta::same_t<typename vecm::specf<TA2>::t_value, t_value>::result>::result };
+        if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA>&)");
+      }
+      template<class TA2> inline vec2_t& operator=(const vec2_t<TA2, _bs>& x) throw (exc_vec2_t __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
+
+      inline explicit vec2_t(size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c T& x)"); }
+      inline explicit vec2_t(s_long base, size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c T& x)"); }
+      template<class F> inline explicit vec2_t(size_type m, const F& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c F& x)"); }
+      template<class F> inline explicit vec2_t(s_long base, size_type m, const F& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c F& x)"); }
+
+      ~vec2_t() throw(__vecm_noargt1) { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return; } if (f_perm()) { _ptd2()->_p_tr_notify(this, 0, 0x1); } }
+
+      inline size_type size() const throw() { return _n; }
+      inline reference operator[] (size_type i) { return *this->vecm::pval_0u<t_value>(i); } // ignores nbase()
+          inline const_reference operator[] (size_type i) const { return *this->vecm::pval_0u<t_value>(i); } // -"-
+      inline reference at (size_type i __vecm_noarg) { t_value* p = this->vecm::pval<t_value>(i + _nbase); if (p) { return *p; } throw exc_vec2_t("vec2_t.at"); } // -"-
+          inline const_reference at (size_type i __vecm_noarg) const { t_value* p = this->vecm::pval<t_value>(i + _nbase); if (p) { return *p; } throw exc_vec2_t("vec2_t.at c"); } // -"-
+      inline reference front(__vecm_noarg1) { t_value* p = this->vecm::pval_first<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.front"); }
+          inline const_reference front(__vecm_noarg1) const { t_value* p = this->vecm::pval_first<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.front c"); }
+      inline reference back(__vecm_noarg1) { t_value* p = this->vecm::pval_last<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.back"); }
+          inline const_reference back(__vecm_noarg1) const { t_value* p = this->vecm::pval_last<t_value>(); if (p) { return *p; } throw exc_vec2_t("vec2_t.back c"); }
+      inline void push_back(const value_type& x __vecm_noarg) { if (this->vecm::el_append(x)) { return; }  throw exc_vec2_t("vec2_t.push_back"); }
+      inline void pop_back(__vecm_noarg1) { if (this->vecm::el_remove_last<t_value>() > 0) { return; } throw exc_vec2_t("vec2_t.pop_back"); }
+        // NOTE clear(), vec2_clear() set all to default, except:
+        //    1. nbase() is kept.
+        //    2. Permanent links mode (f_perm(), f_sync()) does not change.
+        //      If it is enabled, the container may stay registered as perm. link target.
+      inline void clear(__vecm_noarg1) throw() { vecm_clear(); }
+        inline s_long vec2_clear(__vecm_noarg1) throw() { s_long nx = vecm_clear(); return nx; }
+
+      inline bool empty() const throw() { return _n == 0; }
+      inline size_type capacity(__vecm_noarg1) const throw() { return this->vecm::nrsv(); }
+      inline void reserve(size_type n2 __vecm_noarg) { if (n2 >= 0 && this->vecm::el_reserve_n(n2, _f_can_shrink())) { return; } throw exc_vec2_t("vec2_t.reserve"); }
+      inline void resize(size_type n2 __vecm_noarg) { if (n2 > _n) { s_long m = n2 - _n; if (this->vecm::el_append_m(m, meta::construct_f<t_value, meta::nothing, _bs>()) == m) { return; } } else if (n2 >= 0) { s_long m = _n - n2; if (this->vec2_t::el_remove_ml(_nbase + n2, m) == m) { return; } } throw exc_vec2_t("vec2_t.resize(n2)"); }
+      inline void resize(size_type n2, const value_type& x __vecm_noarg) { if (n2 > _n) { s_long m = n2 - _n; if (this->vecm::el_append_m(m, x) == m) { return; } } else if (n2 >= 0) { s_long m = _n - n2; if (this->vec2_t::el_remove_ml(_nbase + n2, m) == m) { return; } } throw exc_vec2_t("vec2_t.resize(n2, x)"); }
+      inline void swap(vec2_t& x __vecm_noarg) { if (_ptd2()->_pswap(this, &x)) { return; } throw exc_vec2_t("vec2_t.swap"); }
+
+      iterator insert(const iterator& pos, const t_value& x __vecm_noarg) { if (pos.pcontainer() == this) { s_long res = this->el_insert_1(pos.ind(), x); if (res == 1) { return iterator(*this, pos.ind()); } } throw exc_vec2_t("vec2_t.insert(pos, x)"); }
+      void insert(const iterator& pos, size_type m, const t_value& x __vecm_noarg) { if (pos.pcontainer() == this) { if (m == 0) { return; } if (m > 0) { s_long res = this->el_insert_ml(pos.ind(), m, x); if (res > 0) { return; } } } throw exc_vec2_t("vec2_t.insert(pos, m, x)"); }
+      template<class Itr> void insert(const iterator& pos, const Itr& s0, const Itr& s2 __vecm_noarg) { if (pos.pcontainer() == this && s2 >= s0) { s_long m = 0; Itr x1 = s0; while (x1 != s2 && ++m > 0) { ++x1; } if (m == 0) { return; } if (m > 0) { s_long res = this->el_insert_ml(pos.ind(), m, meta::construct_f<_v2insert_arg<t_value, typename meta::nonc_t<Itr>::t >, meta::nothing, _bs>(s0)); if (res > 0) { return; } } } throw exc_vec2_t("vec2_t.insert(pos, s0, s2)"); }
+      iterator erase(const iterator& dest __vecm_noarg) { if (dest.pcontainer() == this) { s_long res = this->el_remove_1(dest.ind(), false); if (res == 1) { return iterator(*this, dest.ind()); } } throw exc_vec2_t("vec2_t.erase(dest)"); }
+      iterator erase(const iterator& dest0, const iterator& dest2 __vecm_noarg) { if (dest0.pcontainer() == this && dest2.pcontainer() == this && dest2 >= dest0) { s_long m = dest2.ind0() - dest0.ind0(); if (m == 0) { return iterator(*this, dest0.ind()); } if (m > 0) { s_long res = this->el_remove_ml(dest0.ind(), m); if (res == m) { return iterator(*this, dest0.ind()); } } } throw exc_vec2_t("vec2_t.erase(dest0, dest2)"); }
+
+      inline iterator begin() throw() { return iterator(*this, _nbase); }
+      inline iterator end() throw() { return iterator(*this); }
+        inline const_iterator begin() const throw() { return const_iterator(*this, _nbase); }
+        inline const_iterator end() const throw() { return const_iterator(*this); }
+      inline reverse_iterator rbegin() throw() { return reverse_iterator(iterator(*this)); }
+      inline reverse_iterator rend() throw() { return reverse_iterator(iterator(*this, _nbase)); }
+        inline const_reverse_iterator rbegin() const throw() { return const_reverse_iterator(const_iterator(*this)); }
+        inline const_reverse_iterator rend() const throw() { return const_reverse_iterator(const_iterator(*this, _nbase)); }
+
+      // replication of vecm (all functions are exceptionless)
+      //==section 2==============================================
+
+        // NOTE Casting vec2_t  to vecm may be convenient in a number of applications.
+        //    NOTE The following vecm operations are unsafe in vec2_t:
+        //    1) vecm_copy, vecm_delete.
+        //    2) el_insert*, el_remove* on f_perm() == true.
+        //    For them, calling analogs in vec2_t should be preferred.
+      inline yk_c::vecm& rvecm() throw() { return *this; }
+      inline const yk_c::vecm& rvecm() const throw() { return *this; }
+
+      inline s_long n() const throw() { return _n; }
+      inline s_long nbase() const throw() { return _nbase; }
+      inline s_long nrsv(__vecm_noarg1) const throw() { return _bytes_tu::_nrsv(_nj); }
+      inline bool can_shrink() const throw() { return _f_can_shrink(); }
+      inline bool is_transactional() const throw() { return this->vecm::is_transactional(); }
+      inline s_long nexc() const throw() { return _nxf >> _xsh; }
+      inline s_long integrity(__vecm_noarg1) const throw() { return this->vecm::integrity(); }
+      inline s_long locality(__vecm_noarg1) const throw() { return this->vecm::locality(); }
+      inline s_long compatibility(__vecm_noarg1) const throw()
+      {
+        s_long c = this->vecm::compatibility(); if (c <= -2) { return c; }
+        s_long nx = _ptd2()->version; s_long n = _vec2_tu_td_ver::ver; if ((nx & 0xffff00) != (n & 0xffff00)) { return -3; }
+        if (_cv0() >= 0) { return c; }
+        n &= 0xff; nx &= 0xff; if (n > nx) { n = nx; }
+        return _bytes_tu::is_eq_str<s_long>(_ptd2()->psig, _vec2_tu_td_ver::__psig(), n, n) ? c : -3;
+      }
+      inline const type_descriptor* ptd() const throw() { return this->vecm::ptd(); }
+      inline s_long null_state(s_long ind) const throw() { return this->vecm::null_state(ind); }
+      inline void vec2_set_nbase(s_long nbase) throw() { _nbase = nbase; }
+      inline void vec2_setf_can_shrink(bool x) throw() { _setf_can_shrink(x); }
+      inline void vec2_set0_nexc() const throw() { _nxf &= _fm; }
+      inline void vec2_setf_unsafe(bool x) const throw() { _setf_unsafe(x); }
+
+        // Container copy. Behaves same as vecm_copy.
+        //  NOTE vec2_copy() does not reset perm. links mode or unregister the container.
+        //  NOTE (!) is_tr false may not be used for copying between container and its own element,
+        //    even indirectly. (This is possible with polymorphic types.)
+        //  Returns: 1, 0, -1, -3 -- same as vecm_copy. No other values are returned.
+      template<class TA2, class _bs2> inline _result_eq<1> vec2_copy(const vec2_t<TA2, _bs2>& x, bool is_tr __vecm_noarg) throw()
+      {
+        enum { __check = meta::assert<meta::same_t<typename vecm::specf<TA2>::t_value, t_value>::result>::result };
+        if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return -3; } return _ptd2()->pvec2_copy(this, &x, &x.rvecm(), s_long(is_tr) | 0x2 );
+      }
+        // Returns: 1, 0, -1 -- same as vecm_delete.
+      inline _result_ge<0> vec2_delete(__vecm_noarg1) throw() { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return -1; } return _ptd2()->pvec2_delete(this); }
+
+      inline s_long el_remove_all(__vecm_noarg1) throw() { return this->vecm::el_remove_all(); }
+      inline bool el_reserve_n(s_long n, bool allow_shrink __vecm_noarg) throw() { return this->vecm::el_reserve_n(n, allow_shrink); }
+      inline t_value* el_expand_1(__vecm_noarg1) throw() { return this->vecm::el_expand_1<t_value>(); }
+      inline bool el_expand_n(s_long n2 __vecm_noarg) throw() { return !!_ptd2()->_pexpand_n(this, n2); }
+      inline bool el_expunge_last(__vecm_noarg1) throw() { if (f_perm()) { _ptd2()->_pexpand_n(this, n() - 1); } return this->vecm::el_expunge_last<t_value>(); }
+      inline t_value* el_append(const t_value& x __vecm_noarg) throw() { return this->vecm::el_append(x); }
+        template<class F> inline t_value* el_append(const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; return this->vecm::el_append(x); }
+      inline s_long el_insert_1(s_long ind, const t_value& x __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_insert_1(ind, x); } else { _transaction t(this, _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_insert_1(ind, x); t.end(res == 1 || res == -4); return res; } }
+        template<class F> inline s_long el_insert_1(s_long ind, const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; if (!f_perm()) { return this->vecm::el_insert_1(ind, x); } else { _transaction t(this, _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_insert_1(ind, x); t.end(res == 1 || res == -4); return res; } }
+      inline s_long el_remove_last(__vecm_noarg1) throw() { return this->vecm::el_remove_last<t_value>(); }
+      inline s_long el_remove_1(s_long ind, bool move_last __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_remove_1<t_value>(ind, move_last); } else { _transaction t(this, move_last ? 2 : _nrsv_tr_1(ind)); if (!t) { return -2; } s_long res = this->vecm::el_remove_1<t_value>(ind, move_last); t.end(res == 1 || res == -4); return res; } }
+      inline s_long el_append_m(s_long m, const t_value& x __vecm_noarg) throw() { return this->vecm::el_append_m(m, x); }
+        template<class F> inline s_long el_append_m(s_long m, const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; return this->vecm::el_append_m(m, x); }
+      inline s_long el_insert_ml(s_long ind, s_long m, const t_value& x __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_insert_ml(ind, m, x); } else { _transaction t(this, _nrsv_tr_m(ind, 0)); if (!t) { return -2; } s_long res = this->vecm::el_insert_ml(ind, m, x); t.end(res > 0 || res == -4); return res; } }
+        template<class F> inline s_long el_insert_ml(s_long ind, s_long m, const F& x __vecm_noarg) throw() { enum { __check = _fcheck<F>::result }; if (!f_perm()) { return this->vecm::el_insert_ml(ind, m, x); } else { _transaction t(this, _nrsv_tr_m(ind, 0)); if (!t) { return -2; } s_long res = this->vecm::el_insert_ml(ind, m, x); t.end(res > 0 || res == -4); return res; } }
+      inline s_long el_remove_ml(s_long ind, s_long m __vecm_noarg) throw() { if (!f_perm()) { return this->vecm::el_remove_ml<t_value>(ind, m); } else { _transaction t(this, _nrsv_tr_m(ind, m)); if (!t) { return -2; } s_long res = this->vecm::el_remove_ml<t_value>(ind, m); t.end(res > 0 || res == -4); return res; } }
+
+      template<class T> struct checked_ptr
+      {
+        T* p;
+        inline checked_ptr(T* p_) throw() : p(p_) {}
+        inline T& operator*() const throw(exc_vec2_t) { check(); return *p; }
+        inline operator T*() const throw() { return p; }
+        inline operator bool() const throw() { return bool(p); }
+        inline T* operator->() const throw(exc_vec2_t) { check(); return p; }
+        inline bool operator==(const checked_ptr& p2) throw() { return p == p2.p; }
+        inline bool operator==(const T* p2) throw() { return p == p2; }
+        inline bool operator!=(const checked_ptr& p2) throw() { return p == p2.p; }
+        inline bool operator!=(const T* p2) throw() { return p != p2; }
+
+        inline void check() const throw(exc_vec2_t) { if (!p) { throw exc_vec2_t("vec2_t.checked_ptr"); } }
+      };
+
+        // pval: vecm pval analog. ind is nbase-based.
+        // pc: vecm pval analog, returning checked pointer. ind is nbase-based.
+        // pval_0u: vecm pval_0u and vec2 operator [ ] analog. i is 0-based.
+        // pval_first: vecm pval_first and vec2 front analog.
+        // pval_last: vecm pval_last and vec2 back analog.
+      inline const t_value* pval(s_long ind __vecm_noarg) const throw() { return this->vecm::pval<t_value>(ind); }
+      inline checked_ptr<const t_value> pc(s_long ind __vecm_noarg) const throw() { return this->vecm::pval<t_value>(ind); }
+      inline const t_value* pval_0u(s_long i __vecm_noarg) const throw() { return this->vecm::pval_0u<t_value>(i); }
+      inline const t_value* pval_first(__vecm_noarg1) const throw() { return this->vecm::pval_first<t_value>(); }
+      inline const t_value* pval_last(__vecm_noarg1) const throw() { return this->vecm::pval_last<t_value>(); }
+
+      inline t_value* pval(s_long ind __vecm_noarg) throw() { return this->vecm::pval<t_value>(ind); }
+      inline checked_ptr<t_value> pc(s_long ind __vecm_noarg) throw() { return this->vecm::pval<t_value>(ind); }
+      inline t_value* pval_0u(s_long i __vecm_noarg) throw() { return this->vecm::pval_0u<t_value>(i); }
+      inline t_value* pval_first(__vecm_noarg1) throw() { return this->vecm::pval_first<t_value>(); }
+      inline t_value* pval_last(__vecm_noarg1) throw() { return this->vecm::pval_last<t_value>(); }
+
+      inline link1_t<t_value, false, _bs> link1_begin(__vecm_noarg1) throw() { return this->vecm::link1_begin<t_value, _bs>(); }
+      inline link1_t<t_value, false, _bs> link1_aend(__vecm_noarg1) throw() { return this->vecm::link1_aend<t_value, _bs>(); }
+      inline link1_t<t_value, true, _bs> link1_cbegin(__vecm_noarg1) const throw() { return this->vecm::link1_cbegin<t_value, _bs>(); }
+      inline link1_t<t_value, true, _bs> link1_caend(__vecm_noarg1) const throw() { return this->vecm::link1_caend<t_value, _bs>(); }
+
+      // permanent links in vec2_t
+      //==section 3==============================================
+
+        // Switching permanent links mode (enabled / disabled, synchronized / non-synchronized access).
+        // forced_change true: unconditionally sets the new mode.
+        //    All existing links will be lost (return invalid iterators)
+        //      if sync. flag is inverted or perm. flag changes to false.
+        //    If the current f_perm() is false, forced_change flag does nothing.
+        //  forced_change false:
+        //    a) successfully enables perm. links in this container, if it was not enabled,
+        //    b) does nothing if the new mode is same as the current,
+        //    c) disables perm. links in this container if no valid links exist.
+        //  sync is ignored on perm == false.
+        //  Returns:
+        //    2 - perm. links are enabled / disabled / mode changed successfully.
+        //    1 - links mode has been changed successfully (sync <--> non-sync.), forcefully. Previous links were lost.
+        //    0 - new mode is same as the current. Nothing done.
+        //    -1 - failed to set new mode. The existing mode and links are kept.
+      s_long link2_setf(bool perm, bool sync, bool forced_change __vecm_noarg) throw()
+      {
+        if (locality() != 1) { return -1; }
+        bool sync0 = f_sync();
+        s_long res = 2;
+        if (f_perm())
+        {
+          if (perm && sync == sync0) { return 0; }
+          res = _link2_reg_t<typename _ccstop_t<TA>::t>::ff_mc().detach_p(f_sync(), this, forced_change); if (res < 0) { return -1; }
+          res = res == 1 ? 1 : 2;
+        }
+        else { if (!perm) { return 0; } }
+        if (perm) { _ptd = sync ? &yk_c::typer<_v2ta_b<ta_value, vec2_t, true>, _bs>() : &yk_c::typer<_v2ta_b<ta_value, vec2_t, false>, _bs>(); }
+          else { _ptd = &yk_c::typer<_v2ta_a<ta_value>, _bs>(); }
+        return res;
+      }
+
+        // true: the container is enabled for permanent links.
+        // false (default): the container does not allow permanent links.
+      inline bool f_perm() const throw() { return _ptd2()->link2_flags & 0x1; }
+
+        // true: permanent links are processed inside critical sections.
+        // false (default): permanent links are processed without thread synchronization,
+        //    assuming that all vec2_t containers with f_sync() == false
+        //    are called only by one thread in application.
+        //  NOTE This flag is false when f_perm() == false.
+      inline bool f_sync() const throw() { return !!(_ptd2()->link2_flags & 0x2); }
+
+        // Returns:
+        //  a) valid link to ind0-th element or after-end pos (n()).
+        //    NOTE ind0 is 0-based.
+        //  b) an invalid link on
+        //    - incorrect i,
+        //    - container is from other binary module,
+        //    - target element is itself container, created in other binary module,
+        //    - container with f_perm() == false. See also link2_setf().
+      link2_t<ta_value> link2(s_long ind0 __vecm_noarg) throw() { return link2_t<ta_value>(*this, ind0); }
+
+      // aux
+      //==section 4==============================================
+
+//      template<class _bs2> operator vec2_t<TA, _bs2>&() { return *(vec2_t<TA, _bs2>*)this; }
+//      template<class _bs2> operator const vec2_t<TA, _bs2>&() const { return *(const vec2_t<TA, _bs2>*)this; }
+
+    private:
+      struct _transaction
+      {
+          _transaction(vec2_t* pct_, s_long nrsv __vecm_noarg) throw() : _pct(pct_), _pd(pct_->_ptd2()), _b(false) { start(nrsv); }
+          ~_transaction() throw() { end(false); }
+          operator bool() const throw() { return _b; }
+          void start(s_long nrsv __vecm_noarg) throw() {  if (!_b && _pct->_cv0() >= 0 && _pd->_p_tr_start_2) { _b =  !!_pd->_p_tr_start_2(_pct, nrsv); } }
+          void end(bool commit __vecm_noarg) throw() { if (_b) { _b = false; _pd->_p_tr_end_2(_pct, commit); } }
+      private: vec2_t* _pct; _vec2_td* _pd; bool _b;
+      };
+      inline _vec2_td* _ptd2() const throw() { return reinterpret_cast<_vec2_td*>(_ptd->ptd2); }
+      inline int _cv0(__vecm_noarg1) const throw() // if ver. 0 && sig. length 1, return ptd length (cur. mod.) - ptd length (this); else -1
+        { s_long nx = _ptd2()->version; s_long n = _vec2_tu_td_ver::ver; if (nx == 1 && n == 1)  { s_long ndx = _ptd2()->psig[0] >> 8; s_long nd = sizeof(_vec2_td); if (nd >= ndx) { return nd - ndx; } } return -1; }
+      inline  s_long _nrsv_tr_1(s_long ind) { ind -= _nbase; if (! (ind >= 0 && ind <= _n)) { return 0; }  s_long j = 0, k = 0; _bytes_tu::_ind_jk(ind, j, k); return _last_j + 1 - j; }
+      inline  s_long _nrsv_tr_m(s_long ind, s_long mdel) { ind -= _nbase; if (! (ind >= 0 && ind <= _n)) { return 0; } if (mdel < 0) { mdel = 0; }  s_long q = _n - ind - mdel; if (q < 0) { q = 0; } return q; }
+        // mode flags:
+        //    0x1 -- same as is_tr in vecm_copy.
+        //    0x2 -- keep perm. links mode and registration for this container.
+        //        (Otherwise perm. flags are switched off).
+      inline s_long _l_copy(const void* pctnr, const vecm& x, s_long mode __vecm_noarg) throw()
+      {
+        if (this == pctnr) { return 1; } typedef vec2_t Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
+        meta::s_ll _st[_nst]; Q* p = reinterpret_cast<Q*>(_st); s_long res = p->vecm::_l_cc(x);
+        if ((res >= 0 || (res == -1 && (mode & 0x1) == 0)) && p->_t_ind == _t_ind)
+        {
+          if (mode & 0x2) { const type_descriptor* ptd1 = _ptd; this->vecm::~vecm(); bytes::memmove_t<Q>::F(this, p, _nq); _ptd = ptd1; }
+            else { this->~Q(); bytes::memmove_t<Q>::F(this, p, _nq); _ptd = &yk_c::typer<_v2ta_a<ta_value>, _bs>(); }
+          return res >= 0 ? 1 : -1;
+        }
+        p->vecm::~vecm(); if (mode & 0x1) { return 0; }
+        clear(); if ((mode & 0x2) == 0) { link2_setf(false, false, true); } return -1;
+      }
+
+      friend struct vecm::_ptd2_t<_v2ta_a<ta_value> >;
+      friend struct vecm::_ptd2_t<_v2ta_b<ta_value, vec2_t, true> >;
+      friend struct vecm::_ptd2_t<_v2ta_b<ta_value, vec2_t, false> >;
+      friend struct _vec2_tu_aux_t<ta_value>;
+    };
+
+
+
+    template<class TA, class _bs1, class _bs2> inline bool operator==(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+    {
+      typedef typename vec2_t<TA>::t_value T;
+      if (a.n() != b.n()) { return false; }
+      if (a.n() == 0) { return true; }
+      vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
+      do { if (!(*la.pval() == *lb.pval())) { return false; } la.incr(); } while (lb.incr());
+    }
+    template<class TA, class _bs1, class _bs2> inline bool operator!=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return !(a == b); }
+    template<class TA, class _bs1, class _bs2> inline bool operator<(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+    {
+      typedef typename vec2_t<TA>::t_value T;
+      if (a.n() == 0) { return b.n() > 0; } if (b.n() == 0) { return false; }
+      vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
+      do { _yk_reg const T* p1 = la.pval(); _yk_reg const T* p2 = lb.pval(); if (!p1) { return bool(p2); } if (!p2) { return false; } if (*p1 < *p2) { return true; } if (*p2 < *p1) { return false; } la.incr(); lb.incr(); } while (true);
+    }
+    template<class TA, class _bs1, class _bs2> inline bool operator>(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return b < a; }
+    template<class TA, class _bs1, class _bs2> inline bool operator<=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return !(b < a); }
+    template<class TA, class _bs1, class _bs2> inline bool operator>=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) throw (std::exception __vecm_noargt)
+      { return !(a < b); }
+
+  }
+  template<class V, class _> struct _safemove_vec2_impl_t { static inline void F(V* pdest, V* psrc) throw() { bytes::memmove_t<V>::F(pdest, psrc, sizeof(V)); } };
+  template<class V, class _> struct _destroy_vec2_impl_t { static inline void F(V* p) { p->~V(); } };
+}
+template<class TA, class _bs> struct meta::safemove_t<vec2_t<TA, _bs> > : _yk_c2::_safemove_vec2_impl_t<vec2_t<TA, _bs>, meta::nothing> {};
+template<class TA, class _bs> struct meta::destroy_t<vec2_t<TA, _bs> >  : _yk_c2::_destroy_vec2_impl_t<vec2_t<TA, _bs>, meta::nothing> {};
+template<class TA> struct vecm::spec<_yk_c2::_v2ta_a<TA> > { typedef typename vecm::spec<TA>::config config; };
+  template<class TA> struct meta::type_equi<_yk_c2::_v2ta_a<TA>, typename vecm::specf<TA>::t_value> { typedef typename vecm::specf<TA>::t_value t_3; };
+  template<class TA, class Aux> struct bytes::type_index_t<_yk_c2::_v2ta_a<TA>, Aux> : type_index_t<TA, Aux> {};
+template<class TA, class _bs> struct vecm::spec<vec2_t<TA, _bs> > { typedef config_t<vec2_t<TA, _bs>, 3, 3, 1> config; };
+  // Special construction functor for vec2_t insert.
+  //  After creating each value, increments its copy of source iterator.
+template <class T, class Itr, class _bs> struct meta::construct_f<_yk_c2::_v2insert_arg<T, Itr>, meta::nothing, _bs> { typedef T t; mutable Itr z; construct_f(const Itr& begin) : z(begin) {} inline void f(t* p) const { new (p) t(*z); ++z; } };
+
+namespace _yk_c2
+{
+  namespace _decl
+  {
+      // Container analogous to std::map + keys hashing.
+      //    Feature: access to entry by numeric index in order (operator()), or numeric index in hash (h()).
+      //  Possible application:
+      //      1. Percentile and median values calculation.
+      //      2. Live charts with numeric position recalculation when chart members are frequently added and removed.
+      //        (The order does not require recalculation.)
+      //  Performance:
+      //    1. Worst insertion/removal is O(N^0.5). Factual time is comparable with std::map on n < 10000. 2-5 times slower on n 10k..1M.
+      //    2. Finding an entry position in the order O(log(N)). Factual time is comparable with std::map.
+      //    3. Finding an entry ptr. without order O(1) as in usual hash.
+      //  Requirements:
+      //    1. Consistent dual comparison k2 < k, k < k2, where k2 is the key sought, k is a key in the container.
+      //    2. Hash function and keys equality comparison. Equality consistent with "<" comparison.
+    template<class KA, class VAF, class Less = bytes::less_t<typename vecm::specf<KA>::t_value, typename vecm::specf<KA>::t_value>, class Kf = hashx_common::kf_basic<typename vecm::specf<KA>::t_value>, class _bs = meta::nothing>
+    struct ordhs_t
+    {
+      typedef KA t_ka; // key or its type equivalent
+      typedef typename meta::resolve_TF<VAF, meta::tag_construct>::t t_va; // value or its type equivalent
+      typedef vecm::specf<t_ka> cfgk; typedef vecm::specf<t_va> cfgv; // type configurations for key and value
+      typedef typename cfgk::t_value t_k; // key
+      typedef typename cfgv::t_value t_v; // value
+      typedef typename meta::if_t<meta::resolve_TF<VAF, meta::tag_construct>::use_functor, VAF, meta::construct_f<t_v, meta::nothing, _bs> >::result f_ctf; // construction functor for value
+      typedef hashx_common::entry<t_ka, t_va> entry; // hash map entry
+      typedef vecm::specf<entry> cfge; // type configuration for entry
+      enum { no_elem = hashx_common::no_elem };
+
+        // Single class for hash functions, key comparisons, possibly key type conversions:
+      struct __f0 {}; struct __f1 : Kf, meta::same_t<Less, Kf, __f0, Less>::t {};
+      typedef typename meta::same_t<Less, Kf, Less, __f1>::t f_kf;
+
+      typedef hashx<KA, VAF, f_kf> t_hash;
+
+        // Finding k in the order.
+        //    O(log(N)) if pind_ord != 0.
+        //    O(1) if pind_ord == 0.
+        //  Returns:
+        //    On success / found, ptr. != 0 and *pind_ord containing entry index [0..n()-1] in the order specified by Less. *pind_h is the index of entry in the hash.
+        //    On success / not found, ptr. == 0 and *pind_ord containing index [0..n()] of the place of insertion. *pind_h == no_elem.
+        //    On failure, ptr. == 0 and *pind_ord containing no_elem. *pind_h == no_elem.
+      inline const entry* find(const t_k& k, s_long* pind_ord = 0, s_long* pind_h = 0 __vecm_noarg) const throw()
+      {
+        if (pind_ord)
+        {
+          s_long i; s_long res = __inds().template _ord_find<s_long, t_k, _tlsbind>(k, &i, 0, _tlsbind(_d, *_d.pkf()));
+          if (res == 1) { s_long i2 = * _inds.pval_0u<s_long>(i); *pind_ord = i; if (pind_h) { *pind_h = i2; } return _d(i2); }
+          *pind_ord = res == 0 ? i : s_long(no_elem); if (pind_h) { *pind_h = no_elem; } return 0;
+        }
+        else
+        {
+          const f_kf* p = _d.pkf(); if (!p) { if (pind_h) { *pind_h = no_elem; } return 0; } const entry* e; _d.find2(k, *p, 0, &e, pind_h); return e;
+        }
+      }
+
+        // Finds/inserts an entry with key k.
+        //    O(1) if the entry exists and pind_ord == 0.
+        //    O(log(N)) if the entry exists and pind_ord != 0.
+        //    O(N^0.5) if the entry is inserted.
+        //  Returns:
+        //    1 - the entry has been inserted.
+        //    0 - the entry already exists.
+        //    -1 - an error occurred. The container is not changed.
+        //    On 1, 0, *pentry != 0. On -1, *pentry == 0.
+        //    On 1, 0, *pind_ord, *pind_h contain a valid index. On -1, both of them are no_elem.
+      s_long insert(const t_k& k, const entry** pentry = 0, s_long* pind_ord = 0, s_long* pind_h = 0 __vecm_noarg) throw()
+      {
+        if (pind_ord)
+        {
+          do
+          {
+            s_long i; s_long res = __inds().template _ord_find<s_long, t_k, _tlsbind>(k, &i, 0, _tlsbind(_d, *_d.pkf()));
+            const entry* e(0);
+            if (res == 1) { s_long* p = _inds.pval_0u<s_long>(i); if (pentry) { *pentry = _d(*p); } *pind_ord = i; if (pind_h) { *pind_h = *p; } return 0; }
+            if (res != 0) { break; }
+            s_long i2;
+            res = _d.insert(k, &e, &i2); if (res != 1) { break; } if (_inds.el_insert_1(i, i2) != 1) { _d.remove_i(i2); break; }
+            if (pentry) { *pentry = e; } *pind_ord = i; if (pind_h) { *pind_h = i2; }
+            return 1;
+          }
+          while (false);
+          if (pentry) { *pentry = 0; } *pind_ord = no_elem; if (pind_h) { *pind_h = no_elem; } return -1;
+        }
+        else
+        {
+          do
+          {
+            const entry* e(0); s_long i2;
+            const f_kf* p = _d.pkf(); if (!p) { break; } if (_d.find2(k, *p, 0, &e, &i2) == 1) { if (pentry) { *pentry = e; } if (pind_h) { *pind_h = i2; } return 0; }
+            s_long i; s_long res = __inds().template _ord_find<s_long, t_k, _tlsbind>(k, &i, 0, _tlsbind(_d, *_d.pkf()));
+            if (res != 0) { break; }
+            res = _d.insert(k, &e, &i2); if (res != 1) { break; } if (_inds.el_insert_1(i, i2) != 1) { _d.remove_i(i2); break; }
+            if (pentry) { *pentry = e; } if (pind_h) { *pind_h = i2; }
+            return 1;
+          }
+          while (false);
+          if (pentry) { *pentry = 0; } if (pind_h) { *pind_h = no_elem; } return -1;
+        }
+      }
+
+        // Removing an entry.
+        //    O(N^0.5) if the entry existed.
+        //    O(1) if the entry did not exist.
+        //  Returns:
+        //    1 - the entry with k was removed.
+        //    0 - the entry with k did not exist.
+        //    -1 - an error occurred. The container is not changed.
+      s_long remove(const t_k& k __vecm_noarg) throw()
+      {
+        const entry* e(0); s_long i2;
+        const f_kf* p = _d.pkf(); if (!p) { return -1; } s_long res = _d.find2(k, *p, 0, &e, &i2); if (res == 0) { return 0; } if (res != 1) { return -1; }
+        s_long n9 = _d.n() - 1;
+        if (i2 == n9)
+        {
+          s_long i9; res = __inds().template _ord_find<s_long, t_k, _tlsbind>(_d(n9)->k, &i9, 0, _tlsbind(_d, *_d.pkf()));
+          if (res == 0) { i9 = -1; } else if (res != 1) { return -1; }
+          if (_d.remove_e(e) != 1) { return -1; }
+          if (i9 >= 0) { _inds.el_remove_1<s_long>(i9, false); } // always succeeds
+        }
+        else
+        {
+          s_long i9; res = __inds().template _ord_find<s_long, t_k, _tlsbind>(_d(n9)->k, &i9, 0, _tlsbind(_d, *_d.pkf()));
+          if (res == 0) { i9 = -1; } else if (res != 1) { return -1; }
+          s_long i; res = __inds().template _ord_find<s_long, t_k, _tlsbind>(k, &i, 0, _tlsbind(_d, *_d.pkf()));
+          if (res == 0) { i = -1; } else if (res != 1) { return -1; }
+          if (_d.remove_e(e) != 1) { return -1; }
+          if (i9 >= 0) { *_inds.pval_0u<s_long>(i9) = i2; }
+          if (i >= 0) { _inds.el_remove_1<s_long>(i, false); } // always succeeds
+        }
+        return 1;
+      }
+
+        // Same as hashx::remove_all.
+      inline s_long remove_all(__vecm_noarg1) throw() { s_long m = _d.remove_all(); if (m < 0) { return m; } _inds.vecm_clear(); return m; }
+
+        // Finds/inserts an entry with key k. Returns a reference to value.
+        //    O(1) if the entry exists. O(N^0.5) if it is inserted.
+      inline t_v& operator[](const t_k& k) throw (hashx_common::EHashOpExc  __vecm_noargt) { return opsub(k); }
+      inline t_v& opsub(const t_k& k __vecm_noarg) throw (hashx_common::EHashOpExc)
+      {
+        do
+        {
+          const entry* e(0);
+          const f_kf* p = _d.pkf(); if (!p) { break; } if (_d.find2(k, *p, 0, &e) == 1) { return e->v; }
+          s_long i; s_long res = __inds().template _ord_find<s_long, t_k, _tlsbind>(k, &i, 0, _tlsbind(_d, *_d.pkf()));
+          if (res != 0) { break; }
+          s_long i2;
+          res = _d.insert(k, &e, &i2); if (res != 1) { break; } if (_inds.el_insert_1(i, i2) != 1) { _d.remove_e(e); break; }
+          return e->v;
+        }
+        while (false);
+        throw hashx_common::hoxOpFailed;
+      }
+
+        // The number of elements in the container.
+      inline s_long n() const throw() { return _d.n(); } // >=0
+
+        // The number of errors since construction or the last assignment, clearing, or value reset.
+      inline s_long nexc(__vecm_noarg1) const throw() { return _d.nexc(); }
+
+        // Returns entry by index [0..n()-1] in the order.
+      inline const entry* operator()(s_long ind_ord __vecm_noarg) const throw() { s_long* p = _inds.pval<s_long>(ind_ord); if (!p) { return 0; } return _d(*p); }
+
+        // Returns same as hashx::operator().
+      inline const entry* h(s_long ind_h __vecm_noarg) const throw() { return _d(ind_h); }
+
+      ordhs_t(__vecm_noarg1) throw() : _d(), _inds(typer<s_long, _bs>, 0) {}
+      ~ordhs_t() throw(__vecm_noargt1) {}
+
+        // If copying fails, n() == 0, nexc() != 0.
+      ordhs_t(const ordhs_t& x __vecm_noarg) throw() : _d(x._d), _inds(x._inds) { if (_d.n() != _inds.n()) { _d.hashx_clear(); _inds.vecm_clear(); } }
+
+        // Constructs a copy of x.
+        //    On success, nexc() is set to 0.
+        //    On failure nexc() is set to non-0, *this is not changed, no exceptions generated.
+      ordhs_t& operator=(const ordhs_t& x) throw( __vecm_noargt1)
+      {
+        if (this == &x) { return *this; } typedef ordhs_t Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
+        meta::s_ll _st[_nst]; Q* p = reinterpret_cast<Q*>(_st); new (p) Q(x);
+        if (p->nexc()) { _set_nexc(p->nexc()); p->~Q(); return *this; }
+        this->~Q(); bytes::memmove_t<Q>::F(this, p, _nq); return *this;
+      }
+
+        // Removes all elements, sets everything to default value.
+      void ordhs_clear(__vecm_noarg1) throw() { _d.hashx_clear(); _inds.vecm_clear(); }
+
+      inline void ordhs_set0_nexc(__vecm_noarg1) const throw () { _d.hashx_set0_nexc(); }
+
+        // Links for iterating entries in hash order, analogous to that of hashx.
+      inline vecm::link1_t<entry, true, _bs> link1_cbegin(__vecm_noarg1) const throw() { return _d.link1_cbegin(); }
+      inline vecm::link1_t<entry, true, _bs> link1_caend(__vecm_noarg1) const throw() { return _d.link1_caend(); }
+      inline vecm::link1_t<entry, true, _bs> link1_cat(s_long ind __vecm_noarg) const throw() { return _d.link1_cat(ind); }
+
+        // Reference to combined key function, value constructor, key function setter.
+        //    Just an interface to hashx pkf, pctf, hashx_set_kf.
+      inline const f_kf* pkf(__vecm_noarg1) const throw() { return _d.pkf(); }
+      inline f_ctf* pctf(__vecm_noarg1) const throw() { return _d.pctf(); }
+      inline bool ordhs_set_kf(const f_kf& kf __vecm_noarg) throw() { return _d.hashx_set_kf(kf); }
+
+      inline s_long compatibility(__vecm_noarg1) const throw() { const s_long ti = bytes::type_index_t<s_long>::ind(); s_long c = __s_crvx(_inds)._t_ind == ti && __s_crvx(__d()._ht)._t_ind == ti && sizeof(*this) == ((char*)&_inds - (char*)this) + sizeof(vecm) ? __d().vecm::compatibility() : -1; if (c == 0) { c = -1; } return c; }
+
+//      template<class _bs2> operator ordhs_t<KA, VAF, Less, Kf, _bs2>&() { return *(ordhs_t<KA, VAF, Less, Kf, _bs2>*)this; }
+//      template<class _bs2> operator const ordhs_t<KA, VAF, Less, Kf, _bs2>&() const { return *(const ordhs_t<KA, VAF, Less, Kf, _bs2>*)this; }
+
+    protected:
+      t_hash _d;
+      vecm _inds;
+
+      typedef Less _t_less;
+      struct _tlsbind { inline _tlsbind(const t_hash& h_, const _t_less& l_ __vecm_noarg) throw() : h(h_), l(l_) {} const t_hash& h; const _t_less& l; inline bool less21(const t_k& k1, s_long i2 __vecm_noarg) const { return l.less21(k1, h(i2)->k); } inline bool less12(s_long i1, const t_k& k2 __vecm_noarg) const { return l.less12(h(i1)->k, k2); } };
+
+      struct _Hx : t_hash { friend struct ordhs_t; inline void _set_nexc(s_long n __vecm_noarg) throw() { this->_ht.vecm_set0_nexc(); vecm::_ff_mc()._nx_set(this->vecm::_nxf, n); } };
+      inline void _set_nexc(s_long n __vecm_noarg) throw() { __d()._set_nexc(n); _inds.vecm_set0_nexc(); }
+      inline _Hx& __d() throw () { return *static_cast<_Hx*>(&_d); }
+      inline const _Hx& __d() const throw () { return *static_cast<const _Hx*>(&_d); }
+
+      struct _Vx : vecm { friend struct ordhs_t; };
+      inline _Vx& __inds() throw()  { return *static_cast<_Vx*>(&_inds); }
+      inline const _Vx& __inds() const throw()  { return *static_cast<const _Vx*>(&_inds); }
+      inline const _Vx& __s_crvx(const vecm& v) const throw() { return *static_cast<const _Vx*>(&v); }
+    };
+  }
+}
+template<class T1, class T2, class T3, class T4, class T5> struct vecm::spec<ordhs_t<T1, T2, T3, T4, T5> > { typedef ordhs_t<T1, T2, T3, T4, T5> H; struct aux : vecm::config_aux<H> { }; typedef config_t<H, 1, 4, 2, aux> config; };
+template<class T1, class T2, class T3, class T4, class T5> struct meta::copy_t<ordhs_t<T1, T2, T3, T4, T5> > { typedef ordhs_t<T1, T2, T3, T4, T5> H; static inline void F(H* pdest, const H* psrc) { struct exc_copy {}; new (pdest) H(*psrc); if (pdest->nexc() != 0) { pdest->~H(); throw exc_copy(); } } };
+
+} // namespace yk_c
 
 #if defined(__clang__)
   #pragma clang diagnostic pop
@@ -4250,7 +5091,7 @@ on the conjoint computing and programming performance.
 Author aims at rare, but highly elaborate updates for this module, to keep the following:
 
 performance of the resulting executable code on multiple compilers and platforms;
-predictible results of operations;
+predictable results of operations;
 least possible module dependencies;
 add-only public interface and most of internal elements;
 low human time expenses on writing / compiling / testing high-quality client code.
@@ -4269,25 +5110,41 @@ autorship and contact information from the top of this file.
 3. Use this module only for adequate purposes (programming, education,
 research). Let the good will be with you.
 
-THE COMPILER MUST HAVE
+COMPILER REQUIREMENTS
 
-Some of short, int, long, long long (signed and unsigned) are 32- and 64-bit.
+Having both 32- and 64-bit signed integer types.
 sizeof(double) == 8.
 Pointers to data (and functions) have size either 4 or 8.
-Pointers are aligned in structures without spaces.
 
 TOP-LEVEL NAMESPACE OBJECTS
 
 struct meta -- abstract type logics
 typedef meta::s_long s_long -- 32-bit signed integer
-struct lock_impl_t - template decl. for system-dependent critical section
+template struct lock_impl_t - template decl. for system-dependent critical section
 struct bytes -- byte-level auxiliary functions and classes
 struct vecm -- polymorphic vector
 typer -- function template, returning ref. to vector element type configuration
 struct hashx_common -- hash's supporting structs and utilities
-struct hashx -- the hash template
+template struct hashx -- the hash template
+template struct vec2_t -- template-based version of vecm, compatible with std vector
+template struct iterator_t - iterator for vec2_t.
+template struct ordhs_t -- hashed map (ordered & hashed associative container) with access by key and ordinal number.
+template struct storage_t - local variable storage with controllable automatic construction and destruction.
 
-QUICK START EXAMPLES
+STRUCTURES FOR TYPES BEHAVIOR FINE-TUNING
+
+vecm:: spec, config_aux, config_t, bytes:: config0_t, config_cd_t - type configurations (movability, transactionality, categories etc.),
+meta:: type_equi - type aliasing for alt. configurations and tagging of classes,
+meta:: construct_f - functor prototype for automating container element construction,
+meta:: copy_t, safecopy_t, trymove_t, safemove_t, destroy_t - custom copy constructors, movers, destructor
+bytes:: allocdef_t - memory allocation functions (dflt.: operator new() + processing),
+lock_impl_t - template for system-dependent critical section,
+hashx_common:: kf_basic, kf_std, kf_str - default hash functions and adapters.
+
+USAGE EXAMPLES (vecm, hashx only)
+
+For finding the best way of using this header, consider parts of BMDX library,
+implemented based on vecm, hashx and related structures (e.g. see bmdx_main.h, bmdx_main.cpp).
 
 Creating vecm(string):
 
@@ -4349,91 +5206,4 @@ Creating hash(string, vecm(hash(string, vecm of pointers))).
     std::cout << hd["complex"].pval_first<Hc>()->remove("a") << "\n"; // outputs 1
     std::cout << *(*hd["complex"].pval_first<Hc>())["b"].pval_first<void*>() << "\n"; // outputs sizeof(int)
 
-    //  NOTE hashx and vecm are movable in memory. Insertions/removals do not implicitly copy
-    //    any unrelated container objects.
-
-STL-style iterator and very basic strongly-typed vector:
-
-    template<class T, bool is_const> class iterator_t : public yk_c::vecm::link1_t<T, is_const>, public std::iterator<std::random_access_iterator_tag, T>
-    {
-    public:
-      typedef yk_c::s_long s_long; typedef yk_c::vecm vecm;
-      typedef T t_value; typedef t_value value_type;
-      typedef typename yk_c::meta::if_t<is_const, const t_value*, t_value*>::result  pointer;
-      typedef typename yk_c::meta::if_t<is_const, const t_value&, t_value&>::result reference;
-      typedef yk_c::vecm::link1_t<t_value, is_const> t_link;
-      typedef typename t_link::t_ctnr t_ctnr;
-      typedef std::random_access_iterator_tag iterator_category; typedef iterator_t iterator_type; typedef s_long difference_type;
-
-      inline iterator_t() throw() {}
-      inline iterator_t(t_ctnr& v) throw() : t_link(v) {} // end pos.
-      inline iterator_t(const t_link& l) throw() : t_link(l) {}
-      inline iterator_t(t_ctnr& v, s_long ind) throw() : t_link(v, ind) {}
-      inline iterator_t(const iterator_t<T, false>& x) throw() : t_link(x) {}
-      inline iterator_t(const iterator_t<T, true>& x) throw() : t_link(x) {}
-
-      inline reference operator*() const throw() { return *this->_px; }
-      inline pointer operator->() const throw() { return this->_px; }
-      inline reference operator[](difference_type delta) const throw() { return *this->_pv->template pval_0u<t_value>(this->_i + delta); }
-      inline iterator_type& operator++() throw() { this->incr(); return *this; }
-      inline iterator_type& operator--() throw() { this->decr(); return *this; }
-      inline iterator_type& operator+=(difference_type delta) throw() { this->move_by(delta); return *this; }
-      inline iterator_type& operator-=(difference_type delta) throw() { this->move_by(-delta); return *this; }
-      inline iterator_type operator++(int) throw() { iterator_type i = *this; this->incr(); return i; }
-      inline iterator_type operator--(int) throw() { iterator_type i = *this; this->decr(); return i; }
-      inline iterator_type operator+(difference_type delta) const throw() { iterator_type i = *this; i.move_by(delta); return i; }
-      inline iterator_type operator-(difference_type delta) const throw() { iterator_type i = *this; i.move_by(-delta); return i; }
-      inline difference_type operator-(const iterator_type& x) const throw() { return this->ind0() - x.ind0(); }
-      inline bool operator==(const iterator_type& x) const throw() { return this->is_eq(x); }
-      inline bool operator!=(const iterator_type& x) const throw() { return !this->is_eq(x); }
-      inline bool operator>(const iterator_type& x) const throw() { return this->ind0() > x.ind0(); }
-      inline bool operator<(const iterator_type& x) const throw() { return this->ind0() < x.ind0(); }
-      inline bool operator>=(const iterator_type& x) const throw() { return this->ind0() >= x.ind0(); }
-      inline bool operator<=(const iterator_type& x) const throw() { return this->ind0() <= x.ind0(); }
-    };
-    template<class T, bool b> iterator_t<T, b> operator+(typename iterator_t<T, b>::difference_type delta, const iterator_t<T, b>& x) throw() { iterator_t<T, b> i(x); i.move_by(delta); return i; }
-    namespace yk_c { template<class T, bool b> struct meta::type_equi<iterator_t<T, b>, meta::tag_construct> { typedef meta::tag_construct t_3; }; }
-    namespace yk_c { template<class T, bool b> struct meta::type_equi<iterator_t<T, b>, meta::tag_functor> { typedef meta::tag_functor t_3; }; }
-
-    template<class TA> struct vector_t : yk_c::vecm
-    {
-    public:
-      typedef yk_c::s_long s_long; typedef yk_c::vecm vecm;
-      typedef TA ta_value; typedef typename specf<ta_value>::t_value t_value; struct exc_vector_t : std::exception { const char* _p; exc_vector_t(const char* pmsg) : _p(pmsg) {} const char* what() const throw() { return _p; } };
-      typedef s_long size_type; typedef t_value value_type; typedef t_value& reference; typedef const t_value& const_reference; typedef s_long difference_type;
-      typedef iterator_t<t_value, false> iterator; typedef iterator_t<t_value, true> const_iterator;
-
-      inline vector_t() throw() : vecm(yk_c::typer<ta_value>, 0) {} inline ~vector_t() throw() {}
-        // NOTE can_shrink is not copied by vector_t(const vector_t&) and operator=.
-      inline vector_t(const vector_t& x) : vecm(x) { if (_nxf >> _xsh) { throw exc_vector_t("vector_t(const vector_t&)"); } }
-      inline vector_t& operator=(const vector_t& x) { if (vecm_copy(x, false) == 1) { return *this; } if (!(_t_ind == x._t_ind && _ptd->ta_ind == x._ptd->ta_ind)) { this->~vector_t(); new (this) vector_t(); _nxf += _xd; } throw exc_vector_t("vector_t.operator="); }
-
-      inline size_type size() const { return _n; }
-      inline reference operator[] (size_type i) { return *pval_0u<t_value>(i); } // op. [ ] ignores nbase()
-          inline const_reference operator[] (size_type i) const { return *pval_0u<t_value>(i); } // -"-
-      inline reference front() { t_value* p = pval_first<t_value>(); if (p) { return *p; } throw exc_vector_t("vector_t.front"); }
-          inline const_reference front() const { t_value* p = pval_first<t_value>(); if (p) { return *p; } throw exc_vector_t("vector_t.front const"); }
-      inline reference back() { t_value* p = pval_last<t_value>(); if (p) { return *p; } throw exc_vector_t("vector_t.back"); }
-          inline const_reference back() const { t_value* p = pval_last<t_value>(); if (p) { return *p; } throw exc_vector_t("vector_t.back const"); }
-      inline void push_back(const value_type& x) { if (!el_append(x)) { throw exc_vector_t("vector_t.push_back"); } }
-      inline void pop_back() { if (el_remove_last<t_value>() <= 0) { throw exc_vector_t("vector_t.pop_back"); }  }
-
-      inline iterator begin() throw() { return iterator(*this, nbase()); }
-        inline const_iterator begin() const throw() { return const_iterator(*this, nbase()); }
-      inline iterator end() throw() { return iterator(*this); }
-        inline const_iterator end() const throw() { return const_iterator(*this); }
-    };
-    namespace yk_c { template<class TA> struct vecm::spec<vector_t<TA> > { typedef config_t<vector_t<TA>, 1, 4, 1> config; }; }
-
-Structures for fine-tuning type properties and behavior:
-
-    vecm:: spec, config_aux, config_t, bytes:: config0_t, config_cd_t - type configurations (movability, transactionality, categories etc.),
-    meta:: type_equi - type aliasing for alt. configurations and tagging of classes,
-    meta:: construct_f - functor prototype for automating container element construction,
-    meta:: copy_t, safecopy_t, trymove_t, safemove_t, destroy_t - custom copy constructors, movers, destructor
-    bytes:: allocdef_t - memory allocation functions (dflt.: operator new() + processing),
-    lock_impl_t - template for system-dependent critical section,
-    hashx_common:: kf_basic, kf_std, kf_str - default hash functions and adapters.
-
-  NOTE Learning how these entities are used by vecm_hashx.h itself may help your understanding.
 */

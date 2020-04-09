@@ -1,20 +1,22 @@
-// BMDX library 1.1 RELEASE for desktop & mobile platforms
+// BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2019-08-12
+//  Polymorphic container for data and objects, message dispatcher, utilities.
+// rev. 2020-04-09
 //
-// Copyright 2004-2019 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
+//
+// Copyright 2004-2020 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // The Software is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the Software or the use or other dealings in the Software.
 // https://opensource.org/licenses/MIT
 
-// bmdx_main.h, bmdx_main.cpp: polytype value, message dispatcher, utilities.
 
-// Features:
+// In bmdx_main.h, bmdx_main.cpp: .
 //
-//    Polytype value, for passing high-level data structures across binary modules.    (bmdx::  struct unity)
+//    Polymorphic container for storing high-level data and objects and passing them between binary modules.    (bmdx::  struct unity)
 //
 //    Simple date class.    (bmdx::  struct _unitydate)
 //    Configuration file format with support of trees, + encoding/decoding utility.    (bmdx::  struct paramline)
@@ -34,18 +36,8 @@
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
   #pragma clang diagnostic ignored "-Wunused-function"
 #endif
-#if defined(__GNUC__) && !defined(__clang__)
-  #pragma GCC diagnostic ignored "-Wpragmas"
-  #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
-  #pragma GCC diagnostic ignored "-Wnonnull-compare"
-  #pragma GCC diagnostic ignored "-Wunused-function"
-  #pragma GCC diagnostic ignored "-Wdeprecated"
-  #pragma GCC diagnostic ignored "-Wint-in-bool-context"
-#endif
-
 
 #include "bmdx_config.h"
-#include "yk_cx.h"
 
 #undef __BMDX_DLLEXPORT
 #ifdef _bmdxpl_Wnds
@@ -61,7 +53,7 @@
   // unity() - constructs an empty object (utype() == utEmpty)
   // unity(<scalar value>) - constructs a scalar value; input value may be converted to one of the supported types
   // unity(std::wstring) - constructs a wrapped string that may be passed between incompatible binary modules
-  // unity(std::string) - converts C string to wide string using the current locale
+  // unity(std::string) - converts string to wide string using the system-default locale (equiv. to std::setlocale(..., ""))
   // unity(std::vector<scalar value>) - constructs an array of values
   // unity(<object type>&, bool b_strong) - constructs an object reference; see also set_obj and objt
 
@@ -79,12 +71,12 @@
   // arr_* - array info and modification
   // obj*, set_obj, cpvoid*, pinterface, o_api - referenced objects and interfaces
   //
-  // u_*, sc*, ua*, map*, hash*, [ ], path, u_name*
-  //    -- common type, scalar, array, hashed map, hashlist manipulation, accessing values by key, index, path,
+  // u_*; sc*, ua*, map*, hash*; [ ], path, u_name*
+  //    -- general functions; manipulating scalar, array, hashed ordered map, hashlist; accessing values by key, index, path,
   //      additional object name field support.
   //
   // +<unity object>/<path>/<dflt. value and ret. type specifier> -- ternary operator to extract value
-  //    from associative tree (consisting of hashes, maps, arrays) by the given path.
+  //    from associative tree (consisting of hashlists, maps, arrays) by the given path.
 
 
 //==  Indexation summary.
@@ -97,7 +89,7 @@
   //  1-based indexation on automatic array creation:
   //    rx, conv, ua*, array, decoded paramline arrays.
   //  0-based indexation:
-  //    array0, hashl* (unoredered), cmd_array, split.
+  //    array0, hashl* (unordered), cmd_array, split.
   //  Setting base index dependent on arguments:
   //    arr_init, arrlb_, i_dispatcher_mt::request.
   //  Indexation, dependent on individual array base index:
@@ -111,16 +103,18 @@
 namespace bmdx
 {
     // Implementation part.
-  using namespace yk_c::experimental;
+  using yk_c::__vecm_tu_selector;
   using yk_c::meta;
-  using yk_c::hashx;
-  using yk_c::hashx_common;
-  using yk_c::vecm;
-  using yk_c::typer;
-  using yk_c::bytes;
   using yk_c::s_long;
   typedef yk_c::meta::s_ll s_ll;
-  using yk_c::__vecm_tu_selector;
+  using yk_c::bytes;
+  using yk_c::typer;
+  using yk_c::vecm;
+  using yk_c::hashx_common;
+  using yk_c::hashx;
+  using yk_c::vec2_t;
+  using yk_c::ordhs_t;
+  using yk_c::iterator_t;
 
   struct unity;
   struct unity_common
@@ -236,6 +230,8 @@ namespace bmdx
       msm_cv_recreate,
       msm_rl_init_by_pmsm,
       msm_pcos_checkref,
+      msm_pl_encode,
+      msm_mget_set_retvals,
       sizeof_msm
     };
     enum Eobject_method
@@ -390,10 +386,10 @@ namespace bmdx
 
 
 
-    //==  Wrapper for static varibles.
+    //==  Wrapper for static variables.
     //    Ensures exact 1:1 correspondence of a variable to its binary module instance,
     //    independent of binding ruleset used by compiler.
-    // Important differences from C++ language static varialbles:
+    // Important differences from C++ language static variables:
     //    1) Variable's storage initialization is not done or attempted automatically
     //      during static initialization of the module.
     //      The client must explicitly initialize the storage with help of init*() or rxai*().
@@ -508,37 +504,56 @@ namespace bmdx
 
 
 
-    //==  String character set conversions.
+  //==  String conversions, related to character sets.
 
-    // NOTE When (ws*, bs*, replace)  functions are used, even indirectly, in multithreaded program,
-    //  client-side setlocale and locale-dependent standard function calls
-    //  must be protected with a lock:
-    //    t_critsec_locale __lock(wsbs_lkp(), -1);
-    //  (The above object blocks only if it's necessary, depending on the platform.)
-  struct wsbs_lks {};
-  typedef critsec_t<wsbs_lks> t_critsec_locale;
-  s_long wsbs_lkp(); // lock sleep period: >= 1 (mcs) if lock is needed on this platform, -1 if not
-
-  std::string wsToBs(const std::wstring& x); // UTF-16 string to OS local encoding char string
-  std::string wsToBs(const wchar_t* x, meta::s_ll n = -1); // n < 0: autodetect length based on null char.
-  std::string wsToBsOem(const std::wstring& x); // UTF-16 string to OEM char string - Windows-specific (can be used for text output to console)
+    // Converting wide character string to 1-byte character string, based on system-default locale (equiv. to std::setlocale(..., "")).
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  std::string wsToBs(const std::wstring& x);
+  std::string wsToBs(const wchar_t* x, meta::s_ll n = -1);
+    //
+    // Converting wide character string to OEM char string - Windows-specific (can be used for text output to console)
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  std::string wsToBsOem(const std::wstring& x);
   std::string wsToBsOem(const wchar_t* x, meta::s_ll n = -1);
-  std::string wsToBsUtf8(const std::wstring& x); // UTF-16 string to UTF-8 string
-  std::string wsToBsUtf8(const wchar_t* x, meta::s_ll n = -1);
-  std::string wsToBsLsb(const std::wstring& x); // low byte of each wide char value to char
+    //
+    // Converting wide character string to UTF-8 string.
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  inline std::string wsToBsUtf8(const std::wstring& x __bmdx_noarg) { return bmdx_str::conv::wsbs_utf8(x); }
+  inline std::string wsToBsUtf8(const wchar_t* x, meta::s_ll n = -1 __bmdx_noarg) { return bmdx_str::conv::wsbs_utf8(x, n); }
+    //
+    // Direct converting low byte (8 bits) of each wide char value to char.
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  std::string wsToBsLsb(const std::wstring& x);
   std::string wsToBsLsb(const wchar_t* x, meta::s_ll n = -1);
-
-  std::wstring bsToWs(const std::string& x); // OS local encoding char string to UTF-16 string
+    //
+    //
+    //
+    // Converting a string to wide character string, based on system-default locale (equiv. to std::setlocale(..., "")).
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  std::wstring bsToWs(const std::string& x);
   std::wstring bsToWs(const char* x, meta::s_ll n = -1);
-  std::wstring bsUtf8ToWs(const std::string& x); // UTF-8 string to UTF-16 string
-  std::wstring bsUtf8ToWs(const char* x, meta::s_ll n = -1);
-  std::wstring bsLsbToWs(const std::string& x); // char. values to wide char values 0..255
+    //
+    // Converting UTF-8 string to UTF-16 string.
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  inline std::wstring bsUtf8ToWs(const std::string& x __bmdx_noarg) { return bmdx_str::conv::bsws_utf8(x); }
+  inline std::wstring bsUtf8ToWs(const char* x, meta::s_ll n = -1 __bmdx_noarg) { return bmdx_str::conv::bsws_utf8(x, n); }
+    //
+    // Direct converting input char values, treated as unsigned char in range 0..255, to numerically equal wide char values.
+    //    n >= 0: specifies length of the string x.
+    //    n < 0: autodetect x length based on null char.
+  std::wstring bsLsbToWs(const std::string& x);
   std::wstring bsLsbToWs(const char* x, meta::s_ll n = -1);
 
 
 
 
-  //==  Custom interafcing to a class (o_*).
+  //==  Custom interfacing to a class (o_*).
 
   // Purpose:
   //    a) accessing functions, declared in the class, from any binary module in the process,
@@ -553,8 +568,9 @@ namespace bmdx
   //      After this, unity::set_obj_atop will attach the interface set to object at once with setting
   //      object reference.
   //    Optional (4) To make implemented interface I accessible in another binary module,
-  //      decalre o_proxy specialization able to call static versions of all I functions.
+  //      declare o_proxy specialization able to call static versions of all I functions.
   //      After that, unity::pinterface automatically creates proxy object if necessary.
+  //      Example: search "struct o_proxy<i_dispatcher_mt>" in the current file.
 
   // All steps are illustrated below.
 
@@ -576,7 +592,7 @@ namespace bmdx
     // struct o_iimpl<T, I2> : o_ibind<T, I2>, I2
     // ...
 
-    // NOTE Default o_iimpl assumes that the target object itself inherits from MyI, and is its own implementation.
+    // NOTE Default o_iimpl assumes that the target object itself inherits from I1, and is its own implementation.
 
 
 
@@ -596,12 +612,12 @@ namespace bmdx
 
     // template<> struct o_interfaces_top<T> : public o_interfaces<T, I1, I2... up to 30 interfaces> {};
     //
-    // // Anywere else (does not have to know about o_interfaces_top<T>):
+    // // Anywhere else (does not have to know about o_interfaces_top<T>):
     //
     // unity x; T* p = new T();
     //  try { x.set_obj_atop<T>(*p, 1); } catch(...) { delete p; throw; } // wrap *p into x.
     //
-    // // Anywere else (does not have to know about type T):
+    // // Anywhere else (does not have to know about type T):
     //
     // x.pinterface<I1>()->...; // invokes a method, implemented in o_iimpl<T, I1>
     // x.pinterface<I2>()->...; // invokes a method, implemented in o_iimpl<T, I2>
@@ -691,9 +707,9 @@ namespace bmdx
     //  1. o_iimpl accesses its target object with __pobj(), and any of attached interfaces
     //    with __pinterface(), both defined in base o_ibind.
     //
-    //  2. In the list of interfaces (o_interfaces<>), any argument can be set to int, to quickly diasable entry.
+    //  2. In the list of interfaces (o_interfaces<>), any argument can be set to int, to quickly disable entry.
     //
-    //  3. It is poissible to attach interfaces without knowing the real object class.
+    //  3. It is possible to attach interfaces without knowing the real object class.
     //    o_iimpl class may get valid object pointer of certain type from __pobj() with specific flags.
     //    Working with object may be via __pobj() and/or __pinterface() as needed by application.
     //
@@ -755,6 +771,8 @@ namespace bmdx
     I* __psi() const { return 0; }
     void __set_pp(unity_common::__Psm psm, I* pi) throw () { __psm = psm; __pi = pi; }
   };
+
+
     // NOTE o_iptr_t is only for in-module use. Its structure for different I may be different.
     //  Pass the original unity object between binary modules if necessary.
   template<class I> struct o_iptr_t
@@ -806,7 +824,7 @@ namespace bmdx
     ~o_iptr_t()        throw (__bmdx_noargt1) { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
 
       // NOTE Construction does not generate exceptions.
-      //    If no proxy defined by the client, or the client-defined __Proxy() fails,
+      //    If no proxy defined by the client, or the client-defined __Proxy() fails (this is not normal),
       //    o_iptr_t will be null (== false).
     o_iptr_t(__I* pi, unity_common::__Psm pmsm __bmdx_noarg)        throw () : _p(0), _f(0)
     {
@@ -1028,20 +1046,25 @@ namespace bmdx
 
     //==  Default implementation of interface I for class T.
     //  Should be specialized as necessary.
-    // NOTE For given MyI, several variations of o_iimpl are possible.
+    //  The simplest form of specialization will inherit from I (in addition to o_ibind),
+    //    and implement I for T as necessary. To access object T itself,
+    //    in the necessary mode, this->__pobj should be used.
+    // NOTE For given I, several variations of o_iimpl are possible.
     //    Declare o_iimpl<T, IAlt1>, o_iimpl<T, IAlt2> etc., each of them inherits
-    //    from an o_ibind<T, MyI> and implments MyI differently.
+    //    from an o_ibind<T, I> and implements I differently.
     //    IAlt* are formal arguments, to be listed in the set of interfaces (o_interfaces),
     //    attached to target object.
-  template<class T, class MyI, class _ = __vecm_tu_selector>
-  struct o_iimpl : o_ibind<T, MyI> //, MyI
+  template<class T, class I, class _ = __vecm_tu_selector>
+  struct o_iimpl : o_ibind<T, I>
   {
-      // Default implementation assumes that the target object itself inherits from MyI, and is its own implementation.
-      //    Customized o_iimpl will inherit from MyI and implement it differently.
-    //virtual MyI* __pMyI() { return this; }
-    virtual MyI* __pMyI()
+      // NOTE The default (non-specialized o_iimpl) assumes that the target object itself inherits from I,
+      //    and is its own implementation.
+      //    In the customized o_iimpl, if it's designed to inherit from I (e.g. instead of aggregation),
+      //    uncomment the below line + remove the default __pMyI impl.
+    //virtual I* __pMyI() { return this; }
+    virtual I* __pMyI()
     {
-      MyI* p = this->__pobj(0x25); if (p) { return p; } // return object itself if it's from the current binary module and has the correct static type or vecm type index (see type_index_t in vecm_hashx.h)
+      I* p = this->__pobj(0x25); if (p) { return p; } // return object itself if it's from the current binary module and a) has static type name == that of T, or b) has the same vecm type index (see type_index_t in vecm_hashx.h)
       p = this->__pobj(0x44); return p; // return object itself if it's from other binary module and has the correct vecm type index
     }
     virtual void __itf_after_construct(s_long flags, o_itfset_base* src) {}
@@ -1144,9 +1167,12 @@ namespace bmdx
 
 
 
-    // This is the default (empty) set of interfaces, attached to object T by unity::set_obj_atop.
-    //    If it's specialized for a class (specialization should inherit from particular o_interfaces<T, I1, I2...> class),
-    //    any object, assigned with set_obj_atop, supports all interfaces, listed in that specialization.
+    // The default (empty) template for the set of interfaces for attaching to an object T, wrapped into struct unity (as subtype utObject).
+    //    When specialized for particular T, must inherit from user-defined set of interfaces (e.g. o_interfaces<T, I1, I2...>).
+    //    This specialization influences only 1) unity::set_obj_atop and 2) unity::objt with atop == true (non-default arg.).
+    //    All objects, created with set_obj_atop or objt with atop true, will be automatically added support for the specified set of interfaces.
+    //    (In the above example: I1, I2 etc. The default implementation relies on T inheriting directly from I1, I2..., but the client code
+    //    may define custom implementation for any of them, see struct o_iimpl.)
   template<class T, class _ = __vecm_tu_selector>
   struct o_interfaces_top
   : public o_interfaces<T>{};
@@ -1156,7 +1182,6 @@ namespace bmdx
 namespace yk_c
 {
   template<> struct vecm::spec<bmdx::unity> { struct aux : vecm::config_aux<bmdx::unity> { }; typedef config_t<bmdx::unity, 1, 4, 1, aux> config; };
-  template<class T, class L> struct vecm::spec<bmdx::cref_t<T, L> > { typedef bmdx::cref_t<T, L> t; struct aux : vecm::config_aux<t> { }; typedef config_t<t, 1, 4, 1, aux> config; };
 }
 
 
@@ -1182,19 +1207,22 @@ namespace bmdx
     };
     typedef s_long (*__Pws_ti)();
   public:
-    template<class T, class _ = __vecm_tu_selector> struct checked_ptr
+    template<class T> struct checked_ptr
     {
       T* p;
 
       inline checked_ptr(const T* p_)        throw() : p((T*)p_) {}
+
       inline T& operator*() const        throw(XUExec) { check(); return *p; }
       inline operator T*() const        throw() { return p; }
+
       inline operator bool() const        throw() { return !!p; }
+      inline bool operator!() const        throw() { return !p; }
+      inline bool is_null() const        throw() { return !p; }
+
       inline T* operator->() const        throw(XUExec) { check(); return p; }
       inline bool operator==(const checked_ptr& p2) const        throw() { return p == p2.p; }
-      inline bool operator==(const T* p2) const        throw() { return p == p2; }
       inline bool operator!=(const checked_ptr& p2) const        throw() { return p == p2.p; }
-      inline bool operator!=(const T* p2) const        throw() { return p != p2; }
 
         // Same as in o_iptr_t.
       inline const T* ptr() const        throw(XUExec) { check(); return p; }
@@ -1205,7 +1233,7 @@ namespace bmdx
       inline void check() const        throw(XUExec) { if (!p) {        throw XUExec("checked_ptr.p == 0: ", typeid(T*).name()); } }
     };
 
-      // Hash and map key functions.
+      // Hashlist and map key functions.
     struct kf_unity
     {
       kf_unity(s_long flags_ = 0); // flags: see static const s_long fkcmp*
@@ -1213,21 +1241,21 @@ namespace bmdx
       void _set_flags(s_long x) const;
       s_long hash(const unity& x) const;
       bool is_eq(const unity& x1, const unity& x2) const;
-      bool less12(const unity& x1, const unity& x2) const; // x1 < x2
-      bool less21(const unity& x1, const unity& x2) const; // again x1 < x2
+      bool less12(const unity& x1, const unity& x2) const; // x1.k_less(x2, _flags)
+      bool less21(const unity& x1, const unity& x2) const; // again x1.k_less(x2, _flags)
 
       template<class K2> inline void cnew(unity* p, const K2& x, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { new (p) unity(x); if ((_flags & fkcmpScalarize) && !p->isScalar()) { try { *p = p->u_key(); } catch (...) { p->clear(); throw; } } }
       template<class K2> inline s_long hash(const K2& x, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { return this->hash(unity(x)); }
       template<class K2> inline bool is_eq(const unity& x1, const K2& x2, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { return x1.k_eq(unity(x2), _flags); }
-      template<class K2> inline bool less12(const unity& x1, const K2& x2, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { return x1.k_less(unity(x2), _flags); }
-      template<class K2> inline bool less21(const K2& x1, const unity& x2, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { return unity(x2).k_less(x1, _flags); }
+      template<class K2> inline bool less12(const unity& x1, const K2& x2, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { return x1.k_less(unity(x2), _flags); } // x1 < x2
+      template<class K2> inline bool less21(const K2& x1, const unity& x2, meta::noarg_tu_t<K2> = meta::noarg_tu_t<K2>()) const { return unity(x1).k_less(x2, _flags); } // again x1 < x2
 
       private: mutable s_long _flags;
     };
 
     struct _hl_i;
-    typedef yk_c::experimental::ordhs_t<unity, unity, kf_unity, kf_unity> t_map;
-    typedef yk_c::experimental::ordhs_t<unity, unity, kf_unity, kf_unity, __vecm_tu_selector> t_map_tu;
+    typedef yk_c::ordhs_t<unity, unity, kf_unity, kf_unity> t_map;
+    typedef yk_c::ordhs_t<unity, unity, kf_unity, kf_unity, __vecm_tu_selector> t_map_tu;
     typedef _hl_i t_hash;
 
     template<int utt, class _ = meta::nothing, class __ = __vecm_tu_selector> struct valtype_t {};
@@ -1367,8 +1395,8 @@ namespace bmdx
     };
     template<class Td, class Ts, class _ = meta::nothing, class __ = __vecm_tu_selector>
       struct _x_vecadap {};
-          template<class Td, class Ts, class _> struct _x_vecadap<vec2_t<Td>, std::vector<Ts>, _> { static bool copy(vec2_t<Td>& dest, const std::vector<Ts>& src) { return _utils::copy(dest, src); } };
-          template<class Td, class Ts, class _> struct _x_vecadap<vec2_t<Td>, vec2_t<Ts>, _> { static bool copy(vec2_t<Td>& dest, const vec2_t<Ts>& src) { return _utils::copy(dest, src); } };
+          template<class Td, class Ts, class _> struct _x_vecadap<vec2_t<Td>, std::vector<Ts>, _> { static bool copy(vec2_t<Td>& dest, const std::vector<Ts>& src) { if (dest.locality() != 1 && dest.compatibility() < 1) { return 0; } dest.clear(); dest.vec2_set_nbase(0); typename std::vector<Ts>::const_iterator e = src.begin(); while(e != src.end()) { if (!dest.el_append(*e++)) { return 0; } } return 1; } };
+          template<class Td, class Ts, class _> struct _x_vecadap<vec2_t<Td>, vec2_t<Ts>, _> { static bool copy(vec2_t<Td>& dest, const vec2_t<Ts>& src) { if (src.locality() != 1 && src.compatibility() < 1) { return 0; } if (dest.locality() != 1 && dest.compatibility() < 1) { return 0; } dest.clear(); dest.vec2_set_nbase(src.nbase()); vecm::link1_t<typename vecm::specf<Ts>::t_value, true> e = src.link1_cbegin(); while(!e.is_aend()) { if (!dest.el_append(*e.pval())) { return 0; } e.incr(); } return 1; } };
           template<class _> struct _x_vecadap<vec2_t<std::wstring>, std::vector<std::string>, _> { typedef std::wstring Td; typedef std::string Ts; static bool copy(vec2_t<Td>& dest, const std::vector<Ts>& src) { if (!(dest.locality() == 1 || dest.compatibility() > 0)) { return false; } try { dest.clear(); dest.vec2_set_nbase(0); for (size_t i = 0; i < src.size(); ++i) { dest.push_back(bsToWs(src[i])); } return true; } catch (...) {} return false; } };
           template<class _> struct _x_vecadap<vec2_t<std::wstring>, vec2_t<std::string>, _> { typedef std::wstring Td; typedef std::string Ts; static bool copy(vec2_t<Td>& dest, const vec2_t<Ts>& src) { if (!(dest.locality() == 1 || dest.compatibility() > 0) || !(src.locality() == 1 || src.compatibility() > 0)) { return false; } try { dest.clear(); dest.vec2_set_nbase(src.nbase()); for (s_long i = 0; i < src.n(); ++i) { dest.push_back(bsToWs(src[i])); } return true; } catch (...) {} return false; } };
     template<class Ts> void _x_asgvec(const std::vector<Ts>& src, bool keep_name, meta::noarg_tu_t<Ts> = meta::noarg_tu_t<Ts>())        { typedef typename trivconv_t<typename meta::nonc_t<Ts>::t>::t_target Td; enum { utt = reference_t<Td>::utt | utArray }; _stg_u st; if (_Lcreate(&st, utt | xfPtr, 0) > 0) { vec2_t<Td>* pv = reference_t<vec2_t<Td> >::deref(st, true); if (_x_vecadap<vec2_t<Td>, std::vector<Ts> >::copy(*pv, src)) { void* _pn(0); if (keep_name && isNamed()) { _pn = _data.p2; _data.p2 = 0; } clear(); _data.p1 = st.p1; _data.p2 = _pn; ut = utt | xfPtr; return; } _Ldestroy(&st, utt | xfPtr, 0); } throw XUExec("_x_asgvec", "src: " + _tname0(utt)); }
@@ -1415,7 +1443,7 @@ namespace bmdx
     std::wstring tname(bool allowArrDim = false) const;
 
       // The set
-      //    scalar, array, object, assoc. array (map or hash)
+      //    scalar, array, object, assoc. array (map or hashlist)
       //  covers all available types in a valid object.
       //  Empty is a scalar. Bool is represented by 0/non-0 char.
       // NOTE Tests are able to return false on this == 0.
@@ -1427,6 +1455,7 @@ namespace bmdx
       // Tests for particular types and values.
       // NOTE Tests are able to return false on this == 0.
     inline bool isEmpty() const throw () { return this && utype() == utEmpty; }
+    inline bool isNonempty() const throw () { return !isEmpty(); }
     inline bool isInt() const throw () { return this && utype() == utInt; }
     inline bool isFloat() const throw () { return this && utype() == utFloat; }
     inline bool isDate() const throw () { return this && utype() == utDate; }
@@ -1458,10 +1487,10 @@ namespace bmdx
     bool operator==(const unity& x) const;
     bool operator!=(const unity& x) const;
 
-      // Flags for uniqueness and relation of map and hash keys
+      // Flags for uniqueness and relation of map and hashlist keys
     static const s_long fkcmpNFloat = 0x2; // convert integer keys (utInt, utChar) to double
     static const s_long fkcmpSNocase = 0x1; // strings comparison and hashing are case insensitive (0 == binary comp.)
-    static const s_long fkcmpRevOrder = 0x4; // (map only) reverse order in "<" comparison (hash only)
+    static const s_long fkcmpRevOrder = 0x4; // (map only) reverse order in "<" comparison
     static const s_long fkcmpScalarize = 0x8; // do not use non-scalar keys, convert a copy to scalar and use it as key
     static const s_long _fkcmp_n = 16;
     static const s_long _fkcmp_mask = _fkcmp_n - 1;
@@ -1501,7 +1530,7 @@ namespace bmdx
     static void write_fmt(std::ostream& s, const unity& x, const iofmt& f, bool bsp, s_long nsp = 2);
     static void write_fmt(std::wostream& s, const unity& x, const iofmt& f, bool bsp, s_long nsp = 2);
 
-      // Underlying map, hash access. Objects are implementation-dependent!
+      // Underlying map, hashlist access. Objects are implementation-dependent!
     inline t_map* _pmap() const { typedef t_map& R; return isMap() ? &R(*_m()) : 0; }
     t_hash* _phash() const { return isHash() ? _h() : 0; }
 
@@ -1584,6 +1613,7 @@ namespace bmdx
       // NOTE Assignment never changes the target's native module association (see _pmsm()).
     unity& operator=(const unity& src);
     unity& operator=(const std::wstring&);
+    unity& operator=(const arrayref_t<wchar_t>& src);
     unity& operator=(const meta::s_ll& src);
     unity& operator=(const double& src);
     unity& operator=(const _unitydate& src);
@@ -1650,15 +1680,15 @@ namespace bmdx
       //              The client is responsible for such checks (see also o_api::prefo).
       //
       //          b) Both T and the contained object have same cross-module type index
-      //              (see type_index_t in vecm_hashx.h for details).
       //              NOTE Several types have cross-module indexes pre-declared:
-      //                  char, double, s_long, meta::s_ll -- in vecm_hashx.h.
-      //                  _unitydate, unity -- below in bmdx_main.h.
+      //                  char, double, s_long, meta::s_ll -- search for "cmti_base_t<char" in vecm_hashx.h to see.
+      //                  unity, _unitydate, pcos etc. -- search for "cmti_base_t<bmdx::unity" in the current file to see.
       //                  threadctl, threadctl::tid -- in bmdx_config.h and bmdx_cpiomt.h.
+      //              See also type_index_t in vecm_hashx.h.
       //
       //  If not (1..4), an exception is generated:
       //    XUTypeMismatch if utype() is not the same as given type.
-      //    XUExec a) ind is out of range, b) failed to return refrence to contained object.
+      //    XUExec a) ind is out of range, b) failed to return reference to contained object.
     template<class T> inline T&        ref(meta::noarg_tu_t<T> = meta::noarg_tu_t<T>())                { return _rnonc<T>(); }
     template<class T> inline const T&        ref(meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const                { return _rnonc<T>(); }
     template<int utt> inline typename valtype_t<utt>::t&        ref(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>())                { typedef typename valtype_t<utt>::t T; if (utt != utype()) { throw XUTypeMismatch("ref", _tname0(utype()), _tname0(utt)); } return *checked_ptr<T>(_drf_c_i<utt>()); }
@@ -1806,8 +1836,8 @@ namespace bmdx
       val(s_long ind, EConvStrength cs = csNormal, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const        { return _arr_el_get<reference_t<T>::utt>::F(this, ind, cs); }
 
 
-    // The below v* functions are shorter version of val() + certain additional operations,
-    //    for each particular type.
+    // NOTE The below v* functions are shorter version of val() + certain additional operations,
+    //    dependent on type of the contained value.
 
       // >= 0 -- length of the contained string.
       //  -1 -- the contained value is empty (utEmpty).
@@ -1816,26 +1846,42 @@ namespace bmdx
     meta::s_ll lenstr() const throw();
 
       // Wide string representation of a value.
-      //  NOTE vstr() values returned may be formatted differently than val<utString>().
+      //    (If the value is itself a wide-character string, vstr returns a copy of that string.)
+      //    NOTE vstr() values returned may be formatted differently than val<utString>().
+      //  See also val() with utString.
     std::wstring vstr() const;
       std::wstring vstr(s_long ind) const;
 
-      // C-string representation of a value.
+      // Convenience functions.
+      //  Return reference to the contained std::wstring, if possible. (ref<utString>(), ref<utString>(ind), ref<utUnity>(ind).rstr()).
+    const std::wstring& rstr() const;
+      const std::wstring& rstr(s_long ind) const;
+    std::wstring& rstr();
+      std::wstring& rstr(s_long ind);
+
+      // 1-byte character string representation of a value.
+      // If the value is wide-character string, the conversion is based on system-default locale (equiv. to std::setlocale(..., "")).
+      //    See also wsToBs().
     std::string vcstr() const;
     std::string vcstr(s_long ind) const;
 
+      // Integer representation of a value.
+      //  See also val() with utInt.
     meta::s_ll vint() const;
     meta::s_ll vint(s_long ind) const;
 
-      // High doubleword.
+      // Integer representation of a value - high doubleword only.
+      //  See also val() with utInt.
     s_long vint_h() const;
     s_long vint_h(s_long ind) const;
 
-      // Low doubleword.
+      // Integer representation of a value - low doubleword only.
+      //  See also val() with utInt.
     s_long vint_l() const;
     s_long vint_l(s_long ind) const;
 
-      // Floating-point value.
+      // Floating-point representation of a value - low doubleword only.
+      //  See also val() with utFloat.
     double vfp() const;
     double vfp(s_long ind) const;
 
@@ -1882,7 +1928,7 @@ namespace bmdx
 
 
       // Array size and boundaries.
-      //  If *this does not contain an array, XUTypeMismatch is genereated.
+      //  If *this does not contain an array, XUTypeMismatch is generated.
     s_long arrlb() const; // lower bound (first existing element index).
     s_long arrub() const; // upper bound (largest existing element index).
     s_long arrsz() const; // the number of elements
@@ -2079,7 +2125,7 @@ namespace bmdx
     unity& ua_fill(s_long utt, const unity& v = unity()); // -"-; creates new array with same bounds as existing, + fills with v; on err. gen. exc., the object is not changed
 
 
-    //-- Hashed map
+    //-- Hashed ordered map
 
     unity& map_ensure(); // returns *this
     unity& map_clear(bool full); // true resets flags and removes elements (object name is kept), false only removes elements; returns *this
@@ -2096,6 +2142,8 @@ namespace bmdx
     bool map_locate(const unity& k, bool insert, s_long& ind); // ind == map_noel() if not found on insert == false
     unity& map(const unity& k); // insert { k, utEmpty } if necessary, return ref. to value with key k
       // Returns: true if k was inserted, false if it existed.
+      //  NOTE The name map_append means only that inserting pre-sorted keys into the map is optimized.
+      //    map_append always inserts any k in the set of existing keys at the place, defined by comparison kf_unity::less12.
     bool map_append(const unity& k, const unity& v, bool keep_first = false);
     bool map_del(const unity& k); // true - removed, false - not existed
 
@@ -2103,7 +2151,7 @@ namespace bmdx
     unity& mapS_set(s_long new_S); // returns *this
 
       // In mapi*, ind is 1-based. Valid inds are [1..mapS()].
-      //  NOTE Key, value functions genereate an exception if ind is out of range.
+      //  NOTE Key, value functions generate an exception if ind is out of range.
     bool mapi_has(s_long ind) const; // true if ind is correct
     bool mapi_empty(s_long ind) const; // true if ind is correct and the value is empty
     const unity& mapi_key(s_long ind); // returns key at 1-based ind
@@ -2141,7 +2189,7 @@ namespace bmdx
     s_long hashS_c() const;
 
       // In hashi*, ind is 1-based. Valid inds are [1..hashS()].
-      //  NOTE Key, value functions genereate an exception if ind is out of range.
+      //  NOTE Key, value functions generate an exception if ind is out of range.
       //  NOTE Access by index implicitly creates entries order vector.
       //    If access is mixed with hashlist modification, use hashl family.
     bool hashi_has(s_long ind) const; // true if ind is correct
@@ -2176,41 +2224,49 @@ namespace bmdx
 
 
 
-    //-- map, hash, array elem. access, [ ], path
+    //-- map, hashlist, array elem. access, [ ], path
 
       // u_has returns true if the inner value is the container of one of the specified types
       //    (tt is a combination of flags: 1 <=> utUnityArray, 2 <=> utMap, 4 <=> utHash, 8: allow forwarding to the contained unity object.)
     bool u_has(const unity& ki, s_long tt) const;
-      // operator[] returns, if found type/key/index match, one of the following:
+
+      // operator[] returns, if found type/key/array index match, one of the following:
       //    a) ref. to ki-th array element,
       //    b) map(ki),
       //    c) hash(ki),
-      //    d) contained unity object [ki].
+      //    d) contained unity object's [ki].
       //  Otherwise, XUExec is generated.
+      // NOTE 1. operator[] does not change the type of the internal container.
+      //  2. operator[] does not automatically insert associative array keys or normal array elements.
     unity& operator[] (const unity& ki);
     const unity& operator[] (const unity& ki) const;
 
-      // Keys in the list should be in paramline array format (first "|" or "=|" is optional).
-      //  mha is arbitrary tree of maps, hashes, arrays.
-      //  NOTE forced == true: if key (keylist element) is a non-numeric key, but, in this position
-      //  in the tree, array already exists, the function returns 0 (array is not converted to hash or map).
-      //  In other cases, for numeric key, an array is created containing that index,
-      //  for non-numeric key -  a hash with appropriate entry is autocreated
-      //  (if a scalar exists in this place, it will be overwritten).
-    const unity* path(const std::wstring& keylist) const throw();
-    const unity* path(const wchar_t* keylist) const throw();
-    const unity* path(const std::string& keylist) const throw();
-    const unity* path(const char* keylist) const throw();
-    const unity* path(const unity& keylist) const throw();
+      // Return a pointer to the element in a branch of the tree, consisting of maps, hashlists, arrays.
+      //  keylist: path to the element,
+      //    a) as string - in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional),
+      //    b) as unity array - path as such, split into elements.
+      // On error, null pointer is returned: a) path not found, b) array indexing with non-number, c) mem. alloc. error.
+    checked_ptr<const unity> path(const std::wstring& keylist) const throw();
+    checked_ptr<const unity> path(const wchar_t* keylist) const throw();
+    checked_ptr<const unity> path(const std::string& keylist) const throw();
+    checked_ptr<const unity> path(const char* keylist) const throw();
+    checked_ptr<const unity> path(const unity& keylist) const throw();
 
-    const unity* path(const std::wstring& keylist, const unity& x_dflt) const throw();
-    const unity* path(const wchar_t* keylist, const unity& x_dflt) const throw();
-    const unity* path(const std::string& keylist, const unity& x_dflt) const throw();
-    const unity* path(const char* keylist, const unity& x_dflt) const throw();
-    const unity* path(const unity& keylist, const unity& x_dflt) const throw();
+    checked_ptr<const unity> path(const std::wstring& keylist, const unity& x_dflt) const throw();
+    checked_ptr<const unity> path(const wchar_t* keylist, const unity& x_dflt) const throw();
+    checked_ptr<const unity> path(const std::string& keylist, const unity& x_dflt) const throw();
+    checked_ptr<const unity> path(const char* keylist, const unity& x_dflt) const throw();
+    checked_ptr<const unity> path(const unity& keylist, const unity& x_dflt) const throw();
 
-      // path_w returns 0 only on failure. If the specified branch or key is missing,
-      //  it's inserted.
+      // Return a pointer to the element in a branch of the tree, consisting of maps, hashlists, arrays,
+      //  with autocreation of the given path.
+      //  keylist: path to the element, in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional).
+      //  path_w automatically creates the given path, if it does not exist.
+      //  If branch element is empty (e.g. just created), and is indexed with the key which is Empty, Int, or Float,
+      //      the branch element is automatically converted to array, and resized to make the index valid.
+      //      With other key types, such branch element is converted to hashlist,
+      //      and only one element is inserted (the key with and empty value).
+      // On error, null pointer is returned: a) existing array indexing with non-number, b) mem. alloc. error.
     checked_ptr<unity> path_w(const std::wstring& keylist)        throw() { return _path_w(keylist); }
     checked_ptr<unity> path_w(const wchar_t* keylist)        throw() { return _path_w(keylist); }
     checked_ptr<unity> path_w(const std::string& keylist)        throw() { return _path_w(keylist); }
@@ -2219,10 +2275,10 @@ namespace bmdx
 
 
 
-    //-- Common associative array functions (for map and hash)
+    //-- Common associative array functions (for map and hashlist)
 
-      // assoc* functions work both with maps and with hashes,
-      //    without changing the container type. The container must be map or hash.
+      // assoc* functions work both with maps and with hashlists,
+      //    without changing the container type. The container must be map or hashlist.
       //    For maps, list of key/value pairs is iterated in natural sort order,
       //    numeric positions in assocl_* and index values in mapi_* are the same.
     bool assoc_set(const unity& k, const unity& v, bool keep_first = false);
@@ -2230,7 +2286,7 @@ namespace bmdx
 
     s_long assocS_c() const;
 
-      // NOTE assocl_noel() is returned by assocl_ first, last, next, prev if *this is not map or hash.
+      // NOTE assocl_noel() is returned by assocl_ first, last, next, prev if *this is not map or hashlist.
     s_long assocl_noel() const { return hashx_common::no_elem; }
     s_long assocl_first() const;
     s_long assocl_last() const;
@@ -2240,6 +2296,40 @@ namespace bmdx
     const unity& assocl_key(s_long pos) const;
     unity& assocl(s_long pos);
     const unity& assocl_c(s_long pos) const;
+
+    #if bmdx_part_unity_oppar_assoc
+
+        // Convenience function for building associative arrays.
+        //  Returns map(k) if the current object is utMap, or hash(k) in all other cases.
+      unity& operator()(const unity& k);
+
+        // Convenience function for building associative arrays.
+        //  Performs map_append(k, v) if the current object is utMap, or hash_set(k, v) in all other cases.
+        // Returns *this.
+        // See also paramline :: list_m, list_h.
+      unity& operator()(const unity& k, const unity& v);
+
+    #endif
+
+
+      // Convenience functions for paramline :: decode, decode_tree, decode1v.
+      //  Return *this.
+    unity& pl_dech(arrayref_t<wchar_t> ssrc); // decodes into utHash
+    unity& pl_decm(arrayref_t<wchar_t> ssrc); // decodes into utMap
+    unity& pl_dech_tree(arrayref_t<wchar_t> ssrc, s_long flags = 0); // decodes into utHash (0x1 flag is ignored)
+    unity& pl_decm_tree(arrayref_t<wchar_t> ssrc, s_long flags = 0); // decodes into utMap (0x1 flag is ignored)
+    unity& pl_dec1v(arrayref_t<wchar_t> ssrc); // decodes a value, which is scalar or 1-dim. 1-based utUnityArray
+
+    unity& pl_dech(arrayref_t<char> ssrc);
+    unity& pl_decm(arrayref_t<char> ssrc);
+    unity& pl_dech_tree(arrayref_t<char> ssrc, s_long flags = 0);
+    unity& pl_decm_tree(arrayref_t<char> ssrc, s_long flags = 0);
+    unity& pl_dec1v(arrayref_t<char> ssrc);
+
+      // Convenience functions for paramline :: encode, encode_tree, encode1v.
+    std::wstring pl_enc();
+    std::wstring pl_enc_tree();
+    std::wstring pl_enc1v();
 
 
 
@@ -2347,41 +2437,48 @@ namespace bmdx
 
     template<class T, class _ = __vecm_tu_selector> struct objt_binder_t
     {
-      unity& x; bool ne; s_long lkt;
-      objt_binder_t(unity& x_, bool ne_, s_long lkt_) : x(x_), ne(ne_), lkt(lkt_) {}
-      bool operator()() { T* p(0); try { p = new T(); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(0)"); } return false; }
-      template<class A1> bool operator()(const A1& x1)        { T* p(0); try { p = new T(x1); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
-      template<class A1, class A2> bool operator()(const A1& x1, const A2& x2)        { T* p(0); try { p = new T(x1, x2); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
-      template<class A1, class A2, class A3> bool operator()(const A1& x1, const A2& x2, const A3& x3)        { T* p(0); try { p = new T(x1, x2, x3); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
-      template<class A1, class A2, class A3, class A4> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { T* p(0); try { p = new T(x1, x2, x3, x4); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
-      template<class A1, class A2, class A3, class A4, class A5> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6, x7); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(7)"); } return false; }
-      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6, x7, x8); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(8)"); } return false; }
+      unity& x; bool ne; bool atop; s_long lkt;
+      objt_binder_t(unity& x_, bool ne_, bool b_atop_, s_long lkt_) : x(x_), ne(ne_), atop(b_atop_), lkt(lkt_) {}
+      bool operator()() { T* p(0); try { p = new T(); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(0)"); } return false; }
+      template<class A1> bool operator()(const A1& x1)        { T* p(0); try { p = new T(x1); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
+      template<class A1, class A2> bool operator()(const A1& x1, const A2& x2)        { T* p(0); try { p = new T(x1, x2); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
+      template<class A1, class A2, class A3> bool operator()(const A1& x1, const A2& x2, const A3& x3)        { T* p(0); try { p = new T(x1, x2, x3); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
+      template<class A1, class A2, class A3, class A4> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { T* p(0); try { p = new T(x1, x2, x3, x4); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6, x7); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(7)"); } return false; }
+      template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool operator()(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { T* p(0); try { p = new T(x1, x2, x3, x4, x5, x6, x7, x8); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(8)"); } return false; }
 
             // Same as operator(), but args. are cast to non-const when passed to constructor.
-          template<class A1> bool createnc(const A1& x1)        { T* p(0); try { p = new T((A1&)x1); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
-          template<class A1, class A2> bool createnc(const A1& x1, const A2& x2)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
-          template<class A1, class A2, class A3> bool createnc(const A1& x1, const A2& x2, const A3& x3)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
-          template<class A1, class A2, class A3, class A4> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
-          template<class A1, class A2, class A3, class A4, class A5> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(7)"); } return false; }
-          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); x.set_obj(*p, true, lkt); return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(8)"); } return false; }
+          template<class A1> bool createnc(const A1& x1)        { T* p(0); try { p = new T((A1&)x1); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(1)"); } return false; }
+          template<class A1, class A2> bool createnc(const A1& x1, const A2& x2)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(2)"); } return false; }
+          template<class A1, class A2, class A3> bool createnc(const A1& x1, const A2& x2, const A3& x3)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(3)"); } return false; }
+          template<class A1, class A2, class A3, class A4> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(4)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(5)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(6)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(7)"); } return false; }
+          template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool createnc(const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)        { T* p(0); try { p = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); if (atop) { x.set_obj_atop(*p, true, lkt); } else { x.set_obj(*p, true, lkt); } return true; } catch (...) {} if (p) { try { delete p; } catch (...) {} } if (!ne) { throw XUExec("objt_binder_t()(8)"); } return false; }
     };
 
       // Object creation with 0..6 arguments. The object will be strong-referenced.
       //    Example:         unity z; z.objt<std::string>(0)(' ', 25);
       //    On success, the previous unity contents are correctly removed, and the new object is set on their place.
       //    On failure, the previous contents are not changed.
+      // no_exc: objt_binder_t operator() behavior in case if object construction or interfaces attachment fails:
+      //    true: return false.
+      //    false: generate an exception.
       // lkt: ref. counting lock type:
       //    0 - do not use critical sections for object ref. counting,
       //    1 (default) - lock ref. counting one lock per type (Obj), actual in all translation units of the current binary module,
       //    2 - lock ref. counting with individual lock associated with the target object only (automatically kept together with the wrapped object).
-      // See set_obj for detailed info on how locks type 1 and 2 work.
+      //  See set_obj for detailed info on how locks type 1 and 2 work.
+      // b_atop:
+      //    true - on object creation, attach the default set of interfaces for T to the new object.
+      //      See also struct o_interfaces_top.
+      //    false (default) - create wrapped object T only, do not create any structures related to interfaces.
     template<class T> objt_binder_t<T>
-      objt(bool no_exc, s_long lkt = 1, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw()
-          { return objt_binder_t<T>(*this, no_exc, lkt); }
+      objt(bool no_exc, s_long lkt = 1, bool b_atop = false, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw()
+          { return objt_binder_t<T>(*this, no_exc, b_atop, lkt); }
 
       // Returns object pointer !=0 if unity references a valid (not deleted) object.
     void* cpvoid() const;
@@ -2389,16 +2486,25 @@ namespace bmdx
       // Returns object pointer !=0 if unity references an object or still contains a pointer to the deleted object.
     void* cpvoidkey() const;
 
-      // Returns object pointer !=0:
-      //    a) b_checked == true: if unity references a valid (not deleted) object of the same static type as Obj.
-      //    b) b_checked == false: same as cpvoidkey() cast to Obj* (if unity references any object
-      //      or still contains a pointer to the deleted object).
-    template<class Obj> Obj*
-      objPtr(bool b_checked = true, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>())
-          { return o_api(this).pobj<Obj>(b_checked ? 0x21 : 0x78); }
-    template<class Obj> const Obj*
-      objPtr_c(bool b_checked = true, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>()) const
-          { return o_api(this).pobj<Obj>(b_checked ? 0x21 : 0x78); }
+      // Returns a pointer to the object, wrapped by this unity object.
+      //  b_checked:
+      //    a) true: return non-0 if unity references a valid (not deleted) object of the same static type as Obj.
+      //    b) false: return non-0, if unity references any object (utype == utObject) in any state, even if deleted.
+      //      This is the same as (Obj*)cpvoidkey().
+      //  b_allow_cm:
+      //    a) true: only if b_checked true, allow returning non-0 pointer to an object from another binary module, if its vecm type index is the same as for Obj.
+      //      (See also type_index_t in vecm_hashx.h)
+      //    b) false: do not modify behavior of b_checked flag.
+    template<class Obj> Obj* objPtr(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>())        { o_api a(this); Obj* p = a.pobj<Obj>(b_checked ? 0x21 : 0x78); if (!p && b_checked && b_allow_cm) { p = a.pobj<Obj>(0x44); } return p; }
+    template<class Obj> const Obj* objPtr_c(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>()) const        { o_api a(this); const Obj* p = a.pobj<Obj>(b_checked ? 0x21 : 0x78); if (!p && b_checked && b_allow_cm) { p = a.pobj<Obj>(0x44); } return p; }
+
+      // Analogous to objPtr,
+      //    a) returns valid ref. to Obj,
+      //    b) generates XUExec if *this contains no object or the object is of wrong type or in wrong state.
+      // NOTE Same as "T& ref = x.objRef<T>();", one may use "T& ref = +x;".
+      //    See also: unity operator+ and unitypc operator T&.
+    template<class Obj> Obj& objRef(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>())        { return *checked_ptr<Obj>(this->objPtr<Obj>(b_checked, b_allow_cm)); }
+    template<class Obj> const Obj& objRef_c(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>()) const        { return *checked_ptr<Obj>(this->objPtr<Obj>(b_checked, b_allow_cm)); }
 
       // Search direction in the list of interface sets: from end (larger inds, latest attached sets) to the beginning (smaller inds).
       //  Search direction inside an interface set: from beginning (leftmost listed in o_interfaces<...>) to end (rightmost).
@@ -2429,7 +2535,7 @@ namespace bmdx
       //    0 - the set of such static type already exists.
       //    -1 - pidyn == 0 (list of interf. sets is not created - call itfslist_create() first).
       //    -2 - failure.
-      // NOTE If Itfs is a template with one of arguments belonging to anonimous namespace,
+      // NOTE If Itfs is a template with one of arguments belonging to anonymous namespace,
       //    (like in o_interfaces_top template), or a class in an anon. namespace,
       //    o_iimpl of all interfaces in the set
       //    is created exactly belonging to the current translation unit.
@@ -2592,6 +2698,7 @@ namespace bmdx
         template<class Itfs> s_long find_local_by_itfs(s_long flags, s_long ind0, s_long ind2, meta::noarg_tu_t<Itfs>) const throw();
         template<class I> s_long find_by_itf(s_long flags, o_itfset_base* ps0, std::basic_string<s_long>* pret, meta::noarg_tu_t<I>) const throw();
       #endif
+      template<class T> T& robj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const throw(XUExec) { return *unity::checked_ptr<T>(this->pobj<T>(flags)); }
 
     private:
       o_api _ref_newcp(unity_common::__Psm pmsm_itfslist, s_long flags) const throw();
@@ -2679,7 +2786,7 @@ namespace bmdx
         //    ppara == &para,
         //    pretval == &retval.
         // para: input parameters of the request.
-        // retval: value, returned by the reuest.
+        // retval: value, returned by the request.
         //    Input and output contents are determined by the client and requested module relationships.
         //  flags: 0x1 - ignore native handle, search for name in the main executable.
         // The request is done under global lock, which may block up to 60 s,
@@ -2688,7 +2795,7 @@ namespace bmdx
         // NOTE Defining bmdx_mod_request in the shared library is optional.
         //    The client may use any other functions and means on communication between executable
         //    and library, or between libraries. For example, via BMDX:
-        //    a) global memory (shmobj2s_t), b) process' common objects storage (unity::pcos).
+        //    a) global memory (shmobj2s_t), b) in-process common objects storage (unity::pcos).
         // Returns:
         //  1 - success.
         //  -1 - the requested module is not compatible.
@@ -2824,10 +2931,10 @@ namespace bmdx
     #else
         // With bmdx_part_dllmgmt 0, mod() returns a null handle.
       static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) throw() { return mod_handle(); }
-    #endif //bmdx_part_dllmgmt
+    #endif // bmdx_part_dllmgmt
 
 
-        // unity object structure signature for binary comatibility check.
+        // unity object structure signature for binary compatibility check.
     static s_long sig_struct() throw ();
 
       // Returns:
@@ -2842,7 +2949,7 @@ namespace bmdx
     s_long compatibility() const throw ();
 
 
-    //==  PROCESS' COMMON OBJECTS STORAGE (PCOS)
+    //==  IN-PROCESS COMMON OBJECTS STORAGE (PCOS)
     private: struct _pcos_d_base { mod_handle hhost; virtual ~_pcos_d_base() {} }; friend struct cv_ff_pcos;
     public:
 
@@ -2856,7 +2963,7 @@ namespace bmdx
 
     // NOTE Cross-moduleness. Build options.
     //    pcos object may be freely passed (by value or by reference) through binary modules threshold.
-    //      If pcos references the storage in a shared library, the library is not unloded at least until pcos is destroyed,
+    //      If pcos references the storage in a shared library, the library is not unloaded at least until pcos is destroyed,
     //      because pcos internally contains a handle to that library.
     //    For common storage, it's recommended to compile main executable
     //      including bmdx_main.cpp with bmdx_part_dllmgmt 1 (see in bmdx_config.h).
@@ -2891,8 +2998,8 @@ namespace bmdx
     //      Unless special actions taken by the client, the following constraints always apply:
     //      1. A user value (scalar, string, array or user object) is wrapped into struct unity,
     //          which is in turn wrapped into the outer cref_t object.
-    //      2. Wrapping into unity has the only purpose of keeping polymorhic values from multiple modules
-    //          in the storage hash.
+    //      2. Wrapping into unity has the only purpose of keeping polymorphic values from multiple modules
+    //          in the storage hash map.
     //      3. Wrapping into the outer cref_t solves three problems:
     //          1) Together with user value, a handle to the binary module (main executable or shared library)
     //              is kept in aux. object of cref_t.
@@ -2914,21 +3021,28 @@ namespace bmdx
     //              is not required.
     //      4. PCOS checks the modules to which cref_t, contained unity, and its contained user object (if any)
     //            belong.
-    //          For example, if a shared library does not own the storage (e.g. executable's storage),
-    //              but wants to put its own value into the storage, it can use setcp or makecp+setref.
-    //            By default, the value will be copied and belong to executable's storage.
-    //              In this case, the library may be unloaded, but the value remains in the storage.
-    //            If the value must be moved (setmv or makemv+setref), or if it is custom object (stored as unity/utObject),
-    //              the library must supply mod_handle to itself (e.g. see mod_handle::hself()), otherwise the call fails,
-    //              because ownership on object cannot be changed to other binary module
-    //              because of object's code placement inside the library.
-    //              In this case, the library cannot be unloaded until all such objects are removed from the storage.
-    //          For 2nd example, main executable never needs to supply a handle to put its value therein,
-    //            because default pcos itself already contains main executable's handle.
-    //          More generally, if a module that wants to put into a storage (represented by pcos)
-    //            a value that is from module other than that storage, value's module handle must be supplied,
-    //            or a value must be already in the form cref_t<unity>, created with makemv, makecp,
-    //            or taken from a storage with operator().
+    //          General rule is:
+    //              if a binary module wants to put into a storage (represented by pcos)
+    //              a value that is from a module different from that of the storage itself,
+    //              the module must a) supply value's module handle,
+    //              or b) pass the value in the ready-made form of cref_t<unity>,
+    //              created with makemv, makecp, or taken from any storage with operator().
+    //          Example 1 (copying).
+    //              If a shared library does not own the storage (e.g. it uses, by default, main executable's storage),
+    //                but wants to put its own non-user-object value into the storage, it can use setcp or makecp+setref.
+    //              The value will be copied and belong to executable's storage.
+    //                Even if the library is unloaded, the value will safely remain in the storage.
+    //          Example 2 (moving).
+    //              If the value or user object (stored as unity/utObject) must be moved into the storage (setmv or makemv+setref),
+    //                the library must supply mod_handle to itself (see mod_handle::hself()), otherwise the call fails -
+    //                ownership on object cannot be changed to other binary module
+    //                because object's binary code is part of the library.
+    //                When the handle is supplied, and the value has been moved successfully (+ handle copy created implicitly),
+    //                the library won't be unloaded until all objects, placed in such way, are removed from the storage.
+    //          Example 3 (main executable).
+    //              Main executable never needs to supply a handle
+    //                to put its value into its own (i.e. default) storage, because pcos itself already contains
+    //                main executable's handle.
 
     struct pcos
     {
@@ -2946,7 +3060,7 @@ namespace bmdx
       typedef s_long (*f_pcos_makecp)(const cref_t<_pcos_d_base>* pd, const unity* pxc, unity::mod_handle* phx, cref_t<unity>* prv);
     public:
 
-        // Creates a pcos object, referencing certain process' common object storage.
+        // Creates a pcos object, referencing certain in-process common objects storage.
         //    By default, main executable is the module, servicing the common storage.
         //    Usually it has longer lifetime than any shared library instance.
         //    The client may pas a handle (h) to any loaded shared library,
@@ -2972,7 +3086,6 @@ namespace bmdx
         //    does not support common storage.
       bool b_mainexe() const throw()        { t_d d = _d; return d && d->hhost.is_mainexe(); }
 
-      // === === === === === === === ===
 
         // Get a reference to the value with key k, from the current storage.
         //    (The reference is not removed from the storage, so the value may be accessed again by any client.)
@@ -2989,11 +3102,11 @@ namespace bmdx
         //      The value is associated (by handle) with binary module in which it's factually created.
         //      By default, this is binary module of the current storage (pcos::hhost()).
         //      Otherwise, it's hx (if specified).
-        //      See the above note "Ownership on objects" for explanation when and which hx is neccessary to specify.
+        //      See the above note "Ownership on objects" for explanation when and which hx is necessary to specify.
         //      The correctness of the association is checked in setmv, setcp.
         //      Relaxation for xc: unity object itself may be associated with any module,
         //        because it's automatically copied by setcp on the side, represented by handle.
-        //      Anyway, if xm or xc contains a user object (unity/utObject),
+        //      Anyway, if xm or xc contains user object (unity/utObject),
         //        the user object must have been created by the client on the side, represented by handle.
         //    xr:
         //      a) valid object reference, must have been created with makemv, makecp, or got from any pcos with operator().
@@ -3050,7 +3163,7 @@ namespace bmdx
         //      The correctness of the association is checked by makemv, makecp.
         //      Relaxation for xc: unity object itself may be associated with any module,
         //      because it's automatically copied by makecp on the side, represented by handle.
-        //      Anyway, if xm or xc contains a user object (unity/utObject),
+        //      Anyway, if xm or xc contains user object (unity/utObject),
         //      the user object must have been created by the client on the side, represented by handle.
         // The result code and returned value:
         //  1 - success. A ref. to valid new object is returned.
@@ -3270,7 +3383,7 @@ namespace bmdx
     if (!_o_itfssm_t<Itfs>::__xx_after_construct(p, 0, 1)) { try { delete p; } catch (...) {} pidyn->itfslist._set_n_u(n0); return -2; }
     return 1;
   }
-    // Search for set of interaces created/attached within the current binary module.
+    // Search for set of interfaces created/attached within the current binary module.
     //    (flags & 1): search includes a set if its static type == Itfs.
     //    (flags & 2): search includes a set if its dynamic type == Itfs.
     //    (flags & 4): search includes a set if it may be cast by dynamic_cast into Itfs.
@@ -3312,7 +3425,7 @@ namespace bmdx
     }
     return -1;
   }
-    // Search for set (or several sets) of interaces, from which a valid interface pointer may be created by pinterface().
+    // Search for set (or several sets) of interfaces, from which a valid interface pointer may be created by pinterface().
     // Search direction: from end (larger inds, latest attached sets) to the beginning (smaller inds).
     //  Arguments and algorithm == that of pinterface (see).
     //  If pret != 0, indexes of all matching sets are pushed into it.
@@ -3649,7 +3762,14 @@ namespace bmdx
     I* __psi() const { return __pi; } // server-side interface ptr.
     void __set_pp(unity_common::__Psm psm, I* pi) throw () { __psm = psm; __pi = pi; }
 
-    template<class T> typename T::PF __call() const { return (typename T::PF)__psm(unity_common::find_type<T, typename __Proxy::__Methods>::ind);  }
+    template<class T> typename T::PF __call() const
+    {
+      struct exc_call : std::exception {  _fls75 msg; exc_call() { msg += "o_proxy_base __call "; msg += typeid(I).name(); msg += ' '; msg += typeid(T).name(); } const char* what() const throw() { return msg.c_str(); } };
+      typedef typename T::PF t_f;
+      t_f f = (t_f)__psm(unity_common::find_type<T, typename __Proxy::__Methods>::ind);
+      if (!f) { throw exc_call(); }
+      return f;
+    }
 
   private:
     unity_common::__Psm __psm; __Interface* __pi; // not used by o_proxy object when it's role is server
@@ -3717,7 +3837,7 @@ namespace bmdx
 
 
 
-    //==  Write string representation of a unity object to std ostream.
+    //==  Write string representation of unity object to std ostream.
   std::ostream& operator<<(std::ostream& s, const unity::iofmt& f);
   std::ostream& operator<<(std::ostream& s, const unity& x);
   std::wostream& operator<<(std::wostream& s, const unity::iofmt& f);
@@ -3813,7 +3933,7 @@ namespace
     //  Otherwise returns 0.
   template<class T>
   _unitypc2 unitypc::operator/ (const T& path) const
-    { if (!*this) { return 0; } return (**this).path(path); }
+    { if (!*this) { return 0; } return (**this).path(path).p; }
 
     // Attempts to convert the referenced value to T.
     //    If the value does not exist, dflt is returned.
@@ -3825,7 +3945,7 @@ namespace
     //    unity h; ... if (+h / "root|branch|instance|string key" / wstring("N/A")) { ... }
     //    unity h; ... if (+h / "root|branch|instance|integer key" / -1ll) { ... }
     //    unity h; ... if (+h / "root|branch|instance|float key" / -1.) { ... }
-    //    To get non-default value, h should be any kind of tree - hash, map, array, containing other objects recursively.
+    //    To get non-default value, h should be any kind of tree - hashlist, map, array, containing other objects recursively.
   template<class T>
   T _unitypc2::operator/ (T dflt) const
     { if (!*this) { return dflt; } typedef unity::trivconv_t<typename meta::nonc_t<T>::t> t_conv; return t_conv::Fback((**this).template val<typename t_conv::t_target>()); }
@@ -3838,7 +3958,7 @@ namespace
     //  Usage examples:
     //    unity h; ... if (+h / "root|branch|instance|integer key" % -1ll) { ... }
     //    unity h; ... if (+h / "root|branch|instance|float key" % -1.) { ... }
-    //    To get non-default value, h should be any kind of tree - hash, map, array, containing other objects recursively.
+    //    To get non-default value, h should be any kind of tree - hashlist, map, array, containing other objects recursively.
     // NOTE For strings % behaves exactly like /.
   template<class T>
   T _unitypc2::operator% (T dflt) const
@@ -3879,56 +3999,100 @@ namespace
   std::string cpathsep2(); // two path separator characters
   std::wstring wpathsep2(); // two path separator characters
 
+
+  //== Wide character string helper functions.
+
+    // (locale-aware)
     // Wide character string comparison (s1>s2: 1, s1==s2: 0, s1<s2: -1)
-  s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case);
-
-    // Non-recursive replacement.
-    // Replace 'from' string occurences in 's' by 'to', return the result.
+    // loc_type (only for b_case_insensitive == true):
+    //    0: use the currently set locale (std::setlocale(..., 0)) to compare strings.
+    //    1: use system-default locale (equiv. to std::setlocale(..., "")) to compare strings.
+    //    2: use C locale (equiv. to std::setlocale(..., "C")) to compare strings.
+    //    any other value: return an empty string.
+  s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type = 1);
+    //
+    // (locale-aware)
+    // Wide character string replacement.
+    // Sequentially replace 'from' string occurrences in 's' by 'to',
+    //    returns the result.
     // If nmax >= 0, no more than nmax leftmost replacements are done.
-    // NOTE On ignoreCase == true, replace() uses system-default locale to search for substrings.
-  std::string replace(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase = false, s_ll nmax = -1);
-  std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase = false, s_ll nmax = -1);
-
-    // Trim all 'swat' string occurences in the beginning and end of the string 's'
-  std::wstring trim(const std::wstring& s, const std::wstring& swhat = L" ", bool b_left = true, bool b_right = true);
-  std::string trim(const std::string& s, const std::string& swhat = " ", bool b_left = true, bool b_right = true);
-
-    // NOTE l/u-case functions depend on the currently set locale.
-  std::string lcase(const std::string& s);
-  std::wstring lcase(const std::wstring& s);
-  std::string ucase(const std::string& s);
-  std::wstring ucase(const std::wstring& s);
-
+    // loc_type (only for b_case_insensitive == true):
+    //    0: use the currently set locale (to std::setlocale(..., 0)) to search for substrings.
+    //    1: use system-default locale (equiv. to std::setlocale(..., "")) to search for substrings.
+    //    2: use C locale (equiv. to std::setlocale(..., "C")) to search for substrings.
+    //    any other value: return an empty string.
+  std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool b_case_insensitive = false, s_ll nmax = -1, s_long loc_type = 1);
+    //
+    // (locale-aware)
+    // Convert s to lowercase (lcase_la) or uppercase (ucase_la) representation.
+    // loc_type:
+    //    0: use the currently set locale (std::setlocale(..., 0)).
+    //    1: use system-default locale (equiv. to std::setlocale(..., "")).
+    //    2: use C locale (equiv. to std::setlocale(..., "C")).
+    //    any other value: return an empty string.
+  std::wstring lcase_la(const std::wstring& s, s_long loc_type = 1);
+  std::wstring ucase_la(const std::wstring& s, s_long loc_type = 1);
+    //
+    // (locale-independent)
     // true if str matches the given pattern.
     //  Recognizes constructs similar to: [a-zA-Z], *, ?, # (i.e. digit)
   bool wstring_like(const std::wstring& str, const std::wstring& ptn0);
-
-  unity split(const std::wstring&, const std::wstring& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
-  unity split(const std::string&, const std::string& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
-  std::vector<std::string> splitToVector(const std::string&, const std::string& delim, meta::s_ll nmax = -1);
+    //
+    // (locale-independent)
+    // Trim all 'swat' string occurrences in the beginning and end of the string 's'
+  std::wstring trim(const std::wstring& s, const std::wstring& swhat = L" ", bool b_left = true, bool b_right = true);
+    //
+    // (locale-independent)
+    // Sequentially split s into 0-based array of strings, based on delimiter (delim).
+    // nmax: max number of string parts in the output array. nmax < 0 means "no limit".
+  unity split(const std::wstring& s, const std::wstring& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
   std::vector<std::wstring> splitToVector(const std::wstring&, const std::wstring& delim, meta::s_ll nmax = -1);
-  std::string join(const unity& asrc, const std::string& delim);
+    //
+    // (locale-independent)
+    //  If asrc is an array, join string representations of its elements (asrc.vstr(i)), inserting delim between them.
+    //  If asrc is not an array, join() returns asrc.vstr().
   std::wstring join(const unity& asrc, const std::wstring& delim);
 
-    // Returns a short string representation of x.
-    // If x is a string, it is just copied.
-    // If x is an array, object, or unknown value,
-    //    only a short prefix and the object type name
-    //    is included into output (but NO CONTENTS).
-    // If x is a date, it is converted using fixed format: YYYY-MM-DD HH-MM-SS,
-    //    where H, M, S are missing if all are 0.
-    // If x is char, its boolean value is returned: "True" on 0 or "False" on non-0.
-    // For other values (utEmpty, utInt, utFloat)
-    //    x.s_copy() is returned.
-  std::wstring CStr3(const unity& x);
+
+  //== 1-byte character string helper functions.
+
+    // (using C locale)
+    // Sequentially replace 'from' string occurrences in 's' by 'to',
+    //    returns the result.
+    // If b_case_insensitive == true, the search of 'from' in s is based on C locale.
+    // If b_case_insensitive == false, replace_c is locale-independent.
+  std::string replace_c(const std::string& s, const std::string& from, const std::string& to, bool b_case_insensitive = false, s_ll nmax = -1);
+    //
+    // (using C locale)
+    // Convert s to lowercase (lcase_c) or uppercase (ucase_c) representation.
+  std::string lcase_c(const std::string& s);
+  std::string ucase_c(const std::string& s);
+    //
+    // (locale-independent)
+    // Trim all 'swat' string occurrences in the beginning and end of the string 's'
+  std::string trim(const std::string& s, const std::string& swhat = " ", bool b_left = true, bool b_right = true);
+    //
+    // (locale-independent)
+    // Sequentially split s into 0-based array of strings, based on delimiter (delim).
+    // nmax: max number of string parts in the output array. nmax < 0 means "no limit".
+  unity split(const std::string&, const std::string& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
+  std::vector<std::string> splitToVector(const std::string&, const std::string& delim, meta::s_ll nmax = -1);
+    //
+    // (using system-default locale)
+    //  If asrc is an array, join string representations of its elements (asrc.vcstr(i)), inserting delim between them.
+    //  If asrc is not an array, join() returns asrc.vcstr().
+    //  See also unity :: vcstr().
+  std::string join(const unity& asrc, const std::string& delim);
+
+
 
     // Date/time generators.
   _unitydate d_datetime(s_long y, s_long m, s_long d, s_long h = 0, s_long min = 0, s_long s = 0);
   _unitydate d_time(s_long h, s_long m, s_long s);
-  _unitydate d_now(bool allow_fracsec = false); //returns the current local time
-  _unitydate d_nowutc(bool allow_fracsec = false); //returns the current UTC time
+  _unitydate d_now(bool allow_fracsec = false); // returns the current local time
+  _unitydate d_nowutc(bool allow_fracsec = false); // returns the current UTC time
 
-    // Retuns a copy of selected argument value. ind is 1-based.
+    // Returns a copy of selected argument value. ind is 1-based.
     //  If ind is out of range or selects a default argument, utEmpty is returned.
   unity choose(s_long ind, const unity& x1=unity::_0, const unity& x2=unity::_0, const unity& x3=unity::_0, const unity& x4=unity::_0, const unity& x5=unity::_0, const unity& x6=unity::_0, const unity& x7=unity::_0, const unity& x8=unity::_0, const unity& x9=unity::_0, const unity& x10=unity::_0, const unity& x11=unity::_0, const unity& x12=unity::_0, const unity& x13=unity::_0, const unity& x14=unity::_0, const unity& x15=unity::_0, const unity& x16=unity::_0, const unity& x17=unity::_0, const unity& x18=unity::_0, const unity& x19=unity::_0, const unity& x20=unity::_0, const unity& x21=unity::_0, const unity& x22=unity::_0, const unity& x23=unity::_0, const unity& x24=unity::_0, const unity& x25=unity::_0, const unity& x26=unity::_0, const unity& x27=unity::_0, const unity& x28=unity::_0, const unity& x29=unity::_0,
     const unity& x30=unity::_0);
@@ -3944,20 +4108,21 @@ namespace
     static const std::string cvterm; // "|";
 
     static const std::wstring wpterm; // L"; ";
+    static const unity uwpterm; // == wpterm
     static const std::wstring weterm; // L" = ";
     static const std::wstring wvterm; // L"|";
 
     static const unity& _0;
 
-      //Decode a parameter line.
-      //Recognizes ";" and pterm2 as element separator.
-      //Puts keys and values into mh.
+      // Decode a string, specifying one-level set of named parameters.
+      // Recognizes ";" and pterm2 as element separator.
+      // Puts keys and values into mh.
       //  mh is initialized as utMap (or existing map cleared) on useMap == true,
-      //  or as utHash on useMap (or existing hash cleared) == false.
-      // NOTE (decode(mh) only) When the existing map or hash is cleared, its flags (keys comparison) are kept.
+      //  or as utHash on useMap (or existing hashlist cleared) == false.
+      // NOTE (decode(mh) only) When the existing map or hashlist is cleared, its flags (keys comparison) are kept.
       //    The results of decoding depend on it. If default behavior is necessary,
       //    the client should call mh.clear() or mh.u_clear() before decode().
-      //Example:
+      // Example:
       //  key1 = value1; key2 = value2; key3 = | array elem. 1 | array elem. 2 | array elem. 3 | 1234 | 3.14159 | array elem. 6;
       //  key4 = \0; key4a = false; key5 = \1; key5a = true;
       //  key6 = 2014-01-15 23:59:00; key6a = \d2014-01-15 23:59:00;
@@ -3981,9 +4146,9 @@ namespace
       //
       //  The key itself is always a string value.
       //
-      //Returns mh.
+      // Returns mh.
       //
-      //Note 1. Literal occurences of special characters must be escaped
+      // Note 1. Literal occurrences of special characters must be escaped
       //  in places or cases where they would be treated incorrectly.
       //  In any place, special characters that are escaped, are treated literally.
       //  All rules do not depend on the platform.
@@ -3991,7 +4156,7 @@ namespace
       //    1.1. Literal semicolon (;) must be escaped in all cases (\;).
       //    1.2. Literal 2-byte (CR, LF) sequence should be stated as \~ by default (pterm2 == wCRLF),
       //      to avoid splitting the string literal, i.e. if you need to decode multiline strings as single values.
-      //    1.3. Literal spaces must be escaped if occuring leftmost/rightmost of keys, values, and array values.
+      //    1.3. Literal spaces must be escaped if occurring leftmost/rightmost of keys, values, and array values.
       //      Otherwise they will not go with the corresponding strings to further processing.
       //    1.4. Literal equality signs (=) must be escaped in keys, i.e. in a "<key>=<value>" construct
       //      the first unescaped "=" is treated as separating the key and the value.
@@ -4001,20 +4166,20 @@ namespace
       //      Otherwise, the value will be treated as an array.
       //    1.6. Literal backslash must be escaped (\\) when it's necessary to avoid any of the above cases,
       //      and also if \0, \1, \e, \d, \i, \f, \s or \z should occur literally at the beginning of a string value,
-      //      instead of specifyng a type or a special value.
-      //      Any other occurences of the backslash are not treated as escape sequnces,
+      //      instead of specifying a type or a special value.
+      //      Any other occurrences of the backslash are not treated as escape sequences,
       //      and both the backslash and the following character are normal part of a key or string value.
-      //Note 2. If an exception occurs during the decoding,
+      // Note 2. If an exception occurs during the decoding,
       //  mh contains keys and values decoded up to the place in ssrc that caused the exception.
-    unity& decode(const std::wstring& ssrc, unity& mh, bool useMap, const std::wstring& pterm2 = wCRLF);
-    unity decode(const std::wstring& ssrc, bool useMap, const std::wstring& pterm2 = wCRLF);
+    unity& decode(arrayref_t<wchar_t> ssrc, unity& mh, bool useMap, arrayref_t<wchar_t> pterm2 = wCRLF);
+    unity decode(arrayref_t<wchar_t> ssrc, bool useMap, arrayref_t<wchar_t> pterm2 = wCRLF);
 
-    unity& decode1v(const std::wstring& ssrc, unity& dest);
-    unity decode1v(const std::wstring& ssrc);
+    unity& decode1v(arrayref_t<wchar_t> ssrc, unity& dest);
+    unity decode1v(arrayref_t<wchar_t> ssrc);
 
       // Decode multiline text, representing a tree of values.
       //  Default behavior:
-      //  1. Clear mh and set its type to map or hash (for useMap true or false resp.).
+      //  1. Clear mh and set its type to map or hashlist (for useMap true or false resp.).
       //  2. Split ssrc, using pterm2.
       //  3. Decode each resulting substring and merge the result into mh,
       //      On duplicate key, the existing (i.e. first set) value is kept.
@@ -4026,12 +4191,12 @@ namespace
       //  2. If no path specified (or "" key's value is not an array), k[i], v[i] are merged into the root (mh itself).
       //  3. Path element type: string, number, empty, or any other type, normally supported by paramline::decode() for array elements.
       // flags:
-      //  0x1 - for mh and branches, use map as target container type instead of hash.
+      //  0x1 - for mh and branches, use map as target container type instead of hashlist.
       //  0x2 - overwrite value in a branch if met duplicate path.
       //      (Branch by value, value by branch, value by value. Branches having same path are always merged).
       //  0x4 (decode_tree(mh) only) - do not clear mh if it's already associative, merge ssrc tree into mh.
       //    This has the following effects:
-      //      1) flag 0x1 is ignored, the input mh type (map or hash (dflt.)) is used for all new nodes.
+      //      1) flag 0x1 is ignored, the input mh type (map or hashlist (dflt.)) is used for all new nodes.
       //      2) mh is not cleared, all decoded branches are merged into it.
       //      3) all new nodes inherit mapFlags (or hashFlags) from mh.
       //  0x8 - ignore substring like regexp. "^[\t ]*//.*$". This allows for writing single-line C-style comments.
@@ -4078,21 +4243,21 @@ namespace
       // Returns: mh.
       // NOTE With default pterm2, literal CRLF pairs in ssrc must be replaced with special sequence "\~".
       //  See also decode().
-    unity& decode_tree(const std::wstring& ssrc, unity& mh, s_long flags = 0, const std::wstring& pterm2 = wCRLF);
-    unity decode_tree(const std::wstring& ssrc, s_long flags = 0, const std::wstring& pterm2 = wCRLF);
+    unity& decode_tree(arrayref_t<wchar_t> ssrc, unity& mh, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
+    unity decode_tree(arrayref_t<wchar_t> ssrc, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
 
-      //Encodes the given map or hash (uses pterm as element separator).
+      // Encodes the given map or hashlist (uses pterm as element separator).
       //  If mhsrc is of other subtype, returns "".
       //  If an exception occurs during encoding, sdest may contain partially encoded data.
-    std::wstring& encode(const unity& mhsrc, std::wstring& sdest, const std::wstring& pterm = wpterm);
-    std::wstring encode(const unity& mhsrc, const std::wstring& pterm = wpterm);
+    std::wstring& encode(const unity& mhsrc, std::wstring& sdest, arrayref_t<wchar_t> pterm = wpterm);
+    std::wstring encode(const unity& mhsrc, arrayref_t<wchar_t> pterm = wpterm);
 
-      //Encode single part of line.
+      // Encode single value (scalar, string or one-dimensional array).
     std::wstring encode1n(const unity& name); // encode single name
     std::wstring& encode1v(const unity& value, std::wstring& sdest); // encode single value (scalar or array)
     std::wstring encode1v(const unity& value);
 
-      //Encodes the given map or hash into multiline text, producing separate text line
+      // Encodes the given map or hashlist into multiline text, producing separate text line
       //  for each branch (all key-value pairs of each associative array except pairs where value is associative array itself).
       //  At the beginning of each line, an empty key with value == full path of the branch is inserted: "=|key1|key2...".
       //  pterm - used to separate parameters in a line, representing a branch.
@@ -4101,12 +4266,12 @@ namespace
       //  a) multiline text.
       //  b) if mhsrc is not an associative array, returns "".
       //  c) if an exception occurs during encoding, sdest may contain partially encoded data.
-    std::wstring& encode_tree(const unity& mhsrc, std::wstring& sdest, const std::wstring& pterm = wpterm, const std::wstring& pterm2 = wCRLF);
-    std::wstring encode_tree(const unity& mhsrc, const std::wstring& pterm = wpterm, const std::wstring& pterm2 = wCRLF);
+    std::wstring& encode_tree(const unity& mhsrc, std::wstring& sdest, arrayref_t<wchar_t> pterm = wpterm, arrayref_t<wchar_t> pterm2 = wCRLF);
+    std::wstring encode_tree(const unity& mhsrc, arrayref_t<wchar_t> pterm = wpterm, arrayref_t<wchar_t> pterm2 = wCRLF);
 
-      //set1 += set2, where sets can be utMap or utHash (or else XUTypeMismatch is generated),
+      // set1 += set2, where sets can be utMap or utHash (or else XUTypeMismatch is generated),
       //  keep_first = true prevents overwriting the existing values in set1 by values from set2.
-      //Returns set1.
+      // Returns set1.
     unity& merge(unity& set1, const unity& set2, bool keep_first = false);
     unity& merge(unity& set1, const std::wstring& set2_pl, bool keep_first = false);
 
@@ -4114,6 +4279,7 @@ namespace
 
       // Returns utMap, containing pairs {x1, x2}, {x3, x4} and so one. NOTE All values after first _0 are ignored.
       //  On inserting keys into the output map, duplicate keys are ignored, i.e. the first unique key-values pairs are kept.
+      // See also unity :: operator().
     unity list_m
       ( _rcu x1=_0, _rcu x2=_0, _rcu x3=_0, _rcu x4=_0, _rcu x5=_0, _rcu x6=_0, _rcu x7=_0, _rcu x8=_0, _rcu x9=_0, _rcu x10=_0, _rcu x11=_0, _rcu x12=_0, _rcu x13=_0, _rcu x14=_0, _rcu x15=_0, _rcu x16=_0, _rcu x17=_0, _rcu x18=_0, _rcu x19=_0, _rcu x20=_0, _rcu x21=_0, _rcu x22=_0, _rcu x23=_0, _rcu x24=_0, _rcu x25=_0, _rcu x26=_0, _rcu x27=_0, _rcu x28=_0, _rcu x29=_0, _rcu x30=_0, _rcu x31=_0, _rcu x32=_0, _rcu x33=_0, _rcu x34=_0, _rcu x35=_0, _rcu x36=_0, _rcu x37=_0, _rcu x38=_0, _rcu x39=_0, _rcu x40=_0, _rcu x41=_0, _rcu x42=_0, _rcu x43=_0, _rcu x44=_0, _rcu x45=_0, _rcu x46=_0, _rcu x47=_0, _rcu x48=_0, _rcu x49=_0, _rcu x50=_0, _rcu x51=_0, _rcu x52=_0, _rcu x53=_0, _rcu x54=_0, _rcu x55=_0, _rcu x56=_0, _rcu x57=_0, _rcu x58=_0,
         _rcu x59=_0, _rcu x60=_0 );
@@ -4126,13 +4292,14 @@ namespace
         _rcu x59=_0, _rcu x60=_0);
 
       // Returns utHash, containing pairs {x1, x2}, {x3, x4} and so one. NOTE All values after first _0 are ignored.
-      //  On inserting keys into the output hash, duplicate keys are ignored, i.e. the first unique key-values pairs are kept.
+      //  On inserting keys into the output hashlist, duplicate keys are ignored, i.e. the first unique key-values pairs are kept.
+      // See also unity :: operator().
     unity list_h
       ( _rcu x1=_0, _rcu x2=_0, _rcu x3=_0, _rcu x4=_0, _rcu x5=_0, _rcu x6=_0, _rcu x7=_0, _rcu x8=_0, _rcu x9=_0, _rcu x10=_0, _rcu x11=_0, _rcu x12=_0, _rcu x13=_0, _rcu x14=_0, _rcu x15=_0, _rcu x16=_0, _rcu x17=_0, _rcu x18=_0, _rcu x19=_0, _rcu x20=_0, _rcu x21=_0, _rcu x22=_0, _rcu x23=_0, _rcu x24=_0, _rcu x25=_0, _rcu x26=_0, _rcu x27=_0, _rcu x28=_0, _rcu x29=_0, _rcu x30=_0, _rcu x31=_0, _rcu x32=_0, _rcu x33=_0, _rcu x34=_0, _rcu x35=_0, _rcu x36=_0, _rcu x37=_0, _rcu x38=_0, _rcu x39=_0, _rcu x40=_0, _rcu x41=_0, _rcu x42=_0, _rcu x43=_0, _rcu x44=_0, _rcu x45=_0, _rcu x46=_0, _rcu x47=_0, _rcu x48=_0, _rcu x49=_0, _rcu x50=_0, _rcu x51=_0, _rcu x52=_0, _rcu x53=_0, _rcu x54=_0, _rcu x55=_0, _rcu x56=_0, _rcu x57=_0, _rcu x58=_0,
         _rcu x59=_0, _rcu x60=_0 );
 
       // Returns utHash, containing pairs {x1, x2}, {x3, x4} and so one. NOTE All values after first _0 are ignored.
-      //  On inserting keys into the output hash, duplicate keys are ignored, i.e. the first unique key-values pairs are kept.
+      //  On inserting keys into the output hashlist, duplicate keys are ignored, i.e. the first unique key-values pairs are kept.
     unity list_hx
       ( s_long fk, // unity::fkcmp* flags
         _rcu x1=_0, _rcu x2=_0, _rcu x3=_0, _rcu x4=_0, _rcu x5=_0, _rcu x6=_0, _rcu x7=_0, _rcu x8=_0, _rcu x9=_0, _rcu x10=_0, _rcu x11=_0, _rcu x12=_0, _rcu x13=_0, _rcu x14=_0, _rcu x15=_0, _rcu x16=_0, _rcu x17=_0, _rcu x18=_0, _rcu x19=_0, _rcu x20=_0, _rcu x21=_0, _rcu x22=_0, _rcu x23=_0, _rcu x24=_0, _rcu x25=_0, _rcu x26=_0, _rcu x27=_0, _rcu x28=_0, _rcu x29=_0, _rcu x30=_0, _rcu x31=_0, _rcu x32=_0, _rcu x33=_0, _rcu x34=_0, _rcu x35=_0, _rcu x36=_0, _rcu x37=_0, _rcu x38=_0, _rcu x39=_0, _rcu x40=_0, _rcu x41=_0, _rcu x42=_0, _rcu x43=_0, _rcu x44=_0, _rcu x45=_0, _rcu x46=_0, _rcu x47=_0, _rcu x48=_0, _rcu x49=_0, _rcu x50=_0, _rcu x51=_0, _rcu x52=_0, _rcu x53=_0, _rcu x54=_0, _rcu x55=_0, _rcu x56=_0, _rcu x57=_0, _rcu x58=_0,
@@ -4154,10 +4321,10 @@ namespace
   private:
     enum { fl_v = 1, fl_bs = 2, fl_crlf = 4, fl_sc = 8, fl_sp = 16, fl_eq = 32, fl_ba = 64 };
     static void x_encode1(const unity& x, std::wstring& retval, bool x_name, bool x_ar_elem, bool x_nourecur = false);
-    static void x_encode_branch(const unity& mh, const std::wstring& path, std::wstring& sdest, hashx<const unity*, int>& hstop, const std::wstring& pterm, const std::wstring& pterm2, const std::wstring& pathpfx);
+    static void x_encode_branch(const unity& mh, const std::wstring& path, std::wstring& sdest, hashx<const unity*, int>& hstop, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, const std::wstring& pathpfx);
     static void x_repl_e1(const std::wstring& s1, std::wstring& s2, bool s_name, bool s_ar_elem);
     static void x_replace2a(std::wstring& s, s_long flags);
-    static void x_replace4(const std::wstring& s1, std::wstring& s2, s_long& flags);
+    static void x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& flags);
     static void x_decode1v(unity& v, bool v_ar_elem, s_long flags);
     static bool x_decode1v_auto_date(const std::wstring& s, unity& retval) throw ();
     static bool x_incorrect_numeric_value_str(const std::wstring& s, bool b_nans);
@@ -4170,26 +4337,31 @@ namespace
     //==  File operations utilities.
   enum EFileUtilsPredefinedDir
   {
-      pdCurDir, //the current directory
-      pdThisAppDir, //path to the current application
-      pdTempDir, //Windows: %systemroot%\temp, Linux: %TMPDIR%
+      pdCurDir, // the current directory
+      pdThisAppDir, // path to the current application
+      pdTempDir, // Windows: %systemroot%\temp, Linux: %TMPDIR%
       pdUserDefinedDir,
           //- user-defined directory, passed as second argument; if none, the path to the current application is used
       pdDoNotChange // do not complete path
   };
+
+      // NOTE For wide-character functions of file_utils:
+      //    where system API call is required for perform an operation,
+      //    wide string arguments are first converted to 1-byte character string,
+      //    based on system-default locale (equiv. to std::setlocale(..., "")).
   struct file_utils
   {
-        //Returns true is pathstr specifies the full path.
-        //Returns false for relative paths.
-        //The function analyzes both correct anf incorrect paths.
+        // Returns true is pathstr specifies the full path.
+        // Returns false for relative paths.
+        // The function analyzes both correct and incorrect paths.
     bool is_full_path(const std::wstring& pathstr) const;
     bool is_full_path(const std::string& pathstr) const;
 
-        //Get path without filename (just remove the last path element).
+        // Get path without filename (just remove the last path element).
     std::wstring strip_path(const std::wstring& pathstr) const;
     std::string strip_path(const std::string& pathstr) const;
 
-        //Get filename (the last path element).
+        // Get filename (the last path element).
     std::wstring strip_filename(const std::wstring& pathstr) const;
     std::string strip_filename(const std::string& pathstr) const;
 
@@ -4198,7 +4370,7 @@ namespace
     std::wstring remove_ext(const std::wstring& pathstr, const std::wstring& extsep = L".") const;
     std::string remove_ext(const std::string& pathstr, const std::string& extsep = ".") const;
 
-        // Inserts s_add into copy of pathstr before the last occurence of extsep,
+        // Inserts s_add into copy of pathstr before the last occurrence of extsep,
         //  if this extsep occurs after the last path separator.
         //  Otherwise, returns pathstr + s_add.
     std::wstring add_to_name(const std::wstring& pathstr, const std::wstring& s_add, const std::wstring& extsep = L".") const;
@@ -4208,9 +4380,9 @@ namespace
     std::wstring replace_filename(const std::wstring& fnp, const std::wstring& fn) const;
     std::string replace_filename(const std::string& fnp, const std::string& fn) const;
 
-        //Joins two path parts (or copies pathstr, if pathstr2 is omitted).
-        //Then, deletes all duplicate slahses.
-        //Finally, deletes the last slash, if the path has no characterss after it.
+        // Joins two path parts (or copies pathstr, if pathstr2 is omitted).
+        // Then, deletes all duplicate slashes.
+        // Finally, deletes the last slash, if the path has no characters after it.
     std::wstring join_path(const std::wstring& pathstr, const std::wstring& pathstr2 = L"") const;
     std::wstring join_path(const std::wstring& ps1, const std::wstring& ps2, const std::wstring& ps3) const;
     std::wstring join_path(const std::wstring& ps1, const std::wstring& ps2, const std::wstring& ps3, const std::wstring& ps4) const;
@@ -4219,44 +4391,47 @@ namespace
     std::string join_path(const std::string& ps1, const std::string& ps2, const std::string& ps3) const;
     std::string join_path(const std::string& ps1, const std::string& ps2, const std::string& ps3, const std::string& ps4) const;
 
-        //Returns True if path contains slash at the end.
+        // Returns True if path contains slash at the end.
     bool has_rightmost_patshep(const std::wstring& pathstr) const;
     bool has_rightmost_patshep(const std::string& pathstr) const;
 
-        //Returns false if path contains invalid symbols
+        // Returns false if path contains invalid symbols
         //   or incorrectly represents path in some other way.
-        //Otherwise returns true.
+        // Otherwise returns true.
     bool is_valid_path(const std::wstring& pathstr) const;
     bool is_valid_path(const std::string& pathstr) const;
 
-        //If sPath is already a full path, it is returned as is.
-        //If sPath starts with ".", the point is removed, and the result is prepended with the current directory, then the path is regarded as complete.
-        //In other cases, a predefined path, selected by pd argument, is prepended to sPath.
-        //  For pd = pdUserDefinedDir, the function uses sUserDefDir. If sUserDefDir is not specified, it is assumed to be this applicaition executable file path.
+        // If sPath is already a full path, it is returned as is.
+        // If sPath starts with ".", the point is removed, and the result is prepended with the current directory, then the path is regarded as complete.
+        // In other cases, a predefined path, selected by pd argument, is prepended to sPath.
+        //  For pd = pdUserDefinedDir, the function uses sUserDefDir. If sUserDefDir is not specified, it is assumed to be this application executable file path.
     std::wstring complete_path(const std::wstring& sPath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir = L"") const;
     std::string complete_path(const std::string& sPath, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir = "") const;
 
-        //Returns true if file exists (and is not a directory).
+        // Returns true if file exists (and is not a directory).
         //  If sPath contains rightmost path separator character,
         //  the function always returns false.
     bool is_ex_file(const std::wstring& sPath) const;
     bool is_ex_file(const std::string& sPath) const;
 
-        //Returns true if directory exists (and is not a file).
+        // Returns true if directory exists (and is not a file).
         //  sPath may or may not contain rightmost path separator character,
         //  this does not influence the behavior.
     bool is_ex_dir(const std::wstring& sPath) const;
     bool is_ex_dir(const std::string& sPath) const;
 
         // Non-recursive expansion of environment variables in s.
-        // NOTE std::wstring version of expand_env_nr
-        //  converts system variable names between %-signs
-        //  into local OS encoding (chars), gets variable value (again chars),
-        //  then converts back to UTF-16.
+        //  Converts tokens, limited by '%', into corresponding values of env. variables (std::getenv).
+        // NOTE std::wstring version of expand_env_nr:
+        //    1. Converts tokens, limited by '%', into 1-byte character string.
+        //    2. Gets env. variable value.
+        //    3. Converts the value back to std::wstring.
+        //    Conversions are based on system-default locale (equiv. to std::setlocale(..., "")).
+        //    See also wsToBs(), bsToWs().
     std::wstring expand_env_nr(const std::wstring& s) const;
     std::string expand_env_nr(const std::string& s) const;
 
-        //Recursively create direcories to ensure that sPath exists.
+        // Recursively create directories to ensure that sPath exists.
         //  On success (all was created or already existed) returns true.
         // NOTE POSIX: mk_subdir creates each non-existing directory in sPath
         //  with permissions 0777.
@@ -4265,7 +4440,7 @@ namespace
     bool mk_subdir(const std::string& sPath) const;
 
 
-      //Loads whole file into the string.
+      // Loads whole file into the string.
       // Returns:
       //    On success: string with the loaded characters (but see also ret_s).
       //    On failure or wrong args.: utEmpty.
@@ -4277,14 +4452,14 @@ namespace
       //    NOTE local8bit, if allowed and all others do not match, is used as the default encoding.
       //    NOTE lsb8bit (read raw bytes as lower byte of wchar_t) suppresses local8bit.
       //    NOTE Any unknown parts of format_string are ignored.
-      // ret_s: if a unity object is passed into ret_s, it is assigned the loaded string,
+      // ret_s: if unity object is passed into ret_s, it is assigned the loaded string,
       //    and load_string itself returns boolean value (success/failure).
       // pd: see complete_path.
       // NOTE To load UTF-8 string, use couple: file_io::load_bytes, bsUtf8ToWs.
     unity load_string(const std::string& format_string, const std::wstring& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
     unity load_string(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
 
-      //Saves characters of the string str to the specified file.
+      // Saves characters of the string str to the specified file.
       // format_string should contain
       //    1) one of "binary" or "text". "text" is different in:
       //      1.1) auto-converts single \r and \n into \r\n,
@@ -4332,118 +4507,7 @@ namespace
 
 
 
-    // Implementation part.
-    // Default lock selector for fifo_m11_t. Lock itself may be redefined.
-    // For example, to disable queue locking on a user type:
-    //  namespace yk_c { template<> struct bytes::lock_t<fifo_m11_lks_t<user type> > : bytes::lock_t<meta::nothing> {}; }
-  template<class T>
-  struct fifo_m11_lks_t {};
 
-    // Implementation part.
-    // Async. queue, where 1 reader and 1 writer may reside in different threads.
-    // May work in a) non-blocking mode (normally),
-    //   b) semi-blocking (on queue overflow, the last element may be overwritten with fresh value),
-    //   c) blocking mode (push() waits on overflow an returns if no place appeared).
-  template<class T, class LockSelector = fifo_m11_lks_t<T>, class _bs = meta::nothing>
-  struct fifo_m11_t
-  {
-    typedef bytes::lock_t<LockSelector> t_lock; typedef T t_value; typedef cref_t<t_value, cref_nonlock> t_elem;
-
-      // If n < 3 it is adjusted to 3.
-      //  After construction, is_valid() should be checked.
-    fifo_m11_t(s_long n) throw () : _isup(0), _irec(0), _elems(yk_c::typer<t_elem, _bs>, 0) { if (n < 3) { n = 3; } _elems.el_append_m(n, meta::construct_f<t_elem, meta::nothing, _bs>()); }
-
-    bool is_valid() const throw() { return _elems.n() >= 3; }
-
-      // Pushing a copy of the given value to queue.
-      // m:
-      //    -2 - non-blocking push. On queue overflow, does nothing, returns -2.
-      //    -1 - semi-blocking push. On queue overflow, attempts to overwrite the last pushed value,
-      //        which may cause short blocking (rarely - if the receiver pops out all elements
-      //        up to the overwritten one and tries to pop it as well within the same thread time quantum).
-      //        NOTE In semi-blocking mode, x is copied before locking.
-      //    0..1e7 - time, ms. On queue overflow, push will sleep during that time, and then retry once,
-      //        in non-blocking mode.
-      // Returns:
-      //    1 - pushed successfully.
-      //    0 - overflow, but the last pushed element was overwritten with a copy of x.
-      //    -1 - incorrect m.
-      //    -2 - queue overflow (only on m == -2).
-      //    -3 - timeout (only on m >= 0).
-      //    -4 - memory allocation error (on any m).
-      //    -5 - the queue object is invalid.
-    s_long push(const t_value& x, s_long m) throw()
-    {
-      if (!is_valid()) { return -5; } if (!(m >= -2 && m <= 10000000)) { return -1; }
-      s_long s(_isup), s2(s + 1), r(_irec); if (s2 >= _elems.n()) { s2 = 0; }
-      if (s2 == r) // near-full (1 elem. free) - considered as overflow
-      {
-        if (m == -2) { return -2; }
-        if (m >= 0) { sleep_mcs(meta::s_ll(m) * 1000); return push(x, -2); }
-        t_elem e(x, true); if (!e.has_ref()) { return -4; }
-        if (true)
-        {
-          t_lock __lock; if (sizeof(__lock)) {}
-          if (_irec == r) { s -= 1; if (s < 0) { s = _elems.n(); } *_elems.pval_0u<t_elem>(s) = e; return 0; }
-        }
-      }
-        // Enough space
-      t_elem* p = _elems.pval_0u<t_elem>(s); p->clear(); p->copy(x, true);
-      if (p->has_ref()) { _isup = s2; return 1; }
-      return -4;
-    }
-
-    bool is_empty() const { return _irec == _isup; }
-
-      // m:
-      //    -2 - non-blocking pop. May return an empty ref., leaving 1 element unpopped.
-      //      This is suitable for very frequent regular pushs/pops.
-      //    -1 - semi-blocking pop. Rarely, may block to get the one available element
-      //        (only if push uses m == -1).
-      //        Locking is needed because push() (see it also) with m == -1
-      //        is allowed to overwrite the last element on queue overflow.
-      //    0..1e7 - time, ms. Sleep and then once recheck, in non-blocking mode, if an element is available.
-      //      The check may block for short time as necessary.
-      // b_pop:
-      //    true: pop an element and return it (i.e. strong reference to the object).
-      //    false: do not pop an element, return its copy (i.e. copy of strong reference to the object).
-      // Returns:
-      //    a) t_elem with has_ref() == true -- popped successfully.
-      //    b) t_elem with has_ref() == false -- no elements available (m == -1: right now, m == -2: after timeout),
-      //      or (only on m == -2) 0 or 1 available, but left unpopped; also on wrong m or invalid queue object.
-      //    NOTE Since t_elem owns the dynamically allocated value, no mem. alloc. errors may occur in pop.
-    t_elem pop(s_long m, bool b_pop) throw()
-    {
-      if (!is_valid()) { return t_elem(); } if (!(m >= -2 && m <= 10000000)) { return t_elem(); }
-      s_long r(_irec), s(_isup);
-      if (r == s) { return t_elem(); }
-      s_long r2 = r + 1; if (r2 >= _elems.n()) { r2 = 0; }
-      if (r2 == s) // getting seemingly last available element
-      {
-        if (m == -2) { return t_elem(); }
-        if (m >= 0) { sleep_mcs(meta::s_ll(m) * 1000); return pop(-2, b_pop); }
-        t_elem x;
-        if (true)
-        {
-          t_lock __lock; if (sizeof(__lock)) {}
-          t_elem* p = _elems.pval_0u<t_elem>(r); x = *p;
-          if (b_pop) { p->clear(); _irec = r2; }
-        }
-        return x;
-      }
-      else  // getting exactly non-last element
-      {
-        t_elem* p = _elems.pval_0u<t_elem>(r);
-        t_elem x = *p;
-        if (b_pop) { p->clear(); _irec = r2; }
-        return x;
-      }
-    }
-
-//    template<class _bs2> operator fifo_m11_t<T, LockSelector, _bs2>&() { return *(fifo_m11_t<T, LockSelector, _bs2>*)this; }
-//    template<class _bs2> operator const fifo_m11_t<T, LockSelector, _bs2>&() const { return *(const fifo_m11_t<T, LockSelector, _bs2>*)this; }
-  protected:  volatile s_long _isup, _irec; vecm _elems;
-  };
 
 
 
@@ -4451,438 +4515,946 @@ namespace
   //==  MULTITHREADED MESSAGE DISPATCHER
 #if bmdx_part_dispatcher_mt
 
-    // All functions are intended to be called from a dispatcher client,
-    //    normally residing in separate thread.
-    //    All operations are internally synchronized.
+
+
+// === Definition ===
+//
+//  BMDX message dispatcher is the specialized communication subsystem,
+//    allowing multiple clients (like programmatic objects, CPU threads, processes)
+//    to exchange high-level structured information, with optional binary attachments.
+//
+//  The message dispatcher is represented by
+//    - dispatcher_mt class,
+//    - i_dispatcher_mt interface,
+//    - underlying implementation (using several dedicated CPU threads).
+//
+// === Notation ===
+//
+//  { key; value }    - associative array; key, value may be literary values, parameter names, or descriptions of such
+//  (element, element ... )    - list or array as programmatic object; elements may be literary values, parameter names, or descriptions of such
+//  |element|element ...    - list or array as string in the program; each "|" starts new element; see also struct paramline
+//  [ ... ]    - optional element or part
+//  <identifier>    - some value or parameter; the identifier is used to describe the value in text
+//  * ?    - standard wildcards (any characters, any single character)
+//
+// === Additional information ===
+//
+//  See arch_notes.txt / MESSAGE DISPATCHER for
+//      State of development,
+//      Terminology,
+//      Slot types and address structure,
+//      Examples of configuration,
+//      Configuration parameters.
+
+
+    // Informational structure with all values for "flags" arguments of all dispatcher_mt, i_dispatcher_mt functions.
+  struct dispatcher_mt_flags
+  { enum e {
+      // msend, mget
+    get_hashlist = 1,
+    discard_msg = 2,
+    discard_att = 4,
+    peek_only = 8,
+    anlo_msg = 0x10,
+    anlo_att = 0x20,
+    ignore_hanged = 0x40,
+    use_chsbin = 0x80,
+
+      // dispatcher_mt
+    disp_off_th_mask = 0xfff00,
+    disp_off_th_lqsd = 0x100,
+    disp_off_th_lmsc = 0x200,
+
+      // request, slots_create, dispatcher_mt
+    ensure_local_subs = 0x1,
+
+      // slots_remove
+    array_of_slotnames = 0x1
+  }; };
+
+    // Access to i_dispatcher_mt: see dispatcher_mt :: new_proxy.
   struct i_dispatcher_mt
   {
-      // Take a new message out of the slot.
-      //  slotname: must be string (utString).
-      //  Allowed reciever slots:
-      //      pi_*, qi_* - read common message
-      //      pbi_*, qbi_* - read command
-      //      pbo_* - read response to previously sent command
-      //  retmsg: on success, overwritten by message string.
-      //  retbuf (optional, may be 0): receiving container for binary data,
+    typedef arrayref_t<char> t_stringref;
+    struct tracking_info
+    {
+      s_ll id, state;
+      bool is_empty() const { return id == 0 && state == 0; }
+      tracking_info() : id(0), state(0) {}
+      tracking_info(s_ll id_, s_ll state_) : id(id_), state(state_) {}
+    };
+
+
+
+      // pop, write: emulation of prev. API version (will be removed later)
+//    s_long pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retatt = 0, s_long flags = 4) throw()
+//    {
+//      flags &= 0b1111;
+//      unity m; cref_t<t_stringref> a; if (flags & 2) { return mget(slotname, m, retatt ? &a : 0, flags); }
+//      s_long res = mget(slotname, m, retatt ? &a : 0, flags | 8);
+//      if (!(res == 1 || res == 2)) { return res; }
+//      if (retatt) { if (a && a->n() > 0) { if (!retatt->realloc(a->n(), 0, 0, 0)) { return -2; } std::memcpy(retatt->pd(), a->pd(), (size_t)a->n()); } else { retatt->realloc(0, 0, 0, 0); } }
+//      if (!(flags & 8)) { res = mget(slotname, m, 0, flags | 2 | 4); if (!(res == 1 || res == 2)) { if (retatt) { retatt->realloc(0, 0, 0, 0); } return res; } }
+//      retmsg.swap(m);
+//      return res;
+//    }
+//    s_long write(const unity& msg, const t_stringref* buf = 0) throw()
+//    {
+//      return msend(msg, buf ? make_rba(*buf, true) : cref_t<t_stringref>());
+//    }
+//    s_long periodic(s_long flags = 0) throw()
+//    {
+//      (void)flags; unity x; s_long res = request(8, x, 3); if (res != -3) { res = -2; } return res;
+//    }
+
+
+
+      // Send a message
+      //    (push the message into the internal queue or other storage, associated with destination address).
+      //    Depending on the source and destination slot types, configuration and location, the message may be
+      //      a) delivered immediately (during the current call),
+      //      b) delivered after a delay (by internal threads in the current CPU process, and also that in the receiving CPU process if it's different),
+      //      c) rejected (immediately or after a delay).
+      //
+      //  msg:
+      //      a) hashlist or map (hashlist is the most efficient),
+      //      b) paramline-encoded string (manually or with encode()) representation of the above.
+      //    Minimum required contents (in string form):
+      //
+      //      src = <NAME>; trg = <ADDR>; text = <T>
+      //
+      //    For example:
+      //      o_iptr_t<i_dispatcher_mt> pdisp;
+      //        // ... init. pdisp for accessing the chosen dispatcher thread.
+      //      pdisp->write("src = po_1; trg = |LP|receiver|pi_1; text = abcde");
+      //      (All spaces are optional.)
+      //      This sends message "abcde" from output pin-type slot po_1 of the current dispatcher thread (referred by pdisp)
+      //        into the same dispatcher process (LP = "local process"), thread "receiver", input pin-type slot pi_1.
+      //
+      //      NAME of the slot (here: sender) may be any of two kinds:
+      //        <slot type>_<name root>
+      //          - one-string name of the slot.
+      //        |<slot type>_<name root>|<name part 2>[|part 3[|part 4 ...]]
+      //          - multipart (array) name of the slot (showed in string form).
+      //        Detailed description: arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure.
+      //
+      //      ADDR - destination slot address, consisting of concatenated transfer type, process, thread, slot name + optional parts.
+      //        Detailed description: arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure.
+      //        Formats of ADDR for different transfer types:
+      //          a)    |LP|<thread name>|<slot name>
+      //          b)    |LPA|<qs slot name>
+      //          c)    |LM|<process name>|<thread name>|<slot name>
+      //        (a) is for sending the message between two dispatcher threads inside the same one dispatcher process.
+      //        (b) same as (a), only the name of dispatcher thread, owning the specified qs (subscription) slot, is not known to sender.
+      //        (c) sends the message from one dispatcher process to another, using IPC (shared memory).
+      //          NOTE "LM" only specifies technical way of message exchange.
+      //            It works regardless of the sender and the recipient being a) in the same dispatcher process,
+      //            b) in different dispatcher processes inside one CPU process, c) in different dispatcher processes,
+      //            each inside its own CPU process.
+      //        NOTE "Dispatcher process": distinct dispatcher_mt object + all associated objects and CPU threads, inside one CPU process.
+      //            See arch_notes.txt / MESSAGE DISPATCHER / Terminology.
+      //
+      //      T is the client message.
+      //        Usually, T is a string, numeric value, or one-dimensional 1-based array.
+      //        Also, T may be empty, but "text" key must be present.
+      //        If ADDR is local, and anlo_msg flag is set, T may contain any object of set of objects.
+      //
+      //      NOTE The client may put additional entries into the message.
+      //        Entry name (hashlist key) must be string >= 2 chars., starting from '_'. The second character must be != '_'.
+      //        (Mainly, the client should not use keys, starting from letter or "__".)
+      //
+      //    Rules of correspondence between sender and receiver slots.
+      //      1. Slot types matching (including transfer direction):
+      //        po_* --> pi_*, qi_*, qs_*    - send a message with any kind of information.
+      //        pbo_*, hbo_* --> pbi_*, qbi_*    - send command message. After the recipient receives the command, it must respond.
+      //            Until that, the sender cannot issue a new command.
+      //        pbi_*, qbi_* --> pbo_*, hbo_*    - respond to a command.
+      //        (automatic) qs_* --> pi_*, qi_*    - messages, sent to qs slot directly or using LPA-type address,
+      //            are delivered to subscribers by internal procedure.
+      //      2. Slot with one-string name
+      //        may send to any slot with 1) corresponding type, 2) exactly same name root, 3) with or without any additional name parts.
+      //        NOTE Bidirectional output slots (pbo, hbo) with particular name,
+      //          may issue commands to different target threads with same name root.
+      //          In case of hbo, command messages may be sent at once to several targets with same name root;
+      //          each command target is expected to reply once; this response is stored individually for the target's address,
+      //          on the side of command sender, until the command sender pops it.
+      //      3. Slot with multipart name may send only to slot, whose name parts are exactly equal,
+      //          except for type prefix in the first part (po-pi, pbo-pbi etc.).
+      //
+      //    NOTE If msg is hashlist or map, all its non-scalar (.isScalar() == false) keys, and their values,
+      //      are ignored, i.e. will not be passed to recipient.
+      //      Under scalar keys, values may be of any type. Inside the dispatcher process, clients may even send each other user objects.
+      //        See also flags.
+      //
+      //  att:
+      //      optional binary attachment (BLOB), for sending along with the message. See also make_rba* helpers.
+      //
+      //  flags (ORed, default = 0):
+      //    16 "anlo_msg" - allow user objects in msg to be sent by dispatcher
+      //        inside the dispatcher process. msg must be given in the form of hashlist or map.
+      //        If the flag is not set (default), all values of type utObject, in the internal copy of msg, are cleared (made utEmpty).
+      //        To completely allow user objects passing, several conditions must be satisfied:
+      //          1) per-dispatcher_mt flags __msend_anlo, __mget_anlo must not be set to false or 0.
+      //          2) the sender must set its anlo_msg flag, on msend() call.
+      //          3) the recipient must set anlo_msg flag on mget() call.
+      //          4) user objects' (sender's) binary module must not be unloaded, until all objects are released (deleted) on recipient's side.
+      //            (This may be determined querying by wrapping unity objects ref. count.)
+      //        NOTE If the user objects belong to the binary module, different from that of the recipient,
+      //          the recipient should take care of binary compatibility and lifetime of the objects.
+      //          The original binary module may be unloaded only after all its objects are released.
+      //          This situation is common in plugin-based program, where plugins are 3rd party shared libraries.
+      //    32 "anlo_att" - pass att as such, without copying into intermediate object inside the dispatcher.
+      //        This is the way to pass BLOBs in the current dispatcher process efficiently, without any data copying,
+      //        especially to multiple recipients.
+      //        (If the target address is non-local, the flag allows to make less data copies, but cannot totally avoid copying.)
+      //        If the flag is not set (default), data, associated with att, is copied by value.
+      //        To allow in-process BLOBs passing without copying, the following conditions must be satisfied:
+      //          1) per-dispatcher_mt flags __msend_anlo, __mget_anlo are not set to false or 0. (This is the default.)
+      //          2) the sender must set its own anlo_att flag, when sending a message with binary attachment (see also msend()).
+      //          3) the recipient must set anlo_att flag on mget() call.
+      //        NOTE If the att object belongs to the binary module, different from that of the recipient,
+      //          the recipient should take care of lifetime of the object.
+      //          The original binary module may be unloaded only after att is released on recipient's side.
+      //          In case if att may have multiple recipients (e.g. delivered to many addresses):
+      //            1) the recipients they must not modify the data reference (arrayref_t), contained in att, namely its pd() and n().
+      //            2) The original binary module may be unloaded only after att is released by all recipients.
+      //                E.g. the sender may keep a copy of att, and prevent shared library unloading until att.n_refs() == 1.
+      //    64 "ignore_hanged" - (only) for non-local recipient, e.g. peer process:
+      //          push message into local queue even if peer process appears hanged (tracked activity stopped > 3 s ago).
+      //            (The locally stored message will be sent automatically as normal when peer's activity is resumed.)
+      //          If the flag is set, the function will return error code -14 for the peer process that appears hanged.
+      //          NOTE The flag does not act when the peer is communicated first time.
+      //            If the peer is not accessible, the message is not pushed, and msend returns -2.
+      //    128 "use_chsbin" - calculate and send checksum for att, when it's sent non-locally.
+      //          The checksum is verified by recipient. On no binary attachment, this flag is ignored.
+      //          NOTE use_chsbin is logically ORed with per-dispatcher_mt flag __lmsc_chsbin; att's checksum is inserted into the message
+      //            if the result is true.
+      //
+      //  tracking:
+      //      optional client-side object, receiving volatile information about message, until it's put into recipient's slot.
+      //      If the object is supplied, the reference type may be the following:
+      //        a) cross-module reference, b) multifunctional reference.
+      //        I.e. tracking.is_cm() == true. See also cref_t is_cm.
+      //      NOTE tracking is treated as non-const volatile object.
+      //    tracking->id: unique message id. msend at once generates unique id and writes it to tracking->id.
+      //    tracking->state: the current state of the message.
+      //        a) for local target address (LP, LPA):
+      //          When msend returns, both its ret. code and tracking->state are set
+      //          to the same final value (1, 0, or <= -1).
+      //        b) for non-local target address (LM), when msend returns:
+      //          1 (transient state) - the message is cached locally and is being / will be soon transferred to another process.
+      //              Later, may be changed to any final state (success or failure, see below).
+      //          3 (final state of tracking) - the message has been accepted by dispatcher_mt on the receiving side,
+      //              and successfully put into the recipient's slot.
+      //              It still may be unread (mget) by final recipient.
+      //              NOTE Tracking system does track and send notification on final recipient peeking into or popping the message.
+      //          <= -1 (final state of message transfer) - failure, same as msend() error code.
+      //    NOTE The tracking object is referenced by the dispatcher until
+      //      a) final state of tracking is reached,
+      //      b) i_dispatcher_mt proxy, to which tracking object was passed, has been released (tracking->state == -15).
+      //
+      // Returns:
+      //    1 - success, the message has been
+      //        a) written into the receiving slot (for local target address),
+      //        b) queued for sending to non-local target address.
+      //    0 (only for pi_* slots) - success, prev. message has been overwritten.
+      //    -1 - invalid message format (address, slot name or type, sender-recipient matching) or any invalid argument.
+      //    -2 - common-case failure.
+      //    -3 - no session.
+      //    -5 (only for command messages and responses) - rejected, out of order between the same pair of command source and target.
+      //        To fix this, the client may choose to reset the slot (see request() with rt 9).
+      //    -20 - target queue overflow (qs, qi, qbi) or prev. command no processed yet (pbi). The client may try again later.
+      //    -6 - source slot does not exist or could not be accessed (locking timeout).
+      //    -7 - source thread does not exist (see also request() rt 7).
+      //    -8 - target slot does not exist or could not be accessed (locking timeout).
+      //    -9 - target thread does not exist.
+      //    -10 - send messages to the specified slot from this source thread is not permitted (see also arch_notes.txt: "input all", "input lpa" params. of input slots).
+      //    -11 - non-local communication is disabled or not available.
+      //    -12 - non-local message transfer failed on peer side.
+      //    -13 (in tracking->state only) - message decoding failed on recipient side: a) unsupported msg. format, b) continuous failure of msg. decoding.
+      //    -14 - (with ignore_hanged flag unset, on LM targets): failed to send because peer process appears to be hanged or terminated.
+      //    -15 (in tracking->state only) - tracking is stopped (i_dispatcher_mt proxy, to which tracking object was passed, has been released).
+      //        NOTE When configured by default, capacities of all types of queues are unlimited.
+      //
+    virtual s_long msend(const unity& msg, cref_t<t_stringref> att = cref_t<t_stringref>(), s_long flags = 0, cref_t<tracking_info> tracking = cref_t<tracking_info>()) throw() = 0;
+      //
+      // Convenience function for msend.
+      //    Creates a byte array from msg.
+      //  b_byval:
+      //    true (dflt.) - the returned cref_t strongly references a by value copy of msg.
+      //    false:
+      //      1. The returned array points the given data itself (msg->pd()).
+      //      2. The data must exist until the last cref_t, pointing to that data, is destroyed. (Responsibility of the client.)
+      //      NOTE Even with b_byval false, the function makes small dynamic allocation, i.e., theoretically may fail.
+      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
+      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref>,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba(msg, b_byval, nbadd); }
+      //
+      // Convenience function for msend.
+      //    Creates a byte array as concatenation of copies of the given parts.
+      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
+      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_mp(part1, part2, part3, nbadd); }
+      //
+      // Convenience function for msend.
+      //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref>,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba_z(s_ll nb, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_z(nb, nbadd); }
+
+
+
+      // Pop a message from the given slot (or peek: get a reference without popping),
+      //    if available.
+      //
+      //  slotname:
+      //      Recipient's slot in the current dispatcher thread.
+      //      The name may be one-string or multipart.
+      //      Multipart name may be passed directly as array, or as paramline-encoded string (manually or with encode1v()) representation of it.
+      //      Slot name structure (two kinds):
+      //        <slot type>_<name root>
+      //          - one-string name of the slot.
+      //        |<slot type>_<name root>|<name part 2>[|part 3[|part 4 ...]]
+      //          - multipart (array) name of the slot (showed in string form).
+      //        Detailed description: arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure.
+      //    Recipient's slot types:
+      //      pi, qi - receive-only slot - mget returns a message sent by someone,
+      //      pbi, qbi - command recipient - mget returns a command, to which the client will have to respond (msend from pbi, qbi to original sender's address),
+      //      pbo, hbo - command sender - mget returns the response to previously sent command.
+      //
+      //  retmsg:
+      //    a) on success, if a message is available and discard_msg flag is not set, receives the message.
+      //    b) in any other cases, retmsg is cleared (utEmpty).
+      //    By default, the returned message is represented as hashlist (see also get_hashlist flag),
+      //    containing (as minimum) the following entries:
+      //      { "src"; <ADDR1> }
+      //      { "trg"; <ADDR2> }
+      //      {  "text"; <T> }
+      //    T is the sender's message itself.
+      //        Usually, T is a string, numeric value, one-dimensional 1-based array, or empty.
+      //        If ADDR1 is local address, and anlo_msg flag was set both in mget and in the original msend,
+      //          T may contain any object of set of objects.
+      //      NOTE The sender is allowed to put additional entries into the message.
+      //        Entry name (hashlist key) is a string >= 2 chars., starting from '_'. The second character != '_'.
+      //        All keys, starting from letter or "__", should be ignored by the recipient.
+      //    ADDR1 is the complete sender's address, suitable for responding to the message (if it's necessary).
+      //      The address may be of any type (LP, LPA, LM), allowed for the current slot type.
+      //      NOTE Except for command inputs (pbi, qbi), if the recipient needs to respond,
+      //        it cannot send the response through the same slot from which the original message has been popped.
+      //        See also msend comment "Rules of correspondence between sender and receiver slots".
+      //    ADDR2 is the original recipient's address, as specified on the sender's side.
+      //      The address may be used to determine if the sender is local, and what names it uses.
+      //
+      //  retatt (optional): points to the receiving variable for binary attachment (BLOB),
       //    associated with the message.
-      //    If retbuf is not specified, but the message contains binary part,
-      //    characters are recoded into wide string (wide char. values 0..255)
-      //    and put into "bin" key of the message.
-      //    NOTE recoding large binary data blocks results in performance loss.
-      //  flags (OR):
-      //    1 - return hash in retmsg. If not set, return string in retmsg.
-      //      NOTE If the client resides in another binary module than dispatcher,
-      //        setting this flag is not recommended (to pop & decode string message may be more compatible).
-      //    2 - discard message if it exists, do not write to retmsg, retbuf.
-      //      NOTE (command input only) The client must respond anyway to correct address:
-      //        a) for multiple sources: peek only (flags |= 0x8, see below); extract sender address; pop & discard (flags |= 2); write response.
-      //        b) for single source: pop & discard (flags |= 2); write response to the known address.
-      //    4 - ignore (lose) message binary part if it is received but no retbuf given.
-      //    8 - "peek" -- return everything as specified, only do not pop the message.
-      //        May be used with flag value 2 to test potential pop result w/o getting any data.
+      //    1. If retatt == 0, but the message contains the attachment,
+      //      attachment's bytes are trivially recoded into wide string (wide chars. with values 0..255)
+      //      and put into "bin" key of the returned message.
+      //    2. If retatt != 0, but *retatt does not receive an attachment (on no attachment or on error), it's anyway cleared.
+      //    See also (below): anlo_att flag use for efficient BLOBs passing along with messages.
+      //
+      //  flags (ORed, default = 1|4):
+      //    1 "get_hashlist" - return hashlist in retmsg. If not set, return string in retmsg.
+      //      By dflt., the flag is set.
+      //    2 "discard_msg" - do not write the message into retmsg.
+      //      a) if 8 ("peek_only") flag is not set, the message is lost.
+      //      b) if 8 ("peek_only") flag is set, discard_msg flag is ignored. The client gets a copy of the existing message.
+      //      NOTE For command input: even if the message is discarded,
+      //          the client must respond anyway:
+      //        a) if both command sender's address and the command are simple, fixed and known statically (aka signal):
+      //          1. Discard the message (with flag 2).
+      //          2. React and respond to the command as necessary.
+      //        b) for multiple sources and variable commands:
+      //          1. Peek the message first (with flags (1|8|4)).
+      //          2. Extract sender's address ("src" key) and/or the command ("text" key).
+      //          3. Discard the message and the attachment, if exists (with flags (2|4)).
+      //          4. React and respond to the command as necessary.
+      //    4 "discard_att" - ignore (do not return in any way) message binary attachment, even if it exists.
+      //      By dflt., the flag is set.
+      //      a) if 8 ("peek_only") flag is not set, the binary attachment, if exists, is lost.
+      //      b) if 8 ("peek_only") flag is set, the binary attachment continues to exist,
+      //        until the message is actually popped or discarded.
+      //    8 "peek_only" - return everything as specified by other flags, only do not pop the message.
+      //        May be used find out if a message is available, without actual copying and returning any data to the client.
+      //        E.g. call mget with flags (8|2|4).
+      //    16 "anlo_msg" - allow user objects to be returned in retmsg, when it's in the form of hashlist.
+      //          This is the way to pass user objects inside the current process.
+      //        If the flag is not set (default), all values of type utObject, contained in retmsg, are cleared (made utEmpty).
+      //        See also msend anlo_msg flag for more detailed description.
+      //    32 "anlo_att" - if the message contains binary attachment, and retatt != 0 is given,
+      //          set the attachment directly into *retatt, even if it is non-local object.
+      //          This is efficient way to pass BLOBs inside the current process without any data copying.
+      //        If the flag is not set (default), *retatt will be assigned a by value copy of the attachment,
+      //          created in the binary module of retmsg (normally, it's the same as mget client's).
+      //        See also msend anlo_att flag for more detailed description.
+      //
       // Returns:
-      //    3 - success, ret. message discarded (only on (flags & 2) != 0).
-      //    2 - success, got two-part message (msg. itself and binary part). Parts are returned as flags specify.
-      //    1 - success, got single-part message (no binary part).
-      //    0 - no message, or no response because of no command sent.
-      //    20 - (pbo only) remote or interprocess command failed.
-      //      retmsg is set to auto-generated response, containing
-      //      trg, src, err_code, err_msg. (It does not contain original command message.)
-      //      NOTE (flags & 2) (discard message) suppresses code 20, code 3 is returned instead.
-      // NOTE After codes >= 0, the client may issue another command.
-      // NOTE In case of codes -2..-19 , the slot may be not functional during undefined period of time.
-      // NOTE After codes <= -20, the client should take specific action.
-      //    -1 - invalid slot name or type.
-      //    -2 - failed (mem. alloc. error, invalid proxy object, binary incompatibility etc.).
-      //    -3 - no session.
-      //    -6 - slot does not exist or inaccessible.
-      //    -7 - thread does not exist.
-      //    -20 - (pbo only) waiting for command completion, still command target sent no response.
-      //    -21 - (pbi, qbi only, i.e. for commands) waiting for the client responding to the current command
-      //      (i.e. the client must call write() first, to reply to prev. command).
-      //      This may occur if, in the past, the client occasionally lost the control after popping the command,
-      //      now the control is regained, and the other side still waits for response.
-      //      If the client cannot handle such situation, the recommended behavior is: send a message, containing "text; _e_retry;".
-      //    -22 - input message decoding failed. The client should discard the message (re-pop with (flags & 2) != 0).
-    virtual s_long pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw() = 0;
+      //    2 - success, got two-part message (msg. itself and the binary attachment).
+      //        Parts are returned through retmsg, *retatt, as specified by flags.
+      //    1 - success, got single-part message (no binary part). The message is returned .
+      //        The message is returned through retmsg, as specified by flags. *retatt is cleared.
+      //    On any of the below results, retmsg, *retatt are cleared.
+      //      0 - no message, or (pbo, hbo) no response because of no command sent.
+      //      -20 - (pbo, hbo only) waiting for command completion, still command target sent no response.
+      //          See also ret. code -21 below.
+      //      -21 - (pbi, qbi only) waiting for the client (command target) responding
+      //          to the current (recently popped) command. The client must first reply to the current command,
+      //          and after should try to pop the next command.
+      //          This may occur if, in the past, the client had occasionally lost the control right after popping the command,
+      //          and sent no reply to command sender. Now the control is regained, and the command sender still waits for response.
+      //          If the client does not know how to respond correctly, there are 2 options:
+      //            a) if the client (command target) remembers or knows command sender address, send there a message,
+      //              containing, in addition to addresses ("src", "trg" keys), and empty "text" and "_e_retry" keys.
+      //              In this way, the command sender should always check the responses for "_e_retry" key, and resend the commands when necessary.
+      //            b) the client (command target) may reset the slot phase (see request() with rt 9), to be able to receive new commands.
+      //              This way is recommended for non-local command/response exchange.
+      //              The command sender should
+      //                1) use tracking to see if the command message has been put into command target's slot.
+      //                2) after that, if the command target does not respond for too long (command sender's mget returns -20),
+      //                  the command sender should reset its slot (pbo, hbo) as well, to be able to re-send the command (or send another).
+      //      -1 - invalid slot name or type.
+      //      -2 - common-case failure.
+      //      -3 - no session.
+      //      -6 - the specified slot does not exist or could not be accessed (locking timeout).
+      //      -7 - thread does not exist (see also request() with rt 7).
+      //
+    virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt = 0, s_long flags = 1|4) throw() = 0;
 
-      // Write a message into the slot.
-      //    Depending on the slot type and condition,
-      //    msg may be put into the queue, rejected,
-      //    or overwrite prev. message.
-      //  msg: paramline-encoded string, or else hash or map. Min. contents:
-      //    src = <NAME>; trg = <ADDR>; text = <T>
-      //      NAME - source slot name. Name format variants (simple and specialized) are described near slots_create.
-      //      ADDR - destination slot address, consisting of concatenated scope, process, thread, slot names.
-      //        For in-process messages:
-      //          |LP|<thread name>|<slot name>
-      //          |LPA|<qs slot name>
-      //        For inter-process messages:
-      //          (not implemented) |LM|<process name>|<thread name>|<slot name>
-      //          (not implemented) |LMA|<qs slot name>
-      //        For network messages:
-      //          (not implemented) |R|<host name or address:port>|<process name>|<thread name>|<slot name>
-      //          (not implemented) |RMA|<host name or address:port>|<qs slot name>
-      //          (not implemented) |RPA|<host name or address:port>|<process name>|<qs slot name>
-      //        ADDR examples:
-      //          |LP|recevier|pi_log
-      //          |LP|recevier|pi_indicator|volume_db|L
-      //          |R|192.168.1.1|recevier|pi_indicator|power
-      //      See also arch_notes.txt for address and slot name formats.
-      //      T is arbitrary client message (may be empty).
-      //  Matching of slot names between sender and receiver.
-      //    1. Allowed slot types correspondence:
-      //      po --> pi, qi, qs
-      //      qs --> pi, qi
-      //      pbo --> pbi, qbi (send command)
-      //      pbi, qbi --> pbo (send response)
-      //    2. Slot with type and name root only (no additional name parts)
-      //      may send to any slot with corresponding type, exactly same root,
-      //      with or without any additional name parts.
-      //    3. Slot with type, name root and additional name parts
-      //      may send to any slot with corresponding type,
-      //      exactly same root and exactly same additional name parts.
-      //  buf: optional binary data, associated with the message.
-      // Returns:
-      //    1 - success, written.
-      //    0 - success, prev. message overwritten (only for non-command pins).
-      // NOTE After codes >= 0, the client may write another message or command.
-      // NOTE In case of codes -2..-19 , the slot may be not functional during undefined period of time.
-      // NOTE After codes <= -20, the client should take specific action.
-      //    -1 - invalid message format, address, slot name or slot type, sender-reciever slot mismatch,
-      //        target address for response does not match with command source address.
-      //    -2 - failed (mem. alloc. error, invalid object or smth. else).
-      //    -3 - no session.
-      //    -5 - rejected, out of order (only for command messages and responses).
-      //    -6 - local source slot does not exist or currently unusable.
-      //    -7 - local source thread does not exist.
-      //    -8 - local target slot does not exist or currently unusable.
-      //    -9 - local target thread does not exist.
-      //    -10 - writing to the specified slot from this source thread is not allowed.
-      //    -11 - remote or interprocess sending is disabled.
-      //    -12 - remote or interprocess sending failed.
-      //    -20 - target queue overflow (only for qs, qi), the client may try later.
-    virtual s_long write(const unity& msg, const arrayref_t<char>* buf = 0) throw() = 0;
 
-      // Call for information or extended operation.
+
+      // Subscribe, unsubscribe for messages, or check subscription state.
+      //
+      //  addr_qs - address of the queue, used for delivering the messages to all subscribed clients.
+      //    The address may be of any type:
+      //      LP - local queue in the explicitly specified dispatcher thread,
+      //      LPA - local queue, residing in the dispatcher thread, whose name is not known to the subscribing client,
+      //      LM - queue in the explicitly specified dispatcher thread in another dispatcher process.
+      //    Detailed structure of the address: arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure.
+      //
+      //  recv_sl - name of the recipient's slot (type qi or pi), in the current thread.
+      //    For subscribe() success, the recipient's slot must have the same name root as target qs.
+      //
+      //  rt - request type:
+      //      1 - subscribe,
+      //      2 - unsubscribe,
+      //      3 - check if subscribed (but do not change anything).
+      //    The request is completed (i.e. with final result) immediately only if addr_qs is local (LP, LPA).
+      //    For out-of-process targets, the client should supply tracking object, which will asynchronously
+      //    receive the final result code when it's available.
+      //
+      //  tracking:
+      //    If the object is supplied, the reference type may be the following:
+      //      a) cross-module reference, b) multifunctional reference. I.e. tracking.is_cm() == true. See also cref_t is_cm.
+      //    tracking->id: unique request id. subscribe() at once generates unique id and writes it to tracking->id.
+      //    tracking->state: the current state of the request. Any of subscribe() ret. codes, see below.
+      //
+      // NOTE When a subscription is created dynamically (subscribe()),
+      //      on dispatcher restart (initialization) from any side (qs slot, receiving slot),
+      //      the subscription is not recovered automatically.
+      //    In contrary, pre-configured subscriptions are created automatically on dispatcher initialization:
+      //      a) from the side of qs slot: see arch_notes.txt "output" param. of qs slot,
+      //      b) from the side of subscribed slot: see arch_notes.txt "input qsa" param. of pi, qi slots.
+      //
+      // Returns (directly, + sets the same into tracking->state, treated as volatile const.):
+      //    0 (transient state, for non-local addr_qs only) - the request has been sent successfully.
+      //    1 (final state) - unsubscribed successfully, or was not subscribed.
+      //    2 (final state) - subscribed successfully, or was subscribed.
+      //  Error codes (final state):
+      //    -1 - invalid args (address, slot name or type, request type).
+      //    -2 - common-case failure.
+      //    -3 - no session.
+      //    -5 - recv_sl does not exist or could not be accessed (locking timeout).
+      //    -6 - addr_qs does not exist on the destination side or could not be accessed (locking timeout).
+      //    -10 - addr_qs exists, but does not allow (un-)subscribing recv_sl. See also arch_notes.txt: "output fixed" param. of qs slot.
+      //    -11 - non-local communication is disabled or not available.
+      //    -12 (non-local request only) subscription request failure on peer side.
+      //    -15 (non-local request only) subscription tracking is stopped (e.g. end of session during tracking).
+      //
+    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking = cref_t<tracking_info>()) throw() = 0;
+
+
+
+      // Request information or perform an extended operation.
+      //
       //  Common return values:
       //    1 - success.
       //    -1 - invalid request type (rt).
       //    -2 - operation failed.
-      //    -3 - session is closed.
+      //    -3 - no session.
       //    -4 - operation not permitted.
       //    -5 - invalid argument (args and/or retval as required by request type).
+      //  Common rule for retval:
+      //    retval is cleared a) if request has failed, b) if retval is not used in this type of request.
+      //    Otherwise, retval contains the result of the request, in the format according to its type.
       //
       //  rt (request type):
-      //    1 - get names of all dispatcher threads.
+      //
+      //    rt 1 - get names of all dispatcher threads.
       //      args: not used.
       //      On success, retval: 0-based utStringArray.
       //
-      //    11 - get number of dispatcher threads.
+      //    rt 11 - get number of dispatcher threads.
       //      args: not used.
       //      On success, retval: utInt.
       //
-      //    2 - get names of all slots of a thread.
-      //      args: thread name (scalar).
-      //      On success, retval: 0-based utStringArray.
+      //    rt 2 - get names of all slots of a thread.
+      //      args: thread name (string).
+      //      On success, retval:
+      //          0-based utStringArray.
+      //          Slot names are is string form. If necessary to convert them into array form, use paramline decode().
       //      Specific return value: -7 - thread does not exist.
       //
-      //    12 - get number of slots in a thread.
-      //      args: thread name (scalar).
+      //    rt 12 - get number of slots in a thread.
+      //      args: thread name (string).
       //      On success, retval: utInt.
       //      Specific return value: -7 - thread does not exist.
       //
-      //    3 - set priority and timing for internal thread, delivering subscription messages.
+      //    rt 3 - set priority and timing for internal thread, delivering subscription messages from all qs slots.
       //      args: array(<priority>, <delivery loop sleep time>).
-      //        priority: 1..7 in units of threadctl.
-      //        sleep time: mcs, >= 0
+      //        priority: 1..7 in units of threadctl. (Dflt. priority (normal) is 4.)
+      //        sleep time: in mcs, >= 0
       //      retval: not used.
       //      Specific return value: -7 - the internal delivery thread does not exist (configured so).
       //
-      //    4 - get priority and timing for internal thread, delivering subscription messages.
-      //      retval: 1-based array with 2 elements same as args in rt == 3, see above.
+      //    rt 4 - get priority and timing for internal thread, delivering subscription messages from all qs slots.
+      //      retval: 1-based utIntArray with 2 elements same as args in rt == 3, see above.
       //      Specific return value: -7 - the internal delivery thread does not exist (configured so).
       //
-      //    5 - create a new proxy object and assign it to retval.
-      //      args: thread name (scalar) for the new proxy.
-      //      See also: dispatcher_mt new_proxy.
-      //      NOTE retval is re-initialized to belong to the binary module of the current proxy and dispatcher_mt objects.
+      //    rt 5 - create a new proxy object and assign it to retval.
+      //      args: thread name (string) for the new proxy.
+      //      See also: dispatcher_mt :: new_proxy.
+      //      NOTE retval is re-initialized to belong to the binary module of the current dispatcher process (i.e. dispatcher_mt object).
       //      Specific return value: -7 - thread does not exist.
       //
-      //    6 - create a new thread.
-      //      args: configuration a thread, similar to described near dispatcher_mt::dispatcher_mt().
-      //        Only one configuration (path <thread name>|...) may be specified.
+      //    rt 6 - create a new thread.
+      //      args: configuration of a thread, as described in arch_notes.txt / MESSAGE DISPATCHER / Configuration parameters.
+      //        Only one thread configuration ({ thread name; slots and thread params. }) may be specified.
+      //      flags:
+      //        0x1 "ensure_local_subs" - if set, the request checks if all pre-defined local subscriptions of all slots of the new thread
+      //          (local addresses in qs slots "output", and pi, qi "input qsa" keys),
+      //          have been created successfully. If not so, the request cancels thread creation and returns -2.
+      //          NOTE This request updates, but does not verify non-local subscriptions.
+      //            To explicitly verify any subscriptions, the client should use subscribe().
       //      retval: not used.
+      //      NOTE If the thread contains pre-configured subscriptions, all of them are automatically updated,
+      //        but if any of them fails, the thread creation is not canceled, and the request returns 1 (success).
+      //        Additional options:
+      //          1) Local subscription update with verification is done by slots_create (with flag 0x1 set).
+      //          2) To explicitly verify any subscriptions, the client should use subscribe().
       //      Specific return value: -6 - thread already exists.
       //
-      //    7 - remove the existing thread (may be applied to the thread associated with the current proxy).
-      //      args: thread name (scalar).
+      //    rt 7 - remove the existing thread. May be applied to any thread, incl. one associated with the current proxy.
+      //      args: thread name (string).
       //      retval: not used.
       //      Specific return value: -7 - thread does not exist.
-    virtual s_long request(s_long rt, unity& retval, const unity& args = unity()) throw() = 0;
+      //
+      //    rt 8 - deliver all pending messages from all qs slots, configured in the current dispatcher process, right now.
+      //      retval: not used.
+      //      args: must contain integer value with ORed flags:
+      //          0x1 - deliver messages from the calling dispatcher thread's qs slots, configured with "delivery = thread".
+      //          0x2 - deliver messages from all threads' qs slots, configured with "delivery = disp" .
+      //            This action is performed only if the current thread is configured with disp = true, otherwise it's no-op.
+      //      NOTE This request, with args = 3, replaces former periodic() function.
+      //      NOTE Making this request is necessary for client only if any:
+      //          a) the current or another dispatcher threads contain qs slots, but automatic delivery is disabled (__thm_lqsd = 0).
+      //          b) the current thread contains qs slots, configured with "delivery = thread".
+      //        If no qs slots are covered by the specified flags, the request is no-op.
+      //      NOTE If automatic delivery is enabled (__thm_lqsd = 1 or 2), the request may speed up delivery (depends on internal thread timing).
+      //
+      //    rt 9 - reset phase in the given command slot (pbo, hbo, pbi, qbi).
+      //      Result: if the request is satisfied, the command slot is ready to issue/receive new command to/from any address.
+      //      This request may be used
+      //        a) by command sender, when it detects that its command has been lost or timed out due to exceptional situation.
+      //          E.g. mget returning -20 for too long, which may mean terminated command recipient thread or peer process.
+      //        b) by command sender, if it attempts to send a command in normal way, but its msend returns receives -5 (out of order).
+      //        c) by command recipient, if it attempts to respond to a command, but its msend returns receives -5 (out of order).
+      //      Common usage hint:
+      //        For any particular pair of command sender - command target slots, if any side has been reset (or restarted, recreated),
+      //          another side must be reset (or restarted, recreated) as well.
+      //          Otherwise, on attempt to send new command, msend will anyway fail with code -5 (out of order).
+      //
+      //      args: hashlist, map or string: src = <slot name>; trg = <target address>
+      //        a) for pbo, pbi, qbi: only src is required (target address is not applicable).
+      //          NOTE qbi: the currently queued input commands are not deleted.
+      //        b) for hbo: both src and trg are required.
+      //          trg selects the command target, for which the client has the out of order situation.
+      //          Slot phase will be reset in association with the command target (trg) only.
+      //        Hint: user message (msg of msend) itself may be passed as request argument.
+      //      retval: not used.
+      //
+    virtual s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) throw() = 0;
 
-      // Creates one or more slots during dispatcher session.
-      //  slotscfg is a) hash or map with configuration tree as described below,
-      //      b, c)  single- or multiline string representon of that tree in paramline::decode_tree format (decoding flags: 0x1a).
-      //    a)
-      //      { "slots", { <slot name>, <empty or slot configuration tree> } }
-      //    b)
-      //      =|slots; po_messages1; pi_progress1; pi_progress2; |qi_char|UI; |qi_char|single|R|192.168.1.2:3500|vmpcp|UI
-      //    c) Multiline format is convenient for specifying per-slot configuration:
-      //      =|slots|po_messages1
-      //      =|slots|pi_progress1
-      //      =|slots|pi_progress2
-      //      =|slots|\|qi_char\|UI
-      //      =|slots|\|qi_char\|single\|R\|192.168.1.2:3500\|vmpcp\|UI
-      //    Slot name:
-      //    a) Simple:
-      //        <slot type>_<slot name root>
-      //      Slot types:
-      //        po -- output-only pin, message goes directly to receiver
-      //        pi -- input-only pin, messages may be overwritten if not pushed in time
-      //        pbo -- strong-bound call (command) pin, keeps sequence
-      //          "sender pushes cmd, receiver pops cmd, receiver pushes response, sender pops response"
-      //        pbi -- strong-bound call input pin on the receiver side,
-      //          only one command at a time may be processed
-      //        qi -- non-blocking input queue for values; on overflow, the new value cannot be pushed
-      //          (local sender receives an error code, remote sender is not notified)
-      //        qbi -- strong-bound call (command) input queue on the receiver side; on overflow,
-      //          a new command will not be pushed, and for both local and remote sender
-      //          a response with an error message is automatically generated
-      //        qs -- queue for broadcasting (multiple senders, multiple receivers)
-      //      Slot name root: non-empty string.
-      //    b) Specialized:
-      //        |<slot type>_<slot name root>|<postfix>
-      //      postfix - additional address parts, separated by "|". Examples:
-      //        |qi_char|UI
-      //        |qi_char|single|R|192.168.1.2:3500|vmpcp|UI
-      //    Slot configuration tree: this part is optional. Specifies additional parameters
-      //        influencing slot function.
-      //    See arch_notes.txt "dispatcher_mt threads configuration structure" for details.
+
+
+      // Dynamically creates one or more slots in the current dispatcher thread.
+      //
+      //  slotscfg:
+      //    contains configuration tree for the new slots, as associative array (hashlist, map),
+      //      or as string representation of that array, paramline-encoded (manually or with encode_tree(), for decode_tree() with flags 0x3a).
+      //    Structure of such configuration is subset of full dispatcher configuration.
+      //    This subset describes the list of new slots and their parameters, as follows:
+      //      { "slots"; { <slot name>; <slot configuration, or empty> } }
+      //    Details on slot name format and configuration are in
+      //      arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure, Configuration parameters, Examples of configuration.
+      //    Brief descr. of slot types:
+      //      po - output-only pin, message goes directly to the recipient.
+      //      pi - input-only pin, messages may be overwritten if not popped in time.
+      //      qi - non-blocking input queue for values; any number of messages from one or more sources
+      //          are queued and do not overwrite each other.
+      //        NOTE When configured by default, capacities of all types of queues are unlimited.
+      //      pbo, hbo - command sender pin. Ensures the sequence
+      //          1) command sender sent a command,
+      //          2) command target popped and executed the command,
+      //          3) command target pushed a response, and now is ready for new command,
+      //          4) command sender popped and analyzed the response, and now is ready to issue new command.
+      //          pbo can send one command at a time, to any target.
+      //          hbo can send commands to multiple targets, one at a time per target.
+      //      pbi, qbi  - command target pins.
+      //            pbi can hold only one command at a time, so it's convenient only for sequential exchange
+      //              with single command sender only.
+      //            qbi is a queue, to which multiple senders can push their commands independently, without collisions.
+      //              The commands are queued, and the client (command target) pops/executes/responds to them one by one.
+      //      qs - the queue for delivering the messages to multiple subscribed clients (from multiple senders).
+      //    Primitive example of configuration (in string form):
+      //      for thread A:
+      //        =|slots; po_strings; pi_hash_values
+      //      for thread B:
+      //        =|slots; pi_strings; po_hash_values
+      //      Thread A sends some strings to thread B. Thread B calculates hash values of that strings, and sends them back to thread A.
+      //      Threads are designed so that thread A won't send another string until thread B "returns" hash value for the previous string.
+      //    Example 2 (same task, but using command slots):
+      //      for thread A:
+      //        =|slots; pbo_hash_calc
+      //      for thread B:
+      //        =|slots; pbi_hash_calc
+      //      Here, the dispatcher as such will ensure the sequential data exchange.
+      //      Thread B has to respond (with hash value) to each string, sent by thread A.
+      //      Thread A cannot send another string until thread B responds with the hash value.
+      //
+      //  flags:
+      //      0x1 "ensure_local_subs" - if set, the function checks if all pre-defined local subscriptions
+      //        (local addresses in qs slots "output", and pi, qi "input qsa" keys)
+      //        have been created successfully. If not so, the function cancels slots creation and returns -2.
+      //        NOTE slots_create updates, but does not verify non-local subscriptions.
+      //          To explicitly verify any subscriptions, the client should use subscribe().
+      //
       // Returns:
       //    1 - success.
       //    -1 - invalid or incompatible slotscfg.
-      //    -2 - failed (mem. alloc. error, invalid object or smth. else).
+      //    -2 - common-case failure.
       //    -3 - no session.
       //    -4 - one of new slot names is not unique.
       //    -7 - thread does not exist.
-    virtual s_long slots_create(const unity& slotscfg) throw() = 0;
+      //
+    virtual s_long slots_create(const unity& slotscfg, s_long flags = 0) throw() = 0;
 
-      // slotname: must be
-      //    a) (string) Scalar slot name in the format, described near slots_create.
-      //    b) decoded vector slot name (array).
+
+
+      // Removes slots from the current dispatcher thread.
+      //  slotnames: may be
+      //    a) Name of single slot, in the form of array (utStringArray or utUnityArray).
+      //      The array must be non-empty, 1-based. The first member must be string (po_..., qi_...  etc.).
+      //    b) Name of single slot, as paramline-encoded (with encode1v(), for decode1v()) string.
+      //      (NOTE For identifier-like strings, paramline-encoded form is exactly same as original string.)
+      //    c) List of slot names, as an array (utUnityArray).
+      //      This case works, instead of (a), only if (flags & 1) != 0.
+      //      Each element in the list should be like (a) or (b) above.
+      //    d) Associative array, whose keys are slot names in string form, like in (b) above.
+      //      NOTE Case (d) is useful for removing slots, for which the client remembers original configuration variable.
+      //        (Only associative array keys are used, values are ignored.)
+      //
+      //        E.g. 1: the client may extract slots configuration from associative form of slotscfg arg. of slots_create(), used to add slots in the past:
+      //              slots_remove(slotscfg["slots"]);
+      //          This removes all slots, created by slots_create(slotscfg). added See also slots_create().
+      //
+      //        E.g. 2: the client may extract slots configuration from associative form of cfg arg. of dispatcher_mt().
+      //              o_iptr_t<i_dispatcher_mt> pdisp;
+      //                // ... init. pdisp for accessing the chosen dispatcher thread.
+      //              unity name_th; pdisp->thread_name(name_th);
+      //              slots_remove(cfg[name_th]["slots"]);
+      //          This removes all slots of the thread name_th, originally created on dispatcher_mt initialization. See also dispatcher_mt().
+      //
+      //    NOTE Details on slot name format are in
+      //      arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure.
+      //
+      //  flags:
+      //    0x1 "array_of_slotnames" not set (dflt.): if slotnames is an array, it specifies single slot name in the form of array - case (a).
+      //    0x1 is set: if slotnames is an array, it specifies an array of slot names - case (c).
+      //    other bits: reserved, should be 0.
+      //
       // Returns:
-      //    1 - success.
-      //    0 - slot does not exist.
-      //    -1 - invalid slotname.
-      //    -2 - failed (mem. alloc. error, invalid object, inaccessible thread or smth. else).
+      //    2 - success.
+      //    1 - removed only part of the given slots, because that some of slots do not exist (or bad names given).
+      //    0 - removed only part of the given slots, because of common-case failure.
+      //    -1 - invalid argument (bad value of slotnames arg.).
+      //    -2 - common-case failure.
       //    -3 - no session.
       //    -7 - thread does not exist.
-    virtual s_long slot_remove(const unity& slotname) throw() = 0;
+      //
+    virtual s_long slots_remove(const unity& slotnames, s_long flags = 0) throw() = 0;
 
-      // Get this thread name as registered in dispatcher.
-      //  Thread names are unique within the process.
-      //  Thread name cannot be empty string.
-      //  retname: on success, overwritten by the returned string.
+
+
+      // Returns the current dispatcher thread (that of the current proxy) name.
+      //    Thread names are unique within the process.
+      //    Thread name cannot be empty string.
+      //  retname: on success, assigned the current thread name.
+      //
       // Returns:
-      //    1 - success.
-      //      In all the following, retname remains unchanged:
-      //    -2 - failed (mem. alloc. error, invalid object or smth. else).
+      //    1 - success. retname: assigned the current thread name.
+      //    -2 - common-case failure. retname is not changed.
+      //
     virtual s_long thread_name(unity& retname) throw() = 0;
 
-      // Get this process name as registered in dispatcher.
-      //  Process names are unique within the local machine.
-      //  Process name cannot be empty string.
-      //  retname: on success, overwritten by the returned string.
+
+
+      // Get the dispatcher process name.
+      //    Process names are unique within the local computer.
+      //    Process name cannot be empty string.
+      //  retname: on success, assigned the dispatcher process name.
       // Returns:
-      //    1 - success.
-      //      In all the following, retname remains unchanged:
-      //    -2 - failed (mem. alloc. error, invalid object or smth. else).
+      //    1 - success. retname: assigned the dispatcher process name.
+      //    -2 - common-case failure. retname is not changed.
+      //
     virtual s_long process_name(unity& retname) throw() = 0;
 
-      // Subscribe, unsubscribe for messages, or check subscription state.
-      //  addr_qs - messages source (any address as string or array,
-      //    redirecting addresses like LPA are automatically dereferenced into factual address).
-      //  recv_sl - receiving qi or pi slot in the current thread (slot name as string or array).
-      //    NOTE qs slot and receiver slot must have same name root for subscribing to succeed.
-      //  rt - request type:
-      //    1 - begin subscribe,
-      //    2 - begin unsubscribe,
-      //    3 - begin checking for being subscribed,
-      //    4 - return the current state of operation,
-      //    5 - discard the current operation (do not wait for result).
-      //  Ops. 1, 2, 3 complete immediately if request target (addr_qs) is in-process.
-      //  Returns:
-      //    2 - op. completed, result: subscribed, or already subscribed.
-      //    1 - op. completed, result: not subscribed, or just unsubscribed.
-      //    0 - op. discarded or no operation is in progress with this addr_qs, recv_sl pair.
-      //    10 - op. completed: slot, defined by addr_qs, does not exist on the destination side or inaccessible.
-      //    11 - op. completed: addr_qs is unreachable (network and interprocess only).
-      //    12 - op. completed: addr_qs does not allow (un-)subscribing recv_sl.
-      //    13 - op. timeout (network and interprocess only).
-      //    20 - op. is in progress (network and interprocess only).
-      //    -1 - invalid args (address, slot name or type, request type).
-      //    -2 - failure (out of memory, out of number of parallel requests, no network access etc.).
-      //    -3 - no session.
-      //    -4 - another operation with same addr_qs, recv_sl is currently pending.
-      //    -5 - recv_sl does not exist or inaccessible.
-      // NOTE Subscriptions can be created
-      //  a) statically, with qs slot configuration (output list).
-      //    This is automatically recreated on qs side's restart.
-      //  b) dynamically, with subscribe() call from receiver thread.
-      //    If any of sides may have restarted, the receiving side may check and resubscribe as necessary.
-    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt) throw() = 0;
 
-      // Performs periodic tasks:
-      //    - pop/deliver messages from thread's qs slots configured with delivery = thread.
-      //    - (for disp thread) pop/deliver messages from qs slots with delivery = disp, in all threads.
-      // periodic() should be called in a loop
-      //    with some sleep at each iteration, during whole session.
-      // periodic() call is not necessary in the following cases:
-      //    a) the current thread has no qs slots with delivery = thread,
-      //    b) the current thread is disp thread, but configuration contains __qsdt >= 0
-      //      (automatic delivery for disp thread's messages by internal thread).
-      // flags: reserved, must be 0.
-      // Returns:
-      //    1 - success.
-      //    0 - nothing to do for this thread.
-      //    -1 - invalid flags.
-      //    -2 - failed (mem. alloc. error or smth. else).
-      //    -3 - no session.
-    virtual s_long periodic(s_long flags = 0) throw() = 0;
 
     virtual ~i_dispatcher_mt(){}
   };
 
+
+
   template<> struct o_proxy<i_dispatcher_mt> : o_proxy_base<i_dispatcher_mt>
   {
-    static const char* __iname() { return "Ye.K. / bmdx / i_dispatcher_mt"; }
-
-    struct __pop { typedef s_long (*PF)(__Interface* __pi, const unity* slotname, unity* retmsg, _carray_base_t<char>* retbuf, s_long flags); static s_long F(__Interface* __pi, const unity* slotname, unity* retmsg, _carray_base_t<char>* retbuf, s_long flags) { return __pi->pop(*slotname, *retmsg, retbuf, flags); } };
-    struct __write { typedef s_long (*PF)(__Interface* __pi, const unity* msg, const arrayref_t<char>* buf); static s_long F(__Interface* __pi, const unity* msg, const arrayref_t<char>* buf) { return __pi->write(*msg, buf); } };
-    struct __request { typedef s_long (*PF)(__Interface* __pi, s_long rt, unity* retval, const unity* args); static s_long F(__Interface* __pi, s_long rt, unity* retval, const unity* args) { return __pi->request(rt, *retval, *args); } };
-    struct __slots_create { typedef s_long (*PF)(__Interface* __pi, const unity* slotscfg); static s_long F(__Interface* __pi, const unity* slotscfg) { return __pi->slots_create(*slotscfg); } };
-    struct __slot_remove { typedef s_long (*PF)(__Interface* __pi, const unity* slotname); static s_long F(__Interface* __pi, const unity* slotname) { return __pi->slot_remove(*slotname); } };
+    static const char* __iname() { return "Ye.K./bmdx/i_dispatcher_mt/v2"; }
+    typedef i_dispatcher_mt::tracking_info tracking_info;
+    struct __msend { typedef s_long (*PF)(__Interface* __pi, const unity* msg, cref_t<t_stringref>* att, s_long flags, cref_t<tracking_info>* tracking); static s_long F(__Interface* __pi, const unity* msg, cref_t<t_stringref>* att, s_long flags, cref_t<tracking_info>* tracking) { return __pi->msend(*msg, *att, flags, *tracking); } };
+    struct __mget { typedef s_long (*PF)(__Interface* __pi, const unity* slotname, unity* retmsg, cref_t<t_stringref>* retatt, s_long flags); static s_long F(__Interface* __pi, const unity* slotname, unity* retmsg, cref_t<t_stringref>* retatt, s_long flags) { return __pi->mget(*slotname, *retmsg, retatt, flags); } };
+    struct __subscribe { typedef s_long (*PF)(__Interface* __pi, const unity* addr_qs, const unity* recv_sl, s_long rt, cref_t<tracking_info>* tracking); static s_long F(__Interface* __pi, const unity* addr_qs, const unity* recv_sl, s_long rt, cref_t<tracking_info>* tracking) { return __pi->subscribe(*addr_qs, *recv_sl, rt, *tracking); } };
+    struct __request { typedef s_long (*PF)(__Interface* __pi, s_long rt, unity* retval, const unity* args, s_long flags); static s_long F(__Interface* __pi, s_long rt, unity* retval, const unity* args, s_long flags) { return __pi->request(rt, *retval, *args, flags); } };
+    struct __slots_create { typedef s_long (*PF)(__Interface* __pi, const unity* slotscfg, s_long flags); static s_long F(__Interface* __pi, const unity* slotscfg, s_long flags) { return __pi->slots_create(*slotscfg, flags); } };
+    struct __slots_remove { typedef s_long (*PF)(__Interface* __pi, const unity* slotnames, s_long flags); static s_long F(__Interface* __pi, const unity* slotnames, s_long flags) { return __pi->slots_remove(*slotnames, flags); } };
     struct __thread_name { typedef s_long (*PF)(__Interface* __pi, unity* retname); static s_long F(__Interface* __pi, unity* retname) { return __pi->thread_name(*retname); } };
     struct __process_name { typedef s_long (*PF)(__Interface* __pi, unity* retname); static s_long F(__Interface* __pi, unity* retname) { return __pi->process_name(*retname); } };
-    struct __subscribe { typedef s_long (*PF)(__Interface* __pi, const unity* addr_qs, const unity* recv_sl, s_long rt); static s_long F(__Interface* __pi, const unity* addr_qs, const unity* recv_sl, s_long rt) { return __pi->subscribe(*addr_qs, *recv_sl, rt); } };
-    struct __periodic { typedef s_long (*PF)(__Interface* __pi, s_long flags); static s_long F(__Interface* __pi, s_long flags) { return __pi->periodic(flags); } };
-
-    virtual s_long pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retbuf, s_long flags) throw() { return __call<__pop>()(__psi(), &slotname, &retmsg, retbuf, flags); }
-    virtual s_long write(const unity& msg, const arrayref_t<char>* buf) throw() { return __call<__write>()(__psi(), &msg, buf); }
-    virtual s_long request(s_long rt, unity& retval, const unity& args) throw() { return __call<__request>()(__psi(), rt, &retval, &args); }
-    virtual s_long slots_create(const unity& slotscfg) throw() { return __call<__slots_create>()(__psi(), &slotscfg); }
-    virtual s_long slot_remove(const unity& slotname) throw() { return __call<__slot_remove>()(__psi(), &slotname); }
+    virtual s_long msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) throw() { return __call<__msend>()(__psi(), &msg, &att, flags, &tracking); }
+    virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw() { return __call<__mget>()(__psi(), &slotname, &retmsg, retatt, flags); }
+    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) throw() { return __call<__subscribe>()(__psi(), &addr_qs, &recv_sl, rt, &tracking); }
+    virtual s_long request(s_long rt, unity& retval, const unity& args, s_long flags) throw() { return __call<__request>()(__psi(), rt, &retval, &args, flags); }
+    virtual s_long slots_create(const unity& slotscfg, s_long flags) throw() { return __call<__slots_create>()(__psi(), &slotscfg, flags); }
+    virtual s_long slots_remove(const unity& slotnames, s_long flags) throw() { return __call<__slots_remove>()(__psi(), &slotnames, flags); }
     virtual s_long thread_name(unity& retname) throw() { return __call<__thread_name>()(__psi(), &retname); }
     virtual s_long process_name(unity& retname) throw() { return __call<__process_name>()(__psi(), &retname); }
-    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt) throw() { return __call<__subscribe>()(__psi(), &addr_qs, &recv_sl, rt); }
-    virtual s_long periodic(s_long flags) throw() { return __call<__periodic>()(__psi(), flags); }
-
-    typedef unity_common::fn_list<__pop, __write, __request, __slots_create, __slot_remove, __thread_name, __process_name, __subscribe, __periodic> __Methods;
+    typedef unity_common::fn_list<__msend, __mget, __subscribe, __request, __slots_create, __slots_remove, __thread_name, __process_name> __Methods;
   };
   namespace { o_proxy<i_dispatcher_mt> __o_proxy_i_dispatcher_mt_inst; }
 
+
+
   struct dispatcher_mt
   {
-      // process_name - non-empty string, should be unique in the local machine context.
-      //    Name can be anything except a) empty, b) one of LP, LM, R, LPA, LMA, RPA, RMA.
-      // cfg: is a) hash or map with threads configuration tree as described below,
-      //      b, c)  single- or multiline string representon of that tree in paramline::decode_tree format (decoding flags: 0x1a).
-      //  associative array { thread name, thread configuration tree } in a) hash or map form b) paramline string form.
-      //    Thread name may not start from "__" or be empty (such keys are treated specially).
-      //    a)
-      //      { <thread name>,
-      //        { "slots", { <slot name>, <empty or slot configuration tree> } },
-      //        { <thread parameter>, <value> }
+      // Creates the "dispatcher process", and at once starts communication session.
+      //    (Terminology: see arch_notes.txt / MESSAGE DISPATCHER / Terminology)
+      //
+      //  process_name:
+      //    name of the dispatcher process, unique for the local computer.
+      //    Name uniqueness is checked automatically by dispatcher_mt(), by means of IPC.
+      //    Name may anything except the following: empty string, "LP", "LM", "R", "LPA", "LMA", "RMA".
+      //
+      //  cfg: application-specific communication scheme and parameters.
+      //    This structure is tree-like. Normally, specified in any of forms:
+      //        a) multilevel associative array (hashlist or map),
+      //        b) string form of the above, paramline-encoded (manually or with encode_tree(), for decode_tree() with flags 0x3a).
+      //        The upper level of cfg tree contains all dispatcher threads, with their configurations,
+      //          plus all global (i.e. per-dispatcher_mt) parameters.
+      //    Also,
+      //        c) cfg may be empty, or contain only dispatcher process parameters, without threads.
+      //          In this case, threads and their slots should be added later dynamically,
+      //          using i_dispatcher_mt request() with rt 6, and/or slots_create.
+      //    Formal description:
+      //      cfg: {
+      //        <thread name>; {
+      //          "slots"; { <slot name>; <slot configuration, or empty> }
+      //          <thread parameter name>; <value>
+      //        }
+      //        <per-dispatcher_mt parameter name>; <value>
       //      }
-      //    b)
-      //      =|thread1|slots; po_messages1; pi_progress1; pi_progress2; |qi_char|UI; |qi_char|single|R|192.168.1.2:3500|vmpcp|UI
-      //      =|thread2|slots; pi_messages1
-      //      =|thread2; disp = true
-      //      __exitmode = 1
-      //    c) Multiline format is convenient for specifying per-slot configuration:
-      //      =|thread1|slots|po_messages1
-      //      =|thread1|slots|pi_progress1
-      //      =|thread1|slots|pi_progress2
-      //      =|thread1|slots|\|qi_char\|UI
-      //      =|thread1|slots|\|qi_char\|single\|R\|192.168.1.2:3500\|vmpcp\|UI
-      //      =|thread2|slots|pi_messages1
-      //      =|thread2; disp = true
-      //      __exitmode = 1
-      //    See arch_notes.txt "dispatcher_mt threads configuration structure" for details.
-      //    See also slots_create() for brief descr. of slot types.
+      //      Slot configuration: { <slot parameter name>; <value> }
+      //      Value of per-dispatcher_mt, thread, and slot parameter:
+      //        scalar, array or associative array, as described in arch_notes.txt / MESSAGE DISPATCHER / Configuration parameters.
+      //      All elements are optional.
+      //    See also arch_notes.txt / MESSAGE DISPATCHER / Examples of configuration.
+      //
+      //  flags:
+      //      0x1 "ensure_local_subs" - if set, dispatcher_mt() at once checks if all pre-defined local subscriptions of all slots of all created threads
+      //          (local addresses in qs slots "output", and pi, qi "input qsa" keys),
+      //          have been created successfully. If not so, dispatcher_mt() fails: is_valid() will return false.
+      //          NOTE dispatcher_mt() requests, but does not verify non-local subscriptions.
+      //            To explicitly verify any subscriptions, the client should use subscribe().
+      //      0x100 "disp_off_th_lqsd" - disable the thread, responsible for automatic message delivery for local qs slots. Suppresses __thm_lqsd configuration setting (equiv. to __thm_lqsd = 0).
+      //      0x200 "disp_off_th_lmsc" - disable the thread, responsible for interprocess message delivery. Suppresses __thm_lmsc configuration setting (equiv. to __thm_lmsc = 0).
+      //      0xfff00 "disp_off_th_mask" - a mask for disabling all kinds of additional threads and active subsystems, started by dispatcher_mt. (Includes bits, reserved for that in future versions.)
+      //
       // Results:
-      // On successful construction, an internal session object is created.
-      //    is_valid() will return true.
-      //    The client creates proxy objects (new_proxy()), referring to the session.
-      //    The client puts proxy objects into threads, so that threads could write and pop
-      //      messages.
-      // Session ends according with __exitmode parameter in configuration.
-      //  (By default, session is immediately ended by ~dispatcher_mt(),
-      //    but internal objects are released only after all proxy objects are released by the client.)
-    dispatcher_mt(const std::wstring& process_name, const unity& cfg = unity()) throw();
-    dispatcher_mt(const std::string& process_name, const unity& cfg = unity()) throw();
+      //
+      //  a) On successful construction, an internal session object is created.
+      //    is_valid() returns true.
+      //    The client creates proxy objects, with i_dispatcher_mt interface, to access dispatcher threads.
+      //    See also new_proxy().
+      //    The client passes proxy objects into application-defined CPU threads, so that they could communicate
+      //      with each other and with another dispatcher processes inside this and other CPU processes.
+      //      NOTE Proxy object may be passed with usual function call, or via common objects storage (see struct pcos).
+      //    Application-defined client of the proxy may reside as in the main executable, so in any kind of
+      //      dynamically loaded shared library.
+      //      By design of BMDX library, all proxy functions and associated objects are compiler-independent.
+      //    One CPU process may create one or more dispatcher processes (dispatcher_mt instances), as needed
+      //      for application architecture.
+      //    Two dispatcher processes communicate by means of IPC (based on shared memory).
+      //      In i_dispatcher_mt, LM-type addresses are used for that.
+      //      Inside one dispatcher process, threads may use LM-type addresses as well.
+      //      NOTE The dispatcher does not re-interpret any non-local address as local.
+      //        Address type imperatively selects technical way of message transfer, with all associated limitations.
+      //    Communication session may end in several ways:
+      //      1. On ~dispatcher_mt().
+      //      2. On end_session().
+      //      3. When both dispatcher_mt and all client proxies are completely released.
+      //
+      //  b) On failure, is_valid() == false.
+      //
+    dispatcher_mt(arrayref_t<wchar_t> process_name, const unity& cfg = unity(), s_long flags = 0) throw();
+    dispatcher_mt(arrayref_t<char> process_name, const unity& cfg = unity(), s_long flags = 0) throw();
     ~dispatcher_mt() throw();
 
-      // true - on successful construction.
-      // false - on construction failure, and after destruction.
-      // NOTE is_valid() may be called concurrently.
+      // Returns:
+      //    true - if dispatcher_mt constructor has succeeded.
+      //    false - a) if dispatcher_mt constructor has failed, b) after ~dispatcher_mt().
+      //
+      // Concurrency: is_valid() may be called concurrently.
+      //
     bool is_valid() const throw();
 
-      // true from successful construction till destruction or end_session().
-      // NOTE has_session() may be called concurrently.
+      // Returns:
+      //    true: during the period, starting from successful construction,
+      //      and ending with a) ~dispatcher_mt(), or b) end_session().
+      //    false: beyond this time period.
+      //
+      // Concurrency: has_session() may be called concurrently.
+      //
     bool has_session() const throw();
 
       // Resets an internal flag to signal that the session is no longer valid.
-      //  Any call via any proxy interface will return error code "session is closed".
-      // NOTE until being destroyed, dispatcher_mt holds the session object
-      //  with all associated data.
-      // NOTE end_session() may be called concurrently.
+      //    Any call via any i_dispatcher_mt will return error code -3 ("no session").
+      // NOTE until ~dispatcher_mt(), dispatcher_mt strongly references its session object.
+      //
+      // Concurrency: end_session() may be called concurrently.
+      //
     void end_session() throw();
 
-      // Relation between proxy object, dispatcher "threads" and CPU thread:
-      //  1. Any proxy object represents one particular dispatcher "thread", named by thread_name.
-      //  2. Multiple proxy objects may represent same dispatcher "thread" (have same thread_name),
-      //    and may be called concurrently.
-      //  3. Several proxy objects with different thread names may be used in single CPU thread and vice versa.
-      //  4. A proxy object may not be destroyed (== wrapping unity object clear or overwrite)
-      //    concurrently with calling any of its methods.
+      // Returns wrapped proxy object with interface i_dispatcher_mt.
+      //
+      // Typical sequence of dispatcher_mt and proxy use:
+      //    1. Create dispatcher_mt instance (with application-specific communication scheme and parameters in cfg arg.).
+      //      Check if dispatcher_mt is_valid(), i.e. construction and initialization succeeded.
+      //    2. For each client (communication party), create wrapped proxy object
+      //      with new_proxy().
+      //      Pass the wrapped proxy objects to clients in application-specific way.
+      //    3. In each client, get i_dispatcher_mt pointer from proxy object,
+      //      received (see above) from dispatcher_mt creator.
+      //      Use the pointer to send and receive messages,
+      //        optionally dynamically create/remove dispatcher threads and slots,
+      //        optionally create/remove subscriptions,
+      //        optionally create new proxies etc.
+      //  E.g.
+      //      dispatcher_mt disp("unique name", cfg);
+      //      unity proxy1, proxy2;
+      //      disp.new_proxy(proxy1, "client1");
+      //      disp.new_proxy(proxy2, "client2");
+      //      ... // pass proxy1 and proxy2 to clients.
+      //    // === in client 1 ===
+      //      o_iptr_t<i_dispatcher_mt> pdisp = proxy1.pinterface<i_dispatcher_mt>();
+      //      ... // use pdisp
+      //    // === in client 2 ===
+      //      o_iptr_t<i_dispatcher_mt> pdisp = proxy2.pinterface<i_dispatcher_mt>();
+      //      ... // use pdisp
+      //
+      // IMPORTANT One dispatcher thread may have >= 0 proxies associated.
+      //  The proxy is completely thread-safe and compiler-independent.
+      //  Until being released, each proxy strongly references common dispatcher session object.
+      //  Beyond proxy lifetime, the dispatcher session object does not store any client's objects (made in client's binary module),
+      //    unless the client intentionally sets anlo_msg, anlo_att flags in the call to msend (see i_dispatcher_mt msend, mget).
+      //
+      // See also:
+      //      dispatcher_mt()
+      //      arch_notes.txt / MESSAGE DISPATCHER / Slot types and address structure, Configuration parameters, Examples of configuration.
+      //
+      // Arguments:
+      //    dest: receives the wrapped proxy object, with i_dispatcher_mt interface attached.
+      //    thread_name: dispatcher thread name, as needed to identify particular communicating client.
+      //      The thread with this name should have been either defined in cfg argument to dispatcher_mt constructor,
+      //      or added dynamically before the current call to new_proxy().
+      //
+      // Concurrency: new_proxy() may be called concurrently.
+      //
       // Return value:
-      //  1 - success. dest contains the new object.
+      //  1 - success. dest contains the proxy object, associated with the given thread name.
       //    In all the below cases, dest is cleared (empty).
-      //    -2 - failure (mem. alloc. error or smth. else).
+      //    -2 - common-case failure.
       //    -3 - no session.
       //    -5 - invalid thread name.
       //    -7 - thread does not exist.
-      // NOTE new_proxy() may be called concurrently.
-    s_long new_proxy(unity& dest, const std::wstring& thread_name) const throw();
-    s_long new_proxy(unity& dest, const std::string& thread_name) const throw();
-
+      //
+    s_long new_proxy(unity& dest, arrayref_t<wchar_t>  thread_name) const throw();
+    s_long new_proxy(unity& dest, arrayref_t<char>  thread_name) const throw();
 
       // Similar to i_dispatcher_mt::request. Differences:
       //  1) has all possible permissions.
       //  2) the request is not associated with any particular thread (certain request types may fail).
-      // NOTE request() may be called concurrently.
-    s_long request(s_long rt, unity& retval, const unity& args = unity()) throw();
+      //
+      // Concurrency: request() may be called concurrently.
+      //
+      // Return value:
+      //    same as i_dispatcher_mt::request.
+      //
+    s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) throw();
 
-      // Flags, permitting serious operations from side of any proxy (i_dispatcher_mt request()):
+      // Flags, permitting serious operations from the side of any proxy (i_dispatcher_mt request()):
       //    0x1 - create another thread.
       //    0x2 - remove any thread, including proxy's own.
-      //    0x4 - new proxy creation for thread with specified name.
-      //    0x8 - get list of dispatcher threads, get list of slots for any thread.
+      //    0x4 - new proxy creation for thread with the specified name.
+      //    0x8 - get the list of dispatcher threads; get the list of slots for any thread.
       //    0x10 - get/set automatic subscription delivery parameters.
-      // If both b_get and b_set are true, new flags are set from f, and after, the old flags are written to f.
-      // Dflt. value of dispatcher_mt construction: 0x1f (all allowed).
-      // Returns: true - success, false - no session.
-      // NOTE frqperm() may be called concurrently.
+      //    0x20 - per-dispatcher_mt flag __msend_anlo "allow msend to pass by reference user objects and attachments, including non-local"
+      //    0x40 - per-dispatcher_mt flag __mget_anlo "allow mget to return by reference user objects and attachments, including non-local"
+      // Logic:
+      //    b_get == true reads all the current flags into f.
+      //    b_set == true sets all flags at once to values, specified in f.
+      //    If both b_get and b_set are true, the internal flags variable and f are swapped.
+      // Dflt. value of dispatcher_mt construction: 0x7f (all allowed).
+      //
+      // Concurrency: frqperm() may be called concurrently.
+      //
+      // Returns:
+      //    true - success,
+      //    false - no session.
+      //
     bool frqperm(s_long& f, bool b_get = true, bool b_set = false) const throw();
 
   private:
-    struct cch_session; cref_t<cch_session> _r_ths;
-    struct thread_proxy; struct mst_semaphore;
-    friend struct yk_c::vecm;
     dispatcher_mt(const dispatcher_mt&); dispatcher_mt& operator=(const dispatcher_mt&);
-  };
+    struct cch_session;  struct thread_proxy; struct mst_semaphore; friend struct yk_c::vecm;
+    cref_t<cch_session> _r_ths;
+  }; // struct dispatcher_mt
+
 #endif // bmdx_part_dispatcher_mt
 
 }
