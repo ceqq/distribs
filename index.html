@@ -1,4 +1,5 @@
-<!DOCTYPE html><html><head profile="http://www.w3.org/2005/10/profile">
+<!DOCTYPE html>
+<html>
   <title>BMDX library</title>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="description" content="A C++ library for exchanging messages and high-level objects between processes and binary modules inside them."> 
@@ -14,6 +15,7 @@
   <style>td.z3{ padding: 4px; border-spacing: 0; border: 2px solid #FF4040; }</style>
   <style>td.z4{ padding-bottom: 4px; border-spacing: 0; border: 0px; }</style>
   <style>td.z7{ text-align: center; vertical-align: middle; background-color: #f4f4f4; }</style>
+  <style>h1.z7{ padding: 0; margin-top: 5px; margin-bottom: 10px; }</style>
 </head>
 <body>
 <table class="z6">
@@ -32,23 +34,22 @@ A C++ library for <b>exchanging messages and high-level objects</b> between proc
 
 <b>Source code</b> - separate files (possibilities of partial including are shown in red):
 
-<table class="z1"><tr><td class="z4">
-  <table class="z2">
+<table class="z1"><tr><td class="z4"><table class="z2">
     <tr height="35px">
       <td class="z3" style="width: 210px;"><b><a href="src/bmdx_cpiomt.h">bmdx_cpiomt.h</a></b></td>
-      <td class="z4" rowspan="2" style="width: 180px;"><img src="arrows1.png"/><br/><b><a href="src/bmdx_config.h">bmdx_config.h</a></b></td>
+      <td class="z4" rowspan="2" style="width: 180px;"><img src="arrows1.png" alt="arrows1.png"/><br/><b><a href="src/bmdx_config.h">bmdx_config.h</a></b></td>
       <td class="z3" style="width: 210px;"><b><a href="src/vecm_hashx.h">vecm_hashx.h</a></b></td>
     </tr>
     <tr><td></td><td></td><td></td></tr>
   </table>
-  <img src="arrows2.png"/><br/>
+  <img src="arrows2.png" alt="arrows2.png"/><br/>
   <b><a href="src/bmdx_main.h">bmdx_main.h</a>, <a href="src/bmdx_main.cpp">bmdx_main.cpp</a></b>
 </td></tr></table><table class="z5">
   <tr><td><b><a href="src/arch_notes.txt">arch_notes.txt</a></b></td></tr>
 </table>
 Source code of <b>the examples</b>: <b><a href="#examples">see below &gt;&gt;&gt;</a></b>
 
-<font style="font-size: larger;"><b>BMDX - features</b></font>
+<span style="font-size: larger;"><b>BMDX - features</b></span>
 
 &gt; Highly efficient data transfer and storage.
 
@@ -75,7 +76,7 @@ Source code of <b>the examples</b>: <b><a href="#examples">see below &gt;&gt;&gt
   GCC, Clang, MinGW32, MinGW-w64, MSVC, Intel C++, Embarcadero C++, Sun C++.
   (Remark. Some of the above titles refer to official names of companies, registered trademarks and software products.)
 
-<font style="font-size: larger;"><b>BMDX - 10 leading classes</b></font>
+<span style="font-size: larger;"><b>BMDX - 10 leading classes</b></span>
 
 1. dispatcher_mt - address-based message exchange, in- and inter-process.
   Ensures fast transfer of large binary attachments - up to 3.2 GB/s on average PC.
@@ -114,7 +115,7 @@ Source code of <b>the examples</b>: <b><a href="#examples">see below &gt;&gt;&gt
   Below, there are some of them, with relatively understandable names:
   carray_t, cpparray_t, arrayref_t, processctl, multithread, shmqueue_s, file_io, file_utils, paramline, vec2_t.
 
-<a name="examples"><font style="font-size: larger;"><b>BMDX - use examples</b></font></a>
+<span id="examples" style="font-size: larger;"><b>BMDX - use examples</b></span>
 
 Source code - <b>5 use examples</b>: <b><a href="cpp_bmdx_1.3_examples.zip">(zip) &gt;&gt;&gt;</a></b>
 
@@ -133,7 +134,7 @@ These functions are intended for high-performance applications that are multi-pr
 <b>Example 5</b>. Primitive plugin host. The example illustrates high-level interaction of heterogeneous modules
   (i.e. built with different compilers) - the main module (executable) and the dynamically loaded libraries.
 
-<font style="font-size: larger;"><b>BMDX - the plan for future development</b></font>
+<span style="font-size: larger;"><b>BMDX - the plan for future development</b></span>
 
 1. Extend the message dispatcher with TCP controller and abstract controller,
   to support unified addressable data exchange across the network and non-standard devices,
@@ -141,7 +142,7 @@ These functions are intended for high-performance applications that are multi-pr
 
 2. Write wrappers for message dispatcher API in certain high-level languages (Java, Python, C#).
 
-<font style="font-size: larger;"><b>Contact info</b></font>
+<span style="font-size: larger;"><b>Contact info</b></span>
 
 See e-mail addresses at the top of any header file in the library.
 
