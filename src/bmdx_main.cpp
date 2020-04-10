@@ -1,6 +1,6 @@
 // BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-04-09
+// rev. 2020-04-10
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -11469,6 +11469,8 @@ struct dispatcher_mt::thread_proxy : i_dispatcher_mt
   static bool sln1chk_subscriber(const std::wstring& sln1) throw();
   static bool sln1chk_main_o(const std::wstring& sln1);
   static bool sln1chk_main_i(const std::wstring& sln1);
+  static bool sln1chk_main_bo(const std::wstring& sln1);
+  static bool sln1chk_main_bi(const std::wstring& sln1);
   static bool sln1chk_iomatch(const std::wstring& ssln1, const std::wstring& dsln1);
 
   typedef i_dispatcher_mt::tracking_info tracking_info;
@@ -11970,6 +11972,7 @@ lExit: lmsc.clear(); _r_ths.clear();
   // Append values from array src to array dest.
   //  If dest is not utUnityArray or utStringArray, it's cleared and initialized as 1-based empty utUnityArray.
   //  If src as not an array, it's treated as single element.
+  // n_skip: number of elements from the beginning src to skip (not append to dest).
   // NOTE &dest == &src is processed correctly.
   // NOTE If operation fails, it generates exception, leaving dest partially modified.
 void dispatcher_mt::thread_proxy::__append_vals(unity& dest, const unity& src, s_long n_skip)
@@ -12004,7 +12007,11 @@ void dispatcher_mt::thread_proxy::__append_vals(unity& dest, const unity& src, s
   // sn may be string or already decoded array.
   //  pn1 may be specified to receive 1st part of slot name (in decoded form).
   //  pdtailcmp != 0: destination address, to compare with (source) sn.
-  //    Any of the following must be true: a) no tails, b) sn has no tail, *pdtailcmp has tail, c) both sn and *pdtailcmp have equal tails.
+  //    For this check being OK, one of the following must be true:
+  //      a) no tails in both sn, *pdtailcmp,
+  //      b) (sn slot type is not pbi or qbi) sn has no tail, *pdtailcmp has tail,
+  //      c) (sn slot type is pbi or qbi) sn has tail, *pdtailcmp has no tail,
+  //      d) both sn and *pdtailcmp have equal tails.
   // Returns:
   //    1 and recoded slot name, if sn is valid.
   //    -1:
@@ -12020,11 +12027,12 @@ s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstr
     if (!(pa->isString() || ((pa->utype() == utUnityArray || pa->utype() == utStringArray) && pa->arrlb() == 1 && pa->arrsz() >= 2))) { return -1; }
     std::wstring sln1 = pa->isArray() ? pa->vstr(1) : pa->vstr();
     if (!sln1chk_main(sln1)) { return -1; }
-    if (pn1) { pn1->swap(sln1); }
     if (pdtailcmp)
     {
-      if (pa->isArray() && !pdtailcmp->has_sln_tail()) { return -1; }
-      if (pa->isArray())
+      const bool b_dest_tail = pdtailcmp->has_sln_tail();
+      const bool b_backw = sln1chk_main_bi(sln1); // backward direction (command target responds to command source)
+      if (!b_backw && pa->isArray() && !b_dest_tail) { return -1; }
+      if (pa->isArray() && b_dest_tail)
       {
         const s_long itail1 = 2;
         const s_long n = pa->arrsz() - 1;
@@ -12035,6 +12043,7 @@ s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstr
           else { for (s_long i = 0; i < n; ++i) { const unity& v2 = a2[itail2 + i]; if (!(v2.isString() && pa->rstr(itail1 + i) == v2.rstr())) { return -1; } } }
       }
     }
+    if (pn1) { pn1->swap(sln1); }
     if (pntail)
     {
       if (pa->isArray()) { unity x; __append_vals(x, *pa, 1); *pntail = paramline().encode1v(x); }
@@ -12356,6 +12365,24 @@ bool dispatcher_mt::thread_proxy::sln1chk_main_i(const std::wstring& sln1)
   }
   return false;
 }
+bool dispatcher_mt::thread_proxy::sln1chk_main_bo(const std::wstring& sln1)
+{
+  if (sln1.length() < 5) { return false; }
+  wchar_t c;
+    c = sln1[0]; if (!(c == L'p' || c == L'h')) { return false; }
+    c = sln1[1]; if (!(c == L'b')) { return false; }
+    c = sln1[2]; if (!(c == L'o')) { return false; }
+  return true;
+}
+bool dispatcher_mt::thread_proxy::sln1chk_main_bi(const std::wstring& sln1)
+{
+  if (sln1.length() < 5) { return false; }
+  wchar_t c;
+    c = sln1[0]; if (!(c == L'p' || c == L'q')) { return false; }
+    c = sln1[1]; if (!(c == L'b')) { return false; }
+    c = sln1[2]; if (!(c == L'i')) { return false; }
+  return true;
+}
 bool dispatcher_mt::thread_proxy::sln1chk_iomatch(const std::wstring& ssln1, const std::wstring& dsln1)
 {
   if (ssln1.length() < 4 || dsln1.length() < 4) { return false; }
@@ -12619,12 +12646,11 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
     {
       // Expected __src format (pre-set by sender's _s_write in peer process):
       //      |LM|<sender process name>|<sender thread name>|<sender slot name>
-      // Expected *__ptrg format:
-      //      |LP|<recipient thread name>|<recipient slot name>
-      //      |LPA|<recipient qs slot name>
+      // Expected *__ptrg format is that specified by original sender:
+      //      |LM|<recipient process name>|<recipient thread name>|<recipient slot name>
       // NOTE The original sender knows its process name in full (not a hash of the name),
-      //    and converts both src and trg (__src and *__ptrg)
-      //    to reflect the recipient's perspective (i.e. the process, in which the current _s_write is called).
+      //    and converts __src to to reflect backward address from the recipient's perspective,
+      //    i.e. the process, in which the current _s_write is called.
       sa.set_addr(__src);
         if (sa.is_empty()) { return -1; }
       if (!sa.isLM()) { return -2; }
@@ -12637,7 +12663,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
       if (sender_type <= st_s_subs_deliver)
       {
         std::wstring ssln_exact, ssln1;
-        res = __recode_slotname(sa.sln_v(), &ssln_exact, &ssln1, 0, &da);
+        res = __recode_slotname(sa.sln_v(), &ssln_exact, &ssln1, 0, &da); // (in _s_write)
           if (res != 1) { return -1; }
           if (!sln1chk_main_o(ssln1)) { return -1; }
 
@@ -12887,7 +12913,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
       {
         if (!rses.lmsc) { return -11; }
         std::wstring ssln_exact, ssln1;
-        res = __recode_slotname(sa.sln_v(), &ssln_exact, &ssln1, 0, &da);
+        res = __recode_slotname(sa.sln_v(), &ssln_exact, &ssln1, 0, &da); // (in _s_write)
           if (res != 1) { return -1; }
           if (!sln1chk_main_o(ssln1)) { return -1; }
 
@@ -13013,7 +13039,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
       {
         if (!da.isLM()) { return -1; }
         std::wstring ssln1;
-        res = __recode_slotname(sa.sln_v(), 0, &ssln1, 0, &da);
+        res = __recode_slotname(sa.sln_v(), 0, &ssln1, 0, &da); // (in _s_write)
           if (res != 1) { return -1; }
           if (!sln1chk_main_o(ssln1)) { return -1; }
 
@@ -13749,12 +13775,12 @@ s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_se
     address sa;
       if (1)
       {
-        if (!sln1chk_main_qs(_name_qs)) { return -1; }
         unity a;
         __append_vals(a, L"LP");
         __append_vals(a, _name_th);
         __append_vals(a, paramline().decode1v(_name_qs));
         sa.set_addr(a);
+        if (!sln1chk_main_qs(sa.addr(3).rstr())) { return -1; }
           if (!sln1chk_qs(sa.wstr_sln_1())) { return -1; }
       }
     cch_slot& qs_sl = *r_qs._pnonc_u();
