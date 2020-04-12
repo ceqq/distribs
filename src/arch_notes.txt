@@ -1,4 +1,4 @@
-// rev. 2020-04-10
+// rev. 2020-04-12
 =======================================================================================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 =======================================================================================================================
@@ -366,6 +366,29 @@ g++ -Wl,-E                                               -m64 -fno-use-linker-pl
 g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I$incl1 -I$incl2 -O1 -o test1.so test1.cpp bmdx_main.cpp -L$lib1 -L$lib2 -lpthread
 g++ -shared -fPIC -Wall                                  -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I$incl1 -I$incl2 -O0 -o test1.so test1.cpp bmdx_main.cpp -L$lib1 -L$lib2 -lpthread
 
+----------------------------------
+FreeBSD 12.1
+
+1. All notes, made for FreeBSD 10.1, apply here too.
+2. Warning. System compiler (Clang) fails to catch C++ exceptions,
+  thrown by another compiler's binary module. Tested between Clang-GCC.
+  To avoid problems in application that loads shared libraries from different compilers,
+  use exceptionless part of BMDX API (e.g. objPtr instead of objRef, and so on).
+
+  -----------------------------------------------------
+  clang version 8.0.1 (tags/RELEASE_801/final 366581), x86_64-unknown-freebsd12.1
+
+clang -Wl,-E              -m64 -Wl,-Bsymbolic -O2 -o test1 test1.cpp bmdx_main.cpp -lstdc++ -lm -lpthread
+clang -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1.so test1.cpp bmdx_main.cpp -lstdc++ -lm -lpthread
+
+
+  -----------------------------------------------------
+  gcc version 9.3.0 (FreeBSD Ports Collection), x86_64-portbld-freebsd12.1
+
+g++ -static-libgcc -static-libstdc++ -Wl,-E              -m64 -Wl,-Bsymbolic -O1 -o test1 test1.cpp bmdx_main.cpp -lpthread
+g++ -Wl,-E                                               -m64 -Wl,-Bsymbolic -O0 -o test1 test1.cpp bmdx_main.cpp -lpthread
+g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O1 -o test1.so test1.cpp bmdx_main.cpp -lpthread
+g++ -shared -fPIC -Wall                                  -m64 -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -lpthread
 
 
 

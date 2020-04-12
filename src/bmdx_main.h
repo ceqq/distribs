@@ -1,7 +1,7 @@
 // BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-04-10
+// rev. 2020-04-12
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -2937,15 +2937,47 @@ namespace bmdx
         // unity object structure signature for binary compatibility check.
     static s_long sig_struct() throw ();
 
-      // Returns:
-      //  2 - the current object is created in the current module.
-      //  1 - the current object is compatible with the current module.
-      //  0 - the current object may be safely copied to an object, created in the current module.
-      //    For strings, 0 means that direct reference to string may not be got by the client.
-      //      Still, strings may be copied and assigned.
-      //    For wrapped objects, 0 means that the object has been created in other binary module.
-      //  <0 - the current object is not compatible with the current module.
-      //  Only clear() and destructor may be called safely.
+      // Assume U <=> *this.
+      //
+      // U.compatibility() returns:
+      //
+      //  2 - U is created in the current binary module.
+      //    For compatibility 2, U's contents are not additionally checked.
+      //    This means that the contained value is usable in all ways, with two warnings:
+      //      1. U may wrap a user object, which itself is not compatible.
+      //      2. If U is an array or associative array, compatibility() does not check
+      //        each of that container's values.
+      //        Such container may be, in principle, heterogeneous, i.e. contain elements,
+      //        that are created (or assigned) by different binary modules.
+      //    NOTE Compatibility 2 is the only possible value if the application does not exchange
+      //      BMDX objects with any shared libraries, by design.
+      //
+      //  1 - U is created not in the current binary module,
+      //    but it is compatible, exactly as with compatibility 2.
+      //    In part., the contained value may be accessed by reference.
+      //
+      //  0 - U is created not in the current binary module, and its contained value or object
+      //    may not be accessed by reference without additional checks.
+      //    A. For strings, compatibility 0 means that direct reference to string
+      //      may not be got by the client with ref<utString>() or rstr().
+      //      Still, U may be safely copied, assigned, output to stream etc.,
+      //      and also the string value is accessible as copy,
+      //      with val<utString>(), vstr() etc.
+      //    B. For wrapped user objects, compatibility 0
+      //      means that both U and the wrapped object have been created
+      //      in another binary module.
+      //      Still, objPtr<Obj>(true, true) will return non-0 pointer, if the wrapped object
+      //      is compatible with the current module.
+      //      (This is determined by value of statically declared type index.
+      //        See also: 1. unity :: objPtr(). 2. type_index_t in vecm_hashx.h.)
+      //
+      //  <0 - U itself is not compatible with the current module.
+      //    Copying U, and most of access functions are unsafe.
+      //    Only clear(), recreate() and destructor may be called safely.
+      //    (This case concerns mostly with utMap and utHash types,
+      //      and in practice it is not expected to occur across known compilers,
+      //      independently on version, including future versions.)
+      //
     s_long compatibility() const throw ();
 
 

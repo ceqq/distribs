@@ -1,7 +1,7 @@
 // BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-04-10
+// rev. 2020-04-12
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -630,8 +630,8 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
 
     template<_s_long nmax2> flstr_t(const flstr_t<nmax2>& s) throw() { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
 
-    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw() { _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
-    flstr_t(_s_ll x, bool b_signed) throw() { _s_long n = conv::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw() { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(_s_ll x, bool b_signed) throw() { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
 
     flstr_t(signed short x) throw() { new (this) flstr_t(_s_ll(x), true); }
     flstr_t(signed int x) throw() { new (this) flstr_t(_s_ll(x), true); }
