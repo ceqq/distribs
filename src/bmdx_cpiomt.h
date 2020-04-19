@@ -1,7 +1,7 @@
 // BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-04-12
+// rev. 2020-04-18
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3808,6 +3808,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
         //    Arguments must not include executable name (i.e. first of args is equivalent to argv[1]).
         //    Each argument will be pre-processed with arg1(),
         //    so the client must not do any special processing (escaping etc.).
+        //    NOTE Empty args is treated as no arguments. There's no way to pass exactly one zero-length argument.
         //
         // b_shell false (dflt.):
         //    use CreateProcessA() to launch process.
@@ -3831,7 +3832,8 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
         {
           pos2 = args.find('\0', pos);
           if (pos2 == end) { pos2 = args.length(); }
-          if (pos2 - pos >= 1) { if (a2.length()) { a2 += ' '; } a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell); }
+          if (pos > 0) { a2 += ' '; } a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
+          if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
           pos = pos2 + 1;
         }
         if (b_shell)
@@ -3897,7 +3899,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
           for (size_t i = 0; i < s.length(); ++i)
             { if ( ! ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9') || s[i] == '-' || s[i] == '_' || s[i] == '.') )
               { b = true; break; } }
-          if (!b) { return s; }
+          if (!b && !(b_shell && s.empty())) { return s; }
 
           std::string z = s; b = b_shell;
           for (size_t i = 0; i < z.length(); ++i)
@@ -4016,10 +4018,11 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         // fnp_process with b_shell == false: must be full path and executable name (for posix_spawn()).
         //    fnp_process with b_shell == true: must be executable path and name in any form (for system()).
         //
-        // args: all program arguments, separated with null character ('\0').
+        // args: program arguments, separated with null character ('\0').
         //    Arguments must not include executable name (i.e. first of args is equivalent to argv[1]).
         //    Each argument will be pre-processed with arg1() as necessary,
         //    so the client must not do any special processing (escaping etc.).
+        //    NOTE Empty args is treated as no arguments. There's no way to pass exactly one zero-length argument.
         //
         // b_shell false (dflt.):
         //    use posix_spawn() to launch process.
@@ -4058,7 +4061,8 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
             {
               pos2 = args.find('\0', pos);
               if (pos2 == end) { pos2 = args.length(); }
-              if (pos2 - pos >= 1) { if (a2.length()) { a2 += ' '; } a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell); }
+              if (pos > 0) { a2 += ' '; } a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
+              if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
               pos = pos2 + 1;
             }
             std::string s;
@@ -4171,7 +4175,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
           for (size_t i = 0; i < s.length(); ++i)
             { if ( ! ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9') || s[i] == '-' || s[i] == '_' || s[i] == '.') )
               { b = true; break; } }
-          if (!b) { return s; }
+          if (!b && !(b_shell && s.empty())) { return s; }
 
           std::string z = s; b = b_shell;
               for (size_t i = 0; i < z.length(); ++i)
@@ -6793,7 +6797,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
           }
 
           mutex_t* pm2 = (mutex_t*)mmap(NULL, lkfsize, PROT_READ|PROT_WRITE, MAP_SHARED, h2, 0);
-          if (!pm2) { ::close(h2); return; }
+          if (!(pm2 && pm2 != MAP_FAILED)) { ::close(h2); return; }
 
           _s_long* puidgen = (_s_long*)(pm2+1); _s_long* pflag = puidgen + 1;
           _s_long pid1 = pflag[1];
@@ -7485,7 +7489,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
             }
           }
           __p = mmap(0, nbtotal, PROT_READ|PROT_WRITE, MAP_SHARED, __fd, 0);
-            if (!__p) { _shm_close(); return 0; }
+            if (!(__p && __p != MAP_FAILED)) { _shm_close(); return 0; }
           if (b_reset) { ((_s_long*)__p)[0] = 0; }
           __nb = nbtotal;
           return __p;
@@ -7529,13 +7533,12 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
           struct stat s; std::memset(&s, 0, sizeof(s));
           if (0 != fstat(fd2, &s)) { __shmfd_close(fd2); __fd = -1; return 0; }
           if (size_t(s.st_size) < n2) { if (0 != ftruncate(fd2, n2)) { __shmfd_close(fd2); __fd = -1; return 0; } }
-          #ifdef MAP_SHARED_VALIDATE
-            int f = MAP_SHARED_VALIDATE;
-          #else
-            int f = MAP_SHARED;
+          int f = MAP_SHARED;
+          #ifdef MAP_POPULATE
+            f |= MAP_POPULATE;
           #endif
           _s_long* p2 = (_s_long*)mmap(0, n2, PROT_READ|PROT_WRITE, f, fd2, 0);
-          if (!p2) { __shmfd_close(fd2); __fd = -1; return 0; }
+          if (!(p2 && p2 != MAP_FAILED)) { __shmfd_close(fd2); __fd = -1; return 0; }
           if (b_reset) { p2[0] = 0; }
           __fd = fd2; __p = p2; __nb = n2;
           return __p;
@@ -7595,21 +7598,25 @@ private: shmqueue_ctx_rso(); shmqueue_ctx_rso(const shmqueue_ctx_rso&); void ope
 #define __bmdx_shmfifo_idle_t_enable_time_ms 2100
 #define __bmdx_shmfifo_push1_quot 5 // data is pushed in parts (1/quot) of the buffer capacity, to allow earlier (and shorter in time) popping; this is optimal for interprocess case
 #define __bmdx_shmfifo_push1_nbmin 3000
+#define __bmdx_shmfifo_pop_nbmin_mlock 2048
 
 struct shmqueue_ctx
 {
   typedef arrayref_t<char> t_stringref;
 
   shmqueue_ctx(const t_name_shm& name, bool b_receiver, _s_ll nbhint)
-    : pmsend1(0), pmsend2(0), nmsend(0), b_just_started(true), b_sender_waitinit(false), b_enrq(true),
+    : b_rcv_mlk(0), pmsend1(0), pmsend2(0), nmsend(0), b_just_started(true), b_sender_waitinit(false), b_enrq(true),
       buf(name.c_str(), b_receiver, bmdx_minmax::myllmax(nbhint, __bmdx_shmfifo_nbytes_min, rfifo_nbl11::n0) + sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0, __bmdx_shmfifo_ver),
       bufstate(0), _mprg_ver(0), _mprg_ver_proc(0), _mprg_iend_done(0)
   { _mprg_cmd.tms = bmdx::clock_ms(); }
+
+  ~shmqueue_ctx() { _mrcv_clear(); }
 
 
   critsec_t<shmqueue_ctx>::csdata csd;
   vnnqueue_t<cref_t<t_stringref> > msgs;
   cref_t<t_stringref> msg_rcv;
+  bool b_rcv_mlk;
   t_stringref* pmsend1; // prefix to be sent
   t_stringref* pmsend2; // main message to be sent
   _s_ll nmsend;
@@ -7633,8 +7640,6 @@ struct shmqueue_ctx
   mprg_info _mprg_cmd; // (required iend of sender's lq cleanup, time moment when it should be done)
   _s_ll _mprg_iend_done;
 
-    // Returns size of string in msg_rcv [0..__bmdx_shmfifo_msg_nbytes_max]. If no string object, returns 0.
-  _s_ll msg_rcv_nmax() { if (!msg_rcv) { return 0; } return bmdx_minmax::myllmin(msg_rcv->n(), __bmdx_shmfifo_msg_nbytes_max); }
     // Returns size of the currently sent parts of the message.
   _s_ll msend1_n() { if (!pmsend1) { return 0; } return bmdx_minmax::myllmin(pmsend1->n(), __bmdx_shmfifo_msg_nbytes_max); }
   _s_ll msend2_n() { if (!pmsend2) { return 0; } return bmdx_minmax::myllmin(pmsend2->n(), __bmdx_shmfifo_msg_nbytes_max - msend1_n()); }
@@ -7663,6 +7668,21 @@ struct shmqueue_ctx
     return res;
   }
 
+  void _mrcv_lock() throw()
+  {
+    #ifdef _bmdxpl_Psx
+      b_rcv_mlk = false;
+      if (msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { b_rcv_mlk = 0 == mlock(msg_rcv->pd(), (size_t)msg_rcv->n()); }
+    #endif
+  }
+  void _mrcv_unlock() throw()
+  {
+    #ifdef _bmdxpl_Psx
+      if (b_rcv_mlk && msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { munlock(msg_rcv->pd(), (size_t)msg_rcv->n()); }
+      b_rcv_mlk = false;
+    #endif
+  }
+  void _mrcv_clear() throw() { _mrcv_unlock(); if (msg_rcv) { msg_rcv.clear(); } }
   void _clear_msend() throw()
   {
     if (pmsend1) { msgs.pop_n(3); }
@@ -7890,7 +7910,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
               {
                 q.buf.close();
                 q._clear_msend(); q.b_sender_waitinit = false;
-                q.msg_rcv.clear();
+                q._mrcv_clear();
                 q.bufstate = 4;
                 b_changed = true;
                 continue;
@@ -8060,7 +8080,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
 
               if (tr_rcv == -1) // wait for sender setting its tr_send = -1, then re=initialize the buffer
               {
-                if (q.msg_rcv) { q.msg_rcv.clear(); }
+                q._mrcv_clear();
                 if (_tr_send != -1) { continue; }
 
                 critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
@@ -8084,6 +8104,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
 
                 q.msg_rcv = make_rba_z(ndatr, 1); // creates a string for input message, adds a zero byte to make the returned array more like to C string
                   if (!q.msg_rcv) { continue; } // will retry herein on the next iteration
+                q._mrcv_lock();
                 tr_rcv = 2;
                 continue;
               }
@@ -8113,18 +8134,18 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
                 {
                   if (buf.navl() < 1) { continue; }
                   char c_end(0); buf.pop(&c_end, 1); b_changed = true;
-                  if (c_end != 1) { q.msg_rcv.clear(); tr_rcv = 1; continue; }
+                  if (c_end != 1) { q._mrcv_clear(); tr_rcv = 1; continue; }
                 }
 
                 if (buf.ipop() == shm.ipop_plan)
-                  { if (1 != q.msgs.push_1(q.msg_rcv)) { continue; } q.msg_rcv.clear(); tr_rcv = 1; b_changed = true; }
+                  { if (1 != q.msgs.push_1(q.msg_rcv)) { continue; } q._mrcv_clear(); tr_rcv = 1; b_changed = true; }
 
                 continue;
               }
               else // anything except [-1..2]; attempt to recover
               {
                 if (tr_rcv != -2) { tr_rcv = -2; }
-                if (q.msg_rcv) { q.msg_rcv.clear(); }
+                q._mrcv_clear();
 
                 if (shm.ipush_plan < shm.ipop_plan) { tr_rcv = -1; b_changed = true; }
                   else if (buf.ipop() < shm.ipop_plan) { const _s_ll nd = buf.discard(shm.ipop_plan - buf.ipop()); if (nd > 0) { b_changed = true; } }
