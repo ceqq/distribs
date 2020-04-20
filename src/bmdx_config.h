@@ -1,6 +1,6 @@
 // BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-04-18
+// rev. 2020-04-20
 // See bmdx_main.h for details.
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com

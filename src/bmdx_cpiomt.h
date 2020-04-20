@@ -1,7 +1,7 @@
 // BMDX library 1.3 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-04-18
+// rev. 2020-04-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -7647,8 +7647,12 @@ struct shmqueue_ctx
     // NOTE Must be protected by critsec_t<msg_queue> with this->csd.
     // Returns:
     //    1 - success.
-    //    0 - cannot initialize the buffer, because the current side is sender (b_side1() == false).
-    //      (Other side can be currently initializing the buffer.)
+    //    0 - incomplete initialization or bad state:
+    //      a) (sender only) could not initialize the buffer or fix errors, because the current side is sender (b_side1() == false).
+    //          The sender should wait until the receiver makes necessary updates from its side.
+    //      b) (receiver only) - the buffer exists and is initialized, but is in specific bad state.
+    //          The receiver must wait for *pf_state2() == -1 (i.e. until the bad state is recognized by the sender),
+    //      and then reinitialize the buffer.
     //    Codes for errors, returned by shmobj2s_t::prepare():
     //      -1 - the shared memory exists, but its structure is not compatible (see htype arg. in shmobj2s_t()).
     //      -2 - failure during operation (it's generally unknown if the shared object is available).
@@ -7657,15 +7661,45 @@ struct shmqueue_ctx
   int _reset()
   {
     _s_long res = buf.prepare(true);
-    if (res >= 1 && buf.f_constructed() != 1)
+    if (res < 0) { return res; }
+    if (res == 0) { return -2; } // not expected to occur
+
+    const _s_long fc = buf.f_constructed(); // here: fc is 0..2, buf.p() is valid
+    if (!buf.b_side1()) // sender
     {
-      if (buf.b_side1() == false) { return 0; }
+      if (fc == 1)
+      {
+        const char f1 = *buf.pf_state1();
+        const char f2 = *buf.pf_state2();
+        if (f1 == -1 && f2 == -1) { return 0; }
+          else if (f1 == -1) { *buf.pf_state2() = -1; return 0; }
+          else if (f2 == -1) { return 0; }
+          else { return 1; }
+      }
+      return 0;
+    }
+    else // receiver
+    {
+      if (fc == 1)
+      {
+        const char f1 = *buf.pf_state1();
+        const char f2 = *buf.pf_state2();
+        if (f2 == -1) {} // fall-through
+          else if (f1 == -1) { return 0; }
+          else { return 1; }
+      }
+      *buf.pf_state1() = -1;
+      buf.set_f_constructed(0);
       const _s_ll nbuf = buf.nb() - _s_ll(sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0);
         if (nbuf < 0) { return -1; }
       buf.p()->ringbuf.init_ref(nbuf);
+      buf.p()->ipop_plan = 0;
+      buf.p()->ipush_plan = 0;
+      *buf.pf_state1() = 0;
+      *buf.pf_state2() = 0;
       buf.set_f_constructed(1);
+      return 1;
     }
-    return res;
   }
 
   void _mrcv_lock() throw()
@@ -7780,13 +7814,15 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
     {
       if (autocreate_mode >= 2 && (rv->bufstate & 0xff) < 3)
       {
-        critsec_t<shmqueue_ctx> __lock(10, -1, &rv->csd); if (sizeof(__lock)) {}
-        const _s_long bsm = (rv->bufstate & 0xff);
-        if (bsm < 3 || (bsm != 4 && rv->buf.f_constructed() != 1))
+        shmqueue_ctx& q = rv._rnonc();
+        critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+        const _s_long bsm = (q.bufstate & 0xff);
+        if (bsm < 3 || (bsm != 4 && q.buf.f_constructed() != 1))
         {
-          shmqueue_ctx& q = rv._rnonc();
           _s_long res = q._reset();
-          if (res >= 1) { rv->bufstate = 3; } else if (res == 0) { rv->bufstate = 1; } else { rv->bufstate = (res << 8) | 2; }
+          if (res >= 1) { q.bufstate = 3; }
+            else if (res == 0) { q.bufstate = 1; }
+            else { q.bufstate = (res << 8) | 2; }
         }
       }
     }
@@ -7935,7 +7971,9 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
               if (bsm < 3 || (bsm != 4 && q.buf.f_constructed() != 1))
               {
                 _s_long res = q._reset(); // NOTE this will return 0 if the current side is sender
-                if (res >= 1) { q.bufstate = 3; } else if (res == 0) { q.bufstate = 1; } else { q.bufstate = (res << 8) | 2; }
+                if (res >= 1) { q.bufstate = 3; }
+                  else if (res == 0) { q.bufstate = 1; }
+                  else { q.bufstate = (res << 8) | 2; }
                 if (res < 1) { b_q_constructed = false; break; }
                 b_changed = true;
               }
@@ -8076,9 +8114,10 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
                 //    -2 - data sending sequence is broken (probably receiver process is restarted); try to recover:
                 //      pop the current message bytes until message end, ignore this data; then goto tr_rcv = 1 (normal state)
 
-              if (q.b_just_started) { q.b_just_started = false;  if (_tr_send == -1) { tr_rcv = -1; } else if (tr_rcv != 0) { tr_rcv = -2; } else { tr_rcv = 1; } }
+              if (_tr_send == -1) { tr_rcv = -1; }
+              if (q.b_just_started) { q.b_just_started = false; const char r = tr_rcv; if (r == -1) {} else if (r >= 2) { tr_rcv = -2; } else { tr_rcv = 1; } }
 
-              if (tr_rcv == -1) // wait for sender setting its tr_send = -1, then re=initialize the buffer
+              if (tr_rcv == -1) // wait for sender setting its tr_send = -1, then re-initialize the buffer
               {
                 q._mrcv_clear();
                 if (_tr_send != -1) { continue; }
@@ -8390,7 +8429,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    *pipush, *pipop - the current (volatile) push/pop message index in the local queue.
       //      Meaningful values are set only if lqstate returns >= 0  (i.e. only when the queue exists).
       //        Otherwise, values are set to -1.
-    _s_ll lqstate(bool b_receiver, _s_ll* pipush = 0, _s_ll* pipop = 0, _s_ll iend_sender = -2, double dtms_end = 0) const throw()
+    _s_long lqstate(bool b_receiver, _s_ll* pipush = 0, _s_ll* pipop = 0, _s_ll iend_sender = -2, double dtms_end = 0) const throw()
     {
       if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
@@ -8409,6 +8448,30 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         _rq->_mprg_ver += 1;
       }
       res = ipu > ipo ? 1 : 0; return res;
+    }
+
+      // Convenience function.
+      //  A. For sender: waits until a) the local queue is empty (lqstate() == 0), b) timeout occurs.
+      //    NOTE This is particularly useful if, after sending some messages,
+      //      the program has to exit.
+      //      It may call lqwait(0, timeout) to give internal thread possibility to complete messages sending.
+      //  B. For recevier: waits until a) the local queue is non-empty (lqstate() == 1), b) timeout occurs.
+      // timeout_ms:
+      //    <0 - no timeout, wait for (a) infinitely.
+      //    0 - check local queue state only once and exit immediately.
+      //    >0 - returns on reaching (a) or (b) condition.
+      // Returns:
+      //  the last value, returned by lqstate(), called from within lqwait().
+    _s_long lqwait(bool b_receiver, double timeout_ms) const throw()
+    {
+      const double t0 = clock_ms();
+      while (1)
+      {
+        const _s_long res = lqstate(b_receiver);
+        if (res == _s_long(b_receiver)) { return res; }
+        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return res; }
+        sleep_mcs(_idle_t_mcs);
+      }
     }
 
 
@@ -8531,7 +8594,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    -4 - shared memory exists, but not ready yet (during initialization by the receiver side).
     _s_long msend(cref_t<t_stringref> msg, double timeout_ms = 0, cref_t<t_stringref> prefix = cref_t<t_stringref>(), _s_ll* pipush_last = 0) const throw()
     {
-      double t0 = clock_ms();
+      const double t0 = clock_ms();
       if (pipush_last) { *pipush_last = -1; }
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
       if (!msg) { res = -2; return -2; }
@@ -8591,7 +8654,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //  On any result < 0, this->d is not modified.
     _s_long mget(double timeout_ms = 0, bool b_do_pop = true) const throw()
     {
-      double t0 = clock_ms();
+      const double t0 = clock_ms();
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
       if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, 3, _nbdflt); } catch (...) {} }
       if (!_rq) { res = -2; return -2; }
