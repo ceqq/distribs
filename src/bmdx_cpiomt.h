@@ -8008,7 +8008,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
                 //    -2 - data sending sequence is broken (probably sender process is restarted); try to recover:
                 //      push zero bytes up to the end of incomplete message, then push the end byte indicating an error
 
-              if (q.b_just_started) { q.b_just_started = false; if (tr_send != 0) { tr_send = -2; b_changed = true; continue; } }
+              if (q.b_just_started) { q.b_just_started = false; if (tr_send != 0 && tr_send != -1) { tr_send = -2; b_changed = true; continue; } }
               if (_tr_rcv == -1 && !q.b_sender_waitinit && tr_send != -1) { tr_send = -1; q.b_sender_waitinit = true; continue; } // on some of the next iterations, rcv side will re-init. the buffer
 
               if (q.b_sender_waitinit || tr_send == -1)
@@ -8467,9 +8467,9 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       const double t0 = clock_ms();
       while (1)
       {
-        const _s_long res = lqstate(b_receiver);
-        if (res == _s_long(b_receiver)) { return res; }
-        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return res; }
+        const _s_long res2 = lqstate(b_receiver);
+        if (res2 == _s_long(b_receiver)) { return res2; }
+        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return res2; }
         sleep_mcs(_idle_t_mcs);
       }
     }
