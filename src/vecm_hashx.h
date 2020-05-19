@@ -1,7 +1,7 @@
-// BMDX library 1.3 RELEASE for desktop & mobile platforms
+// BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2020-04-20
+// rev. 2020-05-16
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3471,7 +3471,7 @@ struct hashx_common
     void Fcnew(const t_char** p, const t_char* x) const { *p = x; }
     void Fcnew(const t_char** p, const S& x) const { *p = x.c_str(); }
     s_long Fhash(const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
-    s_long Fhash(const S& key) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg s_long n = s_long(key.size() < 0x7fffffff ? key.size() : 0x7fffffff); while (n > 0) { h *= 19; h += *p++; --n; } h ^= s_long(key.size()); h ^= 53970; return h; }
+    s_long Fhash(const S& key) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg s_long n = s_long(key.size() < 0x7fffffff ? key.size() : 0x7fffffff); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(key.size()); h ^= 53970; return h; }
     bool Fis_eq(const S& k1, const S& k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2.c_str(), k1.size(), k2.size()); }
     bool Fis_eq(const S& k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2, k1.size(), -1); }
     bool Fis_eq(const t_char* k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
@@ -3481,7 +3481,7 @@ struct hashx_common
     enum { _is_pc = true, _is_string = false }; typedef C t_char;
     void Fcnew(const t_char** p, const t_char* x) const { *p = x; }
     s_long Fhash(const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
-    s_long Fhash(const t_char* p0, meta::s_ll n0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg s_long n = s_long(n0 < 0x7fffffff ? n0 : 0x7fffffff); while (n > 0) { h *= 19; h += *p++; --n; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
+    s_long Fhash(const t_char* p0, meta::s_ll n0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg s_long n = s_long(n0 < 0x7fffffff ? n0 : 0x7fffffff); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(p - p0); h ^= 53970; return h; }
     bool Fis_eq(const t_char* k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
   };
   template<class T1, class T2, class _ = meta::nothing, int __s1 = _select_kf<T1, _>::_kf_kind, int __s2 = _select_kf<T2, _>::_kf_kind> struct _select_skf {};

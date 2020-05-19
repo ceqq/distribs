@@ -1,6 +1,6 @@
-// BMDX library 1.3 RELEASE for desktop & mobile platforms
+// BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-04-20
+// rev. 2020-05-16
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -398,30 +398,28 @@ private:
 #define __lm_slot_controller_user_msg_max_ver 1
 #define __lm_slot_controller_nbmax_peer_name_root 100 // should be less than ( min(MAX_PATH, capacity(bmdx_shm::t_name_shm))  - (8 + len(__lm_slot_controller_name_prefix)) ) / 2
 
-#define __lm_slot_controller_reinit_short_dtms 100
+#define __lm_slot_controller_reinit_short_dtms 50
 #define __lm_slot_controller_reinit_long_dtms 400
-#define __lm_slot_controller_peer_reinit_dtms 250
+#define __lm_slot_controller_peer_reinit_dtms 50
 
-#define __lm_slot_controller_qum_send_avl_wait_toms 150
-#define __lm_slot_controller_qum_send_avl_chk_dtms 10
+#define __lm_slot_controller_qum_send_avl_wait_toms (4 * 40)
+#define __lm_slot_controller_qum_send_avl_chk_dtms 5
 #define __lm_slot_controller_peer_prc_hang_toms 3000 // should be much longer than single LMSC det_periodic() call on high load
 #define __lm_slot_controller_thread_hang_toms 3000 // -"-
 
 #define __lm_slot_controller_nb_rqum_min (__bmdx_shmfifo_nbytes_dflt / 10)
 #define __lm_slot_controller_nb_rqum_max (__bmdx_shmfifo_msg_nbytes_max)
-#define __lm_slot_controller_nb_rqum_dflt (100 * 1024) // a copy of __bmdx_shmfifo_nbytes_dflt
+#define __lm_slot_controller_nb_rqum_dflt (__bmdx_shmfifo_nbytes_dflt)
 
 #define __lm_slot_controller_nb_rqinfo_min (__shmqueue_ms_nbytes_min)
 #define __lm_slot_controller_nb_rqinfo_max (__bmdx_shmfifo_msg_nbytes_max / 10)
-#define __lm_slot_controller_nb_rqinfo_dflt (100 * 1024) // a copy of __bmdx_shmfifo_nbytes_dflt
+#define __lm_slot_controller_nb_rqinfo_dflt (100 * 1024)
 
 namespace
 {
-  static const s_long _fl_msend_anlo_msg = 0x10;
-  static const s_long _fl_msend_anlo_att = 0x20;
-  static const s_long _fl_msend_ignore_hanged = 0x40;
-  static const s_long _fl_msend_use_chsbin = 0x80;
-  static const s_long _fl_msend__mask_clt_msend = _fl_msend_ignore_hanged | _fl_msend_use_chsbin;
+  static const s_long _fl_msend_anlo_msg = dispatcher_mt_flags::anlo_msg;
+  static const s_long _fl_msend_anlo_att = dispatcher_mt_flags::anlo_att;
+  static const s_long _fl_msend__mask_clt_msend = dispatcher_mt_flags::ignore_hanged | dispatcher_mt_flags::use_chsbin;
 }
 
 using yk_c::hashx;
@@ -869,7 +867,7 @@ public:
       max_part = fpt_msg;
       return true;
     }
-      // Sets info on binary attachment into the header (attachment itself is passed to shmfifo_s::msend as separate object, to avoid copying).
+      // Sets info on binary attachment into the header (attachment itself is passed to shmqueue_s::msend as separate object, to avoid copying).
     bool set_bin_info(t_stringref bin)
     {
       if (!bin.is_valid()) { return false; }
@@ -976,33 +974,63 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
     _apns(apeer_names),
     _name_prf(make_fixed_utf8_name(name_pr)),
     _qinfo_rcv(make_name_onef(_name_prf), limit_nbqueue(nb_qinfo_, __lm_slot_controller_nb_rqinfo_min, __lm_slot_controller_nb_rqinfo_max, __lm_slot_controller_nb_rqinfo_dflt))
-  { _state = 0; _tms_next_init = 0; _qinfo_rcv_idd0 = 0; _hnew_name_peerf.hashx_setf_can_shrink(0); }
+  {
+    _state = 0; _tms_next_init = 0; _qinfo_rcv_idd0 = 0;
+    _hnew_name_peerf.hashx_setf_can_shrink(0);
+    _qinfo_rcv.auxd_init.disp_ses_state = -2;
+  }
   ~lm_slot_controller() throw() { _x_close(); }
 
 
 private:
   struct _r_prc_uid
   {
-    volatile s_ll sig, pid, pid_deriv, prc_inst_id, livecnt;
-    _r_prc_uid() throw() { sig = Fsig(); pid = pid_deriv = prc_inst_id = livecnt = 0; }
-    void cp_ids(const _r_prc_uid& src) { sig = src.sig; pid = src.pid; pid_deriv = src.pid_deriv; prc_inst_id = src.prc_inst_id; } // the order of copying takes into account the order of checking values in shm by peer
-    static inline s_long Fsig() { return yk_c::bytes::cmti_base_t<_r_prc_uid, 2020, 2, 28, 23>::ind(); }
+    volatile s_ll sig, pid, pid_deriv, livecnt, disp_ses_state, prc_inst_id; // NOTE prc_inst_id must be the last in sequence
+
+    _r_prc_uid() throw() { sig = Fsig(); pid = pid_deriv = livecnt = 0; disp_ses_state = -2; prc_inst_id = 0; }
+
+    static inline s_long Fsig() { return yk_c::bytes::cmti_base_t<_r_prc_uid, 2020, 2, 28, 23>::ind() + 1; }
+
+      // NOTE The order of copying in cp_ids_* takes into account the order of async. checking/modifying values by other side.
+    void cp_ids_from_volatile(const _r_prc_uid& src, bool b_copy_livecnt)
+    {
+      s_ll idinst0;
+      do {
+        idinst0 = src.prc_inst_id;
+        sig = src.sig; pid = src.pid; pid_deriv = src.pid_deriv;
+        if (b_copy_livecnt) { livecnt = src.livecnt; }
+        prc_inst_id = src.prc_inst_id;
+      } while (prc_inst_id != idinst0);
+    }
+    void cp_ids_to_volatile(const _r_prc_uid& src, bool b_copy_livecnt)
+    {
+      s_ll idinst_temp = -1; if (idinst_temp == src.prc_inst_id) { idinst_temp = -2; }
+      prc_inst_id = idinst_temp;
+      sig = src.sig; pid = src.pid; pid_deriv = src.pid_deriv;
+      if (b_copy_livecnt) { livecnt = src.livecnt; }
+      prc_inst_id = src.prc_inst_id;
+    }
+
+    bool b_same_inst(const _r_prc_uid& src) const { return src.pid == pid && src.pid_deriv == pid_deriv && src.prc_inst_id == prc_inst_id; }
+
   };
   static s_ll pid_deriv_v1(s_ll pid) { return pid; }
   enum { nmdemax = 3 };
-  inline static s_ll limit_nbqueue(s_ll nb_orig, s_ll nbmin, s_ll nbmax, s_ll nbdflt) throw() { if (nb_orig < 0) { nb_orig = nbdflt; } return bmdx_minmax::myllrange(nb_orig, nbmin, nbmax); }
+  inline static s_ll limit_nbqueue(s_ll nb_orig, s_ll nbmin, s_ll nbmax, s_ll nbdflt) throw() { if (nb_orig < 0) { nb_orig = nbdflt; } return bmdx_minmax::myllrange_ub(nb_orig, nbmin, nbmax); }
 public:
     // Peer process activity tracker; one for each working dispatcher_mt in other processes, with which IPC occurs.
   struct peer_tracker
   {
     inline peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) throw();
-    inline ~peer_tracker() throw() { _x_close(); }
+    inline ~peer_tracker() throw() { _cltpt_close(); }
     inline s_long state() const throw() { return _state; }
     inline s_ll id_peer() const throw() { return _id_peer; } // for local process use only
 
   private:
     //================================
-    critsec_t<lm_slot_controller>::csdata lkd_pt_access; // for locking 1) _qum_send read/modify/push, 2) mtrk_*_send modify, 3) inside _x_init, _cltpt_ensure_comm
+      // for locking 1) _qum_send read/modify/push, 2) mtrk_*_send modify, 3) inside _x_init, _cltpt_ensure_comm.
+      // NOTE lkd_pt_access must always be set without or after lkd_peer_hpt.
+    critsec_t<lm_slot_controller>::csdata lkd_pt_access;
     //================================
     const bmdx_shm::t_name_shm _name_prf, _name_peerf;
     const bool b_self; // = _name_prf == _name_peerf
@@ -1015,7 +1043,7 @@ public:
     bmdx_shm::shmqueue_s _qum_rcv; // shared queue for input user messages from peer process; serviced in LMSC det_periodic()
     bmdx_shm::shmqueue_s _qum_send; // shared queue for sending user messages to peer process; external client (dispatcher_mt) may only push messages in b_state() 1; locking: lkd_pt_access
     //================================
-    s_ll _qinfo_inst_id, _qinfo_livecnt;
+    _r_prc_uid _qinfo_ids; // actual peer IDs copy (non-volatile)
     double _qinfo_livecnt_tm;
     bool _qinfo_peer_conn_techmsg_sent;
     //=================
@@ -1031,6 +1059,7 @@ public:
       //  so that their info is not lost for the peer unless the current process is terminated..
     vnnqueue_t<__msg_tr> _lq_send_tr; // locking: none (LMSC thread use only)
     bool _qum_send_avl;
+    bool _qum_send_conf_reset_on_exit;
     double _qum_send_avl_tm_lastchk;
     //=================
     struct __tracking_info_reply
@@ -1045,44 +1074,55 @@ public:
       //  so that their info is not lost unless the current process is terminated..
     vnnqueue_t<__tracking_info_reply> _lq_recv_tr; // locking: none (LMSC thread use only)
     s_ll _ipop_qum_rcv_fail; // ind. of the head msg. in _qum_rcv (ipop()), for which _s_write failed (returned -2)
+    bool _qum_rcv_conf_reset_on_exit;
     //================================
+    unsigned char _x_close_state;
+    s_ll _x_close_ipush;
 
     friend struct lm_slot_controller;
     struct lks_idgen {};
-    static s_ll idgen_peer() { static s_ll x(0); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
-    inline double tm_last_init_ms() { return _tm_lastinit; }
+
+      // normally called from both lm_slot_controller and peer_tracker
+    inline double _cltpt_tm_last_init_ms() { return _tm_lastinit; }
     inline s_long _cltpt_ensure_comm(bool b_wait, bool b_force_check) throw();
+    inline bool _cltpt_close() throw();
+    inline void _cltpt_qum_conf_reset(bool b_rcv, bool b_forced) throw();
+
+      // purely private (peer_tracker use only)
+    static s_ll _x_idgen_peer() { static s_ll x(0); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
     inline s_long _x_qinfo_upd_prc_act_time();
     inline void _x_init() throw();
-    inline void _x_close() throw();
   };
 
-  // 1. Helper functions (for any thread).
+    // 1. Helper functions (for any thread).
 
   static inline char make_identifier_char(wchar_t c0)  throw();
   static inline bmdx_shm::t_name_shm __make_name_one_impl(arrayref_t<char> name) throw();
   static inline bmdx_shm::t_name_shm __make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) throw();
   static inline bmdx_shm::t_name_shm make_name_onef(const bmdx_shm::t_name_shm& name) throw() { return __make_name_one_impl(arrayref_t<char>(name.pd(), name.n())); }
   static inline bmdx_shm::t_name_shm make_name_twof(const bmdx_shm::t_name_shm& name1, const bmdx_shm::t_name_shm& name2) throw() { return __make_name_two_impl(arrayref_t<char>(name1.pd(), name1.n()), arrayref_t<char>(name2.pd(), name2.n())); }
-//  static inline bmdx_shm::t_name_shm make_name_one(arrayref_t<char> name) throw() { return __make_name_one_impl(name); }
-//  static inline bmdx_shm::t_name_shm make_name_two(arrayref_t<char> name1, arrayref_t<char> name2) throw() { return __make_name_two_impl(name1, name2); }
-//  static inline bmdx_shm::t_name_shm make_name_one(arrayref_t<wchar_t> name) throw() { return make_name_onef(make_fixed_utf8_name(name)); }
-//  static inline bmdx_shm::t_name_shm make_name_two(arrayref_t<wchar_t> name1, arrayref_t<wchar_t> name2) throw() { return make_name_twof(make_fixed_utf8_name(name1), make_fixed_utf8_name(name2)); }
 
-  inline s_long state() const throw() { return _state; }
+    // 2. Servicing thread API.
+    //
+    //  Called from LMSC servicing thread only (except det_init() once called by dispatcher_mt).
 
-    // NOTE This flag should be set before det_init is called first time.
-  inline void setparam_chsbin(bool b_enable) { s_long f = fpt_md | fpt_msg; if (b_enable) { f |= fpt_bin; } _fl_chs = f;}
-
-  // 2. For LM delivery thread: LMSC initializer and periodic task. (called from LMSC thread only).
+  inline s_long det_state() const throw() { return _state; }
   inline void det_init() throw();
   inline void det_periodic(i_callback& cb, bool& b_active) throw();
+  inline void det_close() throw() { _x_close(); }
 
-  // 3. Special functions.
+    // 3. Client API (exclusively for dispatcher_mt).
 
+  inline void clt_setparam_chsbin(bool b_enable);
+  inline void clt_set_ses_state(s_long st);
+
+  inline s_long clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw();
   inline s_long clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) throw();
   inline s_long clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) throw();
-  inline s_long clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw();
+
+  inline s_long clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, bool b_rcv, bool b_forced) throw();
+  inline s_long clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, bool b_al, bool b_lqcap, s_long& res_al, s_long& res_lqcap, const cref_t<bmdx_shm::i_allocctl>* p_al, double timeout_ms_al, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw();
+  inline s_long clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, s_long& res_lqcap, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw();
 
 private:
   s_ll _nb_qum; volatile s_long _fl_chs;
@@ -1091,7 +1131,17 @@ private:
   volatile s_long _state; // 1 ready; 0 not initialized yet; -2 init. failed, will be tried again later; -3 closing; -4 already closed
   double _tms_next_init;
 
-  shmqueue_ms_receiver_t<_r_prc_uid> _qinfo_rcv; // shared queue for informational messages from multiple peer processes; associated 1:1 with owning dispatcher_mt instance; locking: none (LMSC thread use only)
+    // Shared queue for informational messages from multiple peer processes.
+    //  Associated 1:1 with owning dispatcher_mt instance.
+    //  Presence of _qinfo_rcv is recognized by peer processes
+    //    as presence (or trace of presence) of the process, owning the queue.
+    // Locking: for queue state modification (check/init/open/close/pop) only.
+    //    _qinfo_rcv is accessed only by single LMSC servicing thread,
+    //    except for clt_set_ses_state(),
+    //    which is called by dispatcher_mt, to immediately "publish" its session state changes.
+  critsec_t<lm_slot_controller>::csdata lkd_qinfo_rcv_state;
+  shmqueue_ms_receiver_t<_r_prc_uid> _qinfo_rcv;
+
   s_long _qinfo_rcv_idd0; // index in _qinfo_rcv.dd, marks that all entries with index < _qinfo_rcv_idd0 are already processed; locking: none (LMSC thread use only)
   hashx<bmdx_shm::t_name_shm, s_long> _hnew_name_peerf; // { shared queue name, 0 }; names for queues to create as requested by peer processes via _qinfo_rcv; locking: none (LMSC thread use only)
 
@@ -1099,7 +1149,8 @@ private:
   hashx<bmdx_shm::t_name_shm, cref_t<peer_tracker> > _hpt; // grow-only { name_peerf (global), peer tracker }; locking: lkd_peer_hpt
 
   inline bool _x_qinfo_rcv_init() throw();
-  inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_begin_comm);
+  inline void _x_qinfo_rcv_update_ses_state() throw();
+  inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate);
   inline void _x_close() throw();
 
   struct _mtrk_fn_handler
@@ -1135,84 +1186,31 @@ private:
   struct new_mv_msg_tr { typedef cref_t<t_stringref> t_msg; typedef peer_tracker::__msg_tr t; t_msg& m; new_mv_msg_tr(t_msg& m_) : m(m_) {} void operator()(t* p) const { bmdx_str::words::swap_bytes(p->msg, m); new(&m) t_msg(); } };
 };
 
-  // Called by LMSC thread and client threads (as part of _cltpt_ensure_comm).
-  //  The call must be done under lkd_pt_access.
-  //  Updates cached _r_prc_uid object's data from _qinfo_send.
-  //  Returns:
-  //    1 -  the peer process has just started or restarted - should be informed on the current process activity.
-  //    0 - the peer process is available for normal communication, no special action needed.
-  //    -1 - the peer process is not available: a) hanged, b) terminated and not restarted yet, c) LMSC is not active in the peer process (e.g. peer's dispatcher_mt exited).
-  //    -2 - the peer process is available, but should not be used for communication (communication type or version is different).
-  //    -3 - the shared queue object is not available.
-s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
-{
-  if (_qinfo_send.attempt_open() != 1) // no system access to shared object
-    { return -3; }
-
-  const double t = clock_ms();
-  const _r_prc_uid& q = _qinfo_send.so->auxd;
-
-  if (this->b_self)
-  {
-    _qinfo_inst_id = q.prc_inst_id;
-    _qinfo_livecnt = q.livecnt;
-    _qinfo_livecnt_tm = t;
-    return 0;
-  }
-
-  if (q.sig != _r_prc_uid::Fsig()) // incompatible shared object
-  {
-    _qinfo_send.so.close();
-    return -2;
-  }
-  const s_ll cntinst = q.livecnt;
-  const s_ll idinst = q.prc_inst_id;
-  if (_qinfo_inst_id != idinst) // one of: a) just started new peer process, b) peer's LMSC exited
-  {
-    if (idinst == 0 || idinst == -1) { return -1; }
-    const s_ll der1 = q.pid_deriv;
-    const s_ll pidinst = q.pid;
-    const s_ll der2 = pid_deriv_v1(pidinst);
-    if (pidinst == 0 || der2 != der1) // incompatible agent in the peer process
-      { return -2; }
-    _qinfo_inst_id = idinst;
-    _qinfo_livecnt = cntinst;
-    _qinfo_livecnt_tm = t;
-    return 1;
-  }
-  if (cntinst != _qinfo_livecnt) // new livecnt value
-  {
-    _qinfo_livecnt = cntinst;
-    _qinfo_livecnt_tm = t;
-    return 0;
-  }
-  if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) // livecnt has stuck, but no timeout yet
-    { return 0; }
-  return -1; // timeout (the peer is hanged or terminated)
-}
   // name_prf_: make_fixed_utf8_name of process name of the parent dispatcher_mt.
   // name_peerf_: make_fixed_utf8_name of process peer's process name, taken from message destination address, supplied by client.
 lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) throw()
 :
   _name_prf(name_prf_), _name_peerf(name_peerf_), b_self(name_peerf_ == name_prf_),
   _qinfo_send(make_name_onef(name_peerf_)),
-  _qum_rcv(make_name_twof(_name_peerf, _name_prf), limit_nbqueue(nb_qum_, __lm_slot_controller_nb_rqum_min, __lm_slot_controller_nb_rqum_max, __lm_slot_controller_nb_rqum_dflt)),
-  _qum_send(make_name_twof(_name_prf, _name_peerf))
+  _qum_rcv(make_name_twof(_name_peerf, _name_prf), limit_nbqueue(nb_qum_, __lm_slot_controller_nb_rqum_min, __lm_slot_controller_nb_rqum_max, __lm_slot_controller_nb_rqum_dflt), 8|1),
+  _qum_send(make_name_twof(_name_prf, _name_peerf), -1, 4|1)
 {
-  _id_peer = idgen_peer();
+  _id_peer = _x_idgen_peer();
   _tm_lastinit = clock_ms() - 10000; _tm_mtrk_nem = clock_ms();
   _state = 0;
   _b_clt_mdsend_wait_once = true;
 
-  _qinfo_inst_id = 0; _qinfo_livecnt = -1; _qinfo_livecnt_tm = clock_ms();
+  _qinfo_ids.livecnt = -1; _qinfo_livecnt_tm = clock_ms();
   _qinfo_peer_conn_techmsg_sent = false;
 
   mtrk_qipush_send.set_cap_hints(-1, -2);
   _lq_send_tr.set_cap_hints(-1, -2);
 
   _lq_recv_tr.set_cap_hints(-1, -2);
-  _qum_send_avl = false; _qum_send_avl_tm_lastchk = clock_ms() - 2 * __lm_slot_controller_qum_send_avl_chk_dtms;
-  _ipop_qum_rcv_fail = -1;
+  _qum_send_avl = false; _qum_send_conf_reset_on_exit = false; _qum_send_avl_tm_lastchk = clock_ms() - 2 * __lm_slot_controller_qum_send_avl_chk_dtms;
+  _ipop_qum_rcv_fail = -1; _qum_rcv_conf_reset_on_exit = false;
+
+  _x_close_state = 0; _x_close_ipush = -1;
 }
   // b_wait:
   //    false: for LMSC thread, to check state and perform non-blocking operations if necessary.
@@ -1222,7 +1220,7 @@ lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_
   //    false: check their state only if __lm_slot_controller_qum_send_avl_chk_dtms has passed after the last check.
   // Returns:
   //  1 - the peer process is communicable normally (all needed queues are working).
-  //  0 - the peer process appears hanged, lagging or terminated.
+  //  0 - the peer process appears a) hanged, lagging, terminated, b) normally exited.
   //  -1 - the peer process is not available.
 s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_force_check) throw()
 {
@@ -1282,6 +1280,92 @@ s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_
     return bres ? 1 : -1;
   }
 }
+  // For calling from lm_slot_controller many times.
+  //  1st call initiates closing, next calls are only checking if all done.
+  //  Returns true is all done, false - not yet.
+bool lm_slot_controller::peer_tracker::_cltpt_close() throw()
+{
+  if (_state == -4) { return true; }
+  critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+
+  if (_x_close_state == 0)
+  {
+    if (_state == 1)
+    {
+      _qum_send.lqstate(false, &_x_close_ipush, 0, -1, __bmdx_disp_lq_cleanup_dtms); // NOTE this only initiates queue cleanup; lqstate itself exits immediately
+    }
+    // NOTE See also notes near cch_thread :: mtrk_htracking.
+    _cltpt_qum_conf_reset(true, false); // reset receiver queue conf., only if it was modified
+    _cltpt_qum_conf_reset(false, false); // reset sender queue conf., only if it was modified
+    _x_close_state = 1;
+  }
+
+  _state = -3;
+  if (_x_close_ipush != -1)
+  {
+    s_ll ipop = -1;
+    _qum_send.lqstate(false, 0, &ipop);
+    if (ipop != -1 && ipop - _x_close_ipush < 0) { return false; }
+  }
+  _state = -4;
+  _x_close_state = 2;
+
+  return true;
+}
+
+  // Tracks the peer process public activity status.
+  // Indirectly (i.e. from within _cltpt_ensure_comm) called by LMSC thread and client threads.
+  //  The call must be done under lkd_pt_access.
+  //  Updates cached _r_prc_uid object's data from _qinfo_send.
+  //  Returns:
+  //    1 -  the peer process has just started or restarted - should be informed on the current process activity.
+  //    0 - the peer process is available for normal communication, no special action needed.
+  //    -1 - the peer process is not available: a) hanged, b) terminated and not restarted yet, c) LMSC is not active in the peer process (e.g. peer's dispatcher_mt exited).
+  //    -2 - the peer process is available, but should not be used for communication (communication type or version is different).
+  //    -3 - the shared queue object is not available.
+s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
+{
+  if (_qinfo_send.attempt_open() != 1) // no system access to shared object
+    { return -3; }
+
+  const double t = clock_ms();
+  _r_prc_uid vids; vids.cp_ids_from_volatile(_qinfo_send.so->auxd, true);
+
+  if (this->b_self) // self-connected (means: the peer is always available).
+    { _qinfo_ids.cp_ids_from_volatile(vids, true); _qinfo_livecnt_tm = t; return 0; }
+
+  if (vids.sig != _r_prc_uid::Fsig()) // incompatible shared object
+    { _qinfo_send.so.close(); return -2; }
+
+  if (!_qinfo_ids.b_same_inst(vids)) // one of: a) just started new peer process (init. not complete yet), b) peer's LMSC exited
+  {
+    if (vids.prc_inst_id == 0) { return -1; }
+
+    if (vids.prc_inst_id == -1)
+    {
+      s_ll ipush1 = 0, ipop1 = 0;
+      s_long res1 = _qum_rcv.bufstate(1, &ipush1, &ipop1);
+      s_long res2 = _qum_rcv.lqstate(1);
+      // When peer process had normally exited, but some data from peer remains
+      //  in the local input queue or in shared queue,
+      //  reporting hanged status is delayed (until LMSC pops all available messages).
+      if (res2 == 1 || (res1 == 3 && !(ipop1 < ipush1)))
+      {
+        if (vids.livecnt != _qinfo_ids.livecnt) { _qinfo_ids.livecnt = vids.livecnt; _qinfo_livecnt_tm = t; return 0; }
+          else if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) { return 0; }
+      }
+      return -1;
+    }
+
+      // New peer process instance detected. Checking pid_deriv (i.e. if communication with such process is allowed).
+    if (vids.pid == 0 || pid_deriv_v1(vids.pid) != vids.pid_deriv) { return -2; }
+    _qinfo_ids.cp_ids_from_volatile(vids, true); _qinfo_livecnt_tm = t;
+    return 1;
+  }
+  if (vids.livecnt != _qinfo_ids.livecnt) { _qinfo_ids.livecnt = vids.livecnt; _qinfo_livecnt_tm = t; return 0; }
+    else if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) { return 0; }
+  return -1; // timeout (the peer is hanged or terminated)
+}
   // When x_init succeeds:
   //  1) _qum_rcv is working (the shared object belongs to LMSC of the current process),
   //  2) _qinfo_send is working (the shared object belongs to the peer process),
@@ -1309,11 +1393,11 @@ void lm_slot_controller::peer_tracker::_x_init() throw()
 
   _state = 1;
 }
-void lm_slot_controller::peer_tracker::_x_close() throw()
-{
-  _qum_send.lqstate(0, 0, 0, -1, __bmdx_disp_lq_cleanup_dtms);
-  // NOTE See also notes near cch_thread :: mtrk_htracking.
-}
+
+
+
+
+
 
 
   // NOTE If init. fails, it will really retry only after some delay (see _x_qinfo_rcv_init).
@@ -1340,7 +1424,7 @@ void lm_slot_controller::det_periodic(i_callback& cb, bool& b_active) throw()
         b_active = true;
         const bmdx_shm::t_name_shm& k = _hnew_name_peerf(0)->k;
         if (_hpt.find(k)) { _hnew_name_peerf.remove(k); continue; }
-        cref_t<peer_tracker> pt = _x_pt_getcr(k, true);
+        cref_t<peer_tracker> pt = _x_pt_getcr(k, true, true);
           if (!pt) { break; } // will retry on the next det_periodic() call
           try { bmdx_str::words::swap_bytes(_hpt[k], pt); } catch (...) { break; } // will retry on the next det_periodic() call
         _hnew_name_peerf.remove(k); // removal does not fail (both k, v are movable)
@@ -1364,7 +1448,7 @@ lCont2:;
       for (s_long i = 0; i < hpt2.n(); ++i)
       { try {
         peer_tracker& pt = hpt2(i)->v._rnonc();
-        if (pt._state != 1 && clock_ms() - pt.tm_last_init_ms() < __lm_slot_controller_peer_reinit_dtms) { continue; }
+        if (pt._state != 1 && clock_ms() - pt._cltpt_tm_last_init_ms() < __lm_slot_controller_peer_reinit_dtms) { continue; }
         if (pt._cltpt_ensure_comm(false, false) < 1) { continue; }
 
           // Sending tech. messages (subs. request results and tracking infos), possibly remaining from prev. det_periodic() calls.
@@ -1628,23 +1712,45 @@ lCont2:;
 bool lm_slot_controller::_x_qinfo_rcv_init() throw()
 {
   const double t = clock_ms();
-  if (t < _tms_next_init) { return false; }
-  s_long res = _qinfo_rcv.attempt_init();
-  if (res < 1) { _tms_next_init = t + __lm_slot_controller_reinit_short_dtms; return false; } // will try again later
-  if (res == 1) // check signature; update process info, because the object already exists
+    if (t < _tms_next_init) { return false; }
+
+  if (_qinfo_rcv.so.f_constructed() != 1) // ensure initializing the shared part of _qinfo_rcv
   {
-    if (_qinfo_rcv.so->auxd.sig != _r_prc_uid::Fsig()) { _qinfo_rcv.so.close(); _tms_next_init = t + __lm_slot_controller_reinit_long_dtms; return false; }
-    _qinfo_rcv.so->auxd.cp_ids(_qinfo_rcv.auxd_init);
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
+    s_long res = _qinfo_rcv.attempt_init(); // NOTE If init. successful, res == 1, and, below queue aux data init. will be done
+    if (res < 1) { _tms_next_init = t + __lm_slot_controller_reinit_short_dtms; return false; } // will try again later
+
+    _r_prc_uid& qids_shared = _qinfo_rcv.so->auxd;
+    if (qids_shared.sig != _r_prc_uid::Fsig()) // the queue is just created; check signature; update process and session info
+    {
+      _qinfo_rcv.so.close();
+      _tms_next_init = t + __lm_slot_controller_reinit_long_dtms;
+      return false;
+    }
+    qids_shared.cp_ids_to_volatile(_qinfo_rcv.auxd_init, false);
   }
-  if (res == 1 || res == 2) // the shared queue is valid
+
+  if (1) // here: f_constructed() == 1
   {
+    _r_prc_uid& qids_shared = _qinfo_rcv.so->auxd;
+
+    if (_qinfo_rcv.auxd_init.disp_ses_state != qids_shared.disp_ses_state)
+    {
+      critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
+      _x_qinfo_rcv_update_ses_state();
+    }
+
     cpparray_t<netmsg_header::md_entry> __mdee2;
     netmsg_header::md_entry __mdee1[nmdemax];
 
       // Update livecnt.
-    if (1) { _r_prc_uid& q = _qinfo_rcv.so->auxd; q.livecnt = q.livecnt + 1; }
+    if (1) { s_ll cnt = qids_shared.livecnt; ++cnt; qids_shared.livecnt = cnt; }
       // Pop and process all available tech. msgs.
-    if (_qinfo_rcv.dd.n() == 0) { _qinfo_rcv_idd0 = 0; _qinfo_rcv.mpop_avl(); }
+    if (_qinfo_rcv.dd.n() == 0)
+    {
+      _qinfo_rcv_idd0 = 0;
+      _qinfo_rcv.mpop_avl(); // NOTE this call is not under lock, because it internally will not do queue initialization, because f_constructed() == 1 already (ensured above)
+    }
     if (_qinfo_rcv_idd0 < _qinfo_rcv.dd.n())
     {
       for (s_long i = _qinfo_rcv_idd0; i < _qinfo_rcv.dd.n(); ++i)
@@ -1673,14 +1779,15 @@ lBreak1:;
   }
   return true;
 }
-cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once)
+  // WARNING _x_pt_getcr uses lkd_peer_hpt. It may not be called when any lkd_pt_access is set.
+cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate)
 {
   if (name_peerf.n() > 0)
   {
     critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
     const hashx<bmdx_shm::t_name_shm, cref_t<peer_tracker> >::entry* e = _hpt.find(name_peerf);
     do { // once
-      if (!e) { _hpt.insert(name_peerf, &e); }
+      if (!e) { if (b_autocreate) { _hpt.insert(name_peerf, &e); } }
       if (!e) { break; }
       cref_t<peer_tracker>& pt = e->v;
       const bool b_newpt = !pt;
@@ -1692,36 +1799,70 @@ cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const b
   }
   return cref_t<peer_tracker>();
 }
-  // NOTE If init. fails, it will really retry only after some delay (see _x_qinfo_rcv_init).
+  // NOTE det_init() is called 1st time right after LMSC creation, in dispatcher_mt::thread_proxy::_s_disp_ctor.
+  //  Servicing thread is not run yet at this time.
+  //  If init. fails, it will be retried on the next call to det_init(). See also _x_qinfo_rcv_init.
 void lm_slot_controller::det_init() throw()
 {
   if (!(_state == 0 || _state == -2)) { return; }
 
   if (_state == 0)
   {
-    _r_prc_uid& q = _qinfo_rcv.auxd_init;
-    q.pid = (bmdx_meta::u_ll)processctl::ff_mc().pid_self();
-    q.pid_deriv = pid_deriv_v1(q.pid);
-    union { s_ll n; double t; }; n = 0; t = clock_ms();
-    q.prc_inst_id = n ^ q.pid;
-    q.livecnt = 0;
+    _r_prc_uid& qids_init = _qinfo_rcv.auxd_init;
+    qids_init.pid = (bmdx_meta::u_ll)processctl::ff_mc().pid_self();
+    qids_init.pid_deriv = pid_deriv_v1(qids_init.pid);
+    if (1)
+    {
+      static s_ll n0 = 0; ++n0;
+      union { s_ll n; double t; };
+      n = 0; t = clock_ms(); n += n0; n ^= qids_init.pid;
+      if (n == 0 || n == -1) { n = n0; }
+      qids_init.prc_inst_id = n;
+    }
+    qids_init.livecnt = 0;
   }
   if (!_x_qinfo_rcv_init()) { _state = -2; return; }
 
 
   try {
-    if (_apns.isArray())
-    {
-      for (s_long i = _apns.arrlb(); i <= _apns.arrub(); ++i)
-      {
-        std::wstring pn = _apns.vstr(i);
-        if (pn.empty()) { continue; }
-        _x_pt_getcr(make_fixed_utf8_name(pn), true);
-      }
-    }
+    if (_apns.isArray()) { for (s_long i = _apns.arrlb(); i <= _apns.arrub(); ++i) { std::wstring pn = _apns.vstr(i); if (pn.empty()) { continue; } _x_pt_getcr(make_fixed_utf8_name(pn), true, true); } }
+      else if (_apns.isAssoc()) { for (s_long pos = _apns.assocl_first(); pos != _apns.assocl_noel(); pos = _apns.assocl_next(pos)) { std::wstring pn = _apns.assocl_key(pos).vstr(); if (pn.empty()) { continue; } _x_pt_getcr(make_fixed_utf8_name(pn), true, true); } }
   } catch (...) { _state = -2; return; }
 
   _state = 1;
+}
+
+  // NOTE clt_setparam_chsbin must be called once, before 1st call to det_init().
+void lm_slot_controller::clt_setparam_chsbin(bool b_enable) { s_long f = fpt_md | fpt_msg; if (b_enable) { f |= fpt_bin; } _fl_chs = f; }
+
+void lm_slot_controller::clt_set_ses_state(s_long st)
+{
+  critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
+  _qinfo_rcv.auxd_init.disp_ses_state = st;
+  _x_qinfo_rcv_update_ses_state();
+}
+void lm_slot_controller::_x_qinfo_rcv_update_ses_state() throw()
+{
+  if (_qinfo_rcv.so.f_constructed() == 1) { _qinfo_rcv.so->auxd.disp_ses_state = _qinfo_rcv.auxd_init.disp_ses_state; }
+}
+
+  // Ensures creating peer_tracker and establishing the communication with that peer, as specified by comm_mode.
+  // comm_mode: see clt_mdsend.
+  // Returns:
+  //    1 - success.
+  //    -2 - failed to create or access peer tracker.
+  //    -3 - the peer process is not available.
+  //    -14 - peer process appears to be hanged or terminated.
+s_long lm_slot_controller::clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw()
+{
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true); if (!pt) { return -2; }
+  bool b_comm_wait = comm_mode == 1;
+  if (comm_mode == 0) { b_comm_wait = pt->_b_clt_mdsend_wait_once; }
+  s_long res_comm = pt->_cltpt_ensure_comm(b_comm_wait, false);
+    if (comm_mode == 0) { pt->_b_clt_mdsend_wait_once = false; }
+    if (res_comm < 0) { return -3; }
+    if (res_comm == 0) { return -14; }
+    return 1;
 }
   // mtrk_id_msg:
   //    unique ID of the message being sent.
@@ -1738,13 +1879,16 @@ void lm_slot_controller::det_init() throw()
   // Returns:
   //    1 - success.
   //    -2 - common-case failure.
+  //        NOTE This code is particularly returned:
+  //          1) if peer process is not available (e.g. not created yet).
+  //          2) if peer process has no valid dispatcher session on its side. Session state must be 1 (working).
   //    -14 - (only: with b_ignore_hanged == false): failed to send because peer process appears to be hanged or terminated.
 s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) throw()
 {
   if (mtrk_id_msg == -1) { return -2; }
-  const bool b_ignore_hanged = !!(flags_clt_msend & _fl_msend_ignore_hanged);
-  const bool b_chsbin = bin && ((flags_clt_msend & _fl_msend_use_chsbin) || (_fl_chs & fpt_chsbin));
-  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false); if (!pt) { return -2; }
+  const bool b_ignore_hanged = !!(flags_clt_msend & dispatcher_mt_flags::ignore_hanged);
+  const bool b_chsbin = bin && ((flags_clt_msend & dispatcher_mt_flags::use_chsbin) || (_fl_chs & fpt_chsbin));
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true); if (!pt) { return -2; }
   s_long res_comm = pt->_cltpt_ensure_comm(true, false);
     if (res_comm < 0) { return -2; }
     if (res_comm == 0 && !b_ignore_hanged) { return -14; }
@@ -1766,6 +1910,15 @@ s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, u
   if (1)
   {
     critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    try {
+      s_ll st = pt->_qinfo_send.so->auxd.disp_ses_state;
+      if (st == 1) {}
+      else if (st == 0)
+      {
+        if (!b_ignore_hanged) { return -14; }
+      }
+      else { return -2; }
+    } catch (...) {}
     _mtrk_fn_handler ha(pt._rnonc(), mtrk_id_msg, rhtrprx);
     if (flags_mtrk != 0 && !ha.mtrk_prep()) { return -2; }
     s_long res = 0;
@@ -1788,13 +1941,16 @@ s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, u
   // Returns:
   //    1 - success.
   //    -2 - common-case failure.
+  //        NOTE This code is particularly returned:
+  //          1) if peer process is not available (e.g. not created yet).
+  //          2) if peer process session state is not valid for technical messages. Must be 1 (working) or -1 (late initialization).
   //    -14 - failed to send because peer process appears to be hanged or terminated.
 s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) throw()
 {
   if (mtrk_id == -1) { return -2; }
   if (!msg.b_complete()) { return -2; }
   const s_long parts = msg.parts(); if ((parts & (fpt_msg | fpt_bin)) || !(parts & fpt_md)) { return -2; }
-  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false); if (!pt) { return -2; }
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true); if (!pt) { return -2; }
   bool b_comm_wait = comm_mode == 1;
   if (comm_mode == 0) { b_comm_wait = pt->_b_clt_mdsend_wait_once; }
   s_long res_comm = pt->_cltpt_ensure_comm(b_comm_wait, false);
@@ -1805,6 +1961,7 @@ s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_pee
   if (1)
   {
     critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    try { s_ll st = pt->_qinfo_send.so->auxd.disp_ses_state; if (!(st == 1 || st == -1)) { return -2; } } catch (...) {}
     _mtrk_fn_handler ha(pt._rnonc(), mtrk_id, rhtrprx);
     if (!ha.mtrk_prep()) { return -2; }
     s_ll ipush_lq = -1;
@@ -1815,36 +1972,99 @@ s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_pee
   return 1;
 }
 
-  // Ensures creating peer_tracker and establishing the communication with that peer, as specified by comm_mode.
-  // comm_mode: see clt_mdsend.
+  // clt_qum_conf_set_*:
+  // For the existing peer tracker object, sets its shared queue parameters as specified.
+  //  NOTE If b_forced == false, clt_qum_conf_reset does not force reset,
+  //    it makes any changes/delays only if pt->_qum_*_conf_reset_on_exit == true.
   // Returns:
   //    1 - success.
-  //    -2 - common-case failure.
-  //    -3 - the peer process is not available.
-  //    -14 - peer process appears to be hanged or terminated.
-s_long lm_slot_controller::clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw()
+  //    -2 - failed to create or access peer tracker.
+s_long lm_slot_controller::clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, bool b_rcv, bool b_forced) throw()
 {
-  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false); if (!pt) { return -2; }
-  bool b_comm_wait = comm_mode == 1;
-  if (comm_mode == 0) { b_comm_wait = pt->_b_clt_mdsend_wait_once; }
-  s_long res_comm = pt->_cltpt_ensure_comm(b_comm_wait, false);
-    if (comm_mode == 0) { pt->_b_clt_mdsend_wait_once = false; }
-    if (res_comm < 0) { return -3; }
-    if (res_comm == 0) { return -14; }
-    return 1;
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, false);
+    if (!pt) { return -2; }
+    if (pt->_state == -4) { return -2; }
+  critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    if (pt->_state == -4) { return -2; }
+  pt->_cltpt_qum_conf_reset(b_rcv, b_forced);
+  return 1;
+}
+s_long lm_slot_controller::clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, bool b_al, bool b_lqcap, s_long& res_al, s_long& res_lqcap, const cref_t<bmdx_shm::i_allocctl>* p_al, double timeout_ms_al, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw()
+{
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true);
+    if (!pt) { return -2; }
+    s_long st = pt->_state;
+    if (!(st == 0 || st == 1 || st == -2)) { return -2; }
+  critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    st = pt->_state;
+    if (!(st == 0 || st == 1 || st == -2)) { return -2; }
+  res_al = 0; res_lqcap = 0;
+  if (b_al || b_lqcap) { pt->_qum_rcv_conf_reset_on_exit = true; }
+  if (b_al) { res_al = pt->_qum_rcv.conf_set_al_in(p_al, timeout_ms_al); }
+  if (b_lqcap) { res_lqcap = pt->_qum_rcv.conf_set_lqcap(true, ncapmin, ncapmax, nrsv, timeout_ms_lqcap); }
+  return 1;
+}
+s_long lm_slot_controller::clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, s_long& res_lqcap, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw()
+{
+  cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true);
+    if (!pt) { return -2; }
+    s_long st = pt->_state;
+    if (!(st == 0 || st == 1 || st == -2)) { return -2; }
+  critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
+    if (!(st == 0 || st == 1 || st == -2)) { return -2; }
+  //res_lqcap = 0;
+  if (1) { pt->_qum_send_conf_reset_on_exit = true; }
+  if (1) { res_lqcap = pt->_qum_send.conf_set_lqcap(false, ncapmin, ncapmax, nrsv, timeout_ms_lqcap); }
+  return 1;
+}
+void lm_slot_controller::peer_tracker::_cltpt_qum_conf_reset(bool b_rcv, bool b_forced) throw()
+{
+  bool b1 = b_rcv && (b_forced || this->_qum_rcv_conf_reset_on_exit);
+  bool b2 = !b_rcv && (b_forced || this->_qum_send_conf_reset_on_exit);
+  if (b1 || b2)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+    if (b1)
+    {
+      cref_t<bmdx_shm::i_allocctl> empty;
+      this->_qum_rcv.conf_set_al_in(&empty, -1);
+      this->_qum_rcv.conf_set_lqcap(true, 0, -2, -3, -1);
+      this->_qum_rcv_conf_reset_on_exit = false;
+    }
+    if (b2)
+    {
+      this->_qum_send.conf_set_lqcap(false, 0, -2, -3, -1);
+      this->_qum_send_conf_reset_on_exit = false;
+    }
+  }
 }
 
-  // NOTE x_close() is called from ~lm_slot_controller().
-  //  This occurs in the last thread, releasing the dispatcher session object.
-  //  (But no concurrency with other functions.)
+
+  // NOTE By design, _x_close() is called 1st time right before exit
+  //  from servicing LMSC thread.
+  //  Formally, _x_close() is also called from ~lm_slot_controller(),
+  //  but this call does nothing because of the above.
+  //  (_thread_proc, servicing LMSC, exits when notices dispatcher session end and/or thread stop flag set.)
 void lm_slot_controller::_x_close() throw()
 {
+  if (_state == -4) { return; }
   if (_state != 1) { _state = -4; return; }
   _state = -3;
+  double t0 = clock_ms();
+  bool b_1st = true;
   while (1)
   {
+    double t1 = clock_ms();
     critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
-    if (_hpt.n() > 0) { for (s_long i = _hpt.n() - 1; i >= 0; --i) { if (_hpt(i)->v.n_refs() <= 1) { _hpt.remove_i(i); } } }
+    if (b_1st)
+    {
+      for (s_long i = _hpt.n() - 1; i >= 0; --i) { cref_t<peer_tracker>& pt = _hpt(i)->v; pt->_cltpt_close(); } // initiates each peer tracker closing (fast)
+      b_1st = false;
+    }
+    if (_hpt.n() > 0) { for (s_long i = _hpt.n() - 1; i >= 0; --i) {
+      cref_t<peer_tracker>& pt = _hpt(i)->v;
+      if ((pt->_cltpt_close() || t1 - t0 > (__bmdx_disp_lq_cleanup_dtms + 200))  && pt.n_refs() <= 1) { _hpt.remove_i(i); }
+    } }
     if (_hpt.n() <= 0) { break; }
     sleep_mcs(1000);
   }
@@ -2001,7 +2221,7 @@ namespace bmdx
       // NOTE Defining __bmdx_char_case_tables 1 replaces certain part of usages, enabled by __bmdx_use_locale_t 1,
       //    but does not completely suppress them all.
 
-      #if defined (__FreeBSD__)
+      #if defined(__FreeBSD__)
         #define __bmdx_char_case_tables 1
         #define __bmdx_use_locale_t 1
         #define __bmdx_use_wcrtomb_l 1
@@ -2019,7 +2239,7 @@ namespace bmdx
         #define __bmdx_char_case_tables 0
         #define __bmdx_use_locale_t 0
         #define __bmdx_use_wcrtomb_l 0
-      #elif defined(__SUNPRO_CC) || defined (__sun)
+      #elif defined(__SUNPRO_CC) || defined(__sun)
         #define __bmdx_char_case_tables 1
         #define __bmdx_use_locale_t 0
         #define __bmdx_use_wcrtomb_l 0
@@ -9967,9 +10187,9 @@ std::string file_utils::expand_env_nr(const std::string& s) const
 
 bool file_utils::mk_subdir(const std::wstring& sPath) const { return xmk_subdir(wsToBs(sPath),0); }
 bool file_utils::mk_subdir(const std::string& sPath) const { return xmk_subdir(sPath,0); }
-unity file_utils::load_string(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd, unity& ret_s) const
-    { return load_string(format_string, bsToWs(sPath), pd, ret_s); }
-unity file_utils::load_string(const std::string& format_string, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, unity& ret_s) const
+unity file_utils::load_text(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd, unity& ret_s) const
+    { return load_text(format_string, bsToWs(sPath), pd, ret_s); }
+unity file_utils::load_text(const std::string& format_string, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, unity& ret_s) const
 {
   typedef unsigned char u_char;
 
@@ -9984,7 +10204,7 @@ unity file_utils::load_string(const std::string& format_string, const std::wstri
     if (!is_text && args[i] == "text") is_text = true;
     if (!is_local8bit && args[i] == "local8bit") { is_local8bit = true; encs.push_back(local8bit); }
     if (!is_utf16le && args[i] == "utf16le") { is_utf16le = true; encs.push_back(utf16le); }
-    if (!is_utf16be && args[i] == "utf16be") { is_utf16le = true; encs.push_back(utf16be); }
+    if (!is_utf16be && args[i] == "utf16be") { is_utf16be = true; encs.push_back(utf16be); }
     if (!is_lsb8bit && args[i] == "lsb8bit") { is_lsb8bit = true; encs.push_back(lsb8bit); }
   }
   bool is_successful = false; std::wstring s0;
@@ -10095,9 +10315,9 @@ lExitFor1:
     else { if (&ret_s!=&unity::_0nc) { ret_s.clear(); return false; } else { return unity(); } }
 }
 
-bool file_utils::save_string(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const throw()
-  { return save_string(format_string, str, bsToWs(sTargetFilePath), pd, sUserDefDir); }
-bool file_utils::save_string(const std::string& format_string, const std::wstring& s0, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const throw()
+bool file_utils::save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const throw()
+  { return save_text(format_string, str, bsToWs(sTargetFilePath), pd, sUserDefDir); }
+bool file_utils::save_text(const std::string& format_string, const std::wstring& s0, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const throw()
 {
   try {
     typedef unsigned char u_char;
@@ -10182,9 +10402,9 @@ bool file_utils::save_string(const std::string& format_string, const std::wstrin
   } catch (...) { return false; }
 }
 
-int file_utils::load_cstr(const std::wstring& fnp, std::string& dest) throw() { return file_io::load_bytes(wsToBs(fnp), dest); }
-int file_utils::load_cstr(const std::string& fnp, std::string& dest) throw() { return file_io::load_bytes(fnp, dest); }
-int file_utils::load_cstr(const char* fnp, std::string& dest) throw() { return file_io::load_bytes(fnp, dest); }
+int file_utils::load_bytes(const std::wstring& fnp, std::string& dest) throw() { return file_io::load_bytes(wsToBs(fnp), dest); }
+int file_utils::load_bytes(const std::string& fnp, std::string& dest) throw() { return file_io::load_bytes(fnp, dest); }
+int file_utils::load_bytes(const char* fnp, std::string& dest) throw() { return file_io::load_bytes(fnp, dest); }
 
   // Saves bytes from src to the given file.
   //    b_append == false truncates the file before writing, if it exists.
@@ -10193,10 +10413,10 @@ int file_utils::load_cstr(const char* fnp, std::string& dest) throw() { return f
   // 0 - failed to create file (or open the existing file for writing).
   // -1 - data size too large, or memory alloc. error, or wrong arguments.
   // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-int file_utils::save_cstr(const std::wstring& fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(wsToBs(fnp), src, b_append); }
-int file_utils::save_cstr(const std::string& fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(fnp, src, b_append); }
-int file_utils::save_cstr(const char* fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(fnp, src, b_append); }
-int file_utils::save_cstr(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) throw() { return file_io::save_bytes(fnp, pdata, n, b_append); }
+int file_utils::save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(wsToBs(fnp), src, b_append); }
+int file_utils::save_bytes(const std::string& fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(fnp, src, b_append); }
+int file_utils::save_bytes(const char* fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(fnp, src, b_append); }
+int file_utils::save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) throw() { return file_io::save_bytes(fnp, pdata, n, b_append); }
 
 bool file_utils::xHasCurDirShortCut(const std::wstring& sPath) { return sPath==L"." || sPath.substr(0,1+pslen)==L"."+wpathsep(); }
 bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath=="." || sPath.substr(0,1+pslen)=="."+cpathsep(); }
@@ -11000,6 +11220,7 @@ namespace
 {
   static const s_long _frqperm_msend_anlo = 0x20;
   static const s_long _frqperm_mget_anlo = 0x40;
+  static const s_long _frqperm_shmqueue_in_conf = 0x80;
 
   static const s_long _fl_mget_get_hashlist = 0x1;
   static const s_long _fl_mget_discard_msg = 0x2;
@@ -11292,8 +11513,8 @@ struct dispatcher_mt::cch_session
   :
     gm(0),
     exitmode(2),
-    ses_state(-1),
-    frqperm(0x7f),
+    ses_state(-2),
+    frqperm(0xff),
     __thm_lqsd(1), __thm_lmsc(1), __thm_nsc(1), __thm_cdcc(1),
     nprx(0),
     lqsd_dt(1000), qsd_prio(4)
@@ -11301,13 +11522,22 @@ struct dispatcher_mt::cch_session
 
   bmdx_shm::critsec_gn gm; // interprocess lock to ensure unique process name
   int exitmode;
-  volatile int ses_state; // -1 during initialization, 1 during the current session, 0 after the session
+    // -2 in _s_disp_ctor, when dispatcher session is not valid.
+    // -1 in _s_disp_ctor, when dispatcher session is initialized, and can handle subscription requests.
+    // 1 during the session.
+    // 0 after the session
+  volatile int ses_state;
+  void __set_ses_state(int st)
+  {
+    if (st == 1) { ses_state = st; if (lmsc) { lmsc->clt_set_ses_state(st); } }
+      else { if (lmsc) { lmsc->clt_set_ses_state(st); } ses_state = st; }
+  }
 
-    // Dflt. == 0x7f. Desc.: see dispatcher_mt frqperm();
+    // Dflt. == 0xff. Desc.: see dispatcher_mt frqperm();
   volatile s_long frqperm;
   unsigned char __thm_lqsd, __thm_lmsc, __thm_nsc, __thm_cdcc; // internal threads activity mode; NOTE all by dflt. = -1
-  void __thm_lqsd_enable() { if (th_lqsd) { __thm_lqsd = 2; } }
-  void __thm_lmsc_enable() { if (lmsc) { __thm_lmsc = 2; } }
+  void __thm_lqsd_enable_full() { if (th_lqsd) { __thm_lqsd = 2; } }
+  void __thm_lmsc_enable_full() { if (lmsc) { __thm_lmsc = 2; } }
 
     // Short-time lock for main cch_session members: hg_threads, hg_qs_disp, hg_lpai (for read/write); name_th_disp (for associated variable modification).
   critsec_t<dispatcher_mt>::csdata lkd_disp_ths;
@@ -11331,7 +11561,7 @@ struct dispatcher_mt::cch_session
   hashx<unity, unity> hg_lpai;
 
   critsec_t<dispatcher_mt>::csdata lkd_disp_nprx; // nprx incr/decr lock
-  volatile s_long nprx; // nprx counts the dispatcher_mt single object + all thread_proxy objects
+  volatile s_long nprx; // nprx counts the dispatcher_mt single object + all thread_proxy objects (and does NOT count LMSC and any other internal threads)
 
   meta::s_ll lqsd_dt; // (const) >= 0: global qs delivery period, mcs
 
@@ -11486,6 +11716,8 @@ private:
     //  Locking: any of weakref_t<t_htracking_proxy>::t_lock or refmaker_t<t_htracking_proxy>::t_lock (this is the same) during adding/removing/modifying hash map elements.
   refmaker_t<t_htracking_proxy> mtrk_htracking; // { msg id; strong refs. to tracking_info }
 
+    struct _hpt_conf_reset_lks {};
+  cref_t<hashx<unity, s_long> > _hpt_conf_reset; // for ~thread_proxy: hash key: peer tracker name, hash value: peer tracker queues conf. reset (ORed) flags: 0x1 - reset sender, 0x2 - reset receiver
 
   thread_proxy(const thread_proxy&); thread_proxy& operator=(const thread_proxy& x);
 
@@ -11495,13 +11727,13 @@ public:
     st_client = 0,
     st_s_subs_deliver = 1,
     st_lmsc = 2,
-    st_update_subs_input = 3, // request from _s_update_subs_lists to _s_subscribe
-    st_update_subs_output = 4 // request from _s_update_subs_lists to _s_subscribe
+    st_update_subs_input = 3, // direct call from _s_update_subs_lists to _s_subscribe
+    st_update_subs_output = 4 // direct call from _s_update_subs_lists to _s_subscribe
   };
 
   static s_long _s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw();
   static s_long _s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) throw();
-  static s_long _s_request(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, const std::wstring& _name_th, int frqperm, s_long flags) throw();
+  static s_long _s_request(thread_proxy* pprx, cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, int frqperm, s_long flags) throw();
   static s_long _s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) throw();
 
   static s_long _s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) throw();
@@ -11515,7 +11747,7 @@ public:
   static s_long _s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) throw();
   static s_long _s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) throw();
 
-  static void _s_thh_sig_stop(cch_session& rses) throw() { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
+  static void _s_thh_signal_stop(cch_session& rses) throw() { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
   static bool _s_thh_active(cch_session& rses) throw() { return rses.th_lqsd || rses.th_lmsc; }
 
   static void _s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) throw();
@@ -11713,8 +11945,22 @@ dispatcher_mt::thread_proxy::~thread_proxy()
   } catch (...) {} }
   if (_r_ths)
   {
+    dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
+    try {
+      if (rses.lmsc && this->_hpt_conf_reset)
+      {
+        critsec_t<_hpt_conf_reset_lks> __lock(10, -1); if (sizeof(__lock)) {}
+        const hashx<unity, s_long>& h = this->_hpt_conf_reset.ref();
+        for (s_long i = 0; i < h.n(); ++i)
+        {
+          s_long fl = h(i)->v;
+          if (fl & 0x1) { rses.lmsc->clt_qum_conf_reset(h(i)->k.rstr(), false, false); }
+          if (fl & 0x2) { rses.lmsc->clt_qum_conf_reset(h(i)->k.rstr(), true, false); }
+        }
+      }
+    } catch (...) {}
     critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths->lkd_disp_nprx); if (sizeof(__lock)) {}
-    if ((_r_ths->nprx -= 1) <= 0) { _r_ths->ses_state = 0; }
+    rses.nprx -= 1; if (rses.nprx <= 0) { rses.__set_ses_state(0); _s_thh_signal_stop(rses); } // the last proxy, on being released, ends dispatcher session
   }
   _r_ths.clear();
 }
@@ -11755,7 +12001,10 @@ s_long dispatcher_mt::thread_proxy::msend(const unity& msg, cref_t<t_stringref> 
     return res;
   }
 }
-s_long dispatcher_mt::thread_proxy::request(s_long rt, unity& retval, const unity& args, s_long flags) throw() { return _s_request(_r_ths, rt, retval, args, _name_th, _r_ths ? _r_ths.ref().frqperm : 0, flags); }
+s_long dispatcher_mt::thread_proxy::request(s_long rt, unity& retval, const unity& args, s_long flags) throw()
+{
+  return dispatcher_mt::thread_proxy::_s_request(this, _r_ths, rt, retval, args, _r_ths ? _r_ths.ref().frqperm : 0, flags);
+}
 s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0, s_long flags_cr) throw()
 {
   if (!_r_ths.has_ref()) { return -2; }
@@ -11825,7 +12074,7 @@ s_long dispatcher_mt::thread_proxy::subscribe(const unity& addr_qs, const unity&
 void dispatcher_mt::thread_proxy::th_lqsd_impl::_thread_proc()
 {
   const meta::s_ll sleep1_max = 5000; // 5 ms
-  const s_ll sleep_total_half_enabled = 100000; // 100 ms, until LQSD is enabled in full (rses.__thm_lqsd_enable())
+  const s_ll sleep_total_half_enabled = 100000; // 100 ms, until LQSD is enabled in full (rses.__thm_lqsd_enable_full())
 
   cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return; } cch_session& rses = *_r_ths._pnonc_u();
 
@@ -11833,7 +12082,7 @@ void dispatcher_mt::thread_proxy::th_lqsd_impl::_thread_proc()
   {
     s_ll nm = 0;
     try { dispatcher_mt::thread_proxy::_s_qs_deliver(_r_ths, std::wstring(), 2, &nm); } catch (...) {}
-    if (nm > 0) { rses.__thm_lqsd_enable(); }
+    if (nm > 0) { rses.__thm_lqsd_enable_full(); }
 
     s_ll sleep_total = rses.lqsd_dt;
     if (rses.__thm_lqsd < 2) { sleep_total = sleep_total_half_enabled; }
@@ -11930,11 +12179,11 @@ s_long dispatcher_mt::thread_proxy::th_lmsc_impl::cslph_update(vec2_t<tracking_i
 
 void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
 {
-  const double idle_toms = 3000; // 3 s
+  const double idle_toms = 3000; // timeout for entering sleepy state (sleep_total_long) due to inactivity
   const s_ll sleep_short = 50; // 50 mcs (until idle_toms passes in inactivity, then switches to sleep_total_long)
   const s_ll sleep1_long = 5000; // 5 ms (by this value, until sleep_total_long is accumulated)
   const s_ll sleep_total_long = 20000; // 20 ms
-  const s_ll sleep_total_half_enabled = 100000; // 100 ms, until LMSC is enabled in full (rses.__thm_lmsc = 2)
+  const s_ll sleep_total_half_enabled = __lm_slot_controller_qum_send_avl_wait_toms / 4; // until LMSC is enabled in full (rses.__thm_lmsc_enable_full()) - usually, on 1st incoming connection or outgoing message
 
   cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return; } cch_session& rses = *_r_ths._pnonc_u();
   cref_t<lm_slot_controller> lmsc = rses.lmsc; if (!lmsc) { return; }
@@ -11944,13 +12193,14 @@ void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
   {
     bool b_active = true;
     try {
-      const s_long st = lmsc->state();
+      const s_long st = lmsc->det_state();
       if (st == 1) { b_active = false; lmsc->det_periodic(*this, b_active); }
         else if (st == 0 || st == -2) { lmsc->det_init(); }
     } catch (...) {}
 
     s_ll sleep_total = sleep_short; s_ll sleep1 = sleep_short;
-    if (rses.__thm_lmsc < 2) { t_la = clock_ms(); sleep_total = sleep_total_half_enabled; sleep1 = sleep1_long; }
+    const bool b_halfen = rses.__thm_lmsc < 2;
+    if (b_halfen) { t_la = clock_ms(); sleep_total = sleep_total_half_enabled; sleep1 = sleep1_long; }
     else
     {
       if (b_active) { t_la = clock_ms(); }
@@ -11960,13 +12210,15 @@ void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
     const double t0 = clock_ms();
     while (true)
     {
-      if (rses.ses_state == 0 || rses.nprx <= 0) { goto lExit; }
+      if (b_stop() || rses.ses_state == 0 || rses.nprx <= 0) { goto lExit; }
       const s_ll dtmcs = bmdx_minmax::myllmin(sleep1, sleep_total - s_ll(1000 * (clock_ms() - t0)));
-      if (dtmcs < 0) { break; }
+      if (dtmcs < 0 || (b_halfen && !(rses.__thm_lmsc < 2))) { break; }
       sleep_mcs(dtmcs);
     }
   }
-lExit: lmsc.clear(); _r_ths.clear();
+lExit:
+  lmsc->det_close(); // this may delay up to approx. __bmdx_disp_lq_cleanup_dtms
+  lmsc.clear(); _r_ths.clear();
 }
 
   // Append values from array src to array dest.
@@ -12883,7 +13135,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
         }
         else if (dsln1[1] == L's') // qs
         {
-          rses.__thm_lqsd_enable();
+          rses.__thm_lqsd_enable_full();
           if (dsln1[0] == L'q')
           {
               // Creating subscription message.
@@ -12958,12 +13210,12 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
         {
           const bool b_assign_att_cref = (flags_msend & _fl_msend_anlo_att) && (flags_ses & _frqperm_msend_anlo);
           if (b_assign_att_cref) { att2 = att; }
-            else { try { att2 = i_dispatcher_mt::make_rba(att.ref(), true); } catch (...) { return -2; } }
+            else { try { att2 = i_dispatcher_mt::make_rba(att.ref(), true); } catch (...) {} if (!att2) { return -2; } }
         }
 
         if (dsln1[1] == L'i' || dsln1[1] == L's') // msg --> LMSC (peer's pi, qi, qs)
         {
-          rses.__thm_lmsc = 2;
+          rses.__thm_lmsc_enable_full();
           s_long res = rses.lmsc->clt_msend(id_msg, -1, flags_mtrk, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
               if (res < 1) { return res < -2 ? res : -2; }
           return 1;
@@ -12977,7 +13229,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
             s_long& s_ph = s_sl.phase;
             if (!(s_ph == 2)) { return -5; } // out of order
             if (cmdsrc != s_sl.r_lsrc.ref()) { return -1; }
-            rses.__thm_lmsc = 2;
+            rses.__thm_lmsc_enable_full();
             s_long res = rses.lmsc->clt_msend(id_msg, s_sl.id_msg_cmd, flags_mtrk, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
               if (res < 1) { return res < -2 ? res : -2; }
             s_sl.r_lsrc.clear(); s_sl.id_msg_cmd = -1; s_ph = 3;
@@ -13013,7 +13265,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
               s_long res = s_sl.r_haddrl->insert(cmdsrc, &e);
                 if (res == 0) { return -5; } // out of order
                 if (res != 1) { return -2; }
-              rses.__thm_lmsc = 2;
+              rses.__thm_lmsc_enable_full();
               res = rses.lmsc->clt_msend(id_msg, -1, flags_mtrk | 2, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
                 if (res < 1) { s_sl.r_haddrl->remove_e(e); return res < -2 ? res : -2; }
               _tr2.id_msg = -1; // prevents entry autoremoving from rses.htrk_csl
@@ -13025,7 +13277,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
               __csl_trk_rmv _tr2(rses, id_msg, _tr1); if (_tr2.id_msg < 1) { return -2; }
               s_long& s_ph = s_sl.phase;
               if (!(s_ph == 0 || s_ph == 6)) { return -5; }
-              rses.__thm_lmsc = 2;
+              rses.__thm_lmsc_enable_full();
               s_long res = rses.lmsc->clt_msend(id_msg, -1, flags_mtrk | 2, name_peer, wmsg, att2, flags_clt_msend, rhtrprx);
                 if (res < 1) { return res < -2 ? res : -2; }
               _tr2.id_msg = -1; // prevents entry autoremoving from rses.htrk_csl
@@ -13037,6 +13289,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
       }
       else if (sender_type == st_lmsc)
       {
+        rses.__thm_lmsc_enable_full();
         if (!da.isLM()) { return -1; }
         std::wstring ssln1;
         res = __recode_slotname(sa.sln_v(), 0, &ssln1, 0, &da); // (in _s_write)
@@ -13176,7 +13429,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
         }
         else if (dsln1[1] == L's') // LMSC --> qs
         {
-          rses.__thm_lqsd_enable();
+          rses.__thm_lqsd_enable_full();
           if (dsln1[0] == L'q')
           {
               // Creating subscription message.
@@ -13205,8 +13458,8 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
   return -2;
 }
 
-  // empty _name_th means the call directly from dispatcher_mt (not associated with any thread).
-s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, const std::wstring& _name_th, int frqperm, s_long flags_rq) throw()
+  // pprx == 0 means the call directly from dispatcher_mt (not associated with any thread).
+s_long dispatcher_mt::thread_proxy::_s_request(thread_proxy* pprx, cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, int frqperm, s_long flags_rq) throw()
 {
   retval.clear();
   if (!_r_ths.has_ref()) { return -2; }
@@ -13293,7 +13546,7 @@ s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session
   case 8: // deliver messages
     try {
       if (!args.isInt()) { return -5; }
-      s_long res = dispatcher_mt::thread_proxy::_s_qs_deliver(_r_ths, _name_th, args.vint_l(), 0);
+      s_long res = dispatcher_mt::thread_proxy::_s_qs_deliver(_r_ths, pprx ? pprx->_name_th : std::wstring(), args.vint_l(), 0);
       if (res >= 0) { res = 1; }
         else if (res != -3) { res = -2; }
       return res;
@@ -13312,7 +13565,7 @@ s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session
       cref_t<cch_slot> rcmd_sl;
       if (1)
       {
-        mst_semaphore ms_s(rses, _name_th); hangdet hd;
+        mst_semaphore ms_s(rses, pprx ? pprx->_name_th : std::wstring()); hangdet hd;
         int bf = 0; while (true) { if (hd) { bf = 2; break; } int res = ms_s.r_sl(k_sl, rcmd_sl); if (res < 0) { bf = 1; break; } if (res > 0) { break; } sleep_mcs(50); }
         if (bf != 0) { return -2; }
       }
@@ -13335,6 +13588,153 @@ s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session
       }
       return 1;
     } catch (...) { return -2; }
+  case dispatcher_mt_rt::set_shmqueue_conf: // 10
+  {
+    bool b_clear_rv = true;
+    try {
+      using namespace bmdx_shm;
+      retval.clear();
+      if ((frqperm & _frqperm_shmqueue_in_conf) == 0) { return -4; }
+      if (!args.isAssoc()) { return -5; }
+      if (!rses.lmsc) { return -6; }
+
+      const unity k_peer_name = L"peer_name";
+      const unity kf_set_al_in = L"conf_set_al_in";
+      const unity kf_set_lqcap = L"conf_set_lqcap";
+
+        if (!(args.u_has(k_peer_name, 6) && args[k_peer_name].isString())) { return -5; }
+        const unity& prnm = args[k_peer_name];
+
+        const unity* pa_set_al = args.u_has(kf_set_al_in, 6) ? &args[kf_set_al_in] : 0;
+        const unity* pa_set_lqcap = args.u_has(kf_set_lqcap, 6) ? &args[kf_set_lqcap] : 0;
+          if (!(pa_set_al || pa_set_lqcap)) { return 0; }
+
+      const unity ka_al = L"p_al";
+      const unity ka_tmo = L"timeout_ms";
+      const unity ka_b_rcv = L"b_receiver";
+      const unity ka_ncapmin = L"ncapmin";
+      const unity ka_ncapmax = L"ncapmax";
+      const unity ka_nrsv = L"nrsv";
+
+        bool b_receiver = true;
+        s_ll ncapmin = -3, ncapmax = -3, nrsv = -3;
+        double tmo_lqcap = -1;
+          if (pa_set_lqcap)
+          {
+            b_receiver = !!((*pa_set_lqcap)[ka_b_rcv].vint()); // NOTE ka_b_rcv key is required here
+            tmo_lqcap = +*pa_set_lqcap / ka_tmo / -1.;
+            ncapmin = +*pa_set_lqcap / ka_ncapmin / -3ll;
+            ncapmax = +*pa_set_lqcap / ka_ncapmax / -3ll;
+            nrsv = +*pa_set_lqcap / ka_nrsv / -3ll;
+          }
+        if (pa_set_al && !b_receiver) { return -5; } // conf_set_al_in request is not valid for sender side
+
+        cref_t<i_allocctl> empty;
+        double tmo_al = -1;
+        const cref_t<i_allocctl>* p_al = 0;
+          if (pa_set_al)
+          {
+            tmo_al = +*pa_set_al / ka_tmo / -1.;
+            if (pa_set_al->u_has(ka_al, 6))
+            {
+              const unity& r = (*pa_set_al)[ka_al];
+              if (r.isEmpty()) { p_al = &empty; }
+                else { p_al = (*pa_set_al)[ka_al].objPtr_c<cref_t<i_allocctl> >(true, false); }
+              if (!p_al) { return -2; }
+            }
+          }
+
+      bool b_c_rst_proxy = pprx && !!(flags_rq & 1);
+      if (b_c_rst_proxy)
+      {
+        try {
+          critsec_t<_hpt_conf_reset_lks> __lock(10, -1); if (sizeof(__lock)) {}
+          if (!pprx->_hpt_conf_reset) { pprx->_hpt_conf_reset.create0(0); }
+          pprx->_hpt_conf_reset->opsub(prnm); // ensure key existence
+        } catch (...) { return -2; }
+      }
+
+      bool b_any_succ = false;
+      bool b_all_succ = true;
+      if (b_receiver)
+      {
+
+        unity& r_ret_al = retval(kf_set_al_in);
+        unity& r_ret_lqcap = retval(kf_set_lqcap);
+        s_long res_al = 0;
+        s_long res_lqcap = 0;
+        s_long res2 = rses.lmsc->clt_qum_conf_set_rcv(prnm.vstr(), !!pa_set_al, !!pa_set_lqcap, res_al, res_lqcap, p_al, tmo_al, ncapmin, ncapmax, nrsv, tmo_lqcap);
+        if (res2 == 1)
+        {
+          if (pa_set_al) { r_ret_al = res_al; if (res_al >= 0) { b_any_succ = true; } else { b_all_succ = false; }  }
+          if (pa_set_lqcap) { r_ret_lqcap = res_lqcap; if (res_lqcap >= 0) { b_any_succ = true; } else { b_all_succ = false; } }
+        }
+      }
+      else
+      {
+        unity& r_ret_lqcap = retval(kf_set_lqcap);
+        s_long res_lqcap = 0;
+        s_long res2 = rses.lmsc->clt_qum_conf_set_send(prnm.vstr(), res_lqcap, ncapmin, ncapmax, nrsv, tmo_lqcap);
+        if (res2 == 1)
+        {
+          if (pa_set_lqcap) { r_ret_lqcap = res_lqcap; if (res_lqcap >= 0) { b_any_succ = true; } else { b_all_succ = false; } }
+        }
+      }
+      b_clear_rv = false;
+
+      if (b_c_rst_proxy && b_any_succ)
+      {
+        try {
+          critsec_t<_hpt_conf_reset_lks> __lock(10, -1); if (sizeof(__lock)) {}
+          pprx->_hpt_conf_reset->opsub_c(prnm) |= b_receiver ? 0x2 : 0x1; // mark that shmqueue conf. must be reset on proxy exit
+        } catch (...) {} // an exception is not expected (prnm key ensured above)
+      }
+
+      s_long res = 1;
+      if (!b_all_succ) { res = -7; }
+      return res;
+    } catch (...) { if (b_clear_rv) { retval.clear(); } return -2; }
+  }
+  case dispatcher_mt_rt::get_qs_nvsubs: // 13
+  {
+    try {
+      address qsa;
+      s_long res;
+      res = qsa.set_addr(args); if (res != 1) { return res == -1 ? -5 : -2; }
+      if (!qsa.isLP_any()) { return -5; } // the request isn't working on non-local addresses
+
+      rses.__thm_lqsd_enable_full();
+      address __qsa_deref;
+      const address* pqsa = &qsa;
+      cref_t<cch_slot> rqs_sl; std::wstring sln_s = qsa.wstr_sln();
+      if (qsa.isLPA())
+      {
+        std::wstring thn_qs;
+        if (1)
+        {
+          critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
+          const hashx<unity, unity>::entry* e1 = rses.hg_lpai.find(sln_s); if (!e1) { return -6; }
+          thn_qs = e1->v.vstr();
+        }
+        if (__qsa_deref.set_addr_LP(thn_qs, sln_s) != 1) { return -2; }
+        pqsa = &__qsa_deref;
+      }
+      mst_semaphore ms(rses, pqsa->wstr_thn());
+      hangdet hd; while (true) { if (hd) { return -2; } int res = ms.r_sl(sln_s, rqs_sl); if (res < 0) { return -6; } if (res > 0) { break; } sleep_mcs(50); }
+
+      cch_slot& qs_sl = *rqs_sl._pnonc_u();
+      cch_slot::t_haddrl* ph1(0);
+      if (1)
+      {
+        critsec_t<dispatcher_mt> __lock(10, -1, &qs_sl.lkd); if (sizeof(__lock)) {}
+        ph1 = qs_sl.r_haddrl._pnonc_u(); if (!ph1) { return -2; }
+        const s_long n = ph1->n();
+        if (flags_rq & 1) { retval.arr_init<utStringArray>(0);  for (s_long i = 0; i < n; ++i) { retval.arr_append((*ph1)(i)->k); } }
+          else { retval = n; }
+        return 1;
+      }
+    } catch (...) { retval.clear(); return -2; }
+  }
   default: { return -1; }
   }
 }
@@ -13349,7 +13749,10 @@ s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session
   //    b) st_lmsc: qsa must be local (LP or LPA) address, suba must be non-local address.
   //      id_rq_subs, prhtrprx: ignored, may be -1, 0.
   //      For st_lmsc, it is the client responsibility to send _s_subscribe ret. code back to non-local client.
-  //    c, d) st_update_subs_input, st_update_subs_output: for calling from _s_update_subs_lists.
+  //        NOTE This case may occur during dispatcher late initialization and any time later.
+  //    c, d) st_update_subs_input, st_update_subs_output:
+  //        for direct calling from _s_update_subs_lists.
+  //        NOTE This case may occur during dispatcher early initialization and any time later.
   //      id_rq_subs: must be generated (!= -1).
   //      prhtrprx: ignored, should be 0. rses.lmsc->clt_mdsend will be anyway called with empty rhtrprx arg.
   // pret_destloc:
@@ -13360,8 +13763,11 @@ s_long dispatcher_mt::thread_proxy::_s_request(cref_t<dispatcher_mt::cch_session
 s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) throw()
 {
   if (!_r_ths.has_ref()) { return -2; }
-  if ((sender_type == st_client || sender_type == st_lmsc) && _r_ths.ref().ses_state != 1) { return -3; }
   cch_session& rses = *_r_ths._pnonc_u();
+  int _sst = rses.ses_state;
+  if (sender_type == st_client) { if (!(_sst == 1)) { return -3; } }
+    else if (sender_type == st_lmsc) { if (!(_sst == 1 || _sst == -1)) { return -3; } }
+    else { if (!(_sst == 1 || _sst < 0)) { return -3; } }
   try {
     if (pret_destloc) { *pret_destloc = 0; }
     const std::wstring ssln1 = qsa.wstr_sln_1();
@@ -13380,7 +13786,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
       if (qsa.isLP_any()) // subscribe to local address (immediate result)
       {
         if (pret_destloc) { *pret_destloc = 1; }
-        rses.__thm_lqsd_enable();
+        rses.__thm_lqsd_enable_full();
         address __qsa_deref;
         const address* pqsa = &qsa;
         cref_t<cch_slot> rqs_sl; std::wstring sln_s = qsa.wstr_sln();
@@ -13469,7 +13875,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
         }
 
           // Request non-local qs slot output list update or check.
-        rses.__thm_lmsc = 2;
+        rses.__thm_lmsc_enable_full();
         s_long res = rses.lmsc->clt_mdsend(id_rq_subs, qsa.wstr_pn(), rmb.ref(), *prhtrprx, 1);
           if (res < 0) { return res; }
           if (res > 0) { return 0; }
@@ -13484,7 +13890,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
       if (!qsa.isLM()) { return -1; }
       if (rt < 4) // request from non-local slot to local qs slot
       {
-        rses.__thm_lqsd_enable();
+        rses.__thm_lqsd_enable_full();
 
         cref_t<cch_slot> rqs_sl; std::wstring sln_s = qsa.wstr_sln();
         mst_semaphore ms(rses, qsa.wstr_thn());
@@ -13560,7 +13966,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
         cref_t<netmsg_header::msg_builder> rmb = netmsg_header::mdd_subs_request::make_msg(rt + 3, id_rq_subs, qsa2.wstr_addr(), suba.wstr_addr()); // rt 1, 2 is converted to 4, 5, as required by branch sender_type == st_lmsc (see above)
           if (!rmb) { return -2; }
           // Request non-local qs slot output list update or check.
-        rses.__thm_lmsc = 2;
+        rses.__thm_lmsc_enable_full();
         s_long res = rses.lmsc->clt_mdsend(id_rq_subs, suba.wstr_pn(), rmb.ref(), weakref_t<t_htracking_proxy>(), -1); // comm_mode == -1 because the client (_s_update_subs_lists) already waited for comm. establishing
           if (res < 0) { return res; }
           if (res > 0) { return 0; }
@@ -13605,7 +14011,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
         cref_t<netmsg_header::msg_builder> rmb = netmsg_header::mdd_subs_request::make_msg(rt, id_rq_subs, qsa.wstr_addr(), suba2.wstr_addr());
           if (!rmb) { return -2; }
           // Request non-local qs slot output list update or check.
-        rses.__thm_lmsc = 2;
+        rses.__thm_lmsc_enable_full();
         s_long res = rses.lmsc->clt_mdsend(id_rq_subs, qsa.wstr_pn(), rmb.ref(), weakref_t<t_htracking_proxy>(), -1); // comm_mode == -1 because the client (_s_update_subs_lists) already waited for comm. establishing
           if (res < 0) { return res; }
           if (res > 0) { return 0; }
@@ -13785,7 +14191,6 @@ s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_se
       }
     cch_slot& qs_sl = *r_qs._pnonc_u();
 
-    vec2_t<cch_slot::t_qus::t_value> msgs;
     cch_slot::t_haddrl hsubs;
     cref_t<vnnqueue_t<cch_slot::qs_value, __vecm_tu_selector>, cref_nonlock> r_qus;
     s_ll nmsg = 0, nmsgdone = 0;
@@ -13837,6 +14242,7 @@ s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_se
               hmsg.assoc_set(k_trg0, da_msg, false);
             }
           } catch (...) { continue; }
+
           dispatcher_mt::thread_proxy::_s_write(_r_ths, _name_th, hmsg, qsv.att, st_s_subs_deliver, _fl_msend_anlo_msg | _fl_msend_anlo_att, false, -1, -1, 0, 0);
         }
         if (pnmsent) { ++*pnmsent; }
@@ -14479,9 +14885,9 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::c
 void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) throw()
 {
   if (!(pdisp && process_name.is_valid())) { return; }
-  if (!(_cfg0.isString() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return; }
-  unity _cfg1; try { if (_cfg0.isString()) { paramline().decode_tree(_cfg0.vstr(), _cfg1, 0x3a); } } catch (...) { return; }
-  const unity& cfg = _cfg0.isString() ? _cfg1 : _cfg0;
+  if (!(_cfg0.isString() || _cfg0.isEmpty() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return; }
+  unity _cfg1; try { if (_cfg0.isString()) { paramline().decode_tree(_cfg0.vstr(), _cfg1, 0x3a); } else if (_cfg0.isEmpty()) { _cfg1.u_clear(utHash); } } catch (...) { return; }
+  const unity& cfg = _cfg1.isHash() ? _cfg1 : _cfg0;
 
   if (!pdisp->_r_ths.create0(true)) { return; }
     pdisp->_r_ths->nprx += 1;
@@ -14509,17 +14915,17 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
     if (!thread_proxy::pnchk(process_name)) { b = false; break; }
     rses.name_pr.assign(process_name.pd(), _t_wz(process_name.n()));
 
-    if (1) { meta::s_ll q = +cfg / kg_exitmode / 2ll; if (!(q >= 0 && q <=2)) { b = false; break; } rses.exitmode = (int)q; }
+    if (1) { meta::s_ll q = +cfg / kg_exitmode / 2ll; if (!(q >= 0 && q <= 2)) { b = false; break; } rses.exitmode = (int)q; }
     if (1) { meta::s_ll q = +cfg / kg_lqsd_dt / -1ll; if (q >= 0) { rses.lqsd_dt = q; } }
-    if (1) { meta::s_ll q = +cfg / kg_msend_anlo / -1ll; if (q >= 0) { const s_long m = _frqperm_msend_anlo; volatile s_long& f = rses.frqperm; if (q > 0) { f |= m; } else { f &= ~m; } } }
-    if (1) { meta::s_ll q = +cfg / kg_mget_anlo / -1ll; if (q >= 0) { const s_long m = _frqperm_mget_anlo; volatile s_long& f = rses.frqperm; if (q > 0) { f |= m; } else { f &= ~m; } } }
+    if (1) { meta::s_ll q = +cfg / kg_msend_anlo / -1ll; if (!(q >= -1 && q <= 1)) { b = false; break; } if (q >= 0) { const s_long m = _frqperm_msend_anlo; volatile s_long& f = rses.frqperm; if (q > 0) { f |= m; } else { f &= ~m; } } }
+    if (1) { meta::s_ll q = +cfg / kg_mget_anlo / -1ll; if (!(q >= -1 && q <= 1)) { b = false; break; } if (q >= 0) { const s_long m = _frqperm_mget_anlo; volatile s_long& f = rses.frqperm; if (q > 0) { f |= m; } else { f &= ~m; } } }
     if (1) { meta::s_ll q = +cfg / kg_thm_lqsd / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_lqsd = (unsigned char)q; } }
     if (1) { meta::s_ll q = +cfg / kg_thm_lmsc / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_lmsc = (unsigned char)q; } }
     if (1) { meta::s_ll q = +cfg / kg_thm_nsc / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_nsc = (unsigned char)q; } }
     if (1) { meta::s_ll q = +cfg / kg_thm_cdcc / -1ll; if (q > 2) { b = false; break; } if (q >= 0) { rses.__thm_cdcc = (unsigned char)q; } }
     s_ll _lmsc_nb_qum = +cfg / kg_lmsc_nb_qum / -1ll;
     s_ll _lmsc_nb_qinfo = +cfg / kg_lmsc_nb_qinfo / -1ll;
-    unity _lmsc_peers = +cfg / kg_lmsc_peers / unity(); if (!(_lmsc_peers.isEmpty() || _lmsc_peers.utype() == utUnityArray || _lmsc_peers.utype() == utStringArray)) { _lmsc_peers.clear(); }
+    unity _lmsc_peers = +cfg / kg_lmsc_peers / unity(); if (!(_lmsc_peers.isEmpty() || _lmsc_peers.utype() == utUnityArray || _lmsc_peers.utype() == utStringArray || _lmsc_peers.isAssoc())) { _lmsc_peers.clear(); }
     bool _lmsc_chsbin = +cfg / kg_lmsc_chsbin / false;
 
     if (flags_ctor & dispatcher_mt_flags::disp_off_th_lqsd) { rses.__thm_lqsd = 0; }
@@ -14554,10 +14960,11 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
     if (rses.__thm_lmsc > 0)
     {
       if (!rses.lmsc.create4(1, rses.name_pr, _lmsc_nb_qum, _lmsc_nb_qinfo, _lmsc_peers)) { b = false; break; }
-      rses.lmsc->setparam_chsbin(_lmsc_chsbin);
+      rses.lmsc->clt_setparam_chsbin(_lmsc_chsbin);
       rses.lmsc->det_init(); // 1st-time init., not critical if fails: it is periodically repeated by th_lmsc_impl, when necessary
     }
 
+    rses.__set_ses_state(-1); // setting session state to "late initialization", to be able to handle subscription requests from IPC
     if (rses.__thm_lqsd > 0) { if (!rses.th_lqsd.start_auto<thread_proxy::th_lqsd_impl>(pdisp->_r_ths)) { b = false; break; } }
     if (rses.__thm_lmsc > 0) { if (!rses.th_lmsc.start_auto<thread_proxy::th_lmsc_impl>(pdisp->_r_ths)) { b = false; break; } }
 
@@ -14570,11 +14977,12 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
     break;
   } } catch (...) { b = false; }
 
-  if (b) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {} rses.ses_state = 1; }
+  if (b) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {} rses.__set_ses_state(1); } // starting the dispatcher session
   else
   {
+    rses.__set_ses_state(0); // dispatcher session ends due to initialization error
     if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {} rses.nprx -= 1; }
-    _s_thh_sig_stop(rses); while (_s_thh_active(rses)) { sleep_mcs(100); }
+    _s_thh_signal_stop(rses); while (_s_thh_active(rses)) { sleep_mcs(100); }
     pdisp->_r_ths.clear();
   }
 }
@@ -14586,8 +14994,7 @@ void dispatcher_mt::thread_proxy::_s_disp_dtor(dispatcher_mt* pdisp) throw()
     cch_session& rses = *pdisp->_r_ths._pnonc_u();
     int e = rses.exitmode;
     critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {}
-    rses.nprx -= 1;
-    if (e > 0 || rses.nprx <= 0) { rses.ses_state = 0; _s_thh_sig_stop(rses); }
+    rses.nprx -= 1; if (e > 0 || rses.nprx <= 0) { rses.__set_ses_state(0); _s_thh_signal_stop(rses); } // dispatcher session ends due to ~dispatcher_mt()
   }
   if (pdisp->_r_ths)
   {
@@ -14663,7 +15070,7 @@ void dispatcher_mt::end_session() throw()
 {  if (_r_ths)  {
     cch_session& rses = *_r_ths._pnonc_u();
     critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {}
-    rses.ses_state = 0;
+    rses.__set_ses_state(0); dispatcher_mt::thread_proxy::_s_thh_signal_stop(rses); // dispatcher session ends because dispatcher_mt::end_session() is called y client
 } }
 bool dispatcher_mt::frqperm(s_long& f, bool b_get, bool b_set) const throw()
 {
@@ -14676,7 +15083,7 @@ s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<wchar_t> _name_th) const
 s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<char> _name_th) const throw() { if (!_name_th.is_valid()) { return -2; } try { return thread_proxy::_s_proxy_new(_r_ths, dest, bsToWs(_name_th.pd(), _name_th.n())); } catch (...) {} return -2; }
 
 s_long dispatcher_mt::request(s_long rt, unity& retval, const unity& args, s_long flags) throw()
-  { try { return thread_proxy::_s_request(_r_ths, rt, retval, args, std::wstring(), -1, flags); } catch (...) { return -2; } }
+  { try { return thread_proxy::_s_request(0, _r_ths, rt, retval, args, -1, flags); } catch (...) { return -2; } }
 
 } // bmdx ns
 

@@ -1,4 +1,4 @@
-// rev. 2020-04-20
+// rev. 2020-05-16
 =======================================================================================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 =======================================================================================================================
@@ -852,6 +852,34 @@ On messaging performance and internal locking of dispatcher_mt objects.
     pre-communicate with other processes, speed up periodic internal operations.
     E.g. see params. caporig, __thm_lmsc (= 2), __lmsc_peers, __lqsd_dt.
 
+  Note about performance optimization.
+    By default, the dispatcher does not transfer any cross-module objects,
+      for max. safety.
+    But
+      a) applications, sending large messages or binary data,
+      b) applications, exchanging user-defined objects inside one process,
+    may want to use anlo_msg, anlo_att flags, to selectively disable binary data copying and user-defined objects removal.
+    The objects, passed this way, may reside in 3 locations:
+      1) inside dispatcher_mt session object,
+      2) in any application-defined communicating client,
+      3) in the local (in-process) queue, associated with shared memory (shmqueue_s),
+        before being sent to another process.
+      For (1, 3), dispatcher_mt ensures objects releasing as part of dispatcher session object releasing.
+        This occurs when session object is not used anymore by any side.
+        This works safely only if the client does not forcefully terminate any of communication threads
+        (which would leave proxy object, referring to session object, unreleased).
+      Case (2) is not controlled by the dispatcher, and is pure client's responsibility.
+    Additional kinds of objects that may be used in cross-module context:
+      4) message and subscription tracking objects.
+        dispatcher_mt holds such objects no longer than until proxy, through which they were supplied, is released.
+      5) custom allocators for shared queue's incoming messages.
+        Depending on parameters, specified on its setting, custom allocator lives
+          a) until proxy, through which it is set, is released,
+          b) until dispatcher_mt session object is released.
+    Based on all the above, for an object, created in a shared library, and passed through dispatcher,
+      the client must ensure that that library is not unloaded while the object
+      is held by any other module.
+
 
 === Dispatcher configuration: root level ===
 
@@ -1022,21 +1050,18 @@ On messaging performance and internal locking of dispatcher_mt objects.
 
     __msend_anlo = <X (optional integer or boolean, default == -1)>
     __mget_anlo = X
-      Per-dispatcher_mt setting for binary objects by-reference passing into msend and mget.
+      Per-dispatcher_mt setting for forced disabling binary objects by-reference handling in msend and mget.
+      X == 1, true, or not specified (dflt.): mget/msend behave according to their anlo_msg, anlo_att flags setting in each call.
+      X == 0 or false: mget/msend ignore their anlo_msg, anlo_att flags, and behave as if both flags were 0.
+      X == -1: see X == 1.
+      X out of [-1..1]: bad argument.
       NOTE "anlo" = "allow non-local objects"
-      X == true or 1 (dflt.): allow dispatcher accepting (msend) or returning to client (mget) non-local binary message attachments.
-        Usage: when both anlo flags are set + appropriate anlo_msg or anlo_att flags are set for both msend() and corresponding mget()
-          by communicating clients, the original sender's binary objects are transparently passed to the recipient (i.e. by reference).
-          NOTE In case of shared libraries communication, since anlo_* flags of msend() and mget() are 0 by default,
-            the clients only are responsible for enabling by-ref. objects passing, and for object lifetime control against its creating
-            shared library lifetime. See also  msend(), mget().
-      X == false or 0:
-        Non-local objects passing is disabled. Where applicable, a copy of such objects is made by dispatcher_mt,
-          to satisfy anlo flag(s) setting. If both anlo flags are false,
-          dispatcher_mt object internally does not contain any objects from client binary modules,
-          and may be exited at any time, and application-specific control of client shared library unloading is not required.
-      X < 0 or __mget_anlo key is not specified: see X == true.
-      X > 1: bad argument.
+      NOTE These settings are useful only in the program with multiple shared libraries communicating.
+        Their purpose is to prevent objects, created in binary module A, getting into the dispatcher
+        and/or into the receiving binary module (B), which may be different from A.
+        For binary attachments, prevention means that a copy of attachment is created.
+        Memory for the copy is allocated inside the dispatcher or the receiving module,
+        so that the sending module may be safely unloaded at any time after this copying.
 
 
   Configuration parameters / per-dispatcher_mt / related to internal threads of the dispatcher:
@@ -1084,30 +1109,34 @@ On messaging performance and internal locking of dispatcher_mt objects.
 
   Configuration parameters / per-dispatcher_mt / related to IPC-based delivery (LMSC):
 
-    __lmsc_nb_rqum = <X (optional integer, default == 200 * 1024)>
+    __lmsc_nb_rqum = <X (optional integer, default == value of __lm_slot_controller_nb_rqum_dflt)>
       X: number of bytes for receiving shared queue for user messages.
       Dflt. value is defined as macro __bmdx_shmfifo_nbytes_dflt.
       X is automatically limited by min./max. values, defined as macros
         __lm_slot_controller_nb_rqum_min, __lm_slot_controller_nb_rqum_max.
 
-    __lmsc_nb_rqinfo = <X (optional integer, default == 100 * 1024)>
+    __lmsc_nb_rqinfo = <X (optional integer, default == value of __lm_slot_controller_nb_rqum_dflt)>
       X: number of bytes for receiving shared queue for internal technical messages.
       Dflt. value is defined as macro __bmdx_shmfifo_nbytes_dflt.
       X is automatically limited by min./max. values, defined as macros
         __lm_slot_controller_nb_rqinfo_min, __lm_slot_controller_nb_rqinfo_max.
 
     __lmsc_peers = <L>
-      L: a list of peer process names, with which internal communication must be started at once on dispatcher construction.
+      L: a list (array or associative array (keys only)) of peer process names,
+        with which internal communication must be started at once on dispatcher construction.
         Dflt. L is empty.
         If a peer is not listed in L, the communication begins automatically on the first message sending
         between the current dispatcher and the peer (in any direction),
-        which causes some extra delay in msend (of order 100 ms).
+        which causes some extra delay in msend (of order 150 ms).
+        NOTE If the target system works in stress conditions, it's recommended
+          to explicitly specify the list of peers (__lmsc_peers) in all communicating processes.
 
     __lmsc_chsbin = <B>
       B: boolean value:
         true: for binary attachments of interprocess messages, calculate/verify checksums on message sending/receival.
         false (dflt.): do not calculate/verify checksums for binary attachments.
         See also: msend use_chsbin flag.
+
 
 === Examples of configuration ===
 
@@ -1260,3 +1289,56 @@ On messaging performance and internal locking of dispatcher_mt objects.
       Some cases of invalid correspondence:
         |po_1|A --x--> pi_1, qi_1, qs_1, |qi_1|A|B|C
         |pbo_1|A, |hbo_1|A <--x--> pbi_1, qbi_1
+
+
+=== Examples of the simplest communication programs ===
+
+  1. Low-level plain bytearray transfer.
+    Uses only shmqueue_s from bmdx_cpiomt.h.
+
+    SERVER
+
+      #include "bmdx_cpiomt.h"
+      #include <iostream>
+      int main (int, char**) { try { std::cout << bmdx_shm::shmqueue_s("handshake").mget_str(20000) << "\n"; } catch (...) {} return 0; }
+
+    CLIENT
+
+      #include "bmdx_cpiomt.h"
+      int main (int, char**) { bmdx_shm::shmqueue_s q("handshake"); return !(q.msend("Hello, server!", 20000) == 2 && q.lqwait_out(1000) == 0); }
+
+      NOTE For more than one client, started when server is absent, all clients but one (random) will exit, based on concurrency.
+
+  2. High-level message transfer.
+    Uses whole BMDX library.
+
+    SERVER
+
+      #include "bmdx_main.h"
+      #include <iostream>
+      int main (int, char**)
+      {
+        using namespace bmdx;
+        dispatcher_mt disp("server", "=|y|slots|qi_1");
+        unity prx; disp.new_proxy(prx, "y");
+        unity msg;
+        try { while (1 != prx.pinterface<i_dispatcher_mt>()->mget("qi_1", msg))
+          { sleep_mcs(10000); } } catch (...) {}
+
+        std::cout << msg.vcstr() << "\n";
+        return msg.isEmpty() ? 1 : 0;
+      }
+
+    CLIENT
+
+      #include "bmdx_main.h"
+      int main (int, char**)
+      {
+        using namespace bmdx;
+        dispatcher_mt disp("client", "=|x|slots|po_1");
+        unity prx; disp.new_proxy(prx, "x");
+        int res = 0;
+        try { while (-2 == (res = prx.pinterface<i_dispatcher_mt>()->msend("src=po_1; trg=|LM|server|y|qi_1; text=Hello, server!")))
+          { sleep_mcs(10000); } } catch (...) {}
+        return res == 1 ? 0 : 1;
+      }

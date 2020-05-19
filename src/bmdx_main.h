@@ -1,7 +1,7 @@
-// BMDX library 1.3 RELEASE for desktop & mobile platforms
+// BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-04-20
+// rev. 2020-05-16
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -1711,7 +1711,7 @@ namespace bmdx
       //    cref() family is analogous to val(), but it does not make any copies when the contained object
       //    may be accessed directly by reference.
       //  NOTE If the object is from other binary module, and it contains incompatible string,
-      //    the returned cref_t will reference a copy of that string, created in the current module.
+      //    the returned cref_t will reference a copy of that string, dynamically created in the current module.
       //  Possible exceptions: (rare) XUExec on alloc. error for the default value creation / copy.
     template<int utt> inline cref_t<typename valtype_t<utt>::t>
       cref(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>()) const                {
@@ -4472,30 +4472,39 @@ namespace
     bool mk_subdir(const std::string& sPath) const;
 
 
-      // Loads whole file into the string.
+      // Loads whole file into wide-character string.
       // Returns:
       //    On success: string with the loaded characters (but see also ret_s).
       //    On failure or wrong args.: utEmpty.
       // format_string should contain
-      //    1) one of "binary" or "text". "text" is different in:
-      //      1.1) auto-converts single \r and \n into \r\n,
-      //      1.2) analyzes 0xfeff tag on loading UTF-16, but does not insert it into string.
+      //    1) one of "binary" or "text".
+      //      For "binary", the input data is treated as plain array of bytes,
+      //        which should be converted into string according to the specified or guessed encoding.
+      //      "text" is different in:
+      //        1.1) auto-converts input's single \r and \n into \r\n,
+      //        1.2) takes into account BOM (0xfeff tag in UTF-16),
+      //          but does not insert it into ret_s.
       //    2) one or more encodings to try: "local8bit", "utf16le", "utf16be", "lsb8bit".
-      //    NOTE local8bit, if allowed and all others do not match, is used as the default encoding.
+      //    NOTE local8bit (meaning system-default locale, see also bsToWs()),
+      //      if allowed and all others do not match, is used as the default encoding.
       //    NOTE lsb8bit (read raw bytes as lower byte of wchar_t) suppresses local8bit.
       //    NOTE Any unknown parts of format_string are ignored.
       // ret_s: if unity object is passed into ret_s, it is assigned the loaded string,
-      //    and load_string itself returns boolean value (success/failure).
+      //    and load_text itself returns boolean value (success/failure).
       // pd: see complete_path.
       // NOTE To load UTF-8 string, use couple: file_io::load_bytes, bsUtf8ToWs.
-    unity load_string(const std::string& format_string, const std::wstring& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
-    unity load_string(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
+    unity load_text(const std::string& format_string, const std::wstring& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
+    unity load_text(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
 
-      // Saves characters of the string str to the specified file.
+      // Saves characters of wide-character string str to the specified file.
       // format_string should contain
-      //    1) one of "binary" or "text". "text" is different in:
-      //      1.1) auto-converts single \r and \n into \r\n,
-      //      1.2) auto-inserts 0xfeff tag on saving UTF-16.
+      //    1) one of "binary" or "text".
+      //      For "binary", characters from str are 1:1 converted to output, according to selected encoding,
+      //        without additional operations.
+      //      "text" is different in:
+      //        1.1) auto-converts input's single \r and \n into \r\n,
+      //        1.2) on saving UTF-16, when writing from the beginning of file (file is empty or truncated),
+      //          auto-prepends BOM (0xfeff character).
       //    2) target encoding: "local8bit", "utf16le", "utf16be", "lsb8bit".
       //    3) mode: "truncate" or "append".
       //    For example: "text append utf16le".
@@ -4505,30 +4514,34 @@ namespace
       //    On success: true.
       //    On failure or wrong args.: false.
       // NOTE To save UTF-8 string, use couple: wsToBsUtf8, file_io::save_bytes.
-    bool save_string(const std::string& format_string, const std::wstring& str, const std::wstring& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const throw();
-    bool save_string(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const throw();
+    bool save_text(const std::string& format_string, const std::wstring& str, const std::wstring& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const throw();
+    bool save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const throw();
 
 
       // Loads bytes from the given file into dest.
-      // 1 - success.
-      // 0 - file does not exist.
-      // -1 - memory alloc. error, or wrong arguments.
-      // -2 - file i/o error. NOTE On i/o error, dest may be left modified.
-    int load_cstr(const std::wstring& fnp, std::string& dest) throw();
-    int load_cstr(const std::string& fnp, std::string& dest) throw();
-    int load_cstr(const char* fnp, std::string& dest) throw();
+      //  (Same as file_io::load_bytes.)
+      // Returns:
+      //  1 - success.
+      //  0 - file does not exist.
+      //  -1 - memory alloc. error, or wrong arguments.
+      //  -2 - file i/o error. NOTE On i/o error, dest may be left modified.
+    int load_bytes(const std::wstring& fnp, std::string& dest) throw();
+    int load_bytes(const std::string& fnp, std::string& dest) throw();
+    int load_bytes(const char* fnp, std::string& dest) throw();
 
       // Saves bytes from src to the given file.
-      //    b_append == false truncates the file before writing, if it exists.
-      //    if n == 0, pdata may be 0.
-      // 1 - success.
-      // 0 - failed to create file (or open the existing file for writing).
-      // -1 - data size too large, or memory alloc. error, or wrong arguments.
-      // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-    int save_cstr(const std::wstring& fnp, const std::string& src, bool b_append) throw();
-    int save_cstr(const std::string& fnp, const std::string& src, bool b_append) throw();
-    int save_cstr(const char* fnp, const std::string& src, bool b_append) throw();
-    int save_cstr(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) throw();
+      //  (Same as file_io::save_bytes.)
+      //  b_append == false truncates the file before writing, if it exists.
+      //  if n == 0, pdata may be 0.
+      // Returns:
+      //  1 - success.
+      //  0 - failed to create file (or open the existing file for writing).
+      //  -1 - data size too large, or memory alloc. error, or wrong arguments.
+      //  -2 - file i/o error. NOTE On i/o error, the file may be left modified.
+    int save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) throw();
+    int save_bytes(const std::string& fnp, const std::string& src, bool b_append) throw();
+    int save_bytes(const char* fnp, const std::string& src, bool b_append) throw();
+    int save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) throw();
 
   private:
     static bool xHasCurDirShortCut(const std::wstring& sPath);
@@ -4604,6 +4617,28 @@ namespace
     array_of_slotnames = 0x1
   }; };
 
+    // Request types (1st arg. of i_dispatcher_mt::request).
+  struct dispatcher_mt_rt
+  { enum e {
+    get_threads_names = 1,
+    get_th_slots_names = 2,
+    get_threads_n = 11,
+    get_th_slots_n = 12,
+
+    set_qs_priority = 3,
+    get_qs_priority = 4,
+    deliver_qs_now = 8,
+    get_qs_nvsubs = 13,
+
+    create_proxy = 5,
+    create_disp_thread = 6,
+    remove_disp_thread = 7,
+
+    reset_cmdslot_phase = 9,
+
+    set_shmqueue_conf = 10
+  }; };
+
     // Access to i_dispatcher_mt: see dispatcher_mt :: new_proxy.
   struct i_dispatcher_mt
   {
@@ -4616,28 +4651,6 @@ namespace
       tracking_info(s_ll id_, s_ll state_) : id(id_), state(state_) {}
     };
 
-
-
-      // pop, write: emulation of prev. API version (will be removed later)
-//    s_long pop(const unity& slotname, unity& retmsg, _carray_base_t<char>* retatt = 0, s_long flags = 4) throw()
-//    {
-//      flags &= 0b1111;
-//      unity m; cref_t<t_stringref> a; if (flags & 2) { return mget(slotname, m, retatt ? &a : 0, flags); }
-//      s_long res = mget(slotname, m, retatt ? &a : 0, flags | 8);
-//      if (!(res == 1 || res == 2)) { return res; }
-//      if (retatt) { if (a && a->n() > 0) { if (!retatt->realloc(a->n(), 0, 0, 0)) { return -2; } std::memcpy(retatt->pd(), a->pd(), (size_t)a->n()); } else { retatt->realloc(0, 0, 0, 0); } }
-//      if (!(flags & 8)) { res = mget(slotname, m, 0, flags | 2 | 4); if (!(res == 1 || res == 2)) { if (retatt) { retatt->realloc(0, 0, 0, 0); } return res; } }
-//      retmsg.swap(m);
-//      return res;
-//    }
-//    s_long write(const unity& msg, const t_stringref* buf = 0) throw()
-//    {
-//      return msend(msg, buf ? make_rba(*buf, true) : cref_t<t_stringref>());
-//    }
-//    s_long periodic(s_long flags = 0) throw()
-//    {
-//      (void)flags; unity x; s_long res = request(8, x, 3); if (res != -3) { res = -2; } return res;
-//    }
 
 
 
@@ -4752,9 +4765,13 @@ namespace
       //            2) The original binary module may be unloaded only after att is released by all recipients.
       //                E.g. the sender may keep a copy of att, and prevent shared library unloading until att.n_refs() == 1.
       //    64 "ignore_hanged" - (only) for non-local recipient, e.g. peer process:
-      //          push message into local queue even if peer process appears hanged (tracked activity stopped > 3 s ago).
-      //            (The locally stored message will be sent automatically as normal when peer's activity is resumed.)
-      //          If the flag is set, the function will return error code -14 for the peer process that appears hanged.
+      //          push message into local queue even if peer process appears incommunicable:
+      //            a) hanged or terminated (tracked activity stopped > 3 s ago),
+      //            b) normally exited,
+      //            c) not exited yet, but already ended its session (this is irreversible, until peer's dispatcher_mt recreation).
+      //          On ignore_hanged flag set, the message will stored locally, and sent automatically in normal way,
+      //            when peer's activity is resumed. Note that the new peer may be another entity than the previous.
+      //          If the flag is not set, the function will return error code -14 for cases (a, b, c).
       //          NOTE The flag does not act when the peer is communicated first time.
       //            If the peer is not accessible, the message is not pushed, and msend returns -2.
       //    128 "use_chsbin" - calculate and send checksum for att, when it's sent non-locally.
@@ -4812,6 +4829,7 @@ namespace
       //
       // Convenience function for msend.
       //    Creates a byte array from msg.
+      //    NOTE Implementation uses calloc.
       //  b_byval:
       //    true (dflt.) - the returned cref_t strongly references a by value copy of msg.
       //    false:
@@ -4824,25 +4842,27 @@ namespace
       //    on success: valid non-empty cref_t<t_stringref>,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba(msg, b_byval, nbadd); }
+    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba(msg, b_byval, nbadd); }
       //
       // Convenience function for msend.
       //    Creates a byte array as concatenation of copies of the given parts.
+      //    NOTE Implementation uses calloc.
       //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
       //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
       //  Returns:
       //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_mp(part1, part2, part3, nbadd); }
+    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_mp(part1, part2, part3, nbadd); }
       //
       // Convenience function for msend.
       //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
+      //    NOTE Implementation uses calloc.
       //  Returns:
       //    on success: valid non-empty cref_t<t_stringref>,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba_z(s_ll nb, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_z(nb, nbadd); }
+    static cref_t<t_stringref> make_rba_z(s_ll nb, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_z(nb, nbadd); }
 
 
 
@@ -5031,44 +5051,44 @@ namespace
       //
       //  rt (request type):
       //
-      //    rt 1 - get names of all dispatcher threads.
+      //    rt 1 (get_threads_names) - get names of all dispatcher threads.
       //      args: not used.
       //      On success, retval: 0-based utStringArray.
       //
-      //    rt 11 - get number of dispatcher threads.
-      //      args: not used.
-      //      On success, retval: utInt.
+      //      rt 11 (get_threads_n) - get number of dispatcher threads.
+      //        args: not used.
+      //        On success, retval: utInt.
       //
-      //    rt 2 - get names of all slots of a thread.
+      //    rt 2 (get_th_slots_names) - get names of all slots of a thread.
       //      args: thread name (string).
       //      On success, retval:
       //          0-based utStringArray.
       //          Slot names are is string form. If necessary to convert them into array form, use paramline decode().
       //      Specific return value: -7 - thread does not exist.
       //
-      //    rt 12 - get number of slots in a thread.
-      //      args: thread name (string).
-      //      On success, retval: utInt.
-      //      Specific return value: -7 - thread does not exist.
+      //      rt 12 (get_th_slots_n) - get number of slots in a thread.
+      //        args: thread name (string).
+      //        On success, retval: utInt.
+      //        Specific return value: -7 - thread does not exist.
       //
-      //    rt 3 - set priority and timing for internal thread, delivering subscription messages from all qs slots.
+      //    rt 3 (set_qs_priority) - set priority and timing for internal thread, delivering subscription messages from all qs slots.
       //      args: array(<priority>, <delivery loop sleep time>).
       //        priority: 1..7 in units of threadctl. (Dflt. priority (normal) is 4.)
       //        sleep time: in mcs, >= 0
       //      retval: not used.
       //      Specific return value: -7 - the internal delivery thread does not exist (configured so).
       //
-      //    rt 4 - get priority and timing for internal thread, delivering subscription messages from all qs slots.
+      //    rt 4 (get_qs_priority) - get priority and timing for internal thread, delivering subscription messages from all qs slots.
       //      retval: 1-based utIntArray with 2 elements same as args in rt == 3, see above.
       //      Specific return value: -7 - the internal delivery thread does not exist (configured so).
       //
-      //    rt 5 - create a new proxy object and assign it to retval.
+      //    rt 5 (create_proxy) - create a new proxy object and assign it to retval.
       //      args: thread name (string) for the new proxy.
       //      See also: dispatcher_mt :: new_proxy.
       //      NOTE retval is re-initialized to belong to the binary module of the current dispatcher process (i.e. dispatcher_mt object).
       //      Specific return value: -7 - thread does not exist.
       //
-      //    rt 6 - create a new thread.
+      //    rt 6 (create_disp_thread) - create a new dispatcher thread.
       //      args: configuration of a thread, as described in arch_notes.txt / MESSAGE DISPATCHER / Configuration parameters.
       //        Only one thread configuration ({ thread name; slots and thread params. }) may be specified.
       //      flags:
@@ -5085,12 +5105,12 @@ namespace
       //          2) To explicitly verify any subscriptions, the client should use subscribe().
       //      Specific return value: -6 - thread already exists.
       //
-      //    rt 7 - remove the existing thread. May be applied to any thread, incl. one associated with the current proxy.
+      //    rt 7 (remove_disp_thread) - remove the existing thread. May be applied to any thread, incl. one associated with the current proxy.
       //      args: thread name (string).
       //      retval: not used.
       //      Specific return value: -7 - thread does not exist.
       //
-      //    rt 8 - deliver all pending messages from all qs slots, configured in the current dispatcher process, right now.
+      //    rt 8 (deliver_qs_now) - deliver all pending messages from all qs slots, configured in the current dispatcher process, right now.
       //      retval: not used.
       //      args: must contain integer value with ORed flags:
       //          0x1 - deliver messages from the calling dispatcher thread's qs slots, configured with "delivery = thread".
@@ -5103,7 +5123,7 @@ namespace
       //        If no qs slots are covered by the specified flags, the request is no-op.
       //      NOTE If automatic delivery is enabled (__thm_lqsd = 1 or 2), the request may speed up delivery (depends on internal thread timing).
       //
-      //    rt 9 - reset phase in the given command slot (pbo, hbo, pbi, qbi).
+      //    rt 9 (reset_cmdslot_phase) - reset phase in the given command slot (pbo, hbo, pbi, qbi).
       //      Result: if the request is satisfied, the command slot is ready to issue/receive new command to/from any address.
       //      This request may be used
       //        a) by command sender, when it detects that its command has been lost or timed out due to exceptional situation.
@@ -5123,6 +5143,80 @@ namespace
       //          Slot phase will be reset in association with the command target (trg) only.
       //        Hint: user message (msg of msend) itself may be passed as request argument.
       //      retval: not used.
+      //
+      //    rt 10 (set_shmqueue_conf) - customize the internal shared queue for communicating with the given peer process.
+      //        This request calls any or both of shmqueue_s :: conf_set_al_in, conf_set_lqcap,
+      //          and returns the results.
+      //      args: hashlist of arguments.
+      //          args("peer_name", <peer process name>): required setting.
+      //          args(<function name>)(<arg. name>, <arg. value>)(...)...: optional settings.
+      //          Each particular function is called only if its name is specified in args.
+      //          See also the below example.
+      //      retval:
+      //          a) hashlist of shmqueue_s function calls results:
+      //            retval[<function name>]
+      //            If the function was called: the value is integer ret. code.
+      //            If the function was not called: the value is empty.
+      //          b) empty: may occur (on request ret. code == 0, -1..-6) if the error occurred before doing the request.
+      //          shmqueue_s functions ret. codes are in retval[<function name>].
+      //          See also the below example.
+      //      Specific return value of request():
+      //        0 - nothing to do (no functions specified).
+      //        -6 - nothing is done, because LMSC (shared memory controller) is disabled by dispatcher configuration.
+      //        -7 - some of shmqueue_s functions failed.
+      //      flags:
+      //        0x1 - if set, resets all queue parameters to default on the current dispatcher proxy being destroyed.
+      //          If not set (dflt.), the queue parameters will be reset on dispatcher session being destroyed.
+      //        NOTE To reset the allocator to default value at any time, call request() with the following setting:
+      //          args("conf_set_al_in")("p_al", unity());
+      //          If "p_al" key is omitted, the function does not change the allocator
+      //          (equiv. to p_al = 0 in shmqueue_s::conf_set_al_in).
+      //
+      //      EXAMPLE
+      //          The following code makes binary attachments for some max. number of messages
+      //          from dispatcher process "prc2" getting into pre-allocated memory,
+      //          which is the fastest way of queue-based data transfer.
+      //
+      //          using namespace bmdx_shm;
+      //          const s_ll nmsgs = 100;
+      //          const s_ll nbmsg = (1 * 1024 * 1024) + 2000; // 1 MB for binary attachment + e.g. 2000 bytes for encoded dispatcher message itself
+      //          cref_t<i_allocctl> al = allocctl_pre::create(0xff, nbmsg * nmsgs, nmsgs); // use pre-allocated memory for messages
+      //            if (!al) { <handle pre-allocation failure> }
+      //
+      //          unity args, retval;
+      //          args("peer_name", "prc2");
+      //          args("conf_set_al_in")("p_al", unity(al, false))("timeout_ms", 500);
+      //          args("conf_set_lqcap")("b_receiver", true)("ncapmin", -1)("ncapmax", -2)("nrsv", nmsgs)("timeout_ms", 500);
+      //
+      //          s_long res = disp->request(dispatcher_mt_rt::set_shmqueue_conf, retval, args);
+      //            if (res == 0)
+      //            {
+      //              if (retval["conf_set_al_in"].vint() < 0) { <handle the error> }
+      //              if (retval["conf_set_lqcap"].vint() < 0) { <handle the error> }
+      //            }
+      //            if (res != 1) { <handle request error> }
+      //
+      //      NOTE In the dispatcher, setting custom allocator for particular shared queue
+      //          does not totally disable dynamic memory allocations, associated with that queue.
+      //          It influences only the corresponding shmqueue_s, to help receiving
+      //          long series of shmqueue_s messages, containing dispatcher messages + large attachments,
+      //          without excessive dynamic allocations.
+      //          a) The main dispatcher message (mget retmsg) is always decoded from the received plain bytearray
+      //            in normal way, which involves dynamic memory allocations according to message contents.
+      //          b) The attachment remains inside the memory, provided by custom allocator.
+      //            It will be returned to client as such, without excessive copying,
+      //            if mget is called with anlo_att flag set.
+      //
+      //    rt 13 (get_qs_nvsubs):
+      //        a) get number of slots, subscribed to the given local qs slot.
+      //        b) if (flags & 0x1) != 0, get complete list of subscribed slot addresses (strings).
+      //      args: complete local (LP or  LPA) qs slot address, analogous to addr_qs arg. of subscribe() (see).
+      //      retval:
+      //        a) on success, the number of slots: integer >= 0.
+      //        b) on success, the list of slot addresses: 0-based utStringArray.
+      //        c) on failure: empty.
+      //      Specific return value:
+      //        -6 - the specified qs slot does not exist, or could not be accessed (locking timeout).
       //
     virtual s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) throw() = 0;
 
@@ -5385,8 +5479,9 @@ namespace
     bool has_session() const throw();
 
       // Resets an internal flag to signal that the session is no longer valid.
+      //    Internal threads are stop-signaled.
       //    Any call via any i_dispatcher_mt will return error code -3 ("no session").
-      // NOTE until ~dispatcher_mt(), dispatcher_mt strongly references its session object.
+      // NOTE Anyway, until ~dispatcher_mt(), dispatcher_mt strongly references its session object.
       //
       // Concurrency: end_session() may be called concurrently.
       //
@@ -5467,6 +5562,7 @@ namespace
       //    0x10 - get/set automatic subscription delivery parameters.
       //    0x20 - per-dispatcher_mt flag __msend_anlo "allow msend to pass by reference user objects and attachments, including non-local"
       //    0x40 - per-dispatcher_mt flag __mget_anlo "allow mget to return by reference user objects and attachments, including non-local"
+      //    0x80 - allow request() with rt = shmqueue_in_conf.
       // Logic:
       //    b_get == true reads all the current flags into f.
       //    b_set == true sets all flags at once to values, specified in f.

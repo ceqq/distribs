@@ -34,7 +34,7 @@
 A C++ library for <b>exchanging messages and high-level objects</b> between processes and binary modules inside them.
 
 
-<b>Source code</b> - full: <b><a href="cpp_bmdx_1.3_r5.zip">(zip) &gt;&gt;&gt;</a></b>
+<b>Source code</b> - full: <b><a href="cpp_bmdx_1.4_r1.zip">(zip) &gt;&gt;&gt;</a></b>
 
 <b>Source code</b> - separate files (possibilities of partial including are shown in red):
 </pre>
@@ -89,8 +89,9 @@ Source code of <b>the examples</b>: <b><a href="#examples">see below &gt;&gt;&gt
 <span style="font-size: larger;"><b>BMDX - 10 leading classes</b></span>
 
 1. dispatcher_mt - address-based message exchange, in- and inter-process.
-  Ensures fast transfer of large binary attachments - up to 3.2 GB/s on average PC.
-  Allows for direct in-process passing arbitrary user objects (wrapped for proper memory management and locking).
+  Ensures fast transfer of large binary attachments, up to long-term 6..8 GB/s on average 4-core CPU.
+  The speed is of same order as in known MPI implementations (MPICH, OpenMPI).
+  Allows for direct in-process passing arbitrary user objects, wrapped for proper memory management and locking.
 
 2. unity - polymorphic container for data and objects. Similar to widely known "variant" type.
   In addition to scalars, strings, arrays and user objects, supports two kinds of associative arrays
@@ -127,7 +128,7 @@ Source code of <b>the examples</b>: <b><a href="#examples">see below &gt;&gt;&gt
 
 <span id="examples" style="font-size: larger;"><b>BMDX - use examples</b></span>
 
-Source code - <b>5 use examples</b>: <b><a href="cpp_bmdx_1.3_examples.zip">(zip) &gt;&gt;&gt;</a></b>
+Source code - <b>5 use examples</b>: <b><a href="cpp_bmdx_1.4_examples.zip">(zip) &gt;&gt;&gt;</a></b>
 
 Due to excess of possible applications, the given examples comprise only two key functions -
 address-based message sending, and direct calls to objects, passed between binary modules inside a process.

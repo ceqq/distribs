@@ -1,7 +1,7 @@
-// BMDX library 1.3 RELEASE for desktop & mobile platforms
+// BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-04-20
+// rev. 2020-05-16
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -665,13 +665,13 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     _s_long find_any(const char* pcc, _s_long pos0 = 0, _s_long n_pcc = -1) const throw() { if (!pcc) { return -1; } _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } if (pos0 >= pos2) { return -1; } if (n_pcc < 0) { n_pcc = 0; const char* p = pcc; while (*p++) { ++n_pcc; } } while (pos0 < pos2) { char c = _x[pos0]; for (_s_long i = 0; i < n_pcc; ++i) { if (c == pcc[i]) { return pos0; } } ++pos0; } return -1; }
 
     #ifdef _MSC_VER
-      inline operator std::string() const { return _x; }
+      inline operator std::string() const { return std::string(&_x[0], length()); }
       inline operator std::wstring() const { return wstr(); }
     #else
-      inline operator std::string() const throw (std::exception __bmdx_noargt) { return _x; }
+      inline operator std::string() const throw (std::exception __bmdx_noargt) { return std::string(&_x[0], length()); }
       inline operator std::wstring() const throw (std::exception __bmdx_noargt) { return wstr(); }
     #endif
-    inline std::string str(__bmdx_noarg1) const { return _x; }
+    inline std::string str(__bmdx_noarg1) const { return std::string(&_x[0], length()); }
     std::wstring wstr(__bmdx_noarg1) const // UTF-8 --> UTF-16
     {
       std::wstring s; _s_ll i = 0, n = length();
@@ -910,7 +910,7 @@ namespace bmdx_minmax
   inline _s_ll myllmin(_s_ll a, _s_ll b, _s_ll c) { return myllmin(a, myllmin(b, c)); }
   inline _s_ll myllmax(_s_ll a, _s_ll b, _s_ll c, _s_ll d) { return myllmax(myllmax(a, b), myllmax(c, d)); }
   inline _s_ll myllmin(_s_ll a, _s_ll b, _s_ll c, _s_ll d) { return myllmin(myllmin(a, b), myllmin(c, d)); }
-  inline _s_ll myllrange(_s_ll x, _s_ll a, _s_ll b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline _s_ll myllrange_ub(_s_ll x, _s_ll a, _s_ll b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
   inline _s_ll myllrange_lb(_s_ll x, _s_ll a, _s_ll b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
 
   inline _s_long mylmax(_s_long a, _s_long b) { return a > b ? a : b; }
@@ -919,7 +919,7 @@ namespace bmdx_minmax
   inline _s_long mylmin(_s_long a, _s_long b, _s_long c) { return mylmin(a, mylmin(b, c)); }
   inline _s_long mylmax(_s_long a, _s_long b, _s_long c, _s_long d) { return mylmax(mylmax(a, b), mylmax(c, d)); }
   inline _s_long mylmin(_s_long a, _s_long b, _s_long c, _s_long d) { return mylmin(mylmin(a, b), mylmin(c, d)); }
-  inline _s_long mylrange(_s_long x, _s_long a, _s_long b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline _s_long mylrange_ub(_s_long x, _s_long a, _s_long b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
   inline _s_long mylrange_lb(_s_long x, _s_long a, _s_long b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
 
   inline double myffmax(double a, double b) { return a > b ? a : b; }
@@ -928,7 +928,7 @@ namespace bmdx_minmax
   inline double myffmin(double a, double b, double c) { return myffmin(a, myffmin(b, c)); }
   inline double myffmax(double a, double b, double c, double d) { return myffmax(myffmax(a, b), myffmax(c, d)); }
   inline double myffmin(double a, double b, double c, double d) { return myffmin(myffmin(a, b), myffmin(c, d)); }
-  inline double myffrange(double x, double a, double b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline double myffrange_ub(double x, double a, double b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
   inline double myffrange_lb(double x, double a, double b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
 
   inline float myfmax(float a, float b) { return a > b ? a : b; }
@@ -937,7 +937,7 @@ namespace bmdx_minmax
   inline float myfmin(float a, float b, float c) { return myfmin(a, myfmin(b, c)); }
   inline float myfmax(float a, float b, float c, float d) { return myfmax(myfmax(a, b), myfmax(c, d)); }
   inline float myfmin(float a, float b, float c, float d) { return myfmin(myfmin(a, b), myfmin(c, d)); }
-  inline float myfrange(float x, float a, float b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
+  inline float myfrange_ub(float x, float a, float b) { if (x < a) { x = a; } return x > b ? b : x; } // b (max) has more priority than a
   inline float myfrange_lb(float x, float a, float b) { if (x > b) { x = b; } return x < a ? a : x; } // a (min) has more priority than b
 }
 
@@ -1493,6 +1493,7 @@ namespace bmdx
     ~arrayref_t() throw() { unlink(); }
 
     bool link(const t_value* px, _s_ll n) throw() { _n = n; if (_n < 0 || (_n > 0 && !px)) { _n = 0; _data = 0; return false; } _data = const_cast<T*>(px); return true; }
+    void _link_u(const t_value* px, _s_ll n) throw() { _n = n; _data = const_cast<T*>(px); }
     void unlink() throw() { _n = 0;_data = 0; }
     void clear() throw() { unlink(); }
 
@@ -2249,7 +2250,7 @@ namespace bmdx
       // NOTE vnnqueue_t default constructor disables any capacity limits, equivalent to:
       //    set_cap_hints(0, -2);
       // Returns:
-      //    1 - success: ncapmin() == nmin, ncapmax() == nmax().
+      //    1 - success: ncapmin() == nmin, ncapmax() == nmax.
       //    -1 - no changes: argument constraints are not satisfied.
       // Concurrency:
       //    may be called by Owner only.
@@ -2947,23 +2948,7 @@ namespace bmdx
 
   static void sleep_mcs(_s_ll t)
   {
-    #ifdef __FreeBSD__
-      if (t < 0) { return; }
-      timespec ts; ts.tv_sec = 0; ts.tv_nsec = 0;
-      if (t == 0) { nanosleep(&ts, 0); return; }
-      const double ft0 = clock_ms();
-      nanosleep(&ts, 0);
-      while (1)
-      {
-        _s_ll dt = t - _s_ll((clock_ms() - ft0) * 1000);
-        if (dt <= 0) { return; }
-        ts.tv_sec = dt / 1000000; ts.tv_nsec = (dt % 1000000) * 1000;
-// NOTE Frequent calls with small time hang/crash.
-//        if (dt >= 20) { ts.tv_sec = dt / 1000000; ts.tv_nsec = (dt % 1000000) * 1000; }
-//          else { ts.tv_sec = 0; ts.tv_nsec = 100; }
-        nanosleep(&ts, 0);
-      }
-    #else
+    #if !defined(__FreeBSD__) || (__FreeBSD__ >= 12)
       if (t < 0) { return; }
       timespec ts;
       if (t == 0) { ts.tv_sec = 0; ts.tv_nsec = 0; nanosleep(&ts, 0); return; }
@@ -2979,6 +2964,22 @@ namespace bmdx
       if (t3 > _tlagmcs) { _tlagmcs = t3; }
       t3 = t - t2;
       if (t3 > 0) { ft0 = clock_ms(); ts.tv_sec = 0; ts.tv_nsec = _s_long(t3 >= 10000000 ?  500000000 : t3 * 50); do { nanosleep(&ts, 0); } while (clock_ms() - ft0 < t3 / 1000.); }
+    #else
+      if (t < 0) { return; }
+      timespec ts; ts.tv_sec = 0; ts.tv_nsec = 0;
+      if (t == 0) { nanosleep(&ts, 0); return; }
+      const double ft0 = clock_ms();
+      nanosleep(&ts, 0);
+      while (1)
+      {
+        _s_ll dt = t - _s_ll((clock_ms() - ft0) * 1000);
+        if (dt <= 0) { return; }
+        ts.tv_sec = dt / 1000000; ts.tv_nsec = (dt % 1000000) * 1000;
+// NOTE Frequent calls with small time hang/crash.
+//        if (dt >= 20) { ts.tv_sec = dt / 1000000; ts.tv_nsec = (dt % 1000000) * 1000; }
+//          else { ts.tv_sec = 0; ts.tv_nsec = 100; }
+        nanosleep(&ts, 0);
+      }
     #endif
   }
 
@@ -4038,7 +4039,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         //    On success, launch() returns true.
         //    On failure, launch() returns false.
       #ifndef bmdx_processctl_allowshell
-        #if TARGET_OS_IPHONE
+        #if __APPLE__ && __MACH__ && TARGET_OS_IPHONE
           #define bmdx_processctl_allowshell 0
         #else
           #define bmdx_processctl_allowshell 1
@@ -4206,9 +4207,10 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
     struct console_io
     {
         // b_enabled_ == false makes all in console_io a no-op.
-        //  NOTE When 2 or more co-processes are run inside the same terminal window,
-        //    console_io may be enabled in only one of them, otherwise its behavior is undefined.
-      console_io(bool b_enabled_ = true) throw() { static termios t; static _s_long n(0); __pt = 0; __pnr = 0; if (b_enabled_) { __pt = &t; __pnr = &n; _set_unbuf(true); } }
+        //  NOTE Using console_io in the program running as co-process, detached from console input,
+        //    may be unsafe, regardless of all internal checks.
+        //    It's recommended to disable console_io in co-processes.
+      console_io(bool b_enabled_ = true) throw() { static termios t; static _s_long n(0); __pt = &t; __pnr = &n; _b_en = b_enabled_; _set_unbuf(true); }
       ~console_io() throw() { _set_unbuf(false); }
 
       unsigned int ugetch(unsigned int no_char = 0) throw()
@@ -4222,28 +4224,43 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         if (ch != EOF) { return ch; } else { return no_char; }
       }
 
-      bool b_enabled() const { return !!__pt; }
+        // Returns true if console input is enabled and valid (working).
+      bool b_enabled() const { return _b_en && *__pnr > 0; }
+
     private:
-      termios* __pt; _s_long* __pnr;
-      void _set_unbuf(bool on) throw()
+      termios* __pt; _s_long* __pnr; bool _b_en;
+      void _set_unbuf(bool b_on) throw()
       {
+        if (!_b_en) { return; }
         critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
-        if (!b_enabled()) { return; }
         termios& t0 = *__pt; _s_long n = *__pnr;
-        n += on ? 1 : -1;
-        if (n == 1)
+          if (n < 0) { return; }
+        bool b_valid = getpgrp() == tcgetpgrp(STDIN_FILENO);
+        if (!b_valid) { *__pnr = n = -1; _b_en = false; }
+          if (n < 0) { return; }
+        if (b_on)
         {
-          tcgetattr(STDIN_FILENO, &t0);
+          int res = 0;
+          n += 1;
+          if (n == 1)
+          {
+            res = tcgetattr(STDIN_FILENO, &t0);
             termios t1 = t0;
-            t1.c_lflag &= ~(ICANON | ECHO);
-            t1.c_cc[VMIN] = 1; t1.c_cc[VTIME] = 0;
-          tcsetattr(STDIN_FILENO, TCSANOW, &t1);
-          *__pnr = n;
+            if (res == 0)
+            {
+              t1.c_lflag &= ~(ICANON | ECHO);
+              t1.c_cc[VMIN] = 1; t1.c_cc[VTIME] = 0;
+              res = tcsetattr(STDIN_FILENO, TCSANOW, &t1);
+            }
+          }
+          if (res == 0) { *__pnr = n; }
+            else { _b_en = false; }
         }
-        else if (n <= 0)
+        else
         {
-          tcsetattr(STDIN_FILENO, TCSANOW, &t0);
-          *__pnr = 0;
+          n -= 1;
+          if (n == 0) { tcsetattr(STDIN_FILENO, TCSANOW, &t0); }
+          *__pnr = n;
         }
       }
     };
@@ -4406,318 +4423,17 @@ _s_long _threadctl_tu_static_t<_>::th_terminate(_threadctl_ctx_data* p, _s_long 
 #ifdef _bmdxpl_Wnds
   #define __bmdx_std_getcwd _getcwd
   #define __bmdx_std_mkdir _mkdir
+  #define __bmdx_std_mkdir_arg2
   #define __bmdx_std_access _access
 #endif
 #ifdef _bmdxpl_Psx
   #define __bmdx_std_getcwd getcwd
   #define __bmdx_std_mkdir mkdir
+  #define __bmdx_std_mkdir_arg2 , 0777
   #define __bmdx_std_access access
 #endif
 namespace bmdx
 {
-  struct file_io
-  {
-
-      // Platform-dependent file handle type.
-    typedef std::FILE* t_handle;
-
-      // Factual type of the offset in file.
-      // NOTE OS X: consider compiling with -D__DARWIN_64_BIT_INO_T
-      //    to ensure 64-bit offsets and correct file r/w beyond 4 GB limit.
-    #if defined(_MSC_VER) || defined(__BORLANDC__)
-      typedef __int64 t_offset;
-    #elif defined(__FreeBSD__)
-      typedef __off_t t_offset;
-    #elif __APPLE__ && __MACH__
-      typedef off_t t_offset;
-    #else
-       typedef off64_t t_offset;
-    #endif
-
-
-      // Returns true if the specified path points to the existing file, false in all other cases.
-    static bool is_ex_file(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
-    static inline bool is_ex_file(const std::string& path __bmdx_noarg) throw()    { return is_ex_file(path.c_str()); }
-
-      // Returns true if the specified path points to the existing directory, false in all other cases.
-    static bool is_ex_dir(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
-    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) throw()    { return is_ex_dir(path.c_str()); }
-
-
-
-
-
-    //  is_open, result.
-    //  open, close, seek, seek_end, tell, read, write, flush.
-    //  static: is_ex_file, is_ex_dir, load_bytes, save_bytes
-
-    file_io() throw() : _desc(0), _nwr(0), _mode(0), _res(0) { __pad4 = 0; _last_op_wr = 0; }
-    ~file_io() throw() { if (is_open()) { close(); } }
-
-      // NOTE Copy constructor does not actually copy.
-      //    Defined for compatibility only.
-    file_io(const file_io&) throw() { new (this) file_io(); }
-
-
-    inline bool is_open() const throw() { return !!_desc; }
-      // mode 0: file is not open, mode 1: file is open read-only, mode 2: file is open read-write.
-    inline _s_long mode() const throw() { return _desc ? _mode : 0; }
-    inline _s_long result() const throw() { return _res; }
-
-      // Platform-dependent file handle.
-    inline t_handle _handle() const { return _desc; }
-
-      // Opens or reopens a file with the specified name and parameters.
-      // result():
-      //    1 - success,
-      //    -1 opening existing file for reading failed,
-      //    -2 opening existing file for r/w failed,
-      //    -3 file does not exist, cannot open for reading.
-      //    -4 file does not exist, file creation (for r/w) failed.
-      //    -5 pfilename is null.
-    inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false) throw()
-    {
-      if (!pfilename || *pfilename == '\0') { _res = -5; }
-      if (is_open()) { close(); }
-      #if defined(_MSC_VER) || defined(__BORLANDC__)
-        if (is_ex_file(pfilename)) { if (can_wrcr) { __bmdx_std_fopen_s(&_desc, pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { __bmdx_std_fopen_s(&_desc, pfilename, "rb"); _res = _desc ? 1 : -1; } }
-          else { if (can_wrcr) { __bmdx_std_fopen_s(&_desc, pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
-      #else
-        if (is_ex_file(pfilename)) { if (can_wrcr) { _desc = ::fopen(pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { _desc = ::fopen(pfilename, "rb"); _res = _desc ? 1 : -1; } }
-          else { if (can_wrcr) { _desc = ::fopen(pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
-      #endif
-      _mode = can_wrcr ? 2 : 1;
-      if (_res == 1) { std::setvbuf(_desc, 0, _IOFBF, _nwrchunk); }
-    }
-
-      // result():
-      //    1 - success,
-      //    0 - the file was not open,
-      //    -1 - an error, the file is regarded closed.
-    inline void close() throw()
-    {
-      if (!is_open()) { _res = 0; return; }
-      _res = fclose(_desc) == 0 ? 1 : -1;
-      _desc = 0;
-    }
-
-      // result():
-      //    1 - success,
-      //    -1 - the file is not open,
-      //    -2 - seek error.
-    inline void seek(_s_ll pos) throw()
-    {
-      if (!is_open()) { _res = -1; return; }
-      if (pos < 0) { _res = -2; return; }
-      if (_last_op_wr && _nwr) { fflush(_desc); _nwr = 0; }
-      _res = _seek_u(pos) == 0 ? 1 : -2;
-    }
-
-      // result():
-      //    1 - success,
-      //    -1 - the file is not open,
-      //    -2 - seek error.
-    inline void seek_end() throw()
-    {
-      if (!is_open()) { _res = -1; return; }
-      if (_last_op_wr && _nwr) { fflush(_desc); _nwr = 0; }
-      #if defined(_MSC_VER) || defined(__BORLANDC__)
-        _res = _fseeki64(_desc, 0, SEEK_END) == 0 ? 1 : -2;
-      #elif defined(__FreeBSD__) || (__APPLE__ && __MACH__) || defined(__ANDROID__)
-        _res = fseeko(_desc, 0, SEEK_END) == 0 ? 1 : -2;
-      #else
-        _res = fseeko64(_desc, 0, SEEK_END) == 0 ? 1 : -2;
-      #endif
-    }
-
-      // Returns valid pos. >=0, or -1 on error.
-      // result():
-      //    1 - success,
-      //    -1 - the file is not open,
-      //    -2 - error.
-    inline _s_ll tell() const throw()
-    {
-      if (!is_open()) { _res = -1; return -1; }
-      _s_ll pos = _tell_u();
-      _res = pos >= 0 ? 1 : -2;
-      return pos;
-    }
-
-      // Returns: number of bytes factually read.
-      // result():
-      //    1 - success, size bytes have been read
-      //    -1 - the file is not open,
-      //    -2 - read error, pos. is not changed,
-      //    -3 - read error, pos. is changed.
-    inline size_t read(void* dest, size_t size) throw()
-    {
-      if (!is_open()) { _res = -1; return 0; }
-      if (_last_op_wr)
-      {
-        if (_nwr) { fflush(_desc); _nwr = 0; }
-        _s_ll pos = _tell_u();
-        if (pos < 0) { _res = -2; return 0; }
-        rewind(_desc);
-        if (_seek_u(pos) != 0) { _res = -3; return 0; }
-      }
-      size_t s2 = fread(dest, 1, size, _desc);
-      _last_op_wr = 0;
-      _res = s2 == size ? 1 : (s2 == 0 ? -2 : -3);
-      return s2;
-    }
-
-      // Returns: number of bytes factually written.
-      // result():
-      //    1 - success, size bytes have been written
-      //    -1 - the file is not open,
-      //    -2 - write error, file/pos is not changed,
-      //    -3 - write error, file/pos is changed.
-    inline size_t write(const void* src, size_t size) throw()
-    {
-      if (!is_open()) { _res = -1; return 0; }
-      if (!_last_op_wr)
-      {
-        _s_ll pos = _tell_u();
-        if (pos < 0) { _res = -2; return 0; }
-        rewind(_desc);
-        if (_seek_u(pos) != 0) { _res = -3; return 0; }
-      }
-      if (_nwr + size >= _nwrchunk) { fflush(_desc); _nwr = 0; }
-      size_t s2 = fwrite(src, 1, size, _desc);
-      _last_op_wr = 1;
-      _res = s2 == size ? 1 : (s2 == 0 ? -2 : -3);
-      _nwr += s2;
-      return s2;
-    }
-
-      // result():
-      //    1 - success,
-      //    -1 - the file is not open,
-      //    -2 - operation error.
-      // NOTE Due to system caching, no guarantee that flush() writes to disk immediately.
-    inline void flush() throw()
-    {
-      if (!is_open()) { _res = -1; return; }
-      _res = fflush(_desc) == 0 ? 1 : -2;
-    }
-
-
-
-
-
-  private:
-    file_io& operator=(const file_io&);
-
-    static const int __F_OK = 0;
-
-    t_handle _desc;
-    mutable size_t _nwr;
-    _s_long _mode;
-    mutable _s_long _res;
-    union { mutable char _last_op_wr; _s_ll __pad4; };
-    static const size_t _nwrchunk = 2048;
-
-    inline _s_ll _tell_u() const throw()
-    {
-      t_offset pos;
-      #if defined(_MSC_VER) || defined(__BORLANDC__)
-        pos = _ftelli64(_desc);
-      #elif defined(__FreeBSD__) || (__APPLE__ && __MACH__) || defined(__ANDROID__)
-        pos = ftello(_desc);
-      #else
-        pos = ftello64(_desc);
-      #endif
-      if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if (pos == t_offset(m)) { return -1; } return _s_ll(pos) & m; }
-      return _s_ll(pos);
-    }
-    inline int _seek_u(_s_ll pos) throw()
-    {
-      if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if ((pos & m) != pos) { return -2; } }
-      int res;
-      #if defined(_MSC_VER) || defined(__BORLANDC__)
-        res = _fseeki64(_desc, t_offset(pos), SEEK_SET);
-      #elif defined(__FreeBSD__) || (__APPLE__ && __MACH__) || defined(__ANDROID__)
-        res = fseeko(_desc, t_offset(pos), SEEK_SET);
-      #else
-        res = fseeko64(_desc, t_offset(pos), SEEK_SET);
-      #endif
-      return res;
-    }
-
-
-
-
-    private: struct _stra_base; struct _stra_ca;  struct _stra_str;
-    public:
-
-
-          // Loads bytes from the given file into the dest. container. Resizes the container as necessary.
-          // 1 - success.
-          // 0 - file does not exist.
-          // -1 - memory alloc. error, or wrong arguments.
-          // -2 - file i/o error. NOTE On i/o error, dest may be left modified.
-      static inline int load_bytes(const std::string& fnp, std::string& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_str(), &dest); }
-      static inline int load_bytes(const char* fnp, std::string& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_str(), &dest); }
-
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<signed char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<signed char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
-
-          // Saves bytes from src to the given file.
-          //    b_append == false truncates the file before writing, if it exists.
-          //    if n == 0, pdata may be 0.
-          // 1 - success.
-          // 0 - failed to create file (or open the existing file for writing).
-          // -1 - data size too large, or memory alloc. error, or wrong arguments.
-          // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-      static inline int save_bytes(const char* fnp, const std::string& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, src.c_str(), src.length(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const std::string& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), src.c_str(), _s_ll(src.length()), b_append); }
-
-      static inline int save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, pdata, n0, b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<signed char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<signed char>&  src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
-
-
-
-    private:
-      struct _stra_base { typedef std::string::size_type _t_sz; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() = 0; virtual char* _pd(void* ps __bmdx_noarg) const throw() = 0; };
-      struct _stra_str : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { typedef std::string T; _t_sz n = _t_sz(n0); if (_s_ll(n) != n0) { return false; } try { if (n) { ((T*)ps)->resize(n); } else { ((T*)ps)->clear(); } return true; } catch (...) { return false; } } virtual char* _pd(void* ps __bmdx_noarg) const throw() { typedef std::string T; return &(*(T*)ps)[0]; } };
-      struct _stra_ca : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { typedef _carray_base_t<char> T; return ((T*)ps)->realloc(n0, 0, 0, 0); } virtual char* _pd(void* ps __bmdx_noarg) const throw() { typedef _carray_base_t<char> T; return ((T*)ps)->pd(); } };
-
-      static int _load_bytes(const char* fnp, const _stra_base& a, void* ps __bmdx_noarg) throw()
-      {
-        if (!fnp) { return -1; }
-        file_io f; f.open(fnp, false); if (!f.is_open()) { return f.result() == -3 ? 0 : -2; }
-        f.seek_end(); if (f.result() < 1) { return -2; }
-        _s_ll n0 = f.tell(); if (n0 < 0) { return -2; }
-        f.seek(0); if (f.result() < 1) { return -2; }
-        if (_s_ll(size_t(n0)) != n0) { return -1; }
-        if (!a._resize(ps, n0)) { return -1; }
-        if (!n0) { return 1; }
-        f.read(a._pd(ps), size_t(n0)); if (f.result() < 1) { a._resize(ps, 0); return -2; }
-        return 1;
-      }
-      static int _save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) throw()
-      {
-        if (!(fnp && n0 >= 0 && !(n0 && !pdata))) { return -1; }
-        size_t n = size_t(n0); if (_s_ll(n) != n0) { return -1; }
-        file_io f; f.open(fnp, true, !b_append); if (!f.is_open()) { return 0; }
-        if (!n) { return 1; }
-        if (b_append) { f.seek_end(); if (f.result() < 1) { return -2; } }
-        f.write(pdata, n); if (f.result() < 1) { return -2; }
-        return 1;
-      }
-  };
-
-
-
 
   template<class T, class LockSelector> struct cref_t;
 
@@ -4727,14 +4443,11 @@ namespace bmdx
 
       // b_wait true - block until the lock is acquired,
       //  false - try lock once and immediately exit (use operator bool and/or try_lock after that).
-    _cref_lock_t(bool b_wait, typename critsec_t<Selector>::csdata* pcsd)        : t_impl(-1, 0, pcsd) { try_lock(b_wait); }
-
+    _cref_lock_t(bool b_wait, _critsec_data0_t<Selector>* pcsd)        : t_impl(-1, 0, pcsd) { try_lock(b_wait); }
+      //
       // Create the lock object only, do not try to lock until try_lock() call.
-    _cref_lock_t(typename critsec_t<Selector>::csdata* pcsd)        : t_impl(-1, 0, pcsd) { }
-
-    bool try_lock(bool b_wait)
-      { if (this->is_locked()) { return true; } _critsec_data0_t<Selector>* ps = this->pcsd0(); t_impl* pi = this; pi->~t_impl(); new (pi) t_impl(5, b_wait ? -1 : 0, ps); return this->is_locked(); }
-
+    _cref_lock_t(_critsec_data0_t<Selector>* pcsd)        : t_impl(-1, 0, pcsd) { }
+      //
       // This constructor ensures that cref_t object at the address &x
       //  is locked
       //  even in conditions when it may be concurrently overwritten
@@ -4756,6 +4469,9 @@ namespace bmdx
       }
     }
 
+    bool try_lock(bool b_wait)
+      { if (this->is_locked()) { return true; } _critsec_data0_t<Selector>* ps = this->pcsd0(); t_impl* pi = this; pi->~t_impl(); new (pi) t_impl(5, b_wait ? -1 : 0, ps); return this->is_locked(); }
+
     static bool does_locking()    { return true; }
     operator bool() const        { return this->is_locked(); }
   };
@@ -4765,9 +4481,13 @@ namespace bmdx
   template<> struct _cref_lock_t<cref_nonlock>
   {
     typedef bmdx_meta::nothing t_impl;
-    _cref_lock_t(bool b_wait)    { (void)b_wait; }
+
+    _cref_lock_t(bool b_wait, _critsec_data0_t<cref_nonlock>* pcsd)        { (void)b_wait; (void)pcsd; }
+    _cref_lock_t(_critsec_data0_t<cref_nonlock>* pcsd)        { (void)pcsd; }
     template<class T> _cref_lock_t(const cref_t<T, cref_nonlock>&)    {}
+
     bool try_lock()    { return true; }
+
     static bool does_locking()    { return false; }
     operator bool() const        { return true; }
   };
@@ -4844,10 +4564,10 @@ namespace bmdx
       use_delete = 0x20,
 
         // Multi-functional ref. only:
-        //  1) Get the object pointer from customized arguments wrapper,
+        //  1) The object pointer is obtained from customized arguments wrapper,
         //      using "p = args(0)" call. ("args": 2nd argument of create_any, subclass of i_new.)
         //      The object storage, creation and destruction is controlled by client.
-        //  2) On ref. count == 0, generate ev_release. (ev_des, ev_delete are disabled.)
+        //  2) On ref. count == 0, ev_release is generated. (ev_des, ev_delete are disabled.)
         //    The client may handle or ignore this event as necessary.
         // NOTE The default handler does nothing on ev_release.
         //    This allows for referring to static objects by special arguments wrapper,
@@ -4876,6 +4596,9 @@ namespace bmdx
         //  3) after removing a reference (during cref_t reset or overwriting).
       gen_nrefs = 0x80,
 
+        // Multi-functional ref. only: enable pointer cast/replace events (ev_cast_*).
+      gen_cast = 0x100,
+
       //  ======== ======== ======== ========
 
       ev_des = 0x100, // the handler should destroy the object (~T(), but not deallocate)
@@ -4891,7 +4614,13 @@ namespace bmdx
         // The handler should destroy the aux. object (~Aux(), but not free memory).
         //  NOTE Main object (T) is not available at the time of this event.
         //  NOTE This events occurs only when valid aux. object should be destroyed, unless disable_aux_des flag is set.
-      ev_aux_des = 0x2000
+      ev_aux_des = 0x2000,
+
+        // Cast events are called right after pointer casting/replacement.
+      _ev_cast_mask = 0x4000, // matching any cast op.: (optype & _ev_cast_mask) == _ev_cast_mask
+      ev_cast_static = 0x4000,
+      ev_cast_dynamic = 0x4001,
+      ev_cast_replace = 0x4002
   }; };
 
   template<class T, class _ = __vecm_tu_selector>
@@ -5005,9 +4734,9 @@ namespace bmdx
       t_cnt;
 
 
-      // The type of common event handler for multi-functional references. See also struct iref2.
-      //    s_long (s_long optype, s_ll flags, s_ll nrefs, s_ll dnrefs, _critsec_data0_t<>* pcsd, void* pobj, void* pinterface, void* paux)
-    typedef _s_long (*F_ev_handler_iref2)(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll dnrefs, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux);
+      // The type of common event handler for multi-functional references. See also iref2 :: handler_dflt.
+      //    s_long (s_long optype, s_ll flags, s_ll nrefs, s_ll delta, _critsec_data0_t<>* pcsd, void* pobj, void* pinterface, void* paux)
+    typedef _s_long (*F_ev_handler_iref2)(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll delta, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux);
 
 
 
@@ -5050,8 +4779,8 @@ namespace bmdx
       //  b) on has_ref() == false, generates an exception.
       // The reference, returned by ref(), may be unsafe at the time
       //  when cref_t object is overwritten by another thread.
-    const T& ref() const throw(exc_ref)    { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
-    const T* ptr() const throw()    { return const_cast<const T*>(_p); }
+    const T& ref() const volatile throw(exc_ref)    { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+    const T* ptr() const volatile throw()    { return const_cast<const T*>(_p); }
 
 
 
@@ -5095,8 +4824,8 @@ namespace bmdx
       // NOTE Original meaning of cref_t is "reference to constant object".
       //   Treating constant as variable is an agreement and may be unsafe.
       //   Only the client is responsible for logically correct and synchronized modifications.
-    T* _pnonc_u() const throw()    { return const_cast<T*>(_p); }
-    T& _rnonc() const { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+    T* _pnonc_u() const volatile throw()    { return const_cast<T*>(_p); }
+    T& _rnonc() const volatile { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
 
 
 
@@ -5109,7 +4838,7 @@ namespace bmdx
       //   Only the client is responsible for logically correct and synchronized modifications.
       // NOTE If cref_t may be concurrently overwritten, use p--->method() notation.
       //   See operator--.
-    T* operator->() const        { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return p; }
+    T* operator->() const volatile        { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return p; }
 
 
 
@@ -5223,6 +4952,7 @@ namespace bmdx
         }
         _p = x._p;
       }
+    //cref_t(const volatile cref_t& x) throw() : _ph(0), _p(0), _ps(0) { new (this) cref_t((const cref_t&)x); }
 
     ~cref_t() throw()    { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
@@ -5477,14 +5207,42 @@ namespace bmdx
     struct iref2
     {
 
+        // Default event handler for multi-functional references.
+        // For particular object or type,  may be replaced with custom handler.
+        // Arguments:
+        //    optype - type of operation, for which the handler is called.
+        //      See iref2_flags :: ev_*.
+        //      Custom handler should implement only the types of events that really occur
+        //      on the references using that handler.
+        //    flags - value of flags arguement, passed to create_any.
+        //    nrefs, delta - for event ev_nrefs: the new value of ref. count,
+        //      and the delta by which it has just been changed (+1 or -1).
+        //      NOTE ev_nrefs occurs only if flags contain gen_nrefs.
+        //      NOTE In other events, both parameters are always 0.
+        //    delta - for events ev_cast_*:
+        //      difference (in bytes) between the new pointer value (pinterface) and the original cref_t .ptr().
+        //    pcsd (always != ) - critical section object, used to lock operations on this cref_t.
+        //      May be 0 if the object reference functions in non-locking mode (use_critsec flag is unset).
+        //      If pcsd != 0, all events are called already under lock on pcsd, and any additional locking is not required.
+        //    pobj - for all events except ev_aux_con, ev_aux_des:
+        //      a pointer to the main (real) object,
+        //        a) created with create_any(),
+        //        b) passed to assign() (here: the pointer may point to one of base objects, not to the most derived object).
+        //    pinterface - for all events except ev_aux_con, ev_aux_des:
+        //      the value of .ptr() for cref_t on which the event handler is called.
+        //      NOTE In certain cases .ptr() may be different from any subobject of the main (real) contained object.
+        //        See also _refcast_replace_u.
+        //    paux - for all events:
+        //      the pointer to auxiliary object, if such exists together with the main contained object.
+        //      (Aux object creation is enabled with iref2_flags :: use_aux flag.)
         // Typical return values:
         //  1 - the event is handled.
         //  0 - the event is ignored or not recognized.
         //  -1 - bad argument.
         //  <= -2 failure.
-      static _s_long handler_dflt(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll dnrefs, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux)
+      static _s_long handler_dflt(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll delta, _critsec_data0_t<LockSelector>* pcsd, void* pobj, void* pinterface, void* paux)
       {
-        (void)flags; (void)nrefs; (void)dnrefs; (void)pinterface; (void)pcsd;
+        (void)flags; (void)nrefs; (void)delta; (void)pinterface; (void)pcsd;
         struct f : iref2_flags {};
         if (optype == f::ev_delete) { delete (T*)pobj; return 1; }
         if (optype == f::ev_des) { ((T*)pobj)->~T(); return 1; }
@@ -5532,7 +5290,7 @@ namespace bmdx
         const typename iref2_args_t<Aux>::i_new& args_aux = iref2_args_t<Aux>::args(),
         _s_ll nb_aux = -1
       ) {
-        flags &= ~t_cnt(0xffff00);
+        flags &= ~t_cnt(0xfffe00);
         struct f : iref2_flags {};
         const bool b_aux = !!(flags & f::use_aux);
         const bool b_nrefs = !!(flags & f::gen_nrefs);
@@ -5623,35 +5381,129 @@ namespace bmdx
         return create_any(no_exc, _x_assigner(x, b_hst), pcsd, flags, h, args_aux, nb_aux);
       }
 
-        // Creates a new reference to the same object, but through other interface.
-        // NOTE Reference casting works only with
+
+        // Family of pointer casting/replacement functions.
+        //
+        // Each creates a new reference to the same object, but with another pointer value.
+        //  In all _refcast*, T is the type of original reference, i.e. src.ref() is const T&.
+        //  The real type of the contained object is unknown to the client.
+        //
+        // NOTE Reference casting/replacement works only with the following kind of cref_t:
         //   1) weak references (flags(): type -1),
         //   2) multi-functional references (flags(): type 2).
-        // In both _refcast*, T is the type of reference (src.ref() is const T&),
-        //    not the original type of object, which is unknown to the client.
-        // _refcast_s_u: static cast T --> I is used.
-        //    This is unsafe if I is a subclass of T, but the object src is really not a type I.
-        // _refcast_d_u: tries to use dynamic_cast T --> I.
-        //    On few systems, this may cause system-level exception if the original object
-        //    is from another binary module.
-        //    Do not use dynamic cast in this way or check it in all target systems.
-        // NOTE The returned object refers to src critical section data, even in case of null ref.
+        //   For empty src (ptr() ==0, flags(): type -2), an empty result is always returned.
+        //
+        //  A. _refcast_s_u:
+        //      Does static_cast<I*>(src.ptr()).
+        //      (But if src.ptr() == 0, the result will be anyway 0.)
+        //      NOTE Casting is unsafe if I is subclass of T, but the real contained object is not an I.
+        //    no_exc: specifies the behavior in case
+        //      when src.ptr() != 0, but src is of bad kind (not a weak reference or multi-functional reference).
+        //      true: will generate an exception.
+        //      false: will return an empty cref_t<I>().
+        //
+        //  B. _refcast_d_u:
+        //      Does dynamic_cast<I*>(src.ptr()).
+        //      (But if src.ptr() == 0, the result will be anyway 0.)
+        //      NOTE On few systems, this may cause system-level exception if the original object
+        //        is from another binary module.
+        //        Do not use dynamic cast in this way or check it in all target systems.
+        //    no_exc: specifies the behavior in cases
+        //      1) the result of dynamic cast on the non-0 pointer is 0,
+        //        i.e. if the real contained object is not an I,
+        //      2) src.ptr() != 0, but src is of bad kind (not a weak reference or multi-functional reference).
+        //      true: will generate an exception.
+        //      false: will return an empty cref_t<I>().
+        //
+        //  C. _refcast_replace_u:
+        //      Directly sets p_replace to be .ptr() of the returned cref_t.
+        //      If src.ptr() != 0, it is completely ignored.
+        //      (But if any src.ptr() == 0 || p_replace == 0 || bad kind of src, the result will be anyway 0.)
+        //      In case of non-empty cref_t returned, only the client is responsible
+        //      for its addressing valid object.
+        //      (cref_t itself never uses its own .ptr(); in part. in multi-functional cref_t
+        //      all necessary operations are done on the original object pointer
+        //      that is stored internally.)
+        //    Primary purpose: several cref_t objects may efficiently share single memory area,
+        //      addressing different objects, placed in this area in application-specific way.
+        //      Lifetime of the shared area and the placed objects may be controlled
+        //      via cref_t aux. object (because in multi-functional cref_t,
+        //      it is stored and shared together with reference counter),
+        //      and/or in application-specific way.
+        //
+        // Returns:
+        //
+        //  a) on success - the result of pointer casting or replacement.
+        //    Internally, the real object is the same,
+        //    but the returned cref_t .ptr() is different from src.ptr(),
+        //    appropriate to type of casting.
+        //    Also, in case of multi-functional reference,
+        //    both src and the returned cref_t share the same reference counter and auxiliary object.
+        //
+        //  b) (_refcast_s_u, _refcast_d_u only)
+        //    on casting error or bad kind of src, and no_exc == true:
+        //    an empty cref_t<I>() is returned.
+        //
+        //  c) (_refcast_s_u, _refcast_d_u only)
+        //    on casting error or bad kind of src, and no_exc == false:
+        //    an exception is generated.
+        //
+        //  d) if src.ptr() == 0, an empty cref_t<I>() is returned.
+        //    NOTE _refcast_replace_u:
+        //      Case (d) occurs if any:
+        //      src.ptr() == 0 || p_replace == 0 || bad kind of src (not a weak reference or multi-functional reference)
+        //      Even if bad-kind src is valid and contains ref. counter,
+        //      the returned empty cref_t does not share it,
+        //      and does not internally reference src's real object or auxiliary object.
+        //
+        //  NOTE In (a, b, d), the returned cref_t refers
+        //    to the same critical section data as src,
+        //    even if the returned cref_t is empty.
+        //
       static cref_t<I> _refcast_s_u(cref_t src, bool no_exc)
       {
-        cref_t<I> rv; ((void**)&rv)[2] = src._ps; if (!src._p) { return rv; } // rv._ph == 0 by constr.
-        const I* p2 = 0; if (!src._ph || src._ph->b_v2())
+        cref_t<I> rv; ((void**)&rv)[2] = src._ps;
+        if (!src._p) { return rv; } // src is empty, same will be ret. value
+        struct f : iref2_flags {}; const bool b_weak = !src._ph; const bool b_multifun = !b_weak && src._ph->b_v2();
+        const I* p2 = 0; if (b_weak || b_multifun)
           { p2 = static_cast<const I*>(src._p); } // I and T must be statically related
         if (!p2) { if (!no_exc) { throw exc_refcast_s_u(); } return rv; }
+        const _s_ll delta = (char*)p2 - (char*)src._p;
         ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
+        if (b_multifun && (((cref_t&)rv)._ph->flags & f::gen_cast)) { _cref_handle2* ph = _s_ph2(((cref_t&)rv)._ph); try { F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->h.f_handler;
+          typename cref_t::t_lock __lock(ph->pcsd); if (ph->h.flags & f::use_critsec) { __lock.try_lock(true); }
+          peh(f::ev_cast_static, ph->h.flags, ph->h.cnt & _m, delta, ph->pcsd, ph->pobj, (void*)p2, !!(ph->h.flags & f::use_aux) ? _s_paux(ph) : 0);
+        } catch (...) {} }
         return rv;
       }
       static cref_t<I> _refcast_d_u(cref_t src, bool no_exc)
       {
-        cref_t<I> rv; ((void**)&rv)[2] = src._ps; if (!src._p) { return rv; } // rv._ph == 0 by constr.
-        const I* p2 = 0; if (!src._ph || src._ph->b_v2())
-          { p2 = dynamic_cast<const I*>(src._p); }
+        cref_t<I> rv; ((void**)&rv)[2] = src._ps;
+        if (!src._p) { return rv; } // src is empty, same will be ret. value
+        struct f : iref2_flags {}; const bool b_weak = !src._ph; const bool b_multifun = !b_weak && src._ph->b_v2();
+        const I* p2 = 0; if (b_weak || b_multifun) { p2 = dynamic_cast<const I*>(src._p); }
         if (!p2) { if (!no_exc) { throw exc_refcast_d_u(); } return rv; }
+        const _s_ll delta = (char*)p2 - (char*)src._p;
         ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
+        if (b_multifun && (((cref_t&)rv)._ph->flags & f::gen_cast)) { _cref_handle2* ph = _s_ph2(((cref_t&)rv)._ph); try { F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->h.f_handler;
+          typename cref_t::t_lock __lock(ph->pcsd); if (ph->h.flags & f::use_critsec) { __lock.try_lock(true); }
+          peh(f::ev_cast_dynamic, ph->h.flags, ph->h.cnt & _m, delta, ph->pcsd, ph->pobj, (void*)p2, !!(ph->h.flags & f::use_aux) ? _s_paux(ph) : 0);
+        } catch (...) {} }
+        return rv;
+      }
+      static cref_t<I> _refcast_replace_u(cref_t src, void* p_replace)
+      {
+        cref_t<I> rv; ((void**)&rv)[2] = src._ps;
+        if (!src._p) { return rv; } // src is empty, same will be ret. value
+        struct f : iref2_flags {}; const bool b_weak = !src._ph; const bool b_multifun = !b_weak && src._ph->b_v2();
+        const I* p2 = 0; if (b_weak || b_multifun) { p2 = (const I*)p_replace; }
+        if (!p2) { return rv; }
+        const _s_ll delta = (char*)p2 - (char*)src._p;
+        ((void**)&rv)[0] = src._ph; ((void**)&rv)[1] = (void*)p2; src._p = 0; src._ph = 0;
+        if (b_multifun && (((cref_t&)rv)._ph->flags & f::gen_cast)) { _cref_handle2* ph = _s_ph2(((cref_t&)rv)._ph); try { F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->h.f_handler;
+          typename cref_t::t_lock __lock(ph->pcsd); if (ph->h.flags & f::use_critsec) { __lock.try_lock(true); }
+          peh(f::ev_cast_replace, ph->h.flags, ph->h.cnt & _m, delta, ph->pcsd, ph->pobj, (void*)p2, !!(ph->h.flags & f::use_aux) ? _s_paux(ph) : 0);
+        } catch (...) {} }
         return rv;
       }
 
@@ -6078,7 +5930,317 @@ namespace bmdx
   };
 
 
-}
+
+  struct file_io
+  {
+      // Platform-dependent file handle type.
+    typedef std::FILE* t_handle;
+
+      // Factual type of the offset in file.
+      // NOTE OS X: consider compiling with -D__DARWIN_64_BIT_INO_T
+      //    to ensure 64-bit offsets and correct file r/w beyond 4 GB limit.
+    #if defined(_MSC_VER) || defined(__BORLANDC__)
+      typedef __int64 t_offset;
+    #elif defined(__FreeBSD__)
+      typedef __off_t t_offset;
+    #elif __APPLE__ && __MACH__
+      typedef off_t t_offset;
+    #else
+       typedef off64_t t_offset;
+    #endif
+
+
+      // Returns true if the specified path points to the existing file, false in all other cases.
+    static bool is_ex_file(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
+    static inline bool is_ex_file(const std::string& path __bmdx_noarg) throw()    { return is_ex_file(path.c_str()); }
+
+      // Returns true if the specified path points to the existing directory, false in all other cases.
+    static bool is_ex_dir(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
+    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) throw()    { return is_ex_dir(path.c_str()); }
+
+      // Creates the specified directory (NOTE POSIX: with rwx access),
+      //    or does nothing if the directory already exists.
+      //  Returns:
+      //    a) true if the directory exists or just created.
+      //    b) false on failure.
+    static bool mkdir_rwx(const char* ppath __bmdx_noarg) { if (is_ex_dir(ppath)) { return true; } return 0 == __bmdx_std_mkdir(ppath __bmdx_std_mkdir_arg2); }
+    static bool mkdir_rwx(const std::string& path __bmdx_noarg) { return mkdir_rwx(path.c_str()); }
+
+
+
+
+    //  is_open, result.
+    //  open, close, seek, seek_end, tell, read, write, flush.
+    //  static: is_ex_file, is_ex_dir, load_bytes, save_bytes
+
+    file_io() throw() : _desc(0), _nwr(0), _mode(0), _res(0) { __pad4 = 0; _last_op_wr = 0; }
+    ~file_io() throw() { if (is_open()) { close(); } }
+
+      // NOTE Copy constructor does not actually copy.
+      //    Defined for compatibility only.
+    file_io(const file_io&) throw() { new (this) file_io(); }
+
+
+    inline bool is_open() const throw() { return !!_desc; }
+      // mode 0: file is not open, mode 1: file is open read-only, mode 2: file is open read-write.
+    inline _s_long mode() const throw() { return _desc ? _mode : 0; }
+    inline _s_long result() const throw() { return _res; }
+
+      // Platform-dependent file handle.
+    inline t_handle _handle() const { return _desc; }
+
+      // Opens or reopens a file with the specified name and parameters.
+      // result():
+      //    1 - success,
+      //    -1 opening existing file for reading failed,
+      //    -2 opening existing file for r/w failed,
+      //    -3 file does not exist, cannot open for reading.
+      //    -4 file does not exist, file creation (for r/w) failed.
+      //    -5 pfilename is null.
+    inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false) throw()
+    {
+      if (!pfilename || *pfilename == '\0') { _res = -5; }
+      if (is_open()) { close(); }
+      #if defined(_MSC_VER) || defined(__BORLANDC__)
+        if (is_ex_file(pfilename)) { if (can_wrcr) { __bmdx_std_fopen_s(&_desc, pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { __bmdx_std_fopen_s(&_desc, pfilename, "rb"); _res = _desc ? 1 : -1; } }
+          else { if (can_wrcr) { __bmdx_std_fopen_s(&_desc, pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
+      #else
+        if (is_ex_file(pfilename)) { if (can_wrcr) { _desc = ::fopen(pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { _desc = ::fopen(pfilename, "rb"); _res = _desc ? 1 : -1; } }
+          else { if (can_wrcr) { _desc = ::fopen(pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
+      #endif
+      _mode = can_wrcr ? 2 : 1;
+      if (_res == 1) { std::setvbuf(_desc, 0, _IOFBF, _nwrchunk); }
+    }
+
+      // result():
+      //    1 - success,
+      //    0 - the file was not open,
+      //    -1 - an error, the file is regarded closed.
+    inline void close() throw()
+    {
+      if (!is_open()) { _res = 0; return; }
+      _res = fclose(_desc) == 0 ? 1 : -1;
+      _desc = 0;
+    }
+
+      // result():
+      //    1 - success,
+      //    -1 - the file is not open,
+      //    -2 - seek error.
+    inline void seek(_s_ll pos) throw()
+    {
+      if (!is_open()) { _res = -1; return; }
+      if (pos < 0) { _res = -2; return; }
+      if (_last_op_wr && _nwr) { fflush(_desc); _nwr = 0; }
+      _res = _seek_u(pos) == 0 ? 1 : -2;
+    }
+
+      // result():
+      //    1 - success,
+      //    -1 - the file is not open,
+      //    -2 - seek error.
+    inline void seek_end() throw()
+    {
+      if (!is_open()) { _res = -1; return; }
+      if (_last_op_wr && _nwr) { fflush(_desc); _nwr = 0; }
+      #if defined(_MSC_VER) || defined(__BORLANDC__)
+        _res = _fseeki64(_desc, 0, SEEK_END) == 0 ? 1 : -2;
+      #elif defined(__FreeBSD__) || (__APPLE__ && __MACH__) || defined(__ANDROID__)
+        _res = fseeko(_desc, 0, SEEK_END) == 0 ? 1 : -2;
+      #else
+        _res = fseeko64(_desc, 0, SEEK_END) == 0 ? 1 : -2;
+      #endif
+    }
+
+      // Returns valid pos. >=0, or -1 on error.
+      // result():
+      //    1 - success,
+      //    -1 - the file is not open,
+      //    -2 - error.
+    inline _s_ll tell() const throw()
+    {
+      if (!is_open()) { _res = -1; return -1; }
+      _s_ll pos = _tell_u();
+      _res = pos >= 0 ? 1 : -2;
+      return pos;
+    }
+
+      // Returns: number of bytes factually read.
+      // result():
+      //    1 - success, size bytes have been read
+      //    -1 - the file is not open,
+      //    -2 - read error, pos. is not changed,
+      //    -3 - read error, pos. is changed.
+    inline size_t read(void* dest, size_t size) throw()
+    {
+      if (!is_open()) { _res = -1; return 0; }
+      if (_last_op_wr)
+      {
+        if (_nwr) { fflush(_desc); _nwr = 0; }
+        _s_ll pos = _tell_u();
+        if (pos < 0) { _res = -2; return 0; }
+        rewind(_desc);
+        if (_seek_u(pos) != 0) { _res = -3; return 0; }
+      }
+      size_t s2 = fread(dest, 1, size, _desc);
+      _last_op_wr = 0;
+      _res = s2 == size ? 1 : (s2 == 0 ? -2 : -3);
+      return s2;
+    }
+
+      // Returns: number of bytes factually written.
+      // result():
+      //    1 - success, size bytes have been written
+      //    -1 - the file is not open,
+      //    -2 - write error, file/pos is not changed,
+      //    -3 - write error, file/pos is changed.
+    inline size_t write(const void* src, size_t size) throw()
+    {
+      if (!is_open()) { _res = -1; return 0; }
+      if (!_last_op_wr)
+      {
+        _s_ll pos = _tell_u();
+        if (pos < 0) { _res = -2; return 0; }
+        rewind(_desc);
+        if (_seek_u(pos) != 0) { _res = -3; return 0; }
+      }
+      if (_nwr + size >= _nwrchunk) { fflush(_desc); _nwr = 0; }
+      size_t s2 = fwrite(src, 1, size, _desc);
+      _last_op_wr = 1;
+      _res = s2 == size ? 1 : (s2 == 0 ? -2 : -3);
+      _nwr += s2;
+      return s2;
+    }
+
+      // result():
+      //    1 - success,
+      //    -1 - the file is not open,
+      //    -2 - operation error.
+      // NOTE Due to system caching, no guarantee that flush() writes to disk immediately.
+    inline void flush() throw()
+    {
+      if (!is_open()) { _res = -1; return; }
+      _res = fflush(_desc) == 0 ? 1 : -2;
+    }
+
+
+
+
+
+  private:
+    file_io& operator=(const file_io&);
+
+    static const int __F_OK = 0;
+
+    t_handle _desc;
+    mutable size_t _nwr;
+    _s_long _mode;
+    mutable _s_long _res;
+    union { mutable char _last_op_wr; _s_ll __pad4; };
+    static const size_t _nwrchunk = 2048;
+
+    inline _s_ll _tell_u() const throw()
+    {
+      t_offset pos;
+      #if defined(_MSC_VER) || defined(__BORLANDC__)
+        pos = _ftelli64(_desc);
+      #elif defined(__FreeBSD__) || (__APPLE__ && __MACH__) || defined(__ANDROID__)
+        pos = ftello(_desc);
+      #else
+        pos = ftello64(_desc);
+      #endif
+      if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if (pos == t_offset(m)) { return -1; } return _s_ll(pos) & m; }
+      return _s_ll(pos);
+    }
+    inline int _seek_u(_s_ll pos) throw()
+    {
+      if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if ((pos & m) != pos) { return -2; } }
+      int res;
+      #if defined(_MSC_VER) || defined(__BORLANDC__)
+        res = _fseeki64(_desc, t_offset(pos), SEEK_SET);
+      #elif defined(__FreeBSD__) || (__APPLE__ && __MACH__) || defined(__ANDROID__)
+        res = fseeko(_desc, t_offset(pos), SEEK_SET);
+      #else
+        res = fseeko64(_desc, t_offset(pos), SEEK_SET);
+      #endif
+      return res;
+    }
+
+
+
+
+    private: struct _stra_base; struct _stra_ca;  struct _stra_str;
+    public:
+
+
+          // Loads bytes from the given file into the dest. container. Resizes the container as necessary.
+          // 1 - success.
+          // 0 - file does not exist.
+          // -1 - memory alloc. error, or wrong arguments.
+          // -2 - file i/o error. NOTE On i/o error, dest may be left modified.
+      static inline int load_bytes(const std::string& fnp, std::string& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_str(), &dest); }
+      static inline int load_bytes(const char* fnp, std::string& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_str(), &dest); }
+
+      static inline int load_bytes(const std::string& fnp, _carray_base_t<char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, _carray_base_t<char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
+      static inline int load_bytes(const std::string& fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
+      static inline int load_bytes(const std::string& fnp, _carray_base_t<signed char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, _carray_base_t<signed char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noarg) throw();
+
+          // Saves bytes from src to the given file.
+          //    b_append == false truncates the file before writing, if it exists.
+          //    if n == 0, pdata may be 0.
+          // 1 - success.
+          // 0 - failed to create file (or open the existing file for writing).
+          // -1 - data size too large, or memory alloc. error, or wrong arguments.
+          // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
+      static inline int save_bytes(const char* fnp, const std::string& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, src.c_str(), src.length(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const std::string& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), src.c_str(), _s_ll(src.length()), b_append); }
+
+      static inline int save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, pdata, n0, b_append); }
+      static inline int save_bytes(const char* fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const char* fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const char* fnp, const arrayref_t<signed char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const arrayref_t<signed char>&  src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
+
+
+
+    private:
+      struct _stra_base { typedef std::string::size_type _t_sz; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() = 0; virtual char* _pd(void* ps __bmdx_noarg) const throw() = 0; };
+      struct _stra_str : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { if (n0 < 0) { n0 = 0; } typedef std::string T; _t_sz n = _t_sz(n0); if (_s_ll(n) != n0) { return false; } try { if (n) { ((T*)ps)->resize(n); } else { ((T*)ps)->clear(); } return true; } catch (...) { return false; } } virtual char* _pd(void* ps __bmdx_noarg) const throw() { typedef std::string T; return &(*(T*)ps)[0]; } };
+      struct _stra_ca : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { if (n0 < 0) { n0 = 0; } typedef _carray_base_t<char> T; return ((T*)ps)->realloc(n0, 0, 0, 0); } virtual char* _pd(void* ps __bmdx_noarg) const throw() { typedef _carray_base_t<char> T; return ((T*)ps)->pd(); } };
+      struct _stra_rba;
+
+      static int _load_bytes(const char* fnp, const _stra_base& a, void* ps __bmdx_noarg) throw()
+      {
+        if (!fnp) { return -1; }
+        file_io f; f.open(fnp, false); if (!f.is_open()) { return f.result() == -3 ? 0 : -2; }
+        f.seek_end(); if (f.result() < 1) { return -2; }
+        _s_ll n0 = f.tell(); if (n0 < 0) { return -2; }
+        f.seek(0); if (f.result() < 1) { return -2; }
+        if (_s_ll(size_t(n0)) != n0) { return -1; }
+        if (!a._resize(ps, n0)) { return -1; }
+        if (!n0) { return 1; }
+        f.read(a._pd(ps), size_t(n0)); if (f.result() < 1) { a._resize(ps, -1); return -2; }
+        return 1;
+      }
+      static int _save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) throw()
+      {
+        if (!(fnp && n0 >= 0 && !(n0 && !pdata))) { return -1; }
+        size_t n = size_t(n0); if (_s_ll(n) != n0) { return -1; }
+        file_io f; f.open(fnp, true, !b_append); if (!f.is_open()) { return 0; }
+        if (!n) { return 1; }
+        if (b_append) { f.seek_end(); if (f.result() < 1) { return -2; } }
+        f.write(pdata, n); if (f.result() < 1) { return -2; }
+        return 1;
+      }
+  };
+
+} // end namespace bmdx
 
 
 
@@ -6092,7 +6254,7 @@ namespace bmdx
   #if 0
   #elif __APPLE__ && __MACH__
   #elif defined(__FreeBSD__)
-  #elif defined(__SUNPRO_CC) || defined (__sun)
+  #elif defined(__SUNPRO_CC) || defined(__sun)
     #include <thread.h>
     #include <errno.h>
   #elif defined(__ANDROID__)
@@ -6137,7 +6299,7 @@ typedef t_name_shm (*f_shm_name_prefix)();
     #elif defined(__FreeBSD__)
       static t_name_shm f_prefix_critsec_gn() { return "/tmp/CS\t"; }
       static t_name_shm f_prefix_shmobj2s() { return "/"; }
-    #elif defined(__SUNPRO_CC) || defined (__sun)
+    #elif defined(__SUNPRO_CC) || defined(__sun)
       static t_name_shm f_prefix_critsec_gn() { return "/tmp/CS\t"; }
       static t_name_shm f_prefix_shmobj2s() { return "/tmp/"; }
     #elif defined(__ANDROID__)
@@ -6543,7 +6705,7 @@ private:
 
 
 
-namespace _api // public declarations (merged into namespace bmdx_shm)
+namespace _api // public API, merged into namespace bmdx_shm
 {
 
     // Non-blocking, non-locking queue for bytes, for two threads (sender, receiver).
@@ -6773,7 +6935,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     #endif
     #ifdef _bmdxpl_Psx
       #if 0
-      #elif defined(__SUNPRO_CC) || defined (__sun)
+      #elif defined(__SUNPRO_CC) || defined(__sun)
 
         int h; int _perm; mutex_t* pm; _s_long uid; _s_long uid_fsh;
         bool _b_handle(__bmdx_noarg1) const { return !!pm; } // true: named object created or opened
@@ -6923,6 +7085,8 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
   };
 
 
+  struct _shmobj2s_t_exceptions { struct exc_shmobj2s : std::exception { const char* what() const throw() { return "exc_shmobj2s::operator->: p==0"; } }; };
+
 
     // Wrapper for an object in shared memory, with two-sided access (2 separate locks).
   template<class T>
@@ -6930,8 +7094,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
   {
     private: struct _shm_sems;
     public:
-    struct exc_shmobj2s : std::exception { exc_shmobj2s(__bmdx_noarg1) {} const char* what() const throw() { return "exc_shmobj2s::operator->: p==0"; } };
-
+    struct exc_shmobj2s : _shmobj2s_t_exceptions::exc_shmobj2s {};
 
       // The pointer to nb bytes of shared memory, if shared memory is opened and compatible,
       //   or created and successfully initialized.
@@ -7056,19 +7219,29 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
 
       // Open/create/initialize/lock the shared memory in role as specified by b_side1 on shmobj2s_t construction.
-      //  b_keeplk true:
-      //      a) for the side that may initialize the object: try to set that side's lock, allocate shared memory if not yet, initialize state variables if not yet, return results.
-      //      b) for the side that may NOT initialize the object: try to set that side's lock, try to get shared memory pointer, check initialization, return results.
-      //  b_keeplk false:
-      //      a) for the side that may initialize the object: try to set that side's lock, allocate shared memory if not yet, initialize state variables if not yet, release the lock, return results.
-      //      b) for the side that may NOT initialize the object: try to get shared memory pointer, check initialization, return results.
+      //
+      //  b_keeplk:
+      //    1) Lock the memory at least for the current side (b_side1()).
+      //    2) Hold all global locks set after prepare() returns. (Additional locks may be set due to sides_cr != 0.)
+      //    true:
+      //      a) for the side that may initialize the object:
+      //          try to set that side's lock, allocate shared memory if not yet, initialize state variables if not yet, return results.
+      //      b) for the side that may NOT initialize the object:
+      //          try to set that side's lock, try to get shared memory pointer, check initialization, return results.
+      //    false:
+      //      a) for the side that may initialize the object:
+      //          try to set that side's lock, allocate shared memory if not yet, initialize state variables if not yet, release the lock, return results.
+      //      b) for the side that may NOT initialize the object:
+      //          try to get shared memory pointer, check initialization, return results.
+      //
       //  sides_cr: OR-ed flags, showing which sides may create and initialize shared memory area if it does not exist.
-      //      0x1 - side 1 (by default).
-      //      0x2 - side 2.
-      //      If the current side (b_side1 ? 1 : 2) matches with sides_cr, prepare() creates its lock
-      //        before any further operation.
-      //      NOTE prepare() never creates a lock of the opposite side, so if (by design) both sides may initialize the object
-      //        (sides_cr == 3), the client must additionally synchronize such access.
+      //    0x1 - side 1 (by default).
+      //    0x2 - side 2.
+      //    NOTE If the current side (b_side1()) cannot create the shared object (because of the given sides_cr),
+      //      prepare() does not lock the opposite side even if it's mentioned in sides_cr.
+      //    Namely, complete set of locks, requested by prepare(), is defined as:
+      //      ( (b_side1() && (sides_cr & 1)) || (!b_side1() && (sides_cr & 2)) ? sides_cr : 0 ) | ( b_keeplk ? (b_side1() ? 1 : 2) : 0 )
+      //
       // Returns:
       //    1 - the memory is available (created and initialized, or already opened). b_opened() == true.
       //    -1 - the shared memory exists, but its structure is not compatible (see htype arg. in shmobj2s_t()).
@@ -7307,14 +7480,6 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
     _s_long _prep(bool b_keeplk, _s_long sides_cr __bmdx_noarg)
     {
-      // if b_keeplk or b_side1: _rsems ensure init (may fail), _sems ensure lock (may fail)
-      // _shm_open
-      // check init
-      //  a) check compat. and size, if fact. size is larger, _shm_close, _shm_open(fact. size), (fail if size changed between close-open)
-      //  b) initialize, set size and type tag
-      // set p
-      // if !b_keeplk: release lock
-
       bool b_may_cr = !!((_s_long(_b_side1) | 2 * _s_long(!_b_side1)) & sides_cr);
       shared_lock __slk(*this, (b_keeplk ? 4 : 0) | (b_may_cr ? sides_cr : 0));
       if ((b_keeplk || b_may_cr) && !__slk.b_lk_any()) { return _rsems ? -3 : -2; }
@@ -7509,7 +7674,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
             return shm_open(_shmname_hashed_1_ff(_name, __bmdx_shm_name_max).c_str(), flags, __perm);
           #elif defined(__FreeBSD__)
             return shm_open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
-          #elif defined(__SUNPRO_CC) || defined (__sun)
+          #elif defined(__SUNPRO_CC) || defined(__sun)
             return ::open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
           #else
             return ::open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
@@ -7564,199 +7729,387 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
     do { _shm_sems::lock_normal(*this, sides); if ((!(sides & 1) || b_lk1()) && (!(sides & 2) || b_lk2())) { return; } clear(); if (dt != 0) { sleep_mcs(100); } }
       while (dt < 0 || (dt != 0 && clock_ms() - t0 < dt));
   }
+
+
+
+    // Interface for customized memory allocation and object dispatch control.
+    // See allocctl_pre::create for example of implementation.
+    //
+  struct i_allocctl
+  {
+    typedef arrayref_t<char> t_stringref;
+
+      // On client's behalf, allocates nb bytes of memory + maybe small overhead for internal info,
+      //    in implementation-specific way.
+      //    The allocated memory needs not to be zero-initialized.
+      // On allocation failure, make_rba should return an empty cref_t.
+      //
+    virtual cref_t<t_stringref> make_rba(_s_ll nb) = 0;
+
+      // Shows to i_allocctl the above allocated object, after it has been filled with data,
+      //  but before returning it to the final client.
+      //  (Normally, this occurs in the internal IPC message delivery thread.)
+      //  The implementation may ignore (default), modify, replace, or clear the object.
+      //  If the object is cleared, it's considered either
+      //      a) removed,
+      //      b) dispatched in other way than the calling routine does.
+      //    The calling routine forgets that cref_t, and goes to processing the next message.
+      //    E.g. for shmqueue_s this means that objects that are removed in this way
+      //    by notify_filled, will not get (be pushed) into the local queue of input messages,
+      //    and will not be available via mget().
+      //
+      //  NOTE There's no guarantee that all objects, made with make_rba, will be shown to notify_filled.
+      //      The internal client may e.g. exit between the events, or set another allocator
+      //      on application client's request, during the queue being disabled, etc.
+      //    notify_filled only receives an object (rba) when all the following is true:
+      //      1) rba is created with the same allocator instance, and it was not changed
+      //        or re-set by the client from that time,
+      //      2) after notify_filled, rba will be pushed into the local queue, servicing mget side.
+      //        This may occur immediately or after some delay, if the queue is full and its capacity is limited.
+      //
+    virtual void notify_filled(cref_t<t_stringref>& rba) { (void)rba; }
+
+    virtual ~i_allocctl() {}
+  };
+
 }
 
 
 
 
+typedef arrayref_t<char> _t_stringref;
+typedef char _t_rstr_ct; // make_rba's cref_t Aux object of context-dependent size; pointer to the object is _t_rstr_ct*, which is char*
 
-
-  // Shared memory part of msg_queue object.
-struct shmqueue_ctx_rso
+  // Creates a zero-initialized byte array of length nb.
+static cref_t<_t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd) throw()
 {
-  volatile _s_ll ipush_plan; // planned end pos. of the currently pushed message (used for recovery if the sending process is restarted)
-  volatile _s_ll ipop_plan; // planned end pos. of the currently popped message (used for recovery if the receiving process is restarted)
-  volatile _s_ll __shmqueue_ctx_rso_reserved[6];
+  typedef cref_t<_t_stringref>::iref2<_t_stringref, _t_rstr_ct> t_iref2;
+  if (nb < 0) { return cref_t<_t_stringref>(); }
+  cref_t<_t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<_t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(_t_rstr_ct), nb + bmdx_minmax::myllmax(nbadd, 0)));
+  _t_rstr_ct* ps =  (_t_rstr_ct*)rmsg.paux();
+  if (!ps) { rmsg.clear(); }
+    else { rmsg->_link_u(ps, nb); }
+  return rmsg;
+}
+  // Creates a byte array from msg, by value (self-contained), or by reference (msg->pd() must be valid until all referring cref_t's are destroyed).
+  //  nbadd > 0 (used only on b_byval == true): adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of msg data. E.g. nbadd == 1 makes conventional C string.
+static cref_t<_t_stringref> make_rba(_t_stringref msg, bool b_byval, _s_ll nbadd = 0) throw()
+{
+  typedef cref_t<_t_stringref>::iref2<_t_stringref, _t_rstr_ct> t_iref2;
+  if (!msg.is_valid()) { return cref_t<_t_stringref>(); }
+  cref_t<_t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<_t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(_t_rstr_ct), b_byval ? msg.n() + bmdx_minmax::myllmax(nbadd, 0) : 0));
+  _t_rstr_ct* ps =  (_t_rstr_ct*)rmsg.paux();
+  if (!ps) { rmsg.clear(); }
+    else if (b_byval) { if (msg.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, msg.pd(), msg.n()); } rmsg->_link_u(ps, msg.n()); }
+    else { rmsg->_link_u(msg.pd(), msg.n()); }
+  return rmsg;
+}
+  // Creates a byte array as concatenated copies of the given parts.
+  //  nbadd > 0: adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of parts data. E.g. nbadd == 1 makes conventional C string.
+static cref_t<_t_stringref> make_rba_mp(_t_stringref part1, _t_stringref part2, _t_stringref part3 = _t_stringref(), _s_ll nbadd = 0) throw()
+{
+  typedef cref_t<_t_stringref>::iref2<_t_stringref, _t_rstr_ct> t_iref2;
+  if (!(part1.is_valid() && part2.is_valid() && part3.is_valid())) { return cref_t<_t_stringref>(); }
+  const _s_ll nbvisible = part1.n() + part2.n() + part3.n();
+  cref_t<_t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<_t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(_t_rstr_ct), nbvisible + bmdx_minmax::myllmax(nbadd, 0)));
+  _t_rstr_ct* ps =  (_t_rstr_ct*)rmsg.paux();
+  if (!ps) { rmsg.clear(); }
+    else { rmsg->_link_u(ps, nbvisible); if (part1.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part1.pd(), part1.n()); ps += part1.n(); } if (part2.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part2.pd(), part2.n()); ps += part2.n(); } if (part3.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part3.pd(), part3.n()); ps += part3.n(); } }
+  return rmsg;
+}
 
-    // NOTE Let total shared memory size == nb().
-    //  Then, data buffer size == nb() - sizeof(_shmdesc) - (sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0)
-  rfifo_nbl11 ringbuf;
+  // NOTE This works if
+  //    1) T may be copied and assigned concurrently,
+  //    2) T may be moved as plain bytes,
+  //    3) this->x_copy is initialized by the getter as necessary.
+  //  Roles: setter/updater (s_) and getter (g_) are supposed to be in different threads.
+template <class T> struct volatile_cvar_t
+{
+  volatile T x;
+  T x_copy;
+  volatile_cvar_t() { s_ver1 = s_ver2 = 0; g_ver_pre = g_ver = 0; }
 
-private: shmqueue_ctx_rso(); shmqueue_ctx_rso(const shmqueue_ctx_rso&); void operator=(const shmqueue_ctx_rso&); // this object may be accessed only by pointer or reference
+    // Updates x.
+  void s_begin_update(const T& x2, _s_ll& ver_upd) { const _s_ll v = s_ver2 + 0x100; s_ver1 = v; if (&x2 != &x) { (T&)x = x2; } s_ver2 = v; ver_upd = v; }
+    // For waiting until g_update_complete() on the other side.
+    // 1 - done, 0 - not done yet, -1 (only if pver_upd != 0) - already overwritten by someone else.
+  _s_long s_is_done(_s_ll* pver_upd, unsigned char& retcode) const
+  {
+    _s_ll vg = g_ver; _s_ll vs = s_ver2;
+    retcode = (unsigned char)(vg & 0xff);
+    if ((vg >> 8) == (vs >> 8))
+    {
+      if (pver_upd && vs != *pver_upd) { return -1; }
+      return 1;
+    }
+    return 0;
+  }
+
+    // Updates x_copy from x.
+  void g_update_pre()
+  {
+    if (s_ver2 == g_ver_pre) { return; }
+    double t0 = 0;
+    _s_ll cnt = 0;
+    while (1)
+    {
+      _s_ll v1 = s_ver1; T x2((const T&)x); _s_ll v2 = s_ver2;
+      if (v2 == v1) { bmdx_str::words::swap_bytes(x_copy, x2); g_ver_pre = v2; return; }
+      ++cnt;
+      if (cnt == 1000) { t0 = clock_ms(); }
+      if (cnt > 1000 && clock_ms() - t0 > 200) { return; }
+    }
+  }
+    // If x_copy has been changed as the result of g_update_pre(),
+    //  g_is_new_pre() will return true, until g_update_complete() is called.
+  bool g_is_new_pre() const { return (g_ver_pre >> 8) != (g_ver >> 8); }
+  void g_update_complete(unsigned char retcode) { g_ver = (g_ver_pre & ~_s_ll(0xff)) | _s_ll(retcode); }
+
+private:
+  volatile _s_ll s_ver1, s_ver2;
+public:
+  _s_ll g_ver_pre;
+  volatile _s_ll g_ver;
 };
 
 
-#define __bmdx_shmfifo_ver (-1615777793) // In the current version, shmobj2s_t type index == yk_c::bytes::cmti_base_t<bmdx_shm::shmqueue_s, 2019, 12, 29, 20, 1>::ind()
+
 #define __bmdx_shmfifo_nbytes_min (rfifo_nbl11::n0) // minimal buffer space (8 bytes)
 #define __bmdx_shmfifo_msg_nbytes_max (((1ll << (5 * 8 - 1)) - 1)) // must be ( (1 << (_shmqueue_ctxx_impl::nb_mlen * 8 - 1)) - 1 )
 
-  // Dflt. bytes queue size in shared memory. (It may be specified by client individually for each queue, see shmqueue_s().)
-#define __bmdx_shmfifo_nbytes_dflt (100 * 1024ll)
+  // nbytes_dflt: dflt. shared queue size in bytes. (It may be specified by client individually for each queue, see shmqueue_s().)
+  // quot: data is pushed in parts (1/quot) of the buffer capacity, to allow earlier (and shorter in time) popping
+  // idle_t_short: short sleep if no data now for I/O.
+  //    NOTE Mem. copy speed is of order 3000 B/mcs; idle_t_short should be <=> __bmdx_shmfifo_nbytes_dflt/__bmdx_shmfifo_push1_quot.
+#ifdef _bmdxpl_Wnds
+  #define __bmdx_shmfifo_nbytes_dflt (150 * 1024ll)
+  #define __bmdx_shmfifo_push1_quot 5
+  #define __bmdx_shmfifo_idle_t_short_mcs 8
+#endif
+#ifdef _bmdxpl_Psx
+  #if __APPLE__ && __MACH__
+    #define __bmdx_shmfifo_nbytes_dflt (350 * 1024ll)
+    #define __bmdx_shmfifo_push1_quot 5
+  #else
+    #define __bmdx_shmfifo_nbytes_dflt (150 * 1024ll)
+    #define __bmdx_shmfifo_push1_quot 4
+  #endif
+  #if defined(__sun)
+    #define __bmdx_shmfifo_idle_t_short_mcs 0
+  #else
+    #define __bmdx_shmfifo_idle_t_short_mcs 8
+  #endif
+#endif
 
 #define __bmdx_shmfifo_idle_t_long_mcs 10000
-#define __bmdx_shmfifo_idle_t_short_mcs 8 // NOTE transf. speed. approx. 3000 b/mcs; t_short should be of order 1/20000 of buf. capacity (see also __bmdx_shmfifo_nbytes_dflt)
 #define __bmdx_shmfifo_idle_t_enable_time_ms 2100
-#define __bmdx_shmfifo_push1_quot 5 // data is pushed in parts (1/quot) of the buffer capacity, to allow earlier (and shorter in time) popping; this is optimal for interprocess case
 #define __bmdx_shmfifo_push1_nbmin 3000
+#define __bmdx_shmfifo_rcv_deact_timeout_ms 1500
+#define __bmdx_shmfifo_rcv_recover_timeout_ms 400
 #define __bmdx_shmfifo_pop_nbmin_mlock 2048
 
 struct shmqueue_ctx
 {
   typedef arrayref_t<char> t_stringref;
 
+    // shmqueue_ctx_rso version.
+  #define __bmdx_shmfifo_ver (-1615777792) // In the current version, shmobj2s_t type index == 1 + yk_c::bytes::cmti_base_t<bmdx_shm::shmqueue_s, 2019, 12, 29, 20, 1>::ind()
+  struct shmqueue_ctx_rso;
+
   shmqueue_ctx(const t_name_shm& name, bool b_receiver, _s_ll nbhint)
-    : b_rcv_mlk(0), pmsend1(0), pmsend2(0), nmsend(0), b_just_started(true), b_sender_waitinit(false), b_enrq(true),
-      buf(name.c_str(), b_receiver, bmdx_minmax::myllmax(nbhint, __bmdx_shmfifo_nbytes_min, rfifo_nbl11::n0) + sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0, __bmdx_shmfifo_ver),
-      bufstate(0), _mprg_ver(0), _mprg_ver_proc(0), _mprg_iend_done(0)
+  :
+    b_rcv_mlk(0), pmsend1(0), pmsend2(0), nmsend(0), b_just_started(true), b_enrq(true),
+    bufstate(0), _mprg_ver(0), _mprg_ver_proc(0), _mprg_iend_done(0), iver_al(0),
+
+    buf(name.c_str(), b_receiver, bmdx_minmax::myllmax(nbhint, __bmdx_shmfifo_nbytes_min, rfifo_nbl11::n0) + sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0, __bmdx_shmfifo_ver),
+    sndr_rcv_act(0), b_sndr_waitrcvinit(false), sndr_t0_rcvst(clock_ms()), sndr_ircvst(0)
+
   { _mprg_cmd.tms = bmdx::clock_ms(); }
 
   ~shmqueue_ctx() { _mrcv_clear(); }
 
 
-  critsec_t<shmqueue_ctx>::csdata csd;
-  vnnqueue_t<cref_t<t_stringref> > msgs;
-  cref_t<t_stringref> msg_rcv;
-  bool b_rcv_mlk;
-  t_stringref* pmsend1; // prefix to be sent
-  t_stringref* pmsend2; // main message to be sent
-  _s_ll nmsend;
-  bool b_just_started; // initially true, used to check if the process was restarted, while buf was already existing in some state
-  bool b_sender_waitinit; // when true, assume tr_send == -1, and wait until the buffer is constructed (which automatically sets tr_rcv == 0)
-  volatile bool b_enrq; // client's requirement to enable or disable the queue (by dflt. b_enrq == true)
-  shmobj2s_t<shmqueue_ctx_rso> buf;
-    // Buffer state copy for client non-blocking checks.
-    //  bufstate & 0xff:
-    //    0 - not initialized yet,
-    //    1 - during initialization,
-    //    2 - the last initialization attempt has failed ( (bufstate & 0xffffff00)>>8 contains negative error code ),
-    //    3 - initialized successfully,
-    //    4 - disabled.
-  volatile _s_long bufstate;
+  // A. Queue client-related part.
 
-  struct mprg_info { _s_ll iend; double tms; mprg_info() { iend = 0; tms = 0; } };
-  volatile _s_ll _mprg_ver;
-  _s_ll _mprg_ver_proc; // the last processed _mprg_ver
-  volatile mprg_info mprg_client; // if iend is set to >= 0, and the queue is sender, when clock reaches tms, purges all messages in range [msgs.ipop() .. ismprg_end); the currently unsent message is also terminated
-  mprg_info _mprg_cmd; // (required iend of sender's lq cleanup, time moment when it should be done)
-  _s_ll _mprg_iend_done;
-
-    // Returns size of the currently sent parts of the message.
-  _s_ll msend1_n() { if (!pmsend1) { return 0; } return bmdx_minmax::myllmin(pmsend1->n(), __bmdx_shmfifo_msg_nbytes_max); }
-  _s_ll msend2_n() { if (!pmsend2) { return 0; } return bmdx_minmax::myllmin(pmsend2->n(), __bmdx_shmfifo_msg_nbytes_max - msend1_n()); }
-
-    // NOTE Must be protected by critsec_t<msg_queue> with this->csd.
-    // Returns:
-    //    1 - success.
-    //    0 - incomplete initialization or bad state:
-    //      a) (sender only) could not initialize the buffer or fix errors, because the current side is sender (b_side1() == false).
-    //          The sender should wait until the receiver makes necessary updates from its side.
-    //      b) (receiver only) - the buffer exists and is initialized, but is in specific bad state.
-    //          The receiver must wait for *pf_state2() == -1 (i.e. until the bad state is recognized by the sender),
-    //      and then reinitialize the buffer.
-    //    Codes for errors, returned by shmobj2s_t::prepare():
-    //      -1 - the shared memory exists, but its structure is not compatible (see htype arg. in shmobj2s_t()).
-    //      -2 - failure during operation (it's generally unknown if the shared object is available).
-    //      -3 - lock of side 1 (for b_side1()==true) or side 2 (for b_side1()==false) is set by someone else.
-    //      -4 - the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side.
-  int _reset()
-  {
-    _s_long res = buf.prepare(true);
-    if (res < 0) { return res; }
-    if (res == 0) { return -2; } // not expected to occur
-
-    const _s_long fc = buf.f_constructed(); // here: fc is 0..2, buf.p() is valid
-    if (!buf.b_side1()) // sender
+    critsec_t<shmqueue_ctx>::csdata csd;
+    vnnqueue_t<cref_t<t_stringref> > msgs;
+    cref_t<t_stringref> msg_rcv;
+    bool b_rcv_mlk;
+    t_stringref* pmsend1; // prefix to be sent
+    t_stringref* pmsend2; // main message to be sent
+    _s_ll nmsend;
+    bool b_just_started; // initially true, used to check if the process was restarted, while buf was already existing in some state
+    volatile bool b_enrq; // client's requirement to enable or disable the queue (by dflt. b_enrq == true)
+      //
+      // Shared queue state copy for client non-blocking checks.
+      //  bufstate & 0xff:
+      //    0 - not initialized yet,
+      //    1 - during initialization,
+      //    2 - the last initialization attempt has failed ( (bufstate & 0xffffff00)>>8 contains negative error code ),
+      //    3 - initialized successfully,
+      //    4 - disabled.
+    volatile _s_long bufstate;
+      //
+      // Variables to control client request on discarding messages before they are sent.
+    volatile _s_ll _mprg_ver;
+    _s_ll _mprg_ver_proc; // the last processed _mprg_ver
+    struct mprg_info { _s_ll iend; double tms; mprg_info() { iend = 0; tms = 0; } };
+    volatile mprg_info mprg_client; // if iend is set to >= 0, and the queue is sender, when clock reaches tms, purges all messages in range [msgs.ipop() .. ismprg_end); the currently unsent message is also terminated
+    mprg_info _mprg_cmd; // (required iend of sender's lq cleanup, time moment when it should be done)
+    _s_ll _mprg_iend_done;
+    volatile_cvar_t<cref_t<i_allocctl> > v_al;
+      _s_ll iver_al; // iver_al == 0 serves as "null"
+    struct lqconf_cap
     {
-      if (fc == 1)
+      _s_ll ncapmin, ncapmax, nrsv; lqconf_cap() { ncapmin = -3; ncapmax = -3; nrsv = -3; }
+      bool is_valid_cap() const { return ncapmin >= -1 && ncapmax >= -2; }
+      bool is_valid_rsv() const { return nrsv >= 0; }
+      bool operator==(const lqconf_cap& x) { return x.ncapmin == ncapmin && x.ncapmax == ncapmax && x.nrsv == nrsv; }
+      void cp_nondflt(const lqconf_cap& c) { if (c.is_valid_cap()) { ncapmin = c.ncapmin; ncapmax = c.ncapmax; } if (c.is_valid_rsv()) { nrsv = c.nrsv; } }
+    };
+    volatile_cvar_t<lqconf_cap> v_inq_cap_back; // a copy of the last non-default v_inq_cap.x fields, maybe set by different calls
+    volatile_cvar_t<lqconf_cap> v_inq_cap;
+
+
+
+      // Size of the currently sent parts of the message.
+    _s_ll msend1_n() { if (!pmsend1) { return 0; } return bmdx_minmax::myllmin(pmsend1->n(), __bmdx_shmfifo_msg_nbytes_max); }
+    _s_ll msend2_n() { if (!pmsend2) { return 0; } return bmdx_minmax::myllmin(pmsend2->n(), __bmdx_shmfifo_msg_nbytes_max - msend1_n()); }
+    void _msend_clear() throw() { if (pmsend1) { msgs.pop_n(3); } else if (pmsend2) { msgs.pop_1(); } pmsend1 = pmsend2 = 0; nmsend = 0; }
+      //
+    bool _lqsend_mprg_pending() const throw() { return _mprg_ver != _mprg_ver_proc || _mprg_cmd.iend < _mprg_iend_done; }
+      //
+      // From sender queue, removes all message message refs. and pointers between [msgs.ipop() .. iend).
+      //  If anything has been removed, returns true.
+    bool _lqsend_mprg_update() throw()
+    {
+      if (buf.b_side1()) { return false; } // not a sender
+      if (_mprg_ver != _mprg_ver_proc)
       {
-        const char f1 = *buf.pf_state1();
-        const char f2 = *buf.pf_state2();
-        if (f1 == -1 && f2 == -1) { return 0; }
+        mprg_info cmd; while (1) { _s_ll ver1 = _mprg_ver; cmd.iend = mprg_client.iend; cmd.tms = mprg_client.tms; _s_ll ver2 = _mprg_ver; if (ver1 == ver2) { _mprg_ver_proc = ver1; break; } }
+        _mprg_cmd = cmd;
+      }
+      if ((_mprg_cmd.iend - _mprg_iend_done) > 0 && bmdx::clock_ms() >= _mprg_cmd.tms)
+      {
+        const _s_ll ipop0 = msgs.ipop();
+        if (ipop0 < _mprg_cmd.iend)
+        {
+          _msend_clear();
+          while (msgs.ipop() < _mprg_cmd.iend && msgs.navl() > 0)
+          {
+            if (msgs.front()) { msgs.pop_1(); }
+              else { msgs.pop_n(3); }
+          }
+        }
+        _mprg_iend_done = msgs.ipop();
+        return _mprg_iend_done != ipop0;
+      }
+      return false;
+    }
+
+
+    #ifdef _bmdxpl_Wnds
+        // NOTE Here, locking is not implemented due to inefficiency.
+      void _mrcv_lock() throw() {}
+      void _mrcv_unlock() throw() {}
+    #endif
+    #ifdef _bmdxpl_Psx
+      void _mrcv_lock() throw() { b_rcv_mlk = false; if (msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { b_rcv_mlk = 0 == mlock(msg_rcv->pd(), (size_t)msg_rcv->n()); } }
+      void _mrcv_unlock() throw() { if (b_rcv_mlk && msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { munlock(msg_rcv->pd(), (size_t)msg_rcv->n()); } b_rcv_mlk = false; }
+    #endif
+      //
+    void _mrcv_clear() throw() { if (!msg_rcv) { return; } _mrcv_unlock(); msg_rcv.clear(); }
+
+
+
+  // B. Shared queue implementation-related part.
+
+    struct shmqueue_ctx_rso
+    {
+      volatile _s_ll ipush_plan; // planned end pos. of the currently pushed message (used for recovery if the sending process is restarted)
+      volatile _s_ll ipop_plan; // planned end pos. of the currently popped message (used for recovery if the receiving process is restarted)
+      volatile _s_ll __rsv[6]; // __rsv[0] is live counter, incremented at each receiver iteration
+
+        // NOTE Let total shared memory size == nb().
+        //  Then, data buffer size == nb() - sizeof(_shmdesc) - (sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0)
+      rfifo_nbl11 ringbuf;
+
+    private: shmqueue_ctx_rso(); shmqueue_ctx_rso(const shmqueue_ctx_rso&); void operator=(const shmqueue_ctx_rso&); // this object may be accessed only by pointer or reference
+    };
+
+    shmobj2s_t<shmqueue_ctx_rso> buf;
+    volatile _s_long sndr_rcv_act; // sender side flag: 0: no receiver activity detected yet, 1 or 2: receiver activity detected at least once, -1: detected that receiver is not active after being active
+    bool b_sndr_waitrcvinit; // true: set together with tr_end = -1: the sender waits for the receiver to a) initialize the shared buffer, b) reconnect to the existing buffer
+    double sndr_t0_rcvst; _s_ll sndr_ircvst;
+
+      // NOTE Must be protected by critsec_t<shmqueue_ctx> with this->csd.
+      // Returns:
+      //    1 - success.
+      //    0 - incomplete initialization or bad state:
+      //      a) (sender only) could not initialize the buffer or fix errors, because the current side is sender (b_side1() == false).
+      //          The sender should wait until the receiver makes necessary updates from its side.
+      //      b) (receiver only) - the buffer exists and is initialized, but is in specific bad state.
+      //          The receiver must wait for *pf_state2() == -1 (i.e. until the bad state is recognized by the sender),
+      //      and then reinitialize the buffer.
+      //    Codes for errors, returned by shmobj2s_t::prepare():
+      //      -1 - the shared memory exists, but its structure is not compatible (see htype arg. in shmobj2s_t()).
+      //      -2 - failure during operation (it's generally unknown if the shared object is available).
+      //      -3 - lock of side 1 (for b_side1()==true) or side 2 (for b_side1()==false) is set by someone else.
+      //      -4 - the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side.
+    int _reset() throw()
+    { try {
+      _s_long res = buf.prepare(true);
+      if (res < 0) { return res; }
+      if (res == 0) { return -2; } // not expected to occur
+
+      const _s_long fc = buf.f_constructed(); // here: fc is 0..2, buf.p() is valid
+      if (!buf.b_side1()) // sender
+      {
+        if (fc == 1)
+        {
+          const char f1 = *buf.pf_state1();
+          const char f2 = *buf.pf_state2();
+          if (f1 == -1 && f2 == -1) { return 0; }
           else if (f1 == -1) { *buf.pf_state2() = -1; return 0; }
           else if (f2 == -1) { return 0; }
-          else { return 1; }
-      }
-      return 0;
-    }
-    else // receiver
-    {
-      if (fc == 1)
-      {
-        const char f1 = *buf.pf_state1();
-        const char f2 = *buf.pf_state2();
-        if (f2 == -1) {} // fall-through
-          else if (f1 == -1) { return 0; }
-          else { return 1; }
-      }
-      *buf.pf_state1() = -1;
-      buf.set_f_constructed(0);
-      const _s_ll nbuf = buf.nb() - _s_ll(sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0);
-        if (nbuf < 0) { return -1; }
-      buf.p()->ringbuf.init_ref(nbuf);
-      buf.p()->ipop_plan = 0;
-      buf.p()->ipush_plan = 0;
-      *buf.pf_state1() = 0;
-      *buf.pf_state2() = 0;
-      buf.set_f_constructed(1);
-      return 1;
-    }
-  }
-
-  void _mrcv_lock() throw()
-  {
-    #ifdef _bmdxpl_Psx
-      b_rcv_mlk = false;
-      if (msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { b_rcv_mlk = 0 == mlock(msg_rcv->pd(), (size_t)msg_rcv->n()); }
-    #endif
-  }
-  void _mrcv_unlock() throw()
-  {
-    #ifdef _bmdxpl_Psx
-      if (b_rcv_mlk && msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { munlock(msg_rcv->pd(), (size_t)msg_rcv->n()); }
-      b_rcv_mlk = false;
-    #endif
-  }
-  void _mrcv_clear() throw() { _mrcv_unlock(); if (msg_rcv) { msg_rcv.clear(); } }
-  void _clear_msend() throw()
-  {
-    if (pmsend1) { msgs.pop_n(3); }
-      else if (pmsend2) { msgs.pop_1(); }
-    pmsend1 = pmsend2 = 0;
-    nmsend = 0;
-  }
-  bool _lqsend_mprg_pending() const throw()
-  {
-    return _mprg_ver != _mprg_ver_proc || _mprg_cmd.iend < _mprg_iend_done;
-  }
-    // From sender queue, removes all message message refs. and pointers between [msgs.ipop() .. iend).
-    //  If anything has been removed, returns true.
-  bool _lqsend_mprg_update() throw()
-  {
-    if (buf.b_side1()) { return false; } // not a sender
-    if (_mprg_ver != _mprg_ver_proc)
-    {
-      mprg_info cmd; while (1) { _s_ll ver1 = _mprg_ver; cmd.iend = mprg_client.iend; cmd.tms = mprg_client.tms; _s_ll ver2 = _mprg_ver; if (ver1 == ver2) { _mprg_ver_proc = ver1; break; } }
-      _mprg_cmd = cmd;
-    }
-    if ((_mprg_cmd.iend - _mprg_iend_done) > 0 && bmdx::clock_ms() >= _mprg_cmd.tms)
-    {
-      const _s_ll ipop0 = msgs.ipop();
-      if (ipop0 < _mprg_cmd.iend)
-      {
-        _clear_msend();
-        while (msgs.ipop() < _mprg_cmd.iend && msgs.navl() > 0)
-        {
-          if (msgs.front()) { msgs.pop_1(); }
-            else { msgs.pop_n(3); }
+          else
+          {
+            if (f1 >= 0) { this->sndr_rcv_act = 2; }
+            return 1;
+          }
         }
+        return 0;
       }
-      _mprg_iend_done = msgs.ipop();
-      return _mprg_iend_done != ipop0;
-    }
-    return false;
-  }
+      else // receiver
+      {
+        if (fc == 1)
+        {
+          const char f1 = *buf.pf_state1();
+          const char f2 = *buf.pf_state2();
+          if (f2 == -1) {} // fall-through
+            else if (f1 == -1) { return 0; }
+            else { return 1; }
+        }
+        *buf.pf_state1() = -1;
+        buf.set_f_constructed(0);
+        const _s_ll nbuf = buf.nb() - _s_ll(sizeof(shmqueue_ctx_rso) - rfifo_nbl11::n0);
+          if (nbuf < 0) { return -1; }
+        shmqueue_ctx_rso* p = buf.p();
+          if (!p) { return -2; }
+        p->ringbuf.init_ref(nbuf);
+        std::memset((void*)&p->__rsv[0], 0, sizeof(p->__rsv));
+        p->ipop_plan = 0;
+        p->ipush_plan = 0;
+        *buf.pf_state1() = 0;
+        *buf.pf_state2() = 0;
+        buf.set_f_constructed(1);
+        return 1;
+      }
+    } catch (...) {} return -2; }
+
+
 private:
-  shmqueue_ctx(const shmqueue_ctx&); void operator=(const shmqueue_ctx&); // the object cannot be copied
+  shmqueue_ctx(const shmqueue_ctx&); void operator=(const shmqueue_ctx&); // this object cannot be copied
 };
 
 struct i_shmqueue_ctxx
@@ -7794,6 +8147,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
 
 
   _shmqueue_ctxx_impl() { iver_m = 0; }
+  ~_shmqueue_ctxx_impl() {}
 
   virtual cref_t<shmqueue_ctx> rqueue(const t_name_shm& name, _s_long autocreate_mode, _s_ll nbhint)
   {
@@ -7829,372 +8183,516 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
     return rv;
   }
 
-    // Creates a zero-initialized byte array of length nb.
-  static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd) throw()
-  {
-    typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
-    if (nb < 0) { return cref_t<t_stringref>(); }
-    cref_t<t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(t_rstr_ct), nb + bmdx_minmax::myllmax(nbadd, 0)));
-    t_rstr_ct* ps =  (t_rstr_ct*)rmsg.paux();
-    if (!ps) { rmsg.clear(); }
-      else { rmsg->link(ps, nb); }
-    return rmsg;
-  }
-    // Creates a byte array from msg, by value (self-contained), or by reference (msg->pd() must be valid until all referring cref_t's are destroyed).
-    //  nbadd > 0 (used only on b_byval == true): adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of msg data. E.g. nbadd == 1 makes conventional C string.
-  static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval, _s_ll nbadd = 0) throw()
-  {
-    typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
-    if (!msg.is_valid()) { return cref_t<t_stringref>(); }
-    cref_t<t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(t_rstr_ct), b_byval ? msg.n() + bmdx_minmax::myllmax(nbadd, 0) : 0));
-    t_rstr_ct* ps =  (t_rstr_ct*)rmsg.paux();
-    if (!ps) { rmsg.clear(); }
-      else if (b_byval) { if (msg.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, msg.pd(), msg.n()); } rmsg->link(ps, msg.n()); }
-      else { rmsg->link(msg.pd(), msg.n()); }
-    return rmsg;
-  }
-    // Creates a byte array as concatenated copies of the given parts.
-    //  nbadd > 0: adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of parts data. E.g. nbadd == 1 makes conventional C string.
-  static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) throw()
-  {
-    typedef cref_t<t_stringref>::iref2<t_stringref, t_rstr_ct> t_iref2;
-    if (!(part1.is_valid() && part2.is_valid() && part3.is_valid())) { return cref_t<t_stringref>(); }
-    const _s_ll nbvisible = part1.n() + part2.n() + part3.n();
-    cref_t<t_stringref> rmsg = t_iref2::create0(1, 0, 0x14 | iref2_flags::use_aux, t_iref2::handler_dflt, iref2_args_t<t_rstr_ct>::args(), bmdx_minmax::myllmax(sizeof(t_rstr_ct), nbvisible + bmdx_minmax::myllmax(nbadd, 0)));
-    t_rstr_ct* ps =  (t_rstr_ct*)rmsg.paux();
-    if (!ps) { rmsg.clear(); }
-      else { rmsg->link(ps, nbvisible); if (part1.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part1.pd(), part1.n()); ps += part1.n(); } if (part2.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part2.pd(), part2.n()); ps += part2.n(); } if (part3.n() > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(ps, part3.pd(), part3.n()); ps += part3.n(); } }
-    return rmsg;
-  }
-
   struct th_handler { threadctl tc; ~th_handler() { if (tc) { tc.signal_stop(); while (tc) { sleep_mcs(5000); } } } };
   struct _ipc_delivery_thread : threadctl::ctx_base
   {
+    typedef std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> t_ctxmap;
+
+    inline static bool _part_update_ctxmap(t_ctxmap& m2, _s_ll& iver_m2) throw()
+    {
+      cref_t<i_shmqueue_ctxx> mqq1;
+      _shmqueue_ctxx_impl* pqq1 = 0;
+      if (!mqq1) { mqq1 = mqq(); }
+      if (!pqq1) { pqq1 = static_cast<_shmqueue_ctxx_impl*>(mqq1._pnonc_u()); }
+      if (!pqq1) { return false; }
+      bool b_succ = 1;
+      if (iver_m2 < pqq1->iver_m)
+      {
+        critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+        try { m2 = pqq1->m; iver_m2 = pqq1->iver_m; } catch (...) { b_succ = 0; }
+      }
+      if (!b_succ) { return false; }
+      return true;
+    }
+
+    inline static bool _part_validate_ctx1(shmqueue_ctx& q, bool& b_changed) throw()
+    {
+      // 0. Pre-update volatile settings.
+
+      q.v_al.g_update_pre();
+      q.v_inq_cap.g_update_pre();
+
+      // 1. Process: enrq flag.
+
+      if (q.bufstate == 4) // the queue is currently disabled
+      {
+        if (!q.b_enrq) // continue to be disabled
+        {
+          if (!q.buf.b_side1() && q._lqsend_mprg_pending())
+            { const bool b_purged = q._lqsend_mprg_update(); b_changed =  b_changed || b_purged; }
+          return false;
+        }
+        critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+        q.bufstate = 0; q.b_just_started = true; // enable the queue as if initialized first time
+        b_changed = true;
+      }
+      else if (!q.b_enrq) // the queue is currently enabled, try to disable as requested
+      {
+        bool b_may_disable = false;
+        critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+        const _s_long bsm = (q.bufstate & 0xff);
+        if (q.b_sndr_waitrcvinit) { b_may_disable = true; }
+        else if (bsm == 3 && q.buf.f_constructed() == 1)
+        {
+          if (q.buf.b_side1())
+          {
+            signed char& tr_rcv = *q.buf.pf_state1();
+            b_may_disable = tr_rcv == 0 || tr_rcv == 1 || tr_rcv == -1;
+          }
+          else
+          {
+            signed char& tr_send = *q.buf.pf_state2();
+            b_may_disable = tr_send == 0 || tr_send == 1 || tr_send == -1;
+          }
+        }
+        else { b_may_disable = true; }
+        if (b_may_disable)
+        {
+          q.buf.close();
+          q._msend_clear(); q.b_sndr_waitrcvinit = false;
+          q._mrcv_clear();
+          q.bufstate = 4;
+          b_changed = true;
+          return false;
+        }
+      }
+
+      // 2. Process: buffer construction, queue purge rq., working state setting.
+
+      bool b_q_constructed = true; // true if queue is constructed (i.e. in normal working state)
+      do { // once
+        if (q.b_sndr_waitrcvinit)
+        {
+          critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+          if (q.buf.f_constructed() != 1) { q.bufstate = 1; b_q_constructed = false; break; }
+          const signed char _tr_rcv = *q.buf.pf_state1();
+          signed char& tr_send = *q.buf.pf_state2();
+          if (_tr_rcv == -1) { q.bufstate = 1; tr_send = -1; b_q_constructed = false; break; }
+          q.bufstate = 3;
+        }
+        else if ((q.bufstate & 0xff) < 3)
+        {
+          critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+          const _s_long bsm = (q.bufstate & 0xff);
+          if (bsm < 3 || (bsm != 4 && q.buf.f_constructed() != 1))
+          {
+            _s_long res = q._reset(); // NOTE this may return only 0 or 1, if the current side is sender
+            if (res >= 1) { q.bufstate = 3; }
+              else if (res == 0) { q.bufstate = 1; }
+              else { q.bufstate = (res << 8) | 2; }
+            if (res < 1) { b_q_constructed = false; break; }
+            b_changed = true;
+          }
+        }
+        if (!q.buf.p()) { b_q_constructed = false; break; } // should not occur
+      } while (false);
+
+      // here: if b_q_constructed == true: q.bufstate == 3 && q.buf.f_constructed() == 1 && q.buf.p() != 0
+
+      if (!q.buf.b_side1() && q._lqsend_mprg_pending())
+      {
+        const bool b_purged = q._lqsend_mprg_update(); b_changed =  b_changed || b_purged;
+        const bool b_msg_pending = !!q.pmsend2;
+        if (b_q_constructed && b_purged && b_msg_pending) { signed char& tr_send = *q.buf.pf_state2(); tr_send = -2; } // the message that's currently being sent, will be canceled
+      }
+      if (!b_q_constructed) { return false; }
+
+      // 3. Receiver live state update / check.
+
+      if (1)
+      {
+        volatile _s_ll& ircvst = q.buf->__rsv[0];
+        _s_ll x = ircvst;
+        const double t = clock_ms();
+        if (q.buf.b_side1())
+        {
+          x += 1;
+          ircvst = x;
+        }
+        else
+        {
+          const signed char c_rcv = *q.buf.pf_state1();
+          if (x != q.sndr_ircvst)
+          {
+            if (q.sndr_ircvst != 0)
+            {
+              if (q.sndr_rcv_act == 0 && c_rcv == -2) { q.sndr_rcv_act = 1; } // receiver has just started, it's expected to quickly recover to normal state
+                else { q.sndr_rcv_act =  2; }
+            }
+            q.sndr_t0_rcvst = t;
+            q.sndr_ircvst = x;
+          }
+          if (q.sndr_rcv_act == 2) { if (c_rcv == -2 || t - q.sndr_t0_rcvst >= __bmdx_shmfifo_rcv_deact_timeout_ms) { q.sndr_rcv_act = -1; } }
+            else if (q.sndr_rcv_act == 1) { if (t - q.sndr_t0_rcvst >= __bmdx_shmfifo_rcv_recover_timeout_ms) { q.sndr_rcv_act = -1; } }
+        }
+      }
+
+      return true;
+    }
+
+    inline static void _part_update_conf_rcv(shmqueue_ctx& q, bool& b_changed, bool b_validated) throw()
+    {
+      (void)b_validated;
+      if (!q.buf.b_side1()) { return; }
+      const bool b_al = q.v_al.g_is_new_pre();
+      const bool b_cap = q.v_inq_cap.g_is_new_pre();
+      if (!(b_al || b_cap)) { return; }
+
+      if (b_al) { b_changed = true; q.v_al.g_update_complete(2); }
+      if (b_cap)
+      {
+        unsigned char retcode = 0;
+        _x_update_lqcap(q, retcode);
+        if (retcode == 2) { b_changed = true; _x_update_conf_lqcap_back(q); }
+        q.v_inq_cap.g_update_complete(retcode);
+      }
+    }
+
+    inline static void _part_update_conf_send(shmqueue_ctx& q, bool& b_changed, bool b_validated) throw()
+    {
+      (void)b_validated;
+      if (q.buf.b_side1()) { return; }
+      const bool b_cap = q.v_inq_cap.g_is_new_pre();
+      if (!b_cap) { return; }
+      if (b_cap)
+      {
+        unsigned char retcode = 0;
+        _x_update_lqcap(q, retcode);
+        if (retcode == 2) { b_changed = true; _x_update_conf_lqcap_back(q); }
+        q.v_inq_cap.g_update_complete(retcode);
+      }
+    }
+
+    inline static void _x_update_lqcap(shmqueue_ctx& q, unsigned char& retcode) throw()
+    {
+      retcode = 0;
+      // The client-side lock is necessary to avoid clash with mget(), bufstate() etc.
+      critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+      _s_ll nmin_prv = q.msgs.ncapmin(), nmax_prv = q.msgs.ncapmax();
+      bool b_cap_changed = false, b_rsv_changed = false;
+      if (q.v_inq_cap.x_copy.is_valid_cap())
+      {
+        b_cap_changed = 1 == q.msgs.set_cap_hints(q.v_inq_cap.x_copy.ncapmin, q.v_inq_cap.x_copy.ncapmax);
+        if (!b_cap_changed) { retcode = 1; }
+      }
+      if (retcode != 1 && q.v_inq_cap.x_copy.is_valid_rsv())
+      {
+        b_rsv_changed = 1 == q.msgs.set_rsv(q.v_inq_cap.x_copy.nrsv);
+        if (!b_rsv_changed) { retcode = 1; }
+      }
+      if (retcode == 1) { if (b_cap_changed) { q.msgs.set_cap_hints(nmin_prv, nmax_prv); } }
+        else if (b_cap_changed || b_rsv_changed) { retcode = 2; }
+    }
+    inline static void _x_update_conf_lqcap_back(shmqueue_ctx& q) throw()
+    {
+      typedef shmqueue_ctx::lqconf_cap lqconf_cap;
+      lqconf_cap c = (lqconf_cap&)q.v_inq_cap_back.x;
+      c.cp_nondflt(q.v_inq_cap.x_copy);
+      _s_ll _ver = 0;
+      q.v_inq_cap_back.s_begin_update(c, _ver);
+    }
+
+    inline static void _part_do_rcv(shmqueue_ctx& q, bool b_exit, bool& b_changed)
+    {
+        // Recevier.
+        // tr_rcv
+        //    0 - initialize, goto 1
+        //    1 - wait until message length (fields of nb_mlen bytes) appears in the buffer, peek into it, prep. string for input, goto tr_rcv = 2
+        //    2 - discard msg. length, read msg. bytes, read end byte, [if end succeeded: push string into the queue], clear string, goto tr_rcv = 1
+        //    -1 - data buffer is broken and currently cannot be used; should wait for the sender setting tr_send = -1, and then re-initialize the buffer
+        //    -2 - data sending sequence is broken (probably receiver process is restarted); try to recover:
+        //      pop the current message bytes until message end, ignore this data; then goto tr_rcv = 1 (normal state)
+
+      shmqueue_ctx::shmqueue_ctx_rso& shm = *q.buf.p();
+      rfifo_nbl11& buf = shm.ringbuf;
+      signed char& tr_rcv = *q.buf.pf_state1();
+      const signed char _tr_send = *q.buf.pf_state2();
+
+      signed char c_rcv = tr_rcv;
+      if (_tr_send == -1) { tr_rcv = c_rcv = -1; }
+      if (q.b_just_started)
+      {
+        q.b_just_started = false;
+        switch (c_rcv)
+        {
+          case -2: break;
+          case -1: break;
+          case 0: break;
+          case 1: tr_rcv = c_rcv = 1; b_changed = true; break;
+          case 2: tr_rcv = c_rcv = -2; b_changed = true; break;
+          default: tr_rcv = c_rcv = -1; b_changed = true; break;
+        }
+      }
+      if (c_rcv == -1) // wait for sender setting its tr_send = -1, then re-initialize the buffer
+      {
+        q._mrcv_clear();
+        if (_tr_send != -1) { return; }
+        critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+        q.buf.set_f_constructed(0);
+        q.bufstate = 1;
+        b_changed = true;
+        return;
+      }
+
+
+      if (c_rcv == 0 || c_rcv == 1)
+      {
+        if (b_exit) { q._mrcv_clear(); tr_rcv = -2; return; }
+        if (c_rcv == 0) { tr_rcv = 1; b_changed = true; }
+
+        if (buf.navl() < nb_mlen + 1) { return; } // minimal total message length is (nb_mlen (length field) + 0 (empty message) + 1 (end byte))
+        char z[nb_mlen];
+        buf.pop(z, nb_mlen, false); // peek into msg. length
+        const bool b_extmsg = !!((unsigned char)z[0] & 0x80);
+        const _s_ll ndatr = ((_s_ll(z[0]) & 127) << 32) + be4(z, 1); // NOTE client data length bit 39 is ignored (it serves as b_extmsg flag)
+        const _s_ll iend = buf.ipop() + nb_mlen + ndatr + 1;
+        shm.ipop_plan = iend;
+        b_changed = true;
+
+        if (b_extmsg)
+        {
+          if (ndatr != 0) { tr_rcv = -2; return; } // read and discard unsupported messages
+          buf._rcv_set_ipop(iend); // skip the empty (non-informational) ext. message
+          return;
+        }
+        else if (ndatr > __bmdx_shmfifo_msg_nbytes_max) { tr_rcv = -2; return; } // read and discard messages that are too long
+
+        cref_t<i_allocctl>& al = q.v_al.x_copy;
+        if (al)
+        {
+          q.iver_al = q.v_al.g_ver;
+          q._mrcv_clear();
+          try { q.msg_rcv = al->make_rba(ndatr); } catch (...) {}  // creates a string for input message, using custom allocator
+            if (!q.msg_rcv) { return; } // will retry herein on the next iteration
+        }
+        else
+        {
+          q.iver_al = 0;
+          q.msg_rcv = make_rba_z(ndatr, 1); // creates a string for input message, adds a zero byte to make the returned array more like to C string
+            if (!q.msg_rcv) { return; } // will retry herein on the next iteration
+          q._mrcv_lock();
+        }
+        tr_rcv = 2;
+        return;
+      }
+      else if (c_rcv == 2)
+      {
+        if (b_exit) { q._mrcv_clear(); tr_rcv = -2; return; }
+        if (!q.msg_rcv)  { tr_rcv = -1; b_changed = true; return; } // invariant check
+
+        const _s_ll ndatr = q.msg_rcv->n();
+        const _s_ll i1 = shm.ipop_plan - 1 - ndatr;
+        const _s_ll i0 = i1 - nb_mlen;
+
+        if (buf.ipop() < i0 || (buf.ipop() < i1 && buf.ipop() > i0) || buf.ipop() > shm.ipop_plan) // invariant check
+          { tr_rcv = -1; b_changed = true; return; }
+
+        if (buf.ipop() < i1) // pop length
+          { if (buf.navl() < nb_mlen) { return; } buf.discard(nb_mlen); b_changed = true; }
+
+        if (buf.ipop() < shm.ipop_plan - 1) // pop data
+        {
+          _s_ll j = buf.ipop() - i1;
+          if (j >= ndatr) { tr_rcv = -1; b_changed = true; return; }
+          _s_ll npop2 = buf.pop(q.msg_rcv._pnonc_u()->pd() + j, ndatr - j);
+          if (npop2 != 0) { b_changed = true; }
+        }
+
+        if (buf.ipop() == shm.ipop_plan - 1) // pop end byte, check if it's 1 (if the message is correct), or otherwise
+        {
+          if (buf.navl() < 1) { return; }
+          char c_end(0); buf.pop(&c_end, 1); b_changed = true;
+          if (c_end != 1) { q._mrcv_clear(); tr_rcv = 1; return; }
+        }
+
+        if (buf.ipop() == shm.ipop_plan)
+        {
+          cref_t<i_allocctl>& al = q.v_al.x_copy;
+          if (al)
+          {
+            if (q.v_al.g_ver == q.iver_al) { try { al->notify_filled(q.msg_rcv); } catch (...) {} }
+            q.iver_al = 0;
+          }
+          if (1 != q.msgs.push_1(q.msg_rcv)) { return; }
+          q._mrcv_clear(); tr_rcv = 1; b_changed = true;
+        }
+
+        return;
+      }
+      else // anything except [-1..2]; attempt to recover
+      {
+        if (c_rcv != -2) { tr_rcv = -2; }
+        q._mrcv_clear();
+        if (b_exit) { return; }
+        if (shm.ipush_plan < shm.ipop_plan) { tr_rcv = -1; b_changed = true; }
+          else if (buf.ipop() < shm.ipop_plan) { const _s_ll nd = buf.discard(shm.ipop_plan - buf.ipop()); if (nd > 0) { b_changed = true; } }
+          else if (buf.ipop() == shm.ipop_plan) { tr_rcv = 1; b_changed = true; }
+          else { tr_rcv = -1; b_changed = true; }
+        return;
+      }
+    }
+
+    inline static void _part_do_send(shmqueue_ctx& q, bool b_exit, bool& b_changed)
+    {
+        // Sender.
+        // tr_send
+        //    0 - just started; set goto tr_send = 1
+        //    1 - wait while a message appears on the queue, pop, goto tr_send = 2
+        //    2 - push message length, bytes, end byte into the buffer, goto 1
+        //    -1 - data buffer is broken and currently cannot be used; should wait for the receiver re-initializing the buffer
+        //    -2 - data sending sequence is broken (probably sender process is restarted); try to recover:
+        //      push zero bytes up to the end of incomplete message, then push the end byte indicating an error
+
+      shmqueue_ctx::shmqueue_ctx_rso& shm = *q.buf.p();
+      rfifo_nbl11& buf = shm.ringbuf;
+      const signed char _tr_rcv = *q.buf.pf_state1();
+      signed char& tr_send = *q.buf.pf_state2();
+
+
+      signed char c_send = tr_send;
+      if (q.b_sndr_waitrcvinit)
+      {
+        q._msend_clear();
+          // NOTE _part_do_send may be called only on q.bufstate == 3,
+          //  meaning that tr_send == 0 occurs right after successful buffer reinit.
+          //  by the receiver side, and b_sender_waitrcv should be reset.
+        if (!(c_send == 0 || c_send == 1)) { return; }
+        q.b_sndr_waitrcvinit = false; b_changed = true;
+      }
+      if (q.b_just_started)
+      {
+        q.b_just_started = false;
+        switch (c_send)
+        {
+          case -2: break;
+          case -1: break;
+          case 0: break;
+          case 1: tr_send = c_send = 1; b_changed = true; break;
+          case 2: tr_send = c_send = -2; b_changed = true; break;
+          default: tr_send = c_send = -1; b_changed = true; break;
+        }
+      }
+      if (c_send == -1 || _tr_rcv == -1) { q._msend_clear(); if (c_send != -1) { tr_send = c_send = -1; } q.b_sndr_waitrcvinit = true; b_changed = true; return; }
+
+
+      if (c_send == 0 || c_send == 1)
+      {
+        if (_tr_rcv == -2) { q._msend_clear(); tr_send = -2; b_changed = true; return; }
+        if (b_exit) { q._msend_clear(); tr_send = -2; return; }
+
+        if (c_send == 0) { tr_send = 1; b_changed = true; }
+        if (!q.pmsend2) // needs to check for a message in local queue
+        {
+          if (q.msgs.navl() <= 0) { return; }
+          const cref_t<t_stringref>& r0 = q.msgs.front();
+          if (r0)
+          {
+            if (!r0._pnonc_u()->is_valid()) { q.msgs.pop_1(); return; }
+            q.pmsend2 = r0._pnonc_u();
+            q.nmsend = q.msend2_n();
+            shm.ipush_plan = (buf.ipush() + nb_mlen + q.nmsend + 1);
+          }
+          else
+          {
+            if (q.msgs.navl() < 3) { q.msgs.pop_1(); return; }
+            const cref_t<t_stringref>& r1 = q.msgs[1];
+            const cref_t<t_stringref>& r2 = q.msgs[2];
+            if (!(r1 && r2 && r1._pnonc_u()->is_valid() && r2._pnonc_u()->is_valid())) { q.msgs.pop_n(3); return; }
+            q.pmsend1 = r1._pnonc_u();
+            q.pmsend2 = r2._pnonc_u();
+            q.nmsend = q.msend1_n() + q.msend2_n();
+            shm.ipush_plan = (buf.ipush() + nb_mlen + q.nmsend + 1);
+          }
+          b_changed = true;
+        }
+        if (buf.nfree() < nb_mlen) { return; } // the shm. buffer has not enough free place yet, to accept message length
+        tr_send = 2; b_changed = true;
+        return;
+      }
+      else if (c_send == 2)
+      {
+        if (_tr_rcv == -1) { tr_send = -1; q.b_sndr_waitrcvinit = true; b_changed = true; return; }
+        if (_tr_rcv == -2) { q._msend_clear(); tr_send = -2; b_changed = true; return; }
+        if (b_exit) { q._msend_clear(); tr_send = -2; return; }
+
+        const _s_ll i0 = shm.ipush_plan - 1 - q.nmsend - nb_mlen;
+
+        if (!(q.pmsend2 && buf.ipush() >= i0 && buf.ipush() <= shm.ipush_plan)) // invariant check
+          { tr_send = -1; q.b_sndr_waitrcvinit = true; b_changed = true; return; }
+
+        const _s_ll i1 = i0 + nb_mlen; // abs. index of the beginning of message prefix
+        if (buf.ipush() < i1) // push user message string length
+          { if (buf.nfree() < nb_mlen) { return; } char z[nb_mlen]; z[0] = char((q.nmsend >> 32) & 127); set_be4(z, 1, _s_long(q.nmsend)); buf.push(z, nb_mlen); b_changed = true; } // NOTE client data length bit 39 == 0 (reserved for possible protocol updates)
+
+        const _s_ll ndat1 = q.msend1_n();
+        const _s_ll i2 = i1 + ndat1; // abs. index of the beginning of main message(after prefix, if it exits)
+        if (buf.ipush() < i2) // push prefix
+        {
+          const _s_ll j = buf.ipush() - i1; const char* pd = q.pmsend1->pd();
+          if (j >= ndat1) { tr_send = -1; q.b_sndr_waitrcvinit = true; b_changed = true; return; }
+          const _s_ll n = bmdx_minmax::myllrange_ub(buf.n() / __bmdx_shmfifo_push1_quot, __bmdx_shmfifo_push1_nbmin, ndat1 - j);
+          if (0 != buf.push(pd + j, n)) { b_changed = true; }
+          if (buf.ipush() < i2) { return; }
+        }
+
+        const _s_ll i3 = shm.ipush_plan - 1;
+        if (buf.ipush() < i3) // push main message
+        {
+          const _s_ll j = buf.ipush() - i2; const _s_ll ndat2 = q.msend2_n(); const char* pd = q.pmsend2->pd();
+          if (j >= ndat2) { tr_send = -1; q.b_sndr_waitrcvinit = true; b_changed = true; return; }
+          const _s_ll n = bmdx_minmax::myllrange_ub(buf.n() / __bmdx_shmfifo_push1_quot, __bmdx_shmfifo_push1_nbmin, ndat2 - j);
+          if (0 != buf.push(pd + j, n)) { b_changed = true; }
+          if (buf.ipush() < i3) { return; }
+        }
+
+        if (buf.ipush() < shm.ipush_plan) // push end byte == 1, indicating successful msg. completion
+          { if (0 != buf.push_bytes(1, 1)) { b_changed = true; } }
+
+        if (buf.ipush() == shm.ipush_plan)
+          { q._msend_clear(); tr_send = 1; b_changed = true; }
+
+        return;
+      }
+      else // anything except [-1..2]; attempt to recover
+      {
+        if (c_send != -2) { tr_send = -2; }
+        q._msend_clear();
+        if (b_exit) { return; }
+
+        if (buf.ipush() < shm.ipush_plan) { const bool bpushed = buf.nfree() > 0 && 0 != buf.push_bytes(0, shm.ipush_plan - buf.ipush()); if (bpushed) { b_changed = true; } }
+          else if (buf.ipush() == shm.ipush_plan) { if (q.sndr_rcv_act >= 1) { tr_send = 1; b_changed = true; } }
+          else { tr_send = -1; q.b_sndr_waitrcvinit = true; b_changed = true; }
+        return;
+      }
+    }
+
     void _thread_proc()
     {
       const _s_ll idle_t_long_mcs = __bmdx_shmfifo_idle_t_long_mcs;
       const _s_ll idle_t_short_mcs = __bmdx_shmfifo_idle_t_short_mcs;
       const _s_ll idle_t_enable_time_ms = __bmdx_shmfifo_idle_t_enable_time_ms;
 
-      cref_t<i_shmqueue_ctxx> mqq1;
-      _shmqueue_ctxx_impl* pqq1 = 0;
-      std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> m2;
-      _s_ll iver_m2 = -1;
+      t_ctxmap m2; _s_ll iver_m2 = -1;
       double t0_idle_en = clock_ms();
-      while (!b_stop())
+      while (1)
       {
-        if (1)
-        {
-          if (!mqq1) { mqq1 = mqq(); }
-          if (!pqq1) { pqq1 = static_cast<_shmqueue_ctxx_impl*>(mqq1._pnonc_u()); }
-          if (!pqq1) { sleep_mcs(idle_t_long_mcs); continue; }
-          bool b_succ = 1;
-          if (iver_m2 < pqq1->iver_m)
-          {
-            critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
-            try { m2 = pqq1->m; iver_m2 = pqq1->iver_m; } catch (...) { b_succ = 0; }
-          }
-          if (!b_succ) { sleep_mcs(idle_t_long_mcs); continue; }
-        }
-
+        const bool b_exit = !!b_stop();
+        if (!b_exit && !_part_update_ctxmap(m2, iver_m2)) { sleep_mcs(idle_t_long_mcs); continue; }
         bool b_changed = false;
         for (std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less>::iterator i = m2.begin(); i != m2.end(); ++i)
         {
           if (!i->second) { continue; }
           shmqueue_ctx& q = *i->second._pnonc_u();
-
-          // 1. Process: enrq flag.
-
-          if (q.bufstate == 4) // the queue is currently disabled
-          {
-            if (!q.b_enrq)
-            {
-              if (!q.buf.b_side1() && q._lqsend_mprg_pending())
-              {
-                const bool b_purged = q._lqsend_mprg_update(); b_changed =  b_changed || b_purged;
-              }
-              continue;
-            }
-            critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
-            q.bufstate = 0; q.b_just_started = true; // enable the queue as if initialized first time
-            b_changed = true;
-            continue;
-          }
-          else // the queue is currently enabled
-          {
-            if (!q.b_enrq) // try to disable as requested
-            {
-              bool b_may_disable = false;
-              critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
-              const _s_long bsm = (q.bufstate & 0xff);
-              if (q.b_sender_waitinit) { b_may_disable = true; }
-              else if (bsm == 3 && q.buf.f_constructed() == 1)
-              {
-                if (q.buf.b_side1())
-                {
-                  signed char& tr_rcv = *q.buf.pf_state1();
-                  b_may_disable = tr_rcv == 0 || tr_rcv == 1 || tr_rcv == -1;
-                }
-                else
-                {
-                  signed char& tr_send = *q.buf.pf_state2();
-                  b_may_disable = tr_send == 0 || tr_send == 1 || tr_send == -1;
-                }
-              }
-              else { b_may_disable = true; }
-              if (b_may_disable)
-              {
-                q.buf.close();
-                q._clear_msend(); q.b_sender_waitinit = false;
-                q._mrcv_clear();
-                q.bufstate = 4;
-                b_changed = true;
-                continue;
-              }
-            }
-          }
-
-          // 2. Process: buffer construction, queue purge rq., working state setting.
-
-          bool b_q_constructed = true; // true if queue is constructed (i.e. in normal working state)
-          do { // once
-            if (q.b_sender_waitinit)
-            {
-              critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
-              if (q.buf.f_constructed() != 1) { q.bufstate = 1; b_q_constructed = false; break; }
-              q.bufstate = 3;
-            }
-            else if ((q.bufstate & 0xff) < 3)
-            {
-              critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
-              const _s_long bsm = (q.bufstate & 0xff);
-              if (bsm < 3 || (bsm != 4 && q.buf.f_constructed() != 1))
-              {
-                _s_long res = q._reset(); // NOTE this will return 0 if the current side is sender
-                if (res >= 1) { q.bufstate = 3; }
-                  else if (res == 0) { q.bufstate = 1; }
-                  else { q.bufstate = (res << 8) | 2; }
-                if (res < 1) { b_q_constructed = false; break; }
-                b_changed = true;
-              }
-            }
-            if (!q.buf.p()) { b_q_constructed = false; break; } // should not occur
-          } while (false);
-          // here: if b_q_constructed == true: q.bufstate == 3 && q.buf.f_constructed() == 1 && q.buf.p() != 0
-          if (!q.buf.b_side1() && q._lqsend_mprg_pending())
-          {
-            const bool b_purged = q._lqsend_mprg_update(); b_changed =  b_changed || b_purged;
-            const bool b_msg_pending = !!q.pmsend2;
-            if (b_q_constructed && b_purged && b_msg_pending) { signed char& tr_send = *q.buf.pf_state2(); tr_send = -2; } // the message that's currently being sent, will be canceled
-          }
-          if (!b_q_constructed) { continue; }
-
-          // 3. Process: msg. sending / receival / queue recovery.
-
-          shmqueue_ctx_rso& shm = *q.buf.p();
-          rfifo_nbl11& buf = shm.ringbuf;
+          const bool b_validated = _part_validate_ctx1(q, b_changed);
+          if (q.buf.b_side1()) { _part_update_conf_rcv(q, b_changed, b_validated); }
+            else { _part_update_conf_send(q, b_changed, b_validated); }
+          if (!b_validated) { continue; }
           try {
-            if (!q.buf.b_side1())
-            {
-              signed char& tr_send = *q.buf.pf_state2();
-              const signed char& _tr_rcv = *q.buf.pf_state1();
-
-                // Sender.
-                // tr_send
-                //    0 - just started; set goto tr_send = 1
-                //    1 - wait while a message appears on the queue, pop, goto tr_send = 2
-                //    2 - push message length, bytes, end byte into the buffer, goto 1
-                //    -1 - data buffer is broken and currently cannot be used; should wait for the receiver re-initializing the buffer
-                //    -2 - data sending sequence is broken (probably sender process is restarted); try to recover:
-                //      push zero bytes up to the end of incomplete message, then push the end byte indicating an error
-
-              if (q.b_just_started) { q.b_just_started = false; if (tr_send != 0 && tr_send != -1) { tr_send = -2; b_changed = true; continue; } }
-              if (_tr_rcv == -1 && !q.b_sender_waitinit && tr_send != -1) { tr_send = -1; q.b_sender_waitinit = true; continue; } // on some of the next iterations, rcv side will re-init. the buffer
-
-              if (q.b_sender_waitinit || tr_send == -1)
-              {
-                q._clear_msend();
-                if (tr_send != 0) { continue; }
-                q.b_sender_waitinit = false; // here: tr_send == 0
-                b_changed = true;
-              }
-              else if (tr_send == 0 || tr_send == 1)
-              {
-                if (tr_send == 0) { tr_send = 1; b_changed = true; }
-                if (!q.pmsend2) // needs to check for a message in local queue
-                {
-                  if (q.msgs.navl() <= 0) { continue; }
-                  const cref_t<t_stringref>& r0 = q.msgs.front();
-                  if (r0)
-                  {
-                    if (!r0._pnonc_u()->is_valid()) { q.msgs.pop_1(); continue; }
-                    q.pmsend2 = r0._pnonc_u();
-                    q.nmsend = q.msend2_n();
-                    shm.ipush_plan = (buf.ipush() + nb_mlen + q.nmsend + 1);
-                  }
-                  else
-                  {
-                    if (q.msgs.navl() < 3) { q.msgs.pop_1(); continue; }
-                    const cref_t<t_stringref>& r1 = q.msgs[1];
-                    const cref_t<t_stringref>& r2 = q.msgs[2];
-                    if (!(r1 && r2 && r1._pnonc_u()->is_valid() && r2._pnonc_u()->is_valid())) { q.msgs.pop_n(3); continue; }
-                    q.pmsend1 = r1._pnonc_u();
-                    q.pmsend2 = r2._pnonc_u();
-                    q.nmsend = q.msend1_n() + q.msend2_n();
-                    shm.ipush_plan = (buf.ipush() + nb_mlen + q.nmsend + 1);
-                  }
-                  b_changed = true;
-                }
-                if (buf.nfree() < nb_mlen) { continue; } // the shm. buffer has not enough free place yet, to accept message length
-                tr_send = 2; b_changed = true;
-                continue;
-              }
-              else if (tr_send == 2)
-              {
-                const _s_ll i0 = shm.ipush_plan - 1 - q.nmsend - nb_mlen;
-
-                if (!(q.pmsend2 && buf.ipush() >= i0 && buf.ipush() <= shm.ipush_plan)) // invariant check
-                  { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; continue; }
-
-                const _s_ll i1 = i0 + nb_mlen; // abs. index of the beginning of message prefix
-                if (buf.ipush() < i1) // push user message string length
-                  { if (buf.nfree() < nb_mlen) { continue; } char z[nb_mlen]; z[0] = char((q.nmsend >> 32) & 127); set_be4(z, 1, _s_long(q.nmsend)); buf.push(z, nb_mlen); b_changed = true; } // NOTE client data length bit 39 == 0 (reserved for possible protocol updates)
-
-                const _s_ll ndat1 = q.msend1_n();
-                const _s_ll i2 = i1 + ndat1; // abs. index of the beginning of main message(after prefix, if it exits)
-                if (buf.ipush() < i2) // push prefix
-                {
-                  const _s_ll j = buf.ipush() - i1; const char* pd = q.pmsend1->pd();
-                  if (j >= ndat1) { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; continue; }
-                  const _s_ll n = bmdx_minmax::myllrange(buf.n() / __bmdx_shmfifo_push1_quot, __bmdx_shmfifo_push1_nbmin, ndat1 - j);
-                  if (0 != buf.push(pd + j, n)) { b_changed = true; }
-                  if (buf.ipush() < i2) { continue; }
-                }
-
-                const _s_ll i3 = shm.ipush_plan - 1;
-                if (buf.ipush() < i3) // push main message
-                {
-                  const _s_ll j = buf.ipush() - i2; const _s_ll ndat2 = q.msend2_n(); const char* pd = q.pmsend2->pd();
-                  if (j >= ndat2) { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; continue; }
-                  const _s_ll n = bmdx_minmax::myllrange(buf.n() / __bmdx_shmfifo_push1_quot, __bmdx_shmfifo_push1_nbmin, ndat2 - j);
-                  if (0 != buf.push(pd + j, n)) { b_changed = true; }
-                  if (buf.ipush() < i3) { continue; }
-                }
-
-                if (buf.ipush() < shm.ipush_plan) // push end byte == 1, indicating successful msg. completion
-                  { if (0 != buf.push_bytes(1, 1)) { b_changed = true; } }
-
-                if (buf.ipush() == shm.ipush_plan)
-                  { q._clear_msend(); tr_send = 1; b_changed = true; }
-
-                continue;
-              }
-              else // anything except [-1..2]; attempt to recover
-              {
-                if (tr_send != -2) { tr_send = -2; }
-                q._clear_msend();
-
-                if (buf.ipush() < shm.ipush_plan) { if (buf.nfree() > 0) { b_changed = 0 != buf.push_bytes(0, shm.ipush_plan - buf.ipush()) || b_changed; } }
-                  else if (buf.ipush() == shm.ipush_plan) { tr_send = 1; b_changed = true; }
-                  else { tr_send = -1; q.b_sender_waitinit = true; b_changed = true; }
-                continue;
-              }
-            }
-            else
-            {
-              signed char& tr_rcv = *q.buf.pf_state1();
-              const signed char& _tr_send = *q.buf.pf_state2();
-
-                // Recevier.
-                // tr_rcv
-                //    0 - initialize, goto 1
-                //    1 - wait until message length (fields of nb_mlen bytes) appears in the buffer, peek into it, prep. string for input, goto tr_rcv = 2
-                //    2 - discard msg. length, read msg. bytes, read end byte, [if end succeeded: push string into the queue], clear string, goto tr_rcv = 1
-                //    -1 - data buffer is broken and currently cannot be used; should wait for the sender setting tr_send = -1, and then re-initialize the buffer
-                //    -2 - data sending sequence is broken (probably receiver process is restarted); try to recover:
-                //      pop the current message bytes until message end, ignore this data; then goto tr_rcv = 1 (normal state)
-
-              if (_tr_send == -1) { tr_rcv = -1; }
-              if (q.b_just_started) { q.b_just_started = false; const char r = tr_rcv; if (r == -1) {} else if (r >= 2) { tr_rcv = -2; } else { tr_rcv = 1; } }
-
-              if (tr_rcv == -1) // wait for sender setting its tr_send = -1, then re-initialize the buffer
-              {
-                q._mrcv_clear();
-                if (_tr_send != -1) { continue; }
-
-                critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
-                q.buf.set_f_constructed(0);
-                q.bufstate = 1;
-
-                b_changed = true;
-                continue;
-              }
-              else if (tr_rcv == 0 || tr_rcv == 1)
-              {
-                if (tr_rcv == 0) { tr_rcv = 1; b_changed = true; }
-                if (buf.navl() < nb_mlen) { continue; }
-                char z[nb_mlen];
-                buf.pop(z, nb_mlen, false); // peek into msg. length
-                const _s_ll ndatr = ((_s_ll(z[0]) & 127) << 32) + be4(z, 1); // NOTE client data length bit 39 is ignored (reserved for possible protocol updates)
-                shm.ipop_plan = buf.ipop() + nb_mlen + ndatr + 1;
-                b_changed = true;
-
-                if (ndatr > __bmdx_shmfifo_msg_nbytes_max) { tr_rcv = -2; continue; } // skip too long messages (if the length is limited by compile-time constant)
-
-                q.msg_rcv = make_rba_z(ndatr, 1); // creates a string for input message, adds a zero byte to make the returned array more like to C string
-                  if (!q.msg_rcv) { continue; } // will retry herein on the next iteration
-                q._mrcv_lock();
-                tr_rcv = 2;
-                continue;
-              }
-              else if (tr_rcv == 2)
-              {
-                if (!q.msg_rcv)  { tr_rcv = -1; b_changed = true; continue; } // invariant check
-
-                const _s_ll ndatr = q.msg_rcv->n();
-                const _s_ll i1 = shm.ipop_plan - 1 - ndatr;
-                const _s_ll i0 = i1 - nb_mlen;
-
-                if (buf.ipop() < i0 || (buf.ipop() < i1 && buf.ipop() > i0) || buf.ipop() > shm.ipop_plan) // invariant check
-                  { tr_rcv = -1; b_changed = true; continue; }
-
-                if (buf.ipop() < i1) // pop length
-                  { if (buf.navl() < nb_mlen) { continue; } buf.discard(nb_mlen); b_changed = true; }
-
-                if (buf.ipop() < shm.ipop_plan - 1) // pop data
-                {
-                  _s_ll j = buf.ipop() - i1;
-                  if (j >= ndatr) { tr_rcv = -1; b_changed = true; continue; }
-                  _s_ll npop2 = buf.pop(q.msg_rcv._pnonc_u()->pd() + j, ndatr - j);
-                  if (npop2 != 0) { b_changed = true; }
-                }
-
-                if (buf.ipop() == shm.ipop_plan - 1) // pop end byte, check if it's 1 (if the message is correct), or otherwise
-                {
-                  if (buf.navl() < 1) { continue; }
-                  char c_end(0); buf.pop(&c_end, 1); b_changed = true;
-                  if (c_end != 1) { q._mrcv_clear(); tr_rcv = 1; continue; }
-                }
-
-                if (buf.ipop() == shm.ipop_plan)
-                  { if (1 != q.msgs.push_1(q.msg_rcv)) { continue; } q._mrcv_clear(); tr_rcv = 1; b_changed = true; }
-
-                continue;
-              }
-              else // anything except [-1..2]; attempt to recover
-              {
-                if (tr_rcv != -2) { tr_rcv = -2; }
-                q._mrcv_clear();
-
-                if (shm.ipush_plan < shm.ipop_plan) { tr_rcv = -1; b_changed = true; }
-                  else if (buf.ipop() < shm.ipop_plan) { const _s_ll nd = buf.discard(shm.ipop_plan - buf.ipop()); if (nd > 0) { b_changed = true; } }
-                  else if (buf.ipop() == shm.ipop_plan) { tr_rcv = 1; b_changed = true; }
-                  else { tr_rcv = -1; b_changed = true; }
-                continue;
-              }
-            }
-          } catch (...) { b_changed = true; }
+            if (q.buf.b_side1()) { _part_do_rcv(q, b_exit, b_changed); }
+              else { _part_do_send(q, b_exit, b_changed); }
+          } catch (...) { t0_idle_en = clock_ms(); b_changed = false; }
         }
+        if (b_exit) { break; }
         if (b_changed) { t0_idle_en = clock_ms(); }
           else { sleep_mcs(clock_ms() - t0_idle_en < idle_t_enable_time_ms ? idle_t_short_mcs : idle_t_long_mcs); }
       }
@@ -8256,8 +8754,359 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
 
 
 
-namespace _api // public declarations (merged into namespace bmdx_shm)
+namespace _api // public API, merged into namespace bmdx_shm
 {
+
+    // Specialized memory allocator, allowing shmqueue_s to avoid dynamic allocations
+    //  on all stages of interprocess message transfer.
+    //  The memory is reserved at once on allocator creation.
+    //  The allocator is then attached by client to particular queue with shmqueue_s::conf_set_al_in.
+    //  Large message transfer time is nearing to 2*memcpy of message data.
+    //  For short (< 100 B) messages, the additional overhead may be noticeable
+    //    (due to infrequent sleeping on a lock, and allocation logic execution).
+    //    Anyway, pre-allocated memory is faster than conventional dynamic allocation.
+    //
+    // Details: see allocctl_pre::create.
+    //
+  struct allocctl_pre : i_allocctl
+  {
+      // Allocator creation. See impl. for descr.
+    static inline cref_t<i_allocctl> create(_s_long flags_, _s_ll nbdata_, _s_ll hint_nobj_max_ = -1) throw();
+
+      // Returns the exact amount of memory, pre-allocated by allocctl_pre::create,
+      //  given the same arguments.
+      // See create() impl. for description of how this memory will be used.
+    static inline _s_ll nbmem(_s_ll nbdata_, _s_ll nobj_max_) throw();
+
+      // Convenience function, allocating single area (zero-filled and zero-terminated)
+      //  in a way, specified by flags.
+      //  The allocator is created for that purpose only temporarily.
+      // flags, nbdata: see impl. of create().
+    static inline cref_t<t_stringref> make_rba_special(_s_long flags, _s_ll nbdata) throw()
+      { cref_t<i_allocctl> al = create(flags, nbdata, 1); return al ? al->make_rba(nbdata) : cref_t<t_stringref>(); }
+
+      // See create() impl. for flags descr.
+    enum Eflags
+    {
+      fl_allow_fallback_calloc = 0x1,
+      fl_use_mapping = 0x2,
+      fl_use_pagelock = 0x4,
+      fl_force_fetch = 0x8,
+      fl_pagelock_is_critical = 0x10
+    };
+
+  private:
+    enum _Ex_flags { _fl_client_mask = 0xff, _fl_revert_ws = 0x100 };
+    cref_t<t_stringref> a; // handles whole mem. area
+    struct _header_whole; struct _header_block;
+    static inline void release_hw(_header_whole& hw) throw();
+    static inline _s_ll nbblkovr();
+    static inline _s_long cref_ev_handler(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll delta, _critsec_data0_t<t_stringref>* pcsd, void* pobj, void* pinterface, void* paux);
+    inline cref_t<t_stringref> make_rba(_s_ll nb);
+  };
+
+
+
+
+  struct allocctl_pre::_header_whole { _t_stringref mem; union { _s_long flags; _s_ll __pad1; }; _s_ll ipop, nbbusy; };
+  struct allocctl_pre::_header_block { _s_ll nbblock, nrefsblock; enum { nboff_msg = 2 * 8 }; _t_stringref msg; enum { nbblock_min = 16 }; }; // followed by user data + 1 zero byte + alignment up to 7 bytes
+
+
+
+
+    // The function creates specialized memory allocator,
+    //  and initially allocates for it long contiguous area of memory.
+    //  The memory is initially zero-initialized, but on reuse may contain anything.
+    //
+    // The allocator, at each call (make_rba), returns smart pointers
+    //  to sequentially allocated regions in this memory.
+    //  The allocator is oriented for use with shmqueue_s::mget,
+    //  for the client being able to receive series of IPC messages
+    //  (large messages, or multiple small messages)
+    //  without any dynamic allocations during this operation.
+    //
+    // For fully pre-allocated message receival, make several preparations on the receiving side:
+    //
+    //    1. Configure the input (receiver side) local queue to have fixed capacity:
+    //        q.conf_set_lqcap(true, -1, ncap, ncap);
+    //      See also vnnqueue_t:: set_cap_hints, set_rsv.
+    //    2. Create an allocator, e.g.
+    //        al = allocctl_pre::create(0xff, nb, nobj);
+    //      This at once reserves and prepares the necessary amount of memory,
+    //        == nbmem(nbdata_, hint_nobj_max_).
+    //      (This includes small additional reserves, per-allocator and per-object.)
+    //    3. Assign the allocator to the queue:
+    //        q.conf_set_al_in(&al);
+    //
+    //  After that, any incoming IPC message will be written by internal thread into memory,
+    //      obtained from allocator's make_rba. The resulting smart pointer to memory
+    //      will be pushed into local input queue, and thus becomes available via mget.
+    //    The client is expected to pop IPC messages (shmqueue_s::mget), use them as necessary,
+    //      and release (forget smart pointer), approximately in the same order
+    //      as they have been allocated, i.e. in the order of incoming messages.
+    //    The allocator wraps around whole reserved area of memory,
+    //      in progress of client releasing the earliest allocated regions.
+    //  NOTE The allocator from allocctl_pre::create is thread-safe,
+    //      and, if wanted, one instance may be used in several input queues plus on the client side.
+    //
+    // Arguments:
+    //  nbdata_, hint_nobj_max_ -
+    //    control how much memory should be pre-allocated by allocctl_pre::create
+    //    for incoming IPC messages data.
+    //    The scheme of allocator operation, described above, gives a hint on this value:
+    //      if the receiving client expects  max. N objects to exist
+    //      simultaneously on its side,
+    //      nbdata_ should define a space, enough for N + 1 such objects
+    //    hint_nobj_max_ = N + 1.
+    //      NOTE If all objects have exactly same size, N+1 may be relaxed to N.
+    //  flags_ -
+    //    ORed flags for fine-tuning allocator's behavior.
+    //      0x1 (fl_allow_fallback_calloc) - if the allocator cannot give the requested amount of memory,
+    //        it falls back to default shmqueue_s behavior (make_rba_z(n, 1), which is based on calloc).
+    //        If the flag is not set, in this situation, the allocator returns an empty object,
+    //        which factually results in shared memory queue being paused, until the client releases
+    //        the oldest allocated region(s), and the allocator may reuse them.
+    //      0x2 (fl_use_mapping) - if set, use mmap (*nix) / CreateFileMapping (Windows)
+    //        to initially allocate the memory.
+    //        If the flag is not set, allocctl_pre uses make_rba_z().
+    //      0x4 (fl_use_pagelock) - if set, apply mlock (*nix) / VirtualLock (Windows)
+    //        to the initially allocated memory. If this succeeds, the memory becomes not swappable.
+    //      0x8 (fl_force_fetch) - if set, write small amount of null bytes (sparsely)
+    //        into the initially allocated memory. This forces all pages to be available
+    //        later for read/write without any commit-on-page-fault overhead.
+    //      0x10 (fl_pagelock_is_critical) - fail if fl_use_pagelock is set, but page locking failed.
+    //        allocctl_pre::create will return an empty object.
+    //        (If fl_use_pagelock is not set, fl_pagelock_is_critical is ignored.)
+    //
+  cref_t<i_allocctl> allocctl_pre::create(_s_long flags_, _s_ll nbdata_, _s_ll hint_nobj_max_) throw()
+  {
+    #define __bmdx_allocctl_pre_csname_base "bmdx_shm::allocctl_pre::create_"
+    flags_ &= _fl_client_mask;
+    cref_t<i_allocctl> rv = cref_t<allocctl_pre>::iref2<i_allocctl>::create0(1);
+    if (!rv) { return rv; }
+    const _s_ll nb_alloc = nbmem(nbdata_, hint_nobj_max_);
+    allocctl_pre* pa = static_cast<allocctl_pre*>(rv._pnonc_u());
+    _header_whole* phw = 0;
+
+      // 1. Allocate.
+    if (flags_ & fl_use_mapping)
+    {
+      #ifdef _bmdxpl_Psx
+        int f = MAP_PRIVATE | MAP_ANONYMOUS;
+        #ifdef MAP_POPULATE
+          f |= MAP_POPULATE;
+        #endif
+        void* p = mmap(0, size_t(nb_alloc), PROT_READ|PROT_WRITE, f, -1, 0);
+        if (p && p != MAP_FAILED) { phw = (_header_whole*)p; }
+      #elif defined(_bmdxpl_Wnds)
+        HANDLE hfm = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nb_alloc >> 32), DWORD(nb_alloc & 0xffffffffll), NULL);
+        if (hfm)
+        {
+          void* p = MapViewOfFile(hfm, FILE_MAP_ALL_ACCESS, 0, 0, SIZE_T(nb_alloc));
+          CloseHandle(hfm);
+          if (p) { phw = (_header_whole*)p; }
+        }
+      #endif
+    }
+    else
+    {
+      phw = (_header_whole*)iref2_args_t<t_stringref>::sf_alloc(nb_alloc);
+    }
+    if (!phw) { rv.clear(); return rv; }
+
+      // 2. Initialize.
+    phw->mem = t_stringref((char*)phw, nb_alloc);
+    phw->__pad1 = 0;
+    phw->flags = flags_;
+    phw->ipop = 0;
+    phw->nbbusy = 0;
+
+      // 3. Lock.
+    if (phw->flags & fl_use_pagelock)
+    {
+      #ifdef _bmdxpl_Psx
+        bool b = 0 == mlock(phw->mem.pd(), (size_t)phw->mem.n());
+      #elif defined(_bmdxpl_Wnds)
+        SIZE_T nbx = (SIZE_T)phw->mem.n();
+        bool b = !!VirtualLock(phw->mem.pd(), nbx);
+        if (!b)
+        {
+          HANDLE hp = GetCurrentProcess(); SIZE_T nbmin = 0, nbmax = 0;
+          bool bto = false;
+          t_name_shm csname(__bmdx_allocctl_pre_csname_base); csname += GetCurrentProcessId();
+          critsec_gn cs(csname.c_str()); if (1) { double t0 = clock_ms(); while (!cs.lock()) { sleep_mcs(10000); if (clock_ms() - t0 > 3000) { bto = true; break; } } }
+          if (!bto && !!GetProcessWorkingSetSize(hp, &nbmin, &nbmax))
+          {
+            nbmin += nbx; nbmax += nbx;
+            if (!!SetProcessWorkingSetSize(hp, nbmin, nbmax)) { b = true; phw->flags |= _fl_revert_ws; }
+          }
+        }
+      #endif
+      if (!b)
+      {
+        phw->flags &= ~_s_long(fl_use_pagelock);
+        if (phw->flags & fl_pagelock_is_critical)
+        {
+          release_hw(*phw); rv.clear();
+          return rv;
+        }
+      }
+    }
+
+      // 4. Acquire all pages.
+    if (phw->flags & fl_force_fetch) { for (_s_ll i = sizeof(_header_whole); i < nb_alloc; i += 511) { ((char*)phw)[i] = 0; } }
+
+      // 5. Embed into the allocator object.
+    struct f : iref2_flags {};
+    pa->a = cref_t<t_stringref>::iref2<t_stringref>::assign(1, phw->mem, 0, int(f::use_release) | f::gen_nrefs | f::use_critsec, cref_ev_handler);
+    if (!pa->a) { release_hw(*phw); rv.clear(); return rv; }
+
+    return rv;
+  }
+
+  _s_ll allocctl_pre::nbmem(_s_ll nbdata_, _s_ll nobj_max_) throw()
+  {
+    _s_ll n = nbdata_ > 0 ? nbdata_ : 0;
+    if (nobj_max_ < 1) { nobj_max_ = 1; }
+    n += sizeof(_header_whole) + nobj_max_ * nbblkovr();
+    return n;
+  }
+
+  void allocctl_pre::release_hw(_header_whole& hw) throw()
+  {
+    if (!hw.mem.pd()) { return; }
+    #ifdef _bmdxpl_Psx
+      if (hw.flags & fl_use_pagelock) { munlock(hw.mem.pd(), (size_t)hw.mem.n()); }
+      if (hw.flags & fl_use_mapping) { munmap(hw.mem.pd(), (size_t)hw.mem.n()); }
+        else { iref2_args_t<t_stringref>::sf_free(hw.mem.pd()); }
+    #elif defined(_bmdxpl_Wnds)
+      SIZE_T nbx = (SIZE_T)hw.mem.n();
+      if (hw.flags & fl_use_pagelock) { VirtualUnlock(hw.mem.pd(), nbx); }
+      if (hw.flags & _fl_revert_ws)
+      {
+        HANDLE hp = GetCurrentProcess(); SIZE_T nbmin = 0, nbmax = 0;
+        bool bto = false;
+        t_name_shm csname(__bmdx_allocctl_pre_csname_base); csname += GetCurrentProcessId();
+        critsec_gn cs(csname.c_str()); if (1) { double t0 = clock_ms(); while (!cs.lock()) { sleep_mcs(10000); if (clock_ms() - t0 > 3000) { bto = true; break; } } }
+        if (!bto && !!GetProcessWorkingSetSize(hp, &nbmin, &nbmax) && nbmin >= nbx && nbmax >= nbx)
+        {
+          nbmin -= nbx; nbmax -= nbx;
+          SetProcessWorkingSetSize(hp, nbmin, nbmax);
+        }
+      }
+      if (hw.flags & fl_use_mapping) { UnmapViewOfFile(hw.mem.pd()); }
+        else { iref2_args_t<t_stringref>::sf_free(hw.mem.pd()); }
+    #endif
+  }
+
+  _s_ll allocctl_pre::nbblkovr() { return sizeof(_header_block) + 8; }
+
+  cref_t<_t_stringref> allocctl_pre::make_rba(_s_ll nb)
+  {
+    if (nb < 0 || !a) { return cref_t<_t_stringref>(); }
+    cref_t<_t_stringref>::t_lock __lock(a); if (sizeof(__lock)) {}
+    _header_whole& hw = (_header_whole&)a._rnonc();
+    _t_stringref bmem(hw.mem.pd() + sizeof(_header_whole), hw.mem.n() - sizeof(_header_whole));
+    const _s_ll nb2 = (nb & ~_s_ll(7)) + nbblkovr();
+    _s_ll ifree = hw.ipop + hw.nbbusy;
+    _s_ll nbcontig;
+    if (ifree < bmem.n())
+    {
+      nbcontig = bmem.n() - ifree;
+      if (nbcontig < nb2) // not enough place without wraparound
+      {
+        if (hw.nbbusy > 0)
+        {
+          if (nbcontig >= _header_block::nbblock_min)
+          {
+            _header_block& hb = (_header_block&)bmem[ifree];
+            hb.nbblock = nbcontig;
+            hb.nrefsblock = 0;
+          }
+          hw.nbbusy += nbcontig;
+          ifree = 0;
+          nbcontig = hw.ipop;
+        }
+        else
+        {
+          hw.ipop = 0;
+          hw.nbbusy = 0;
+          ifree = 0;
+          nbcontig = bmem.n();
+        }
+      }
+    }
+    else
+    {
+      ifree %= bmem.n();
+      nbcontig = hw.ipop - ifree;
+    }
+    if (nbcontig < nb2) { return !!(hw.flags & fl_allow_fallback_calloc) ? make_rba_z(nb, 1) : cref_t<_t_stringref>(); }
+    _header_block& hb = (_header_block&)bmem[ifree];
+    hb.nbblock = nb2;
+    hb.nrefsblock = 1;
+    hb.msg._link_u((char*)(&hb + 1), nb);
+    hb.msg[nb] = 0; // force new array to be zero-terminated; additional byte after msg is accounted in nbblkovr()
+    hw.nbbusy += nb2;
+    return cref_t<t_stringref>::iref2<t_stringref>::_refcast_replace_u(a, &hb.msg);
+  }
+
+  _s_long allocctl_pre::cref_ev_handler(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll delta, _critsec_data0_t<t_stringref>* pcsd, void* pobj, void* pinterface, void* paux)
+  {
+    (void)flags; (void)nrefs; (void)delta; (void)pinterface; (void)pcsd; (void)paux;
+    struct f : iref2_flags {};
+    if (optype == f::ev_release)
+    {
+      t_stringref& rmem = *(t_stringref*)pobj;
+      if (!(rmem.pd() && rmem.n() > 0)) { return 1; }
+      _header_whole& hw = *(_header_whole*)rmem.pd();
+      release_hw(hw);
+      return 1;
+    }
+    if (optype == f::ev_nrefs)
+    {
+      t_stringref& rmem = *(t_stringref*)pobj;
+      if (!(rmem.pd() && rmem.n() > 0)) { return 1; }
+      if (pinterface != rmem.pd()) // one of blocks, made by allocator
+      {
+        _header_whole& hw = *(_header_whole*)rmem.pd();
+        _t_stringref bmem(hw.mem.pd() + sizeof(_header_whole), hw.mem.n() - sizeof(_header_whole));
+        _header_block& hbcur = *(_header_block*)((char*)pinterface - _header_block::nboff_msg);
+        hbcur.nrefsblock += delta;
+        if (hbcur.nrefsblock <= 0 && (void*)&hbcur == (void*)&bmem[hw.ipop]) // the block is freed and it was the first in sequence
+        {
+          while (hw.nbbusy > 0)
+          {
+            if (hw.nbbusy < _header_block::nbblock_min)
+            {
+              hw.ipop = (hw.ipop + hw.nbbusy) % bmem.n();
+              hw.nbbusy = 0;
+              break;
+            }
+            _header_block& hb2 = (_header_block&)bmem[hw.ipop];
+            if (hb2.nrefsblock > 0) { break; } // the current block is not free yet
+              // The current block is free.
+            const _s_ll nb2 = hb2.nbblock;
+            if (nb2 > hw.nbbusy) { break; } // not expected
+            hw.ipop = (hw.ipop + nb2) % bmem.n();
+            hw.nbbusy -= nb2;
+              // Check the next block size.
+            const _s_ll nbtail = bmdx_minmax::myllmin(bmem.n() - hw.ipop, hw.nbbusy);
+            if (nbtail < _header_block::nbblock_min) // skip the block if it's too small for header
+            {
+              hw.ipop = (hw.ipop + nbtail) % bmem.n();
+              hw.nbbusy -= nbtail;
+            }
+          }
+        }
+      }
+      return 1;
+    }
+    return 0;
+  }
+
+
+
 
     // IPC queue of strings, based on shared memory (FIFO buffer).
     //  The shmqueue_s object is designed to work with both sides of the queue, as separate objects.
@@ -8274,7 +9123,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
       // Cached data reference of the last pop or peek operation (see also mget()).
       // NOTE If the client uses mget_str to retrieve messages, d is kept empty.
-    mutable cref_t<t_stringref> d;
+    cref_t<t_stringref> d;
 
 
   private:
@@ -8287,11 +9136,11 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
 
       // name_: global name of the queue.
       // nbdflt_: IPC queue buffer size hint. Dflt. == -1, which means use __bmdx_shmfifo_nbytes_dflt.
-      // flags_ (ORed): see flags().
+      // flags_ (ORed): see flags(). Default value == 1 (use client-side locks).
       // idle_t_mcs_: sleep time at each iteration inside client-side blocking mget or msend (0..1e6 mcs). Dflt. 5000 mcs.
     shmqueue_s(const t_name& name_, const _s_ll nbdflt_ = -1, _s_long flags_ = 1, _s_ll idle_t_mcs_ = -1) throw()
       : name(name_.n() ? name_ : "_"), res(0), _nbdflt(nbdflt_), _flags(flags_), _idle_t_mcs(idle_t_mcs_ >= 0 ? _s_long(bmdx_minmax::myllmin(1000000, idle_t_mcs_)) : 5000)
-      {}
+    { if (_flags & 4) { bufstate(2); } if (_flags & 8) { bufstate(3); } }
 
       // Flags, set by constructor.
       //    0x1 - use client-side locks when sending and receiving messages.
@@ -8302,27 +9151,229 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //      NOTE shmqueue_s object itself is not protected from concurrency.
       //        Unsetting this flag disables only locks on local queue push/pop
       //        (queues as such are non-blocking by design).
-      //    0x2 - optimistic push on zero timeout.
+      //    0x2 - optimistic push on receiver not ready.
       //        Dflt. value: the flag is not set.
       //        Responsibility for initializing the queue object in shared memory is on receiver's side.
-      //        If this flag is set, msend() will put
-      //          the message into the local queue:
+      //        If this flag is set, msend() will put the message into the local queue:
       //            a) (normal) if shared memory queue is completely initialized,
       //            b) if timeout_ms == 0, and shared memory queue currently does not exist,
-      //            c) if timeout_ms == 0, and shared memory queue is not yet completely initialized.
+      //            c) if timeout_ms == 0, and shared memory queue is not yet completely initialized,
+      //            d) if shared memory exists, but the receiver is not active.
       //            NOTE This does NOT include cases when the shared memory object is locked, or the queue is disabled by the client.
       //        If this flag not set, only the above case (a) works.
+      //    0x4 - constructor's flag (already done): automatically connect to sender side, and create local queue for msend (i.e. call bufstate(2)).
+      //    0x8 - constructor's flag (already done): automatically connect to receiver side, and create local queue for mget (i.e. call bufstate(3)).
       // NOTE flags() does not modify this->res.
-    _s_long flags() const { return _flags; }
+    _s_long flags() const throw() { return _flags; }
+
+
+
+      // Sets custom allocator to the input (mget) queue.
+      //
+      //  p_al:
+      //    a) p_al != 0, p_al.ptr() != 0: the new allocator object.
+      //      NOTE *p_al may be any kind of reference.
+      //         The client is responsible for object's validity during whole period of its use by shmfifo_s impl.
+      //    b) p_al != 0, p_al.ptr() == 0: signals that any existing custom allocator must be removed.
+      //    c) p_al == 0: do not change the current allocator, do wait and prev. setting result check only.
+      //
+      //  timeout_ms: timeout in milliseconds, to wait for the setting being applied on the side of internal thread.
+      //    The timeout parameter is similar to that in lqwait_in (see).
+      //
+      // Returns:
+      //  1 - the setting has succeeded.
+      //  0 - a) started setting, but not waited (timeout_ms == 0).
+      //    b) the setting is not yet done.
+      //  -1 - timeout (on timeout_ms > 0).
+      //  -2 - the setting has failed to start, or other kind of failure.
+      //  -3 (not expected) - the setting has failed inside the internal thread. The current settings not changed.
+      //  -4 - the client wants check only for setting result, but no setting changes previously requested by the client.
+      //  -5 - configuration setting is unsafe, because client-side locks are disabled: (flags() & 1) == 0.
+      //  In addition, this->res holds the result of the last bufstate() call.
+      //
+    _s_long conf_set_al_in(const cref_t<i_allocctl>* p_al = 0, double timeout_ms = -1) const throw()
+    {
+      if (!(_flags & 1)) { return -5; }
+      _s_long res2 = bufstate(3); if (!(res2 >= 3 && res2 <= 5)) { return -2; }
+      if (!_rq) { return -2; }
+      if (_rq->buf.b_side1() != true) { return -2; } // not expected to occur
+      _s_ll vs = 0; bool b_vs = false;
+      if (p_al)
+      {
+        b_vs = true;
+        critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
+        unsigned char _temp = 0;
+        if (_rq->v_al.s_is_done(0, _temp) == 1 && !*p_al && !_rq->v_al.x_copy) { return 1; } // do not reset the allocator if it's already done
+        cref_t<i_allocctl> empty;
+        _rq->v_al.s_begin_update(*p_al ? *p_al : empty, vs);
+      }
+      if (timeout_ms == 0) { return 0; }
+      const double t0 = clock_ms();
+      while (1)
+      {
+        if (1)
+        {
+          critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
+          unsigned char res3 = 0;
+          _s_long res4 = _rq->v_al.s_is_done(b_vs ? &vs : 0, res3);
+          if (res4 != 0)
+          {
+            if (res3 == 2) { return 1; }
+            if (res3 == 0) { return -4; }
+            return -3;
+          }
+        }
+        if (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms) { return -1; }
+        sleep_mcs(_idle_t_mcs);
+        if (!_shmqueue_ctxx_impl::_th_enable()) { return -2; } // the application may be exiting during waiting
+      }
+    }
+      //
+      // Gets custom allocator of the input (mget) queue, previously set by conf_set_al_in.
+      //
+      // Returns:
+      //  1 - r_al received the last set custom allocator object.
+      //    May be empty (.ptr() == 0):
+      //      a) the last set allocator was empty (for clearing the previous one set).
+      //      b) no conf_set_al_in had been called on this queue before.
+      //      In both cases, instead of custom allocator, the internal thread
+      //      currently uses default allocation procedure (bmdx_shm::_bmdx_shm::make_rba_z).
+      //  0 - same as 1, but the last set object is not yet accepted by internal thread.
+      //  -2 - failure, r_al is cleared.
+      //  In addition, this->res holds the result of the last bufstate() call.
+      //
+    _s_long conf_get_al_in(cref_t<i_allocctl>& r_al) const throw()
+    {
+      r_al.clear();
+      _s_long res2 = bufstate(3); if (!(res2 >= 3 && res2 <= 5)) { return -2; }
+      if (!_rq) { return -2; }
+      if (_rq->buf.b_side1() != true) { return -2; } // not expected to occur
+      critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
+      r_al = (const cref_t<i_allocctl>&)_rq->v_al.x;
+      res2 = 1; unsigned char res3 = 0;
+      if (_rq->v_al.s_is_done(0, res3) != 1) { res2 = 0; }
+      return res2;
+    }
+      //
+      // Optionally sets queue capacity and/or place reserve (if any n* is non-default).
+      // Optionally (timeout_ms != 0) waits until the last given settings are applied.
+      //
+      //  b_receiver:
+      //    true - input queue (mget).
+      //      For input queue, conf_set_lqcap succeeds only if bufstate(3) returns 3..5 (the shared queue is valid).
+      //    false - output queue (msend).
+      //      For output queue, conf_set_lqcap succeeds if bufstate(2) >= 0.
+      //      (i.e. the shared queue may be invalid, but local queue already created).
+      //  ncapmin, ncapmax - queue capacity hints.
+      //    The default values are "do not limit queue shrinking or expansion".
+      //    Details: see vnnqueue_t :: set_cap_hints.
+      //    To skip capacity modification, specify <= -3 to any of ncap*.
+      //  nrsv >= 0 - reserves at least nrsv positions in the queue.
+      //    Details: see vnnqueue_t :: set_nrsv.
+      //    To skip the reserve modification, specify <= -1 to nrsv.
+      //
+      //  timeout_ms: timeout in milliseconds, to wait for the setting being applied on the side of internal thread.
+      //    The timeout parameter is similar to that in lqwait_in/_out (see).
+      //
+      // Returns:
+      //  1 - the setting has succeeded.
+      //  0 - a) started setting, but not waited (timeout_ms == 0).
+      //    b) the setting is not yet done.
+      //  -1 - timeout (on timeout_ms > 0).
+      //  -2 - the setting has failed to start, or other kind of failure.
+      //      NOTE For sender queue (b_receiver == false), failure may occur if the receiving end is not yet connected
+      //        (i.e. bufstate() < 3).
+      //  -3 - the setting has failed inside the internal thread. The current settings not changed.
+      //  -4 - the client wants check only for setting result, but no setting changes previously requested by the client.
+      //  -5 - configuration setting is unsafe, because client-side locks are disabled: (flags() & 1) == 0.
+      //  In addition, this->res holds the result of the last bufstate() call.
+      //
+    _s_long conf_set_lqcap(bool b_receiver, _s_ll ncapmin = -3, _s_ll ncapmax = -3, _s_ll nrsv = -3, double timeout_ms = -1) const throw()
+    {
+      if (!(_flags & 1)) { return -5; }
+      _s_long res2 = bufstate(b_receiver ? 3 : 2);
+        if (b_receiver && !(res2 >= 3 && res2 <= 5)) { return -2; }
+        if (!b_receiver && !(res2 >= 0)) { return -2; }
+      if (!_rq) { return -2; }
+      if (_rq->buf.b_side1() != b_receiver) { return -2; } // not expected to occur
+      shmqueue_ctx::lqconf_cap c;
+        c.ncapmin = ncapmin;
+        c.ncapmax = ncapmax;
+        c.nrsv = nrsv;
+      _s_ll vs = 0; bool b_vs = false;
+      if (c.is_valid_cap() || c.is_valid_rsv())
+      {
+        b_vs = true;
+        critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
+        unsigned char _temp = 0;
+        if (_rq->v_inq_cap.s_is_done(0, _temp) == 1 && c == _rq->v_inq_cap.x_copy) { return 1; } // do not modify settings if they are not changed
+        _rq->v_inq_cap.s_begin_update(c, vs);
+      }
+      if (timeout_ms == 0) { return 0; }
+      const double t0 = clock_ms();
+      while (1)
+      {
+        if (1)
+        {
+          critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
+          unsigned char res3 = 0;
+          _s_long res4 = _rq->v_inq_cap.s_is_done(b_vs ? &vs : 0, res3);
+          if (res4 != 0)
+          {
+            if (res3 == 2) { return 1; }
+            if (res3 == 0) { return -4; }
+            return -3;
+          }
+        }
+        if (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms) { return -1; }
+        sleep_mcs(_idle_t_mcs);
+        if (!_shmqueue_ctxx_impl::_th_enable()) { return -2; } // the application may be exiting during waiting
+      }
+    }
+      //
+      // Gets actual local queue capacity parameters, previously successfully set by conf_set_lqcap call(s).
+      //
+      // Returns:
+      //  1 - non-null p* have received the last set queue parameters.
+      //    NOTE If no conf_set_lqcap had been called on this queue before, all *pn* will be == -3.
+      //      In this case, the local queue uses default capacity settings, originally set by vnnqueue_t constructor.
+      //  0 - same as 1, but the most recent parameters are not accepted by internal thread (not yet, or setting failed).
+      //    In this case, *pn* reflect the previously set values.
+      //  -2 - failure, all *pn* are set to -3.
+      //  In addition, this->res holds the result of the last bufstate() call.
+      //
+    _s_long conf_get_lqcap(bool b_receiver, _s_ll* pncapmin = 0, _s_ll* pncapmax = 0, _s_ll* pnrsv = 0) const throw()
+    {
+      if (pncapmin) { *pncapmin = -3; } if (pncapmax) { *pncapmax = -3; } if (pnrsv) { *pnrsv = -3; }
+      _s_long res2 = bufstate(b_receiver ? 3 : 2);
+        if (b_receiver && !(res2 >= 3 && res2 <= 5)) { return -2; }
+        if (!b_receiver && !(res2 >= 0)) { return -2; }
+      if (!_rq) { return -2; }
+      if (_rq->buf.b_side1() != b_receiver) { return -2; } // not expected to occur
+      critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
+      res2 = 1; unsigned char res3 = 0;
+      if (_rq->v_inq_cap.s_is_done(0, res3) != 1) { res2 = 0; }
+      volatile_cvar_t<shmqueue_ctx::lqconf_cap>&  v_ = _rq->v_inq_cap_back;
+      v_.g_update_pre(); v_.g_update_complete(2);
+      if (pncapmin) { *pncapmin = v_.x_copy.ncapmin; } if (pncapmax) { *pncapmax = v_.x_copy.ncapmax; } if (pnrsv) { *pnrsv = v_.x_copy.nrsv; }
+      return res2;
+    }
+
+
 
       // navl(bool): returns the number of available messages (>= 0),
-      //    depending on direction - ones that are not sent yet, or ones just received and not popped yet.
+      //    depending on direction - ones that are not sent yet,
+      //    or ones just received and not popped yet.
       //  b_receiver:
       //    specifies, for what end of the queue the function is called.
-      // navl_*: shortcut to navl(bool).
-      // NOTE navl*() value is volatile. May grow or shrink depending on "other" side working.
+      // navl_out: shortcut to navl(false).
+      // navl_in: shortcut to navl(true).
+      //
+      // NOTE navl*() value is volatile. The local queue may grow or shrink
+      //    due to internal thread working.
       // NOTE navl*() do not make automatic initialization of queues (as msend, mget do).
       // NOTE navl*() do not modify this->res.
+      //
     _s_ll navl(bool b_receiver) const throw()
     {
       if (!_shmqueue_ctxx_impl::_th_enable()) { return 0; }
@@ -8330,71 +9381,32 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       if (!_rq) { return 0; }
       return _rq->msgs.navl();
     }
-    _s_ll navl_send() const throw() { return navl(false); }
-    _s_ll navl_get() const throw() { return navl(true); }
+    _s_ll navl_out() const throw() { return navl(false); }
+    _s_ll navl_in() const throw() { return navl(true); }
 
-      // Returns IPC buffer state, and optionally ensures the queue creation and enabling/disabling.
-      // rqtype:
-      //    0 - return the sender-side queue state, but do not autocreate or modify the queue,
-      //    1 - return the receiver-side queue state, but do not autocreate or modify the queue,
-      //    2 - if the sender-side queue does not exist, autocreate it,
-      //    3 - if the receiver-side queue does not exist, autocreate it,
-      //    NOTE "Autocreate" means:
-      //      if the shared object does not exist, the receiver queue will perform its complete initialization,
-      //      while the sender queue will only try to connect to the existing shared object.
-      //    4, 5 - if the (sender, receiver)-side queue already exists, request queue enabling.
-      //        NOTE By default, when the queue is first created/connected to, it's enabled.
-      //    6, 7 - if the (sender, receiver)-side queue already exists, request queue disabling.
-      //        The shared object will be closed, and after that, can be opened/used by another process
-      //        or another binary module of the current process.
-      //    NOTE rqtype's 4..7 are satisfied by internal thread after some delay,
-      //      when all necessary conditions are met.
-      //      When the queue is factually disabled, its bufstate becomes 4.
-      //      After it's reenabled, its bufstate becomes 0, and grows to 3, as in usual initialization sequence.
+      // Convenience functions.
+      //  A. For sender (lqwait_out): waits until a) navl_out() <= n, or b) timeout occurs.
+      //    NOTE This is particularly useful if, after sending some messages,
+      //      the program has to exit.
+      //      It may call lqwait_out(timeout) to give internal thread time
+      //      to complete messages sending.
+      //  B. For recevier (lqwait_in): waits until a) navl_in() >= n, or b) timeout occurs.
+      // timeout_ms:
+      //    <0 - no timeout, wait for (a) infinitely.
+      //    0 - check local queue state only once and exit immediately.
+      //    >0 - returns on reaching (a) or (b) condition.
       // Returns:
-      //    ret. code (also in this->res):
-      //      0, 1 - during shared object initialization by the receiver side.
-      //      2 - for receiver: the last  initialization attempt has failed (maybe retry once more);
-      //        for sender: failed to connect to shared memory (probably, the receiver, which is responsible for creation, does not yet exist).
-      //      3 - initialized successfully (normal work).
-      //      4 - disabled (see enrq below).
-      //      -1 - the local queue object is not created yet (use rqtype 2 or 3 to make it).
-      //      -2 - common case failure, no changes.
-      //      -3 - shared memory is locked by some other side.
-      //    *pipush, *pipop - the current (volatile) push/pop char index in the shared memory queue.
-      //      Meaningful values are set only if bufstate returns 3 (i.e. only when the queue is working normally).
-      //        Otherwise, values are set to -1.
-      //      Hint: in application-specific context, along with regular sending some messages,
-      //        *pipop may be used (in sender process) to check if the receiving process is alive and actively consumes messages.
-      //    enrq:
-    _s_long bufstate(_s_long rqtype, _s_ll* pipush = 0, _s_ll* pipop = 0) const throw()
-    {
-      if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
-      if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
-      const _s_long enrq = rqtype == 4 || rqtype == 5 ? 1 : (rqtype == 6 || rqtype == 7 ? 0 : -1);
-      if (enrq >= 0) { rqtype &= 1; }
-      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, rqtype, _nbdflt); } catch (...) {} }
-      if (!_rq) { res = -1; return -1; }
-      if ((rqtype >= 0 && rqtype <= 3) && _rq->buf.b_side1() != !!(rqtype & 1)) { res = -2; return -2; }
-      const _s_long st = _rq->bufstate;
-      if (st == 3 && (pipush || pipop)) { try { rfifo_nbl11& b = _rq->buf->ringbuf; if (pipush) { *pipush = b.ipush(); } if (pipop) { *pipop = b.ipop(); } } catch (...) { res = -2; return -2; } }
-      if (enrq == 0 || enrq == 1) { _rq->b_enrq = enrq == 1; }
-      _s_long stm = st & 0xff;
-      if (stm != 2) { res = stm; return res; }
-      stm = st >> 8;
-      if (_rq->buf.b_side1())
-      {
-        if (stm <= -4 || stm >= -1) { stm = -2; }
-          else if (stm == -2) { stm = 2; }
-      }
-      else
-      {
-        if (stm == -4) { stm = 1; } // the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side
-          else if (stm < -4 || stm >= -1) { stm = -2; }
-          else if (stm == -2) { stm = 2; }
-      }
-      res = stm; return res;
-    }
+      //  lqwait_out: the last value of navl_out(),
+      //  lqwait_in: the last value of navl_in().
+      //
+      // NOTE lqwait_*() do not make automatic initialization of queues (as msend, mget do).
+      // NOTE lqwait_*() do not modify this->res.
+      //
+    _s_ll lqwait_out(double timeout_ms, _s_ll n = 0) const throw()        { const double t0 = clock_ms(); while (1) { const _s_ll na = navl_out(); if (na <= n || timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return na; } sleep_mcs(_idle_t_mcs); } }
+    _s_ll lqwait_in(double timeout_ms, _s_ll n = 1) const throw()       { const double t0 = clock_ms(); while (1) { const _s_ll na = navl_in(); if (na >= n || timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return na; } sleep_mcs(_idle_t_mcs); } }
+
+
+
 
       // 1. Returns the current local queue state, and ipush, ipop values (message count).
       // 2. Optionally (if the queue is sender && iend_sender >= -1),
@@ -8403,18 +9415,26 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    Messages are released by internal thread, by popping without any processing,
       //      in short time after lqstate() returns.
       //      Under normal conditions, the client may rely on or wait for release completion
-      //      (navl() == 0, lqstate() == 0) in 50..100 ms.
+      //      (navl() == 0, lqstate() == 0) in 50..100 ms. See also lqwait_out.
       // b_receiver:
       //    specifies, for what end of the queue the function is called.
-      // iend_sender, dtms_end:
-      //    a) -2 (normal mode) - send messages as normal. Ignore dtms_end.
-      //    b) -1 - for all msgs. that are available currently: after dtms_end ms from now, pop (lose) ones that are not yet sent.
-      //    c) >= 0: after dtms_end ms from now, pop (lose) messages with index in local queue < iend_sender.
+      // iend_sender (together with dtms_end):
+      //    a) -2 (normal mode) - do not modify local queue, send messages as normal. Ignore dtms_end.
+      //    b) -1 - for all msgs. that are available currently:
+      //        after dtms_end ms from now, pop (lose) ones that are not yet sent.
+      //        If pipush != 0, *pipush receives the index, until which the messages will be popped.
+      //        Messages, pushed later (larger index), if any, are not popped.
+      //    c) >= 0: after dtms_end ms from now, pop (lose) messages with index in local queue < iend_sender
+      //        (i.e. pushed earlier than certain one).
       //    d) invalid args.: dtms_end < 0, or iend_sender <= -3.
+      //    NOTE Even with dtms_end > 0, lqstate returns immediately. Local queue cleanup
+      //      after the timeout is done by internal thread.
       //    NOTE Cases (b) and (c) offer reliable way to release all client message objects (cref_t<t_stringref>)
-      //      during limited amount of time, which is approx. (dtms_end + __bmdx_shmfifo_idle_t_long_mcs/1000. + 10) ms.
+      //      during limited amount of time, which is approx.
+      //      (dtms_end + __bmdx_shmfifo_idle_t_long_mcs/1000. + 10)
+      //      milliseconds.
       //      Some of use cases in applications:
-      //        1) all client messages, created in the shared library B, but sent through shmfifo_s in module A (executable or shared library),
+      //        1) all client messages, created in the shared library B, but sent through shmqueue_s in module A (executable or shared library),
       //            must be released before unloading library A (i.e. before its static deinitialization).
       //        2) if immediate sending of messages appears to be impossible (no recipient or it's hanged),
       //            it may be necessary to discard the currently existing messages.
@@ -8427,7 +9447,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //      0 - the local queue is currently empty (ipush == ipop),
       //      1 - the local queue is currently not empty (ipush > ipop).
       //    *pipush, *pipop - the current (volatile) push/pop message index in the local queue.
-      //      Meaningful values are set only if lqstate returns >= 0  (i.e. only when the queue exists).
+      //      Meaningful values are set only if lqstate returns >= 0, i.e. only when the queue exists.
       //        Otherwise, values are set to -1.
     _s_long lqstate(bool b_receiver, _s_ll* pipush = 0, _s_ll* pipop = 0, _s_ll iend_sender = -2, double dtms_end = 0) const throw()
     {
@@ -8450,82 +9470,74 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       res = ipu > ipo ? 1 : 0; return res;
     }
 
-      // Convenience function.
-      //  A. For sender: waits until a) the local queue is empty (lqstate() == 0), b) timeout occurs.
-      //    NOTE This is particularly useful if, after sending some messages,
-      //      the program has to exit.
-      //      It may call lqwait(0, timeout) to give internal thread possibility to complete messages sending.
-      //  B. For recevier: waits until a) the local queue is non-empty (lqstate() == 1), b) timeout occurs.
-      // timeout_ms:
-      //    <0 - no timeout, wait for (a) infinitely.
-      //    0 - check local queue state only once and exit immediately.
-      //    >0 - returns on reaching (a) or (b) condition.
+
+
+      // Returns IPC buffer state, and optionally ensures the queue creation and enabling/disabling.
+      // rqtype:
+      //    0 - return the sender-side queue state, but do not autocreate or modify the queue,
+      //    1 - return the receiver-side queue state, but do not autocreate or modify the queue,
+      //    2 - if the sender-side queue does not exist, autocreate it,
+      //    3 - if the receiver-side queue does not exist, autocreate it,
+      //    NOTE "Autocreate" means:
+      //      if the shared object does not exist, the receiver queue will perform its complete initialization,
+      //      while the sender queue will only try to connect to the existing shared object.
+      //    4, 5 - if the (sender, receiver)-side queue already exists, request queue enabling.
+      //        NOTE By default, when the queue is first created/connected to, it's enabled.
+      //        WARNING Queue enabling is done by internal thread and does not effect immediately.
+      //    6, 7 - if the (sender, receiver)-side queue already exists, request queue disabling.
+      //        The shared object will be closed, and after that, can be opened/used by another process
+      //        or another binary module of the current process.
+      //        WARNING Queue disabling is done by internal thread and does not effect immediately.
+      //    NOTE rqtype's 4..7 are satisfied by internal thread after some delay,
+      //      when all necessary conditions are met.
+      //      When the queue is factually disabled, its bufstate becomes 4.
+      //      After it's reenabled, its bufstate becomes 0, and grows to 3, as in usual initialization sequence.
       // Returns:
-      //  the last value, returned by lqstate(), called from within lqwait().
-    _s_long lqwait(bool b_receiver, double timeout_ms) const throw()
+      //    ret. code (also in this->res):
+      //      0, 1 - during shared object initialization by the receiver side.
+      //      2 - for receiver: the last  initialization attempt has failed (maybe retry once more);
+      //        for sender: failed to connect to shared memory (probably, the receiver, which is responsible for creation, does not yet exist).
+      //      3 - initialized successfully (normal work).
+      //      4 - disabled (see enrq below).
+      //      5 (sender only) - the buffer is initialized successfully, but the receiver process is not active for too long, i.e. it may currently not exist.
+      //      -1 - the local queue object is not created yet (use rqtype 2 or 3 to make it).
+      //      -2 - common case failure, no changes.
+      //      -3 - shared memory is locked by some other side.
+      //    *pipush, *pipop - the current (volatile) push/pop char index in the shared memory queue.
+      //      Meaningful values are set only if bufstate returns 3 (i.e. only when the queue is working normally).
+      //        Otherwise, values are set to -1.
+      //      Hint: in application-specific context, along with regular sending some messages,
+      //        *pipop may be used (in sender process) to check if the receiving process is alive and actively consumes messages.
+      //    enrq:
+    _s_long bufstate(_s_long rqtype, _s_ll* pipush = 0, _s_ll* pipop = 0) const throw()
     {
-      const double t0 = clock_ms();
-      while (1)
+      if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
+      if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
+      const _s_long enrq = rqtype == 4 || rqtype == 5 ? 1 : (rqtype == 6 || rqtype == 7 ? 0 : -1);
+      if (enrq >= 0) { rqtype &= 1; }
+      if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, rqtype, _nbdflt); } catch (...) {} }
+      if (!_rq) { res = -1; return -1; }
+      if ((rqtype >= 0 && rqtype <= 3) && _rq->buf.b_side1() != !!(rqtype & 1)) { res = -2; return -2; }
+      const _s_long st = _rq->bufstate;
+      const bool b_rcv_act_all = _rq->buf.b_side1() || _rq->sndr_rcv_act >= 1;
+      if (st == 3 && (pipush || pipop)) { try { rfifo_nbl11& b = _rq->buf->ringbuf; if (pipush) { *pipush = b.ipush(); } if (pipop) { *pipop = b.ipop(); } } catch (...) { res = -2; return -2; } }
+      if (enrq == 0 || enrq == 1) { _rq->b_enrq = enrq == 1; }
+      _s_long stm = st & 0xff;
+      if (stm != 2) { if (stm == 3 && !b_rcv_act_all) { stm = 5; } res = stm; return res; }
+      stm = st >> 8;
+      if (_rq->buf.b_side1())
       {
-        const _s_long res2 = lqstate(b_receiver);
-        if (res2 == _s_long(b_receiver)) { return res2; }
-        if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return res2; }
-        sleep_mcs(_idle_t_mcs);
+        if (stm <= -4 || stm >= -1) { stm = -2; }
+          else if (stm == -2) { stm = 2; }
       }
+      else
+      {
+        if (stm == -4) { stm = 1; } // the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side
+          else if (stm < -4 || stm >= -1) { stm = -2; }
+          else if (stm == -2) { stm = 2; }
+      }
+      res = stm; return res;
     }
-
-
-      // Convenience function for msend.
-      //    Creates a byte array from msg.
-      //  b_byval:
-      //    true (dflt.) - the returned cref_t strongly references a by value copy of msg.
-      //    false:
-      //      1. The returned array points the given data itself (msg->pd()).
-      //      2. The data must exist until the last cref_t, pointing to that data, is destroyed. (Responsibility of the client.)
-      //      NOTE Even with b_byval false, the function makes small dynamic allocation, i.e., theoretically may fail.
-      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
-      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
-      //  Returns:
-      //    on success: valid non-empty cref_t<t_stringref>,
-      //    on failure: cref_t<t_stringref>().
-      //
-    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba(msg, b_byval, nbadd); }
-      //
-      // Convenience function for msend.
-      //    Creates a byte array as concatenation of copies of the given parts.
-      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
-      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
-      //  Returns:
-      //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
-      //    on failure: cref_t<t_stringref>().
-      //
-    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_mp(part1, part2, part3, nbadd); }
-      //
-      // Convenience function for msend.
-      //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
-      //  Returns:
-      //    on success: valid non-empty cref_t<t_stringref>,
-      //    on failure: cref_t<t_stringref>().
-      //
-    static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::_shmqueue_ctxx_impl::make_rba_z(nb, nbadd); }
-      //
-      // Convenience function for msend.
-      //  Creates cref_t, pointing to the given arrayref_t object (msg).
-      //  This function is the most efficient way of creating references to constant strings.
-      // Returns:
-      //  valid non-empty cref_t<t_stringref>.
-      //    The function does not fail. It does no dynamic allocations.
-      // Example.
-      //    At global or function scope:
-      //      static arrayref_t<char> kw("keyword");
-      //    usage:
-      //      shmqueue_s q("shared queue name");
-      //      q.msend(shmqueue_s::make_rrba(kw));
-      //
-    static cref_t<t_stringref> make_rrba(t_stringref& msg) throw()    { cref_t<t_stringref> rv; rv.assign(msg, false, 1); return rv; }
-
-
-
 
 
 
@@ -8591,6 +9603,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //    -1 - attempt to push message into the input queue.
       //    -2 - failure (memory allocation, incompatibility, message too long, the queue is disabled, etc.).
       //    -3 - shared memory is locked by some other side.
+      //      NOTE When locked state is detected, msend does not wait for timeout and returns immediately.
       //    -4 - shared memory exists, but not ready yet (during initialization by the receiver side).
     _s_long msend(cref_t<t_stringref> msg, double timeout_ms = 0, cref_t<t_stringref> prefix = cref_t<t_stringref>(), _s_ll* pipush_last = 0) const throw()
     {
@@ -8604,9 +9617,18 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       if (_rq->buf.b_side1() != false) { res = -1; return -1; } // not expected to occur
       while (true)
       {
-        _s_long bufstate = _rq->bufstate; if ((bufstate & 0xff) == 2) { const _s_long st2 = bufstate >> 8; if (st2 == -1 || st2 == -3) { res = bufstate; return res; } bufstate = 0; }
-        bufstate &= 0xff; if (bufstate >= 4) { res = -2; return -2; }
-        if (bufstate == 3 || (bufstate <= 1&& timeout_ms == 0 && !!(_flags & 2)))
+        _s_long bsm = _rq->bufstate;
+        if ((bsm & 0xff) == 2)
+        {
+          _s_long st2 = bsm >> 8;
+          if (!(st2 >= -4 && st2 <= -1)) { st2 = -2; }
+          if (st2 == -1) { res = -2; return -2; }
+          if (st2 == -3) { res = -3; return -3; }
+          bsm = 0;
+        }
+        bsm &= 0xff; if (bsm >= 4) { res = -2; return -2; }
+        bool b_optim = !!(_flags & 2);
+        if ((bsm == 3 && (_rq->sndr_rcv_act >= 1 || b_optim)) || (bsm <= 1 && timeout_ms == 0 && b_optim))
         {
           critsec_t<shmqueue_ctx> __lock(_flags & 1 ? 10 : -1, -1, &_rq->csd); if (sizeof(__lock)) {}
           vnnqueue_t<cref_t<t_stringref> >& lq = _rq->msgs;
@@ -8614,20 +9636,74 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
             else { res =  lq.push_1(msg); }
           if (res != 1) { res = -2; return -2; }
           if (pipush_last) { *pipush_last = lq.ipush() - 1; }
-          res = bufstate == 3 ? 2 : 1; return res;
+          res = bsm == 3 ? 2 : 1; return res;
         }
         if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { res = 0; return 0; }
         sleep_mcs(_idle_t_mcs);
+        if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; } // the application may be exiting during waiting
       }
     }
 
       // Convenience function.
       //  Sends a copy of the given string(s), through msend(cref_t...).
-    _s_long msend(t_stringref msg, double timeout_ms = 0) const throw()    { return msend(_shmqueue_ctxx_impl::make_rba(msg, true), timeout_ms); }
-    _s_long msend(t_stringref msg, double timeout_ms, t_stringref prefix) const throw()    { return msend(_shmqueue_ctxx_impl::make_rba(msg, true), timeout_ms, _shmqueue_ctxx_impl::make_rba(prefix, true)); }
+    _s_long msend(t_stringref msg, double timeout_ms = 0) const throw()    { return msend(_bmdx_shm::make_rba(msg, true), timeout_ms); }
+    _s_long msend(t_stringref msg, double timeout_ms, t_stringref prefix) const throw()    { return msend(_bmdx_shm::make_rba(msg, true), timeout_ms, _bmdx_shm::make_rba(prefix, true)); }
 
 
 
+
+      // Convenience function for msend.
+      //    Creates a byte array from msg.
+      //    NOTE Implementation uses calloc.
+      //  b_byval:
+      //    true (dflt.) - the returned cref_t strongly references a by value copy of msg.
+      //    false:
+      //      1. The returned array points the given data itself (msg->pd()).
+      //      2. The data must exist until the last cref_t, pointing to that data, is destroyed. (Responsibility of the client.)
+      //      NOTE Even with b_byval false, the function makes small dynamic allocation, i.e., theoretically may fail.
+      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
+      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref>,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba(msg, b_byval, nbadd); }
+      //
+      // Convenience function for msend.
+      //    Creates a byte array as concatenation of copies of the given parts.
+      //    NOTE Implementation uses calloc.
+      //  nbadd > 0 (used only on b_byval == true): adds hidden (not accounted in t_stringref::n()) zero bytes
+      //      after the copy of msg data. E.g. nbadd = 1 makes msg copy conventional C string.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_mp(part1, part2, part3, nbadd); }
+      //
+      // Convenience function for msend.
+      //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
+      //    NOTE Implementation uses calloc.
+      //  Returns:
+      //    on success: valid non-empty cref_t<t_stringref>,
+      //    on failure: cref_t<t_stringref>().
+      //
+    static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_z(nb, nbadd); }
+      //
+      // Convenience function for msend.
+      //  Creates cref_t, pointing to the given arrayref_t object (msg).
+      //  No dynamic allocations are made.
+      //  This function is the most efficient way of creating references to constant strings.
+      // Returns:
+      //  valid non-empty cref_t<t_stringref>.
+      //    The function does not fail. It does no dynamic allocations.
+      // Example.
+      //    At global or function scope:
+      //      static arrayref_t<char> kw("keyword");
+      //    usage:
+      //      shmqueue_s q("shared queue name");
+      //      q.msend(shmqueue_s::make_rrba(kw));
+      //
+    static cref_t<t_stringref> make_rrba(t_stringref& msg) throw()    { cref_t<t_stringref> rv; rv.assign(msg, false, 1); return rv; }
 
 
 
@@ -8648,11 +9724,12 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       //      NOTE this->d->pd() points to this->d->n() bytes of message, plus 1 zero byte appended (may be used as C string).
       //    0 - no message in the queue (in case if timeout_ms > 0 was specified, then the time has passed already)
       //      this->d is cleared.
-      //    -1 - attempt to pop message from the output queue
+      //    -1 - attempt to pop message from the output queue.
       //    -2 - failure (memory allocation, incompatibility, the queue is disabled, etc.).
       //    -3 - shared memory is locked by some other side.
+      //      NOTE When locked state is detected, mget does not wait for timeout and returns immediately.
       //  On any result < 0, this->d is not modified.
-    _s_long mget(double timeout_ms = 0, bool b_do_pop = true) const throw()
+    _s_long mget(double timeout_ms = 0, bool b_do_pop = true) throw()
     {
       const double t0 = clock_ms();
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
@@ -8661,8 +9738,8 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
       if (_rq->buf.b_side1() != true) { res = -1; return -1; } // not expected to occur
       while (true)
       {
-        _s_long bufstate = _rq->bufstate; if ((bufstate & 0xff) == 2) { bufstate >>= 8; if (bufstate >= -1 || bufstate <= -4) { bufstate = -2; } res = bufstate; return res; }
-        bufstate &= 0xff; if (bufstate >= 4) { res = -2; return -2; }
+        _s_long bsm = _rq->bufstate; if ((bsm & 0xff) == 2) { bsm >>= 8; if (!(bsm >= -3 && bsm <= -1)) { bsm = -2; } res = bsm; return res; }
+        bsm &= 0xff; if (bsm >= 4) { res = -2; return -2; }
         if (_rq->msgs.navl() > 0)
         {
           critsec_t<shmqueue_ctx> __lock(_flags & 1 ? 10 : -1, -1, &_rq->csd); if (sizeof(__lock)) {}
@@ -8673,6 +9750,7 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
         }
         if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { if (this->d) { this->d.clear(); } res = 0; return 0; }
         sleep_mcs(_idle_t_mcs);
+        if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; } // the application may be exiting during waiting
       }
     }
 
@@ -8706,16 +9784,25 @@ namespace _api // public declarations (merged into namespace bmdx_shm)
   };
 
 
-}
 
+
+} // end namespace _bmdx_shm::_api
 } using namespace _bmdx_shm::_api; } // end namespace bmdx_shm
 
+namespace bmdx
+{
+  struct file_io::_stra_rba : _stra_base { typedef cref_t<arrayref_t<char> > t_rba; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { t_rba& x = *(t_rba*)ps; if (n0 < 0) { x.clear(); return true; } x = ::bmdx_shm::_bmdx_shm::make_rba_z(n0, 1); return !!x; } virtual char* _pd(void* ps __bmdx_noarg) const throw() { return (*(t_rba*)ps)->pd(); } };
+  int file_io::load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noargt) throw()
+  {
+    cref_t<arrayref_t<char> > retval;
+    int res = _load_bytes(fnp, _stra_rba(), &retval);
+    bmdx_str::words::swap_bytes(retval, dest);
+    return res;
+  }
+}
 
 #undef _s_long
 #undef _s_ll
 #undef _u_ll
 
 #endif // bmdx_cpiomt_H
-
-
-
