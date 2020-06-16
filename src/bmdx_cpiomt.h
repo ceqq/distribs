@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-05-16
+// rev. 2020-06-16
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3475,7 +3475,7 @@ namespace bmdx
         const int n = sizeof(_threadctl_tid_data::t_native_tid);
         if (n > 16) { return 0; }
         try {
-          _s_ll t_my = (_s_ll)((char*)_critsec_tu_static_t<tid>::sm(16) - (char*)0); _s_ll t = (_s_ll)((char*)_dat.psm(16) - (char*)0); _s_ll s = (_s_ll)((char*)_dat.psm(17) - (char*)0);
+          _s_ll t_my = (_s_ll)((char*)_threadctl_tu_static_t<>::sm(16) - (char*)0); _s_ll t = (_s_ll)((char*)_dat.psm(16) - (char*)0); _s_ll s = (_s_ll)((char*)_dat.psm(17) - (char*)0);
           if (t != t_my) { return 0; } if (s != n) { return 0; }
         } catch (...) { return 0; }
         _s_ll x = 1; bool b = *(char*)&x == 1;
@@ -3491,6 +3491,20 @@ namespace bmdx
       _s_ll num_id() const throw()    { if (is_null()) { return 0; } _s_ll n = _dat.stg1 ^ _dat.stg2; if (!n) { n = _dat.stg1; } return n; }
 
     private: friend struct threadctl; _threadctl_tid_data _dat;
+    };
+
+    struct ff_mc
+    {
+        // Returns thread ID of the current (caller's) thread.
+      tid tid_self() throw()
+      {
+        #ifdef _bmdxpl_Wnds
+          return GetCurrentThreadId();
+        #endif
+        #ifdef _bmdxpl_Psx
+          return pthread_self();
+        #endif
+      }
     };
 
 
