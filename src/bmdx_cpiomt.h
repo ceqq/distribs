@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-06-16
+// rev. 2020-06-23
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -55,21 +55,18 @@
   #pragma warning(disable:4290)
   #pragma warning(disable:4099)
 #endif
-
   // Rough platform selector
 #ifdef _WIN32
   #define _bmdxpl_Wnds
 #else
   #define _bmdxpl_Psx
 #endif
-
 #undef _yk_reg
 #if __cplusplus > 199711L
   #define _yk_reg
 #else
   #define _yk_reg register
 #endif
-
 #if __APPLE__ && __MACH__
   #define __bmdx_noarg , bmdx_meta::t_noarg = bmdx_meta::t_noarg()
   #define __bmdx_noarg1 bmdx_meta::t_noarg = bmdx_meta::t_noarg()
@@ -84,6 +81,15 @@
   #define __bmdx_noargt1
   #define __bmdx_noargv
   #define __bmdx_noargv1
+#endif
+#ifndef __bmdx_noex
+#if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201406)
+  #define __bmdx_noex noexcept
+  #define __bmdx_exs(a) noexcept(false)
+#else
+  #define __bmdx_noex throw()
+  #define __bmdx_exs(a) throw(a)
+#endif
 #endif
 
 
@@ -160,21 +166,21 @@ namespace bmdx_str
   {
       // NOTE Values are treated as signed integer.
       // NOTE pos is the offset in bytes from p.
-    static inline _s_ll le8(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_ll x = _s_ll(*pc++); x |= _s_ll(*pc++) << 8; x |= _s_ll(*pc++) << 16; x |= _s_ll(*pc++) << 24; x |= _s_ll(*pc++) << 32; x |= _s_ll(*pc++) << 40; x |= _s_ll(*pc++) << 48; x |= _s_ll(*pc) << 56; return x; }
-    static inline _s_long le4(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc++) << 8; x |= _s_long(*pc++) << 16; x |= _s_long(*pc) << 24; return x; }
-    static inline _s_long le2(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc) << 8; return (x << 16) >> 16; }
-    static inline void set_le8(void* p, _s_long pos, _s_ll x) throw() { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc = char(x);  }
-    static inline void set_le4(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc = char(x);  }
-    static inline void set_le2(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc = char(x);  }
+    static inline _s_ll le8(const void* p, _s_long pos) __bmdx_noex { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_ll x = _s_ll(*pc++); x |= _s_ll(*pc++) << 8; x |= _s_ll(*pc++) << 16; x |= _s_ll(*pc++) << 24; x |= _s_ll(*pc++) << 32; x |= _s_ll(*pc++) << 40; x |= _s_ll(*pc++) << 48; x |= _s_ll(*pc) << 56; return x; }
+    static inline _s_long le4(const void* p, _s_long pos) __bmdx_noex { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc++) << 8; x |= _s_long(*pc++) << 16; x |= _s_long(*pc) << 24; return x; }
+    static inline _s_long le2(const void* p, _s_long pos) __bmdx_noex { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos; _s_long x = _s_long(*pc++); x |= _s_long(*pc) << 8; return (x << 16) >> 16; }
+    static inline void set_le8(void* p, _s_long pos, _s_ll x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc = char(x);  }
+    static inline void set_le4(void* p, _s_long pos, _s_long x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc++ = char(x); x >>= 8; *pc = char(x);  }
+    static inline void set_le2(void* p, _s_long pos, _s_long x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos; *pc++ = char(x); x >>= 8; *pc = char(x);  }
 
       // NOTE Values are treated as signed integer.
       // NOTE pos is the offset in bytes from p.
-    static inline _s_ll be8(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 7; _s_ll x = _s_ll(*pc--); x |= _s_ll(*pc--) << 8; x |= _s_ll(*pc--) << 16; x |= _s_ll(*pc--) << 24; x |= _s_ll(*pc--) << 32; x |= _s_ll(*pc--) << 40; x |= _s_ll(*pc--) << 48; x |= _s_ll(*pc) << 56; return x; }
-    static inline _s_long be4(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 3; _s_long x = _s_long(*pc--); x |= _s_long(*pc--) << 8; x |= _s_long(*pc--) << 16; x |= _s_long(*pc) << 24; return x; }
-    static inline _s_long be2(const void* p, _s_long pos) throw() { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 1; _s_long x = _s_long(*pc--); x |= _s_long(*pc) << 8; return (x << 16) >> 16; }
-    static inline void set_be8(void* p, _s_long pos, _s_ll x) throw() { _yk_reg char* pc = ((char*)p) + pos + 7; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
-    static inline void set_be4(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos + 3; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
-    static inline void set_be2(void* p, _s_long pos, _s_long x) throw() { _yk_reg char* pc = ((char*)p) + pos + 1; *pc-- = char(x); x >>= 8; *pc = char(x);  }
+    static inline _s_ll be8(const void* p, _s_long pos) __bmdx_noex { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 7; _s_ll x = _s_ll(*pc--); x |= _s_ll(*pc--) << 8; x |= _s_ll(*pc--) << 16; x |= _s_ll(*pc--) << 24; x |= _s_ll(*pc--) << 32; x |= _s_ll(*pc--) << 40; x |= _s_ll(*pc--) << 48; x |= _s_ll(*pc) << 56; return x; }
+    static inline _s_long be4(const void* p, _s_long pos) __bmdx_noex { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 3; _s_long x = _s_long(*pc--); x |= _s_long(*pc--) << 8; x |= _s_long(*pc--) << 16; x |= _s_long(*pc) << 24; return x; }
+    static inline _s_long be2(const void* p, _s_long pos) __bmdx_noex { _yk_reg unsigned char* pc = ((unsigned char*)p) + pos + 1; _s_long x = _s_long(*pc--); x |= _s_long(*pc) << 8; return (x << 16) >> 16; }
+    static inline void set_be8(void* p, _s_long pos, _s_ll x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos + 7; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
+    static inline void set_be4(void* p, _s_long pos, _s_long x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos + 3; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
+    static inline void set_be2(void* p, _s_long pos, _s_long x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos + 1; *pc-- = char(x); x >>= 8; *pc = char(x);  }
 
     #undef __bmdx_null_pchar
     #define __bmdx_null_pchar ((char*)1 - 1)
@@ -183,7 +189,7 @@ namespace bmdx_str
       typedef bmdx_meta::t_pdiff t_pdiff;
       typedef _s_ll s_ll;
       typedef _s_long s_long;
-      static inline void sf_memmove(void* dest_, const void* src_, t_pdiff n) throw()
+      static inline void sf_memmove(void* dest_, const void* src_, t_pdiff n) __bmdx_noex
       {
         if (dest_ == src_ || n <= 0) { return; }
         char* s = (char*)src_;
@@ -286,15 +292,15 @@ namespace bmdx_str
 
   namespace conv
   {
-    struct exc_str2i : std::exception { const char* what() const throw() { return "bmdx_str::str2i"; } };
-    struct exc_str2f : std::exception { const char* what() const throw() { return "bmdx_str::str2f"; } };
-    struct exc_conv_ws : std::exception { enum { nmax = 80 }; char msg[nmax ]; const char* what() const throw() { return msg; } exc_conv_ws(const char* s1, const char* s2 = 0) { _s_long n = nmax - 1; char* p = msg; if (s1) { while (*s1 && n > 0) { *p++ = *s1++; } } if (s2) { while (*s2 && n > 0) { *p++ = *s2++; } } *p = '\0'; } };
+    struct exc_str2i : std::exception { const char* what() const __bmdx_noex { return "bmdx_str::str2i"; } };
+    struct exc_str2f : std::exception { const char* what() const __bmdx_noex { return "bmdx_str::str2f"; } };
+    struct exc_conv_ws : std::exception { enum { nmax = 80 }; char msg[nmax ]; const char* what() const __bmdx_noex { return msg; } exc_conv_ws(const char* s1, const char* s2 = 0) { _s_long n = nmax - 1; char* p = msg; if (s1) { while (*s1 && n > 0) { *p++ = *s1++; } } if (s2) { while (*s2 && n > 0) { *p++ = *s2++; } } *p = '\0'; } };
 
     template<class _ = yk_c::__vecm_tu_selector>
     struct _bmdx_str_impl
     {
-      static _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) throw();
-      static _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax, bool b_nans) throw();
+      static _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) __bmdx_noex;
+      static _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax, bool b_nans) __bmdx_noex;
       static _s_ll str2i(const wchar_t* x, _s_ll xlen, _s_ll dflt, bool no_exc);
       static double str2f(const wchar_t* x, _s_ll xlen, double dflt, bool no_exc, bool b_nans);
       static _s_ll str2i(const char* x, _s_ll xlen, _s_ll dflt, bool no_exc);
@@ -307,7 +313,7 @@ namespace bmdx_str
       { return __bmdx_isfinite(x); }
 
     template<class _>
-    _s_long _bmdx_str_impl<_>::str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) throw()
+    _s_long _bmdx_str_impl<_>::str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) __bmdx_noex
     {
       if (!(buf && nchars >= 0)) { return -1; }
       if (nchars == 0) { return 0; }
@@ -324,7 +330,7 @@ namespace bmdx_str
     }
 
     template<class _>
-    _s_long _bmdx_str_impl<_>::str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax, bool b_nans) throw()
+    _s_long _bmdx_str_impl<_>::str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax, _s_long nfracmax, bool b_nans) __bmdx_noex
     {
       if (!(buf && nchars >= 0)) { return -1; }
       if (nchars == 0) { return 0; }
@@ -623,53 +629,53 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     flstr_t() { _nr = 1 << _sh_res; _x[0] = 0; }
 
       // res(): 1: success; 0: only part is added; -1: length() == nmax() already.
-    flstr_t(const char* ps, _s_ll n = -1) throw() { _nr = 0; _x[0] = 0; _set_res_u(_append_s(ps, n >= 0 ? n : -1)); }
-    flstr_t(const std::string& s) throw() { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
-    flstr_t(const wchar_t* ps, _s_ll n = -1) throw() { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); }
-    flstr_t(const std::wstring& s) throw() { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(s.c_str(), s.length())); }
+    flstr_t(const char* ps, _s_ll n = -1) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(ps, n >= 0 ? n : -1)); }
+    flstr_t(const std::string& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
+    flstr_t(const wchar_t* ps, _s_ll n = -1) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); }
+    flstr_t(const std::wstring& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(s.c_str(), s.length())); }
 
-    template<_s_long nmax2> flstr_t(const flstr_t<nmax2>& s) throw() { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
+    template<_s_long nmax2> flstr_t(const flstr_t<nmax2>& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
 
-    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw() { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
-    flstr_t(_s_ll x, bool b_signed) throw() { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) __bmdx_noex { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(_s_ll x, bool b_signed) __bmdx_noex { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
 
-    flstr_t(signed short x) throw() { new (this) flstr_t(_s_ll(x), true); }
-    flstr_t(signed int x) throw() { new (this) flstr_t(_s_ll(x), true); }
-    flstr_t(signed long x) throw() { new (this) flstr_t(_s_ll(x), true); }
-    flstr_t(signed long long x) throw() { new (this) flstr_t(_s_ll(x), true); }
-    flstr_t(unsigned short x) throw() { new (this) flstr_t(_s_ll(x), false); }
-    flstr_t(unsigned int x) throw() { new (this) flstr_t(_s_ll(x), false); }
-    flstr_t(unsigned long x) throw() { new (this) flstr_t(_s_ll(x), false); }
-    flstr_t(unsigned long long x) throw() { new (this) flstr_t(_s_ll(x), false); }
+    flstr_t(signed short x) __bmdx_noex { new (this) flstr_t(_s_ll(x), true); }
+    flstr_t(signed int x) __bmdx_noex { new (this) flstr_t(_s_ll(x), true); }
+    flstr_t(signed long x) __bmdx_noex { new (this) flstr_t(_s_ll(x), true); }
+    flstr_t(signed long long x) __bmdx_noex { new (this) flstr_t(_s_ll(x), true); }
+    flstr_t(unsigned short x) __bmdx_noex { new (this) flstr_t(_s_ll(x), false); }
+    flstr_t(unsigned int x) __bmdx_noex { new (this) flstr_t(_s_ll(x), false); }
+    flstr_t(unsigned long x) __bmdx_noex { new (this) flstr_t(_s_ll(x), false); }
+    flstr_t(unsigned long long x) __bmdx_noex { new (this) flstr_t(_s_ll(x), false); }
 
-    flstr_t(const void* x) throw() { new (this) flstr_t((_s_ll)x, false); }
+    flstr_t(const void* x) __bmdx_noex { new (this) flstr_t((_s_ll)x, false); }
 
-    _s_long nmax() const  throw() { return nmax_c; }
-    _s_long length() const throw() { return _nr & _m_size; }
-    _s_long size() const throw() { return _nr & _m_size; }
-    _s_long n() const throw() { return _nr & _m_size; }
-    _s_long is_full() const throw() { return length() == nmax(); }
-    _s_long is_empty() const throw() { return length() == 0; }
-    _s_long res() const throw() { return _nr >> _sh_res; }
-    const char* c_str() const throw() { return _x; }
-    const char* pd() const throw() { return _x; }
-    _s_long type() const throw() { return 0; }
+    _s_long nmax() const  __bmdx_noex { return nmax_c; }
+    _s_long length() const __bmdx_noex { return _nr & _m_size; }
+    _s_long size() const __bmdx_noex { return _nr & _m_size; }
+    _s_long n() const __bmdx_noex { return _nr & _m_size; }
+    _s_long is_full() const __bmdx_noex { return length() == nmax(); }
+    _s_long is_empty() const __bmdx_noex { return length() == 0; }
+    _s_long res() const __bmdx_noex { return _nr >> _sh_res; }
+    const char* c_str() const __bmdx_noex { return _x; }
+    const char* pd() const __bmdx_noex { return _x; }
+    _s_long type() const __bmdx_noex { return 0; }
 
       // If n >= 0, chars [pos0..min(pos0+n, length())) are returned.
       //  If n < 0, chars [pos0..length()) are returned.
-    t_string substr(_s_long pos0, _s_long n) const throw() { _s_long n0 = length(); if (n <= 0) { if (n == 0) { return t_string(); } n = n0; } if (n > n0) { n = n0; } if (pos0 < 0) { pos0 = 0; } else if (pos0 > n0) { pos0 = n0; } if (pos0 + n > n0) { n = n0 - pos0; } return t_string(_x + pos0, n); }
+    t_string substr(_s_long pos0, _s_long n) const __bmdx_noex { _s_long n0 = length(); if (n <= 0) { if (n == 0) { return t_string(); } n = n0; } if (n > n0) { n = n0; } if (pos0 < 0) { pos0 = 0; } else if (pos0 > n0) { pos0 = n0; } if (pos0 + n > n0) { n = n0 - pos0; } return t_string(_x + pos0, n); }
       // Starts searching from pos0.
       //  (find_any) n_pcc >= 0 specifies num of chars. in pcc.
       // Returns [0..length()), or -1 if not found.
-    _s_long find(char c, _s_long pos0 = 0) const throw() { _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } while (pos0 < pos2) { if (_x[pos0] == c) { return pos0; } ++pos0; } return -1; }
-    _s_long find_any(const char* pcc, _s_long pos0 = 0, _s_long n_pcc = -1) const throw() { if (!pcc) { return -1; } _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } if (pos0 >= pos2) { return -1; } if (n_pcc < 0) { n_pcc = 0; const char* p = pcc; while (*p++) { ++n_pcc; } } while (pos0 < pos2) { char c = _x[pos0]; for (_s_long i = 0; i < n_pcc; ++i) { if (c == pcc[i]) { return pos0; } } ++pos0; } return -1; }
+    _s_long find(char c, _s_long pos0 = 0) const __bmdx_noex { _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } while (pos0 < pos2) { if (_x[pos0] == c) { return pos0; } ++pos0; } return -1; }
+    _s_long find_any(const char* pcc, _s_long pos0 = 0, _s_long n_pcc = -1) const __bmdx_noex { if (!pcc) { return -1; } _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } if (pos0 >= pos2) { return -1; } if (n_pcc < 0) { n_pcc = 0; const char* p = pcc; while (*p++) { ++n_pcc; } } while (pos0 < pos2) { char c = _x[pos0]; for (_s_long i = 0; i < n_pcc; ++i) { if (c == pcc[i]) { return pos0; } } ++pos0; } return -1; }
 
     #ifdef _MSC_VER
       inline operator std::string() const { return std::string(&_x[0], length()); }
       inline operator std::wstring() const { return wstr(); }
     #else
-      inline operator std::string() const throw (std::exception __bmdx_noargt) { return std::string(&_x[0], length()); }
-      inline operator std::wstring() const throw (std::exception __bmdx_noargt) { return wstr(); }
+      inline operator std::string() const __bmdx_exs(std::exception) { return std::string(&_x[0], length()); }
+      inline operator std::wstring() const __bmdx_exs(std::exception) { return wstr(); }
     #endif
     inline std::string str(__bmdx_noarg1) const { return std::string(&_x[0], length()); }
     std::wstring wstr(__bmdx_noarg1) const // UTF-8 --> UTF-16
@@ -698,84 +704,84 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     }
 
       // Modify the last result (res()) value. Before setting, x is limited by res_min..res_max.
-    void set_res(_s_long x) throw() { if (x < res_min) { x = res_min; } else if (x > res_max) { x = res_max; } _set_res_u(x); }
+    void set_res(_s_long x) __bmdx_noex { if (x < res_min) { x = res_min; } else if (x > res_max) { x = res_max; } _set_res_u(x); }
 
       // res(): 1: success; 0: n > nmax(), so nmax() is set; -1: n is negative, nothing changed.
-    void resize(_s_long n, char c = ' ') throw() { if (n < 0) { _set_res_u(-1); return; } bool b = n > nmax(); if (b) { n = nmax(); } _s_long delta = n - length(); if (delta > 0) { _set_u(c, _x + length(), delta); } if (delta != 0) { _set_end_u(n); } _set_res_u(b ? 0 : 1); }
+    void resize(_s_long n, char c = ' ') __bmdx_noex { if (n < 0) { _set_res_u(-1); return; } bool b = n > nmax(); if (b) { n = nmax(); } _s_long delta = n - length(); if (delta > 0) { _set_u(c, _x + length(), delta); } if (delta != 0) { _set_end_u(n); } _set_res_u(b ? 0 : 1); }
 
       // res(): 1.
-    void clear() throw() { resize(0); }
+    void clear() __bmdx_noex { resize(0); }
 
 
     char& operator[] (_s_long i) { return _x[i]; }
     const char& operator[] (_s_long i) const { return _x[i]; }
 
-    bool operator == (const t_string& s) const throw()    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    bool operator < (const t_string& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    bool operator <= (const t_string& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
-    bool operator != (const t_string& s) const throw()    { return !operator==(s); }
-    bool operator > (const t_string& s) const throw()    { return !operator<(s); }
-    bool operator >= (const t_string& s) const throw()    { return !operator<=(s); }
+    bool operator == (const t_string& s) const __bmdx_noex    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
+    bool operator < (const t_string& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    bool operator <= (const t_string& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    bool operator != (const t_string& s) const __bmdx_noex    { return !operator==(s); }
+    bool operator > (const t_string& s) const __bmdx_noex    { return !operator<(s); }
+    bool operator >= (const t_string& s) const __bmdx_noex    { return !operator<=(s); }
 
-    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const throw()    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const throw()    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
-    template<_s_long n2> bool operator != (const flstr_t<n2>& s) const throw()    { return !operator==(s); }
-    template<_s_long n2> bool operator > (const flstr_t<n2>& s) const throw()    { return !operator<(s); }
-    template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const throw()    { return !operator<=(s); }
+    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const __bmdx_noex    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
+    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    template<_s_long n2> bool operator != (const flstr_t<n2>& s) const __bmdx_noex    { return !operator==(s); }
+    template<_s_long n2> bool operator > (const flstr_t<n2>& s) const __bmdx_noex    { return !operator<(s); }
+    template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const __bmdx_noex    { return !operator<=(s); }
 
     template<class T> t_string& operator << (const T& x) { *this += x; return *this; }
 
 
       // res(): 1: success; -1: length() == nmax() already.
-    t_string& operator += (char c) throw() { _s_long n = length(); if (n >= nmax()) { _set_res_u(-1); return *this; } _x[n] = c; ++n; _x[n] = 0; _nr = (1 << _sh_res) | n; return *this; }
+    t_string& operator += (char c) __bmdx_noex { _s_long n = length(); if (n >= nmax()) { _set_res_u(-1); return *this; } _x[n] = c; ++n; _x[n] = 0; _nr = (1 << _sh_res) | n; return *this; }
 
-    t_string& operator += (double x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (wchar_t x) throw() { append(&x, 1); return *this; }
+    t_string& operator += (double x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (wchar_t x) __bmdx_noex { append(&x, 1); return *this; }
 
-    t_string& operator += (signed short x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (signed int x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (signed long x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (signed long long x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (unsigned short x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (unsigned int x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (unsigned long x) throw() { *this += t_string(x); return *this; }
-    t_string& operator += (unsigned long long x) throw() { *this += t_string(x); return *this; }
+    t_string& operator += (signed short x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (signed int x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (signed long x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (signed long long x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (unsigned short x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (unsigned int x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (unsigned long x) __bmdx_noex { *this += t_string(x); return *this; }
+    t_string& operator += (unsigned long long x) __bmdx_noex { *this += t_string(x); return *this; }
 
-    t_string operator + (char c) throw() { t_string s2(*this); s2 += c; return s2; }
+    t_string operator + (char c) __bmdx_noex { t_string s2(*this); s2 += c; return s2; }
 
-    t_string operator + (double x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (wchar_t x) throw() { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (double x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (wchar_t x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
 
-    t_string operator + (signed short x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (signed int x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (signed long x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (signed long long x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned short x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned int x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned long x) throw() { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned long long x) throw() { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed short x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed int x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed long long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned short x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned int x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned long long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
 
       // res(): 1: success; 0: only part is added; -1: length() == nmax() already; -2: ps == 0.
-    t_string& append (const char* ps, _s_ll n) throw() { _set_res_u(_append_s(ps, n >= 0 ? n : -1)); return *this; }
-    t_string& operator += (const char* ps) throw() { _set_res_u(_append_s(ps, -1)); return *this; }
-    t_string& operator += (const std::string& s) throw() { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
-    t_string& operator = (const char* ps) throw() { resize(0); _set_res_u(_append_s(ps, -1)); return *this; }
-    t_string& operator = (const std::string& s) throw() { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
-    t_string operator + (const char* ps) throw() { t_string s2(*this); s2 += ps; return s2; }
-    t_string operator + (const std::string& s) throw() { t_string s2(*this); s2 += s; return s2; }
+    t_string& append (const char* ps, _s_ll n) __bmdx_noex { _set_res_u(_append_s(ps, n >= 0 ? n : -1)); return *this; }
+    t_string& operator += (const char* ps) __bmdx_noex { _set_res_u(_append_s(ps, -1)); return *this; }
+    t_string& operator += (const std::string& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
+    t_string& operator = (const char* ps) __bmdx_noex { resize(0); _set_res_u(_append_s(ps, -1)); return *this; }
+    t_string& operator = (const std::string& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
+    t_string operator + (const char* ps) __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
+    t_string operator + (const std::string& s) __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
 
-    t_string& append (const wchar_t* ps, _s_ll n) throw() { _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); return *this; }
-    t_string& operator += (const wchar_t* ps) throw() {  _set_res_u(_append_wcs(ps, -1)); return *this; }
-    t_string& operator += (const std::wstring& s) throw() { _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
-    t_string& operator = (const wchar_t* ps) throw() { resize(0); _set_res_u(_append_wcs(ps, -1)); return *this; }
-    t_string& operator = (const std::wstring& s) throw() { resize(0); _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
-    t_string operator + (const wchar_t* ps) throw() { t_string s2(*this); s2 += ps; return s2; }
-    t_string operator + (const std::wstring& s) throw() { t_string s2(*this); s2 += s; return s2; }
+    t_string& append (const wchar_t* ps, _s_ll n) __bmdx_noex { _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); return *this; }
+    t_string& operator += (const wchar_t* ps) __bmdx_noex {  _set_res_u(_append_wcs(ps, -1)); return *this; }
+    t_string& operator += (const std::wstring& s) __bmdx_noex { _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
+    t_string& operator = (const wchar_t* ps) __bmdx_noex { resize(0); _set_res_u(_append_wcs(ps, -1)); return *this; }
+    t_string& operator = (const std::wstring& s) __bmdx_noex { resize(0); _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
+    t_string operator + (const wchar_t* ps) __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
+    t_string operator + (const std::wstring& s) __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
 
-    template<_s_long nmax2> t_string& operator += (const flstr_t<nmax2>& s) throw() { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
-    template<_s_long nmax2> t_string operator + (const flstr_t<nmax2>& s) throw() { t_string s2(*this); s2 += s; return s2; }
-    template<_s_long nmax2> t_string& operator = (const flstr_t<nmax2>& s) throw() { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
+    template<_s_long nmax2> t_string& operator += (const flstr_t<nmax2>& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
+    template<_s_long nmax2> t_string operator + (const flstr_t<nmax2>& s) __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
+    template<_s_long nmax2> t_string& operator = (const flstr_t<nmax2>& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
 
   private:
     _s_long _nr; char _x[nmax_c + 1];
@@ -785,9 +791,9 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     inline _s_long _copy_le_u(const char* buf, char* dest, _s_long nc) { _s_long n = 0; while (nc > 0) { char c = *buf++; if (!c) { break; } *dest++ = c; ++n; --nc; } return n; }
     inline void _set_u(char c, char* dest, _s_long n) { while (n > 0) { *dest++ = c; --n; } }
     inline void _set_end_u(_s_long n) { _x[n] = 0; _nr &= ~_s_long(_m_size); _nr |= n; }
-    inline void _set_res_u(_s_long x) throw() { _nr &= _m_size; _nr |= (x << _sh_res); }
+    inline void _set_res_u(_s_long x) __bmdx_noex { _nr &= _m_size; _nr |= (x << _sh_res); }
       // 1: success, 0: partially copied, -1: string is full, cannot append, -2: invalid ps, nsrc.
-    _s_long _append_s(const char* ps, _s_ll nsrc = -1) throw()
+    _s_long _append_s(const char* ps, _s_ll nsrc = -1) __bmdx_noex
     {
       if (!(ps && nsrc >= -1)) { return -2; }
       _s_long ncmax = nmax() - length(); if (nsrc > 0 && ncmax <= 0) { return -1; }
@@ -831,13 +837,13 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     }
   };
 
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const char* ps, const flstr_t<nmax_>& s2) throw() { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const std::string& s, const flstr_t<nmax_>& s2) throw() { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
+  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const char* ps, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
+  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const std::string& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
 
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const wchar_t* ps, const flstr_t<nmax_>& s2) throw() { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const std::wstring& s, const flstr_t<nmax_>& s2) throw() { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
+  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const wchar_t* ps, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
+  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const std::wstring& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
 
-  template<_s_long nmax_> inline std::ostream& operator << (std::ostream& stm, const flstr_t<nmax_>& s2) throw() { stm << s2.str(); return stm; }
+  template<_s_long nmax_> inline std::ostream& operator << (std::ostream& stm, const flstr_t<nmax_>& s2) __bmdx_noex { stm << s2.str(); return stm; }
 
   namespace conv { namespace
   {
@@ -860,7 +866,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       //        c) x < 0: '-'.
       //    0 - nchars == 0.
       //    -1 - invalid input parameter (buf == 0, nchars < 0).
-    static inline _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed = true) throw() { return _bmdx_str_impl<>::str_from_s_ll(x, buf, nchars, b_signed); }
+    static inline _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed = true) __bmdx_noex { return _bmdx_str_impl<>::str_from_s_ll(x, buf, nchars, b_signed); }
 
       // ndmmax (max. num. of digits in mantissa) is limited to 1..14.
       //    Max number of output characters == limited ndmmax + 7 (0..1 sign, 1 point, 0..1 "e", 0..4 order).
@@ -873,7 +879,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       //    1 - string representation is longer than nchars, so only sign is extracted: buf[0] == '+', '0', or '-'.
       //    0 - nchars == 0.
       //    -1 - invalid input parameter (buf == 0, nchars < 0, x is not finite with b_nans == false).
-    static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) throw() { return _bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax, b_nans); }
+    static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) __bmdx_noex { return _bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax, b_nans); }
 
       // Converts string to number. On failure, returns dflt, or (if no_exc == false) generates exc_str2i.
       //  For char* and wchar_t* versions, xlen == -1 means that x is 0-terminated.
@@ -957,11 +963,11 @@ namespace bmdx
   //== BASE PART FOR CROSS-MODULE CONTAINERS
 
     // operator= and copy constructor exception for array types with enabled exceptions. May be caught on the client.
-  struct exc_carr_alloc_asg : std::exception { const char* what() const throw() { return "c[pp]array_t/operator=|cc/alloc"; } };
+  struct exc_carr_alloc_asg : std::exception { const char* what() const __bmdx_noex { return "c[pp]array_t/operator=|cc/alloc"; } };
 
     // Internal exceptions, do not reach the client.
-  struct __exc_carr_asg : std::exception { const char* what() const throw() { return "_carr_asgx_t::try_asg"; } };
-  struct __exc_carr_cc : std::exception { const char* what() const throw() { return "_carr_asgx_t:try_cc"; } };
+  struct __exc_carr_asg : std::exception { const char* what() const __bmdx_noex { return "_carr_asgx_t::try_asg"; } };
+  struct __exc_carr_cc : std::exception { const char* what() const __bmdx_noex { return "_carr_asgx_t:try_cc"; } };
   template<class T, bool no_exc_asg> struct carray_t;
   template<class T, bool no_exc_asg, class _bs> struct cpparray_t;
   template<class T, bool no_exc_asg> struct carray_r_t;
@@ -980,14 +986,14 @@ namespace bmdx
   struct _carray_tu_alloc_t
   {
       #ifdef calloc
-        static inline void* _s_psf1() throw() { return 0; }
+        static inline void* _s_psf1() __bmdx_noex { return 0; }
       #else
-        static inline void* _s_psf1() throw() { return (void*)&std::calloc; }
+        static inline void* _s_psf1() __bmdx_noex { return (void*)&std::calloc; }
       #endif
-      static void* _sf_calloc(_s_ll nb) throw() { if (nb < 0) { return 0; } size_t n2 = size_t(nb); if (_s_ll(n2) != nb) { return 0; } try { return std::calloc(n2, 1); } catch (...) { return 0; } }
-      static void _sf_free(void* p) throw() { try { std::free(p); } catch (...) {} }
-      static void _sf_destroy1(T* p) throw() { if (p) { try { p->~T(); } catch (...) {} } }
-      static void _sf_delete1(T* p) throw() { if (p) { try { delete p; } catch (...) {} } }
+      static void* _sf_calloc(_s_ll nb) __bmdx_noex { if (nb < 0) { return 0; } size_t n2 = size_t(nb); if (_s_ll(n2) != nb) { return 0; } try { return std::calloc(n2, 1); } catch (...) { return 0; } }
+      static void _sf_free(void* p) __bmdx_noex { try { std::free(p); } catch (...) {} }
+      static void _sf_destroy1(T* p) __bmdx_noex { if (p) { try { p->~T(); } catch (...) {} } }
+      static void _sf_delete1(T* p) __bmdx_noex { if (p) { try { delete p; } catch (...) {} } }
     static void* _spff[];
   };
   template<class T, class _> void* _carray_tu_alloc_t<T, _>::_spff[5] = { (void*)(3 + __bmdx_null_pchar), (void*)&_sf_calloc, (void*)&_sf_free, (void*)&_sf_destroy1, (void*)&_sf_delete1 };
@@ -998,26 +1004,26 @@ namespace bmdx
     typedef T t_value;
     typedef size_t _t_size; // _t_size: private; client uses s_ll as index as size type
 
-    _carray_base_t() throw() : _n(0), _data(0), _psf1(_carray_tu_alloc_t<T>::_s_psf1()) { __pad1 = 0; _pff = _carray_tu_alloc_t<T>::_spff; }
+    _carray_base_t() __bmdx_noex : _n(0), _data(0), _psf1(_carray_tu_alloc_t<T>::_s_psf1()) { __pad1 = 0; _pff = _carray_tu_alloc_t<T>::_spff; }
 
-    inline _s_ll n() const throw()    { return _n; }
+    inline _s_ll n() const __bmdx_noex    { return _n; }
 
       // NOTE Normally, pd() == 0 if n() == 0. See also _set_n_u.
-    inline const t_value* pd() const throw() { return _data; }
-    inline t_value* pd() throw() { return _data; }
+    inline const t_value* pd() const __bmdx_noex { return _data; }
+    inline t_value* pd() __bmdx_noex { return _data; }
 
-    inline const t_value& operator[] (_s_ll i) const throw() { return _data[_t_size(i)]; }
-    inline t_value& operator[] (_s_ll i) throw() { return _data[_t_size(i)]; }
+    inline const t_value& operator[] (_s_ll i) const __bmdx_noex { return _data[_t_size(i)]; }
+    inline t_value& operator[] (_s_ll i) __bmdx_noex { return _data[_t_size(i)]; }
 
       // Set all existing (or [i0..i2) cut to [0..n()) elements to x, using operator=.
       //  Returns: 1 - all set successfully, 0 - all assignments failed, -1 - part of assignments failed.
       //    (If operator= always succeeds, the function will also succeed and return 1.)
-    inline int set(const t_value& x) throw()
+    inline int set(const t_value& x) __bmdx_noex
     {
       _t_size i0 = 0; _t_size nf(0); while (i0 < _t_size(_n)) { try { for (; i0 < _t_size(_n); ++i0) { _carr_asgx_t<T>::try_asg(_data[i0], x); } } catch (...) { ++i0; ++nf; } }
       return nf ? (nf == _t_size(_n) ? 0 : -1) : 1;
     }
-    inline int set(const t_value& x, _s_ll i0, _s_ll i2) throw()
+    inline int set(const t_value& x, _s_ll i0, _s_ll i2) __bmdx_noex
     {
       if (i0 < 0) { i0 = 0; } if (i2 > _n) { i2 = _n; }
       _t_size _i0 = _t_size(i0); const _t_size _i2 = _t_size(i2); if (!(_s_ll(_i0) == i0 && _s_ll(_i2) == i2)) { return 0; }
@@ -1037,7 +1043,7 @@ namespace bmdx
       //    == 0 with imode == 1 - initialize as T().
       // Returns: true - success, false - failure, no changes.
       // NOTE realloc() proceeds with realloc/copy/init even if n2 == n().
-    bool realloc(_s_ll n2, int dmode, int imode, const t_value* px) throw()
+    bool realloc(_s_ll n2, int dmode, int imode, const t_value* px) __bmdx_noex
     {
       if (!(n2 >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
       if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
@@ -1065,7 +1071,7 @@ namespace bmdx
       return true;
     }
       // Same as realloc, only uses x to initialize array elements. t_value may have no default constructor.
-    bool realloc_cp(_s_ll n2, int dmode, int imode, const t_value& x) throw()
+    bool realloc_cp(_s_ll n2, int dmode, int imode, const t_value& x) __bmdx_noex
     {
       if (!(n2 >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
       if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
@@ -1092,7 +1098,7 @@ namespace bmdx
       return true;
     }
       // Same as realloc, but only for clearing the container.
-    bool realloc_0(int dmode) throw()
+    bool realloc_0(int dmode) __bmdx_noex
     {
       if (!(dmode == (dmode & 1))) { return false; }
       if (_n > 0) { if (dmode == 1) { _destroy(_data, 0, _t_size(_n)); } _free(_data); }
@@ -1111,14 +1117,14 @@ namespace bmdx
 
   protected:
     _s_ll _n; T* _data; void* _psf1; union { void** _pff; _s_ll __pad1; };
-    ~_carray_base_t() throw() { if (_data) { _free(_data); _data = 0; } _n = 0; }
+    ~_carray_base_t() __bmdx_noex { if (_data) { _free(_data); _data = 0; } _n = 0; }
 
     typedef void* (*F_alloc)(_s_ll nbytes); typedef void (*F_free)(void* p);
-    inline void* _alloc(_s_ll nbytes) throw() { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_calloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
-    inline void _free(void* p) throw() { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
+    inline void* _alloc(_s_ll nbytes) __bmdx_noex { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_calloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
+    inline void _free(void* p) __bmdx_noex { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
 
-    inline void _destroy(T* pd_, _t_size i0, _t_size i2) throw() { (void)pd_; while (i0 < i2) { try { for (; i0 < i2; ++i0) { (pd_ + i0)->~T(); } } catch (...) { ++i0; } } }
-    inline void _destroy1(T* pd_) throw() { try { pd_->~T(); } catch (...) {} }
+    inline void _destroy(T* pd_, _t_size i0, _t_size i2) __bmdx_noex { (void)pd_; while (i0 < i2) { try { for (; i0 < i2; ++i0) { (pd_ + i0)->~T(); } } catch (...) { ++i0; } } }
+    inline void _destroy1(T* pd_) __bmdx_noex { try { pd_->~T(); } catch (...) {} }
 
   private:
     _carray_base_t(const _carray_base_t&); _carray_base_t& operator=(const _carray_base_t&);
@@ -1162,15 +1168,15 @@ namespace bmdx
     typedef carray_t t_a;
     typedef typename _carray_base_t<T>::_t_size _t_size; // _t_size: private; client uses s_ll as index as size type
 
-    carray_t() throw() {}
+    carray_t() __bmdx_noex {}
     carray_t(const carray_t& x) : _carray_base_t<T>() { if (!this->realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
-    ~carray_t() throw() {}
+    ~carray_t() __bmdx_noex {}
 
       // If this != &src: clears this, moves src to this, sets src to be empty.
-    void move(carray_t& src) throw() { if (this == &src) { return; } this->~carray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(carray_t)); src._data = 0; src._n = 0; }
-    void swap(carray_t& src) throw() { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
-    bool resize(_s_ll n) throw() { if (n == this->_n) { return true; } return this->realloc(n, 0, 4, 0); }
-    void clear() throw() { this->realloc(0, 0, 4, 0); }
+    void move(carray_t& src) __bmdx_noex { if (this == &src) { return; } this->~carray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(carray_t)); src._data = 0; src._n = 0; }
+    void swap(carray_t& src) __bmdx_noex { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
+    bool resize(_s_ll n) __bmdx_noex { if (n == this->_n) { return true; } return this->realloc(n, 0, 4, 0); }
+    void clear() __bmdx_noex { this->realloc(0, 0, 4, 0); }
     bool operator=(const carray_t& x)
       { if (this == &x) { return true; } carray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(x2._data, x._data, _t_size(x.n()) * sizeof(T)); } this->move(x2); return true; }
 
@@ -1213,15 +1219,15 @@ namespace bmdx
     typedef cpparray_t t_a;
     typedef typename _carray_base_t<T>::_t_size _t_size; // _t_size: private; client uses s_ll as index as size type
 
-    cpparray_t() throw() {}
+    cpparray_t() __bmdx_noex {}
     cpparray_t(const cpparray_t& x) : _carray_base_t<T>() { *this = x; }
-    ~cpparray_t() throw() { this->realloc_0(1); }
+    ~cpparray_t() __bmdx_noex { this->realloc_0(1); }
 
       // If this != &src: clears this, moves src to this, sets src to be empty.
-    void move(cpparray_t& src) throw() { if (this == &src) { return; } this->~cpparray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; }
-    void swap(cpparray_t& src) throw() { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
-    bool resize(_s_ll n) throw() { if (n == this->_n) { return true; } return this->realloc(n, 1, 1, 0); }
-    void clear() throw() { this->realloc_0(1); }
+    void move(cpparray_t& src) __bmdx_noex { if (this == &src) { return; } this->~cpparray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; }
+    void swap(cpparray_t& src) __bmdx_noex { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
+    bool resize(_s_ll n) __bmdx_noex { if (n == this->_n) { return true; } return this->realloc(n, 1, 1, 0); }
+    void clear() __bmdx_noex { this->realloc_0(1); }
     bool operator=(const cpparray_t& x)
     {
       if (this == &x) { return true; } cpparray_t x2; if (!x2.realloc(x.n(), 0, 0, 0)) { _carr_asgx_t<t_a>::check_exc_alloc(); return false; }
@@ -1263,30 +1269,30 @@ namespace bmdx
     typedef carray_r_t<T, no_exc_asg> t_a; typedef carray_t<T, no_exc_asg> t_a0; typedef typename _carray_base_t<T>::_t_size _t_size;
 
 
-    _s_ll nrsv() const throw() { return _nrsv; }
-    _s_ll n() const throw() { return this->_n; }
+    _s_ll nrsv() const __bmdx_noex { return _nrsv; }
+    _s_ll n() const __bmdx_noex { return this->_n; }
 
       // NOTE Normally, pd() == 0 if n() == 0.
-    const t_value* pd() const throw() { return this->_data; }
-    t_value* pd() throw() { return this->_data; }
+    const t_value* pd() const __bmdx_noex { return this->_data; }
+    t_value* pd() __bmdx_noex { return this->_data; }
 
-    const t_value& operator[] (_s_ll i) const throw() { return this->_data[_t_size(i)]; }
-    t_value& operator[] (_s_ll i) throw() { return this->_data[_t_size(i)]; }
+    const t_value& operator[] (_s_ll i) const __bmdx_noex { return this->_data[_t_size(i)]; }
+    t_value& operator[] (_s_ll i) __bmdx_noex { return this->_data[_t_size(i)]; }
 
 
-    carray_r_t() throw() : _nrsv(0) {}
+    carray_r_t() __bmdx_noex : _nrsv(0) {}
       // NOTE on copying, new nrsv() == x.n().
     carray_r_t(const t_a& x) : carray_t<T, no_exc_asg>(), _nrsv(0) { if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } }
     carray_r_t(_s_ll n, const t_value& x) : _nrsv(0) { if (!append_nx(n, x)) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     carray_r_t(const t_value* px, _s_ll n) : _nrsv(0) { if (!append_n(px, n)) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     explicit carray_r_t(const arrayref_t<t_value>& x) : _nrsv(0) { if (!append_n(x.pd(), x.n())) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
     template<class Tr, class A> carray_r_t(const std::basic_string<t_value, Tr, A>& x) : _nrsv(0) { if (x.size() > 0 && !append_n(x.c_str(), x.size())) { _carr_asgx_t<t_a0>::check_exc_alloc(); } }
-    ~carray_r_t() throw() {}
+    ~carray_r_t() __bmdx_noex {}
 
 
-    void move(t_a& src) throw() { if (this == &src) { return; } this->~carray_r_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; src._nrsv = 0; }
-    void swap(t_a& src) throw() { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
-    void clear() throw() { this->resize(0, false, true); } // deallocate the array (nrsv() becomes 0)
+    void move(t_a& src) __bmdx_noex { if (this == &src) { return; } this->~carray_r_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; src._nrsv = 0; }
+    void swap(t_a& src) __bmdx_noex { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
+    void clear() __bmdx_noex { this->resize(0, false, true); } // deallocate the array (nrsv() becomes 0)
       // NOTE On assignment, if old reserve is enough to hold values, no memory reallocation occurs.
       //    Otherwise, new nrsv() == x.n(). Exact behavior: see also resize() with b_minimize_rsv true.
     bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } return true; }
@@ -1319,7 +1325,7 @@ namespace bmdx
       //        the existing values are kept on b_copy == true, otherwise zeroed,
       //        and the new positions are anyway zeroed.
       // NOTE If new size is within the current reserve, the function always succeeds.
-    bool resize(_s_ll n2, bool b_copy, bool b_minimize_rsv, const t_value* px = 0) throw()
+    bool resize(_s_ll n2, bool b_copy, bool b_minimize_rsv, const t_value* px = 0) __bmdx_noex
     {
       if (n2 < 0) { return false; }
       if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
@@ -1351,7 +1357,7 @@ namespace bmdx
       //    (New elements are filled with zero bytes.)
       // NOTE If new reserve is within the current reserve,
       //    the function returns true (success) even if failed to shrink the storage.
-    bool reserve(_s_ll nrsv2) throw()
+    bool reserve(_s_ll nrsv2) __bmdx_noex
     {
       if (nrsv2 < 0) { return false; }
       if (nrsv2 == _nrsv) { return true; }
@@ -1367,7 +1373,7 @@ namespace bmdx
     }
 
       // Ensure reserving n() + 1 element. Set element at n()+1 to T().
-    bool ensure_cstr() throw() { if (nrsv() <= n()) { if (!reserve(n() + 1)) { return false; } } pd()[n()] = T(); return true; }
+    bool ensure_cstr() __bmdx_noex { if (nrsv() <= n()) { if (!reserve(n() + 1)) { return false; } } pd()[n()] = T(); return true; }
 
       // Appending, similar to basic_string operator +=.
       //  Keeps reserved space >= n() + new elements + 1.
@@ -1377,7 +1383,7 @@ namespace bmdx
       //    b) if taken with arg. z, it is interpreted as a z-terminated.
       //    c) if taken with arg. n, it is interpreted as string of n values.
       // If n() + new elements + 1 is within the current reserve, the functions always succeed.
-    bool append_1(const t_value& x) throw()
+    bool append_1(const t_value& x) __bmdx_noex
     {
       const _s_ll nr = this->_n + 2;
       if (nr > _nrsv && !reserve(2 * nr)) { return false; }
@@ -1385,7 +1391,7 @@ namespace bmdx
       return true;
     }
       // append_n: appends *px++ max(0, n) times.
-    bool append_n(const t_value* px, _s_ll n) throw()
+    bool append_n(const t_value* px, _s_ll n) __bmdx_noex
     {
       if (n > 0 && !px) { return false; }
       if (n < 0) { n = 0; }
@@ -1398,7 +1404,7 @@ namespace bmdx
       return true;
     }
       // append_nx: appends x max(0, n) times.
-    bool append_nx(_s_ll n, const t_value& x) throw()
+    bool append_nx(_s_ll n, const t_value& x) __bmdx_noex
     {
       if (n < 0) { n = 0; }
       const _s_ll nr = this->_n + n + 1;
@@ -1411,16 +1417,16 @@ namespace bmdx
       return true;
     }
       // append_z: appends px[i] until meets z. (For t_value == char, z == 0 this is equivalent to appending C string.)
-    bool append_z(const t_value* px, const t_value& z = t_value()) throw()
+    bool append_z(const t_value* px, const t_value& z = t_value()) __bmdx_noex
     {
       _s_ll n = 0;
       if (px) { const t_value* px2 = px; while (*px2 != z) { ++px2; } n = _s_ll(px2 - px); }
       return append_n(px, n);
     }
-    bool append(const arrayref_t<t_value>& x) throw() { return append_n(x.pd(), x.n()); }
+    bool append(const arrayref_t<t_value>& x) __bmdx_noex { return append_n(x.pd(), x.n()); }
 
 
-    struct exc_carray_r_oppluseq : std::exception { const char* what() const throw() { return "carray_r_t:op+="; } };
+    struct exc_carray_r_oppluseq : std::exception { const char* what() const __bmdx_noex { return "carray_r_t:op+="; } };
 
       // operator+= succeeds if:
       //    a) n() + number of appended elements in x or px is within the current reserve.
@@ -1473,54 +1479,54 @@ namespace bmdx
     typedef size_t t_size;
     typedef arrayref_t t_a;
 
-    inline _s_ll n() const throw()    { return _n; }
-    inline _s_ll size() const throw()    { return _n; }
-    inline _s_ll length() const throw()    { return _n; }
+    inline _s_ll n() const __bmdx_noex    { return _n; }
+    inline _s_ll size() const __bmdx_noex    { return _n; }
+    inline _s_ll length() const __bmdx_noex    { return _n; }
 
-    inline const t_value* pd() const throw() { return _data; }
-    inline t_value* pd() throw() { return _data; }
+    inline const t_value* pd() const __bmdx_noex { return _data; }
+    inline t_value* pd() __bmdx_noex { return _data; }
 
-    inline const t_value& operator[] (_s_ll i) const throw() { return _data[t_size(i)]; }
-    inline t_value& operator[] (_s_ll i) throw() { return _data[t_size(i)]; }
+    inline const t_value& operator[] (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
+    inline t_value& operator[] (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
 
           // Same as operator[].
-        inline const t_value& opsub (_s_ll i) const throw() { return _data[t_size(i)]; }
-        inline t_value& opsub (_s_ll i) throw() { return _data[t_size(i)]; }
+        inline const t_value& opsub (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
+        inline t_value& opsub (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
 
-    inline bool is_valid() const throw() { return (_data && _n >= 0) || (!_data && _n == 0); }
+    inline bool is_valid() const __bmdx_noex { return (_data && _n >= 0) || (!_data && _n == 0); }
 
-    arrayref_t() throw() { __pad1 = 0; unlink(); }
-    ~arrayref_t() throw() { unlink(); }
+    arrayref_t() __bmdx_noex { __pad1 = 0; unlink(); }
+    ~arrayref_t() __bmdx_noex { unlink(); }
 
-    bool link(const t_value* px, _s_ll n) throw() { _n = n; if (_n < 0 || (_n > 0 && !px)) { _n = 0; _data = 0; return false; } _data = const_cast<T*>(px); return true; }
-    void _link_u(const t_value* px, _s_ll n) throw() { _n = n; _data = const_cast<T*>(px); }
-    void unlink() throw() { _n = 0;_data = 0; }
-    void clear() throw() { unlink(); }
+    bool link(const t_value* px, _s_ll n) __bmdx_noex { _n = n; if (_n < 0 || (_n > 0 && !px)) { _n = 0; _data = 0; return false; } _data = const_cast<T*>(px); return true; }
+    void _link_u(const t_value* px, _s_ll n) __bmdx_noex { _n = n; _data = const_cast<T*>(px); }
+    void unlink() __bmdx_noex { _n = 0;_data = 0; }
+    void clear() __bmdx_noex { unlink(); }
 
-    arrayref_t(const t_value* px) throw() { __pad1 = 0; link(px, 0); if (px) { while (*px++ != T()) { ++_n; } } }
-    arrayref_t(const t_value* px, _s_ll n) throw() { __pad1 = 0; link(px, n); }
-    arrayref_t(const arrayref_t& x) throw() : _n(x._n) { __pad1 = 0; _data = x._data; }
-    template<bool _ne> arrayref_t(const carray_t<t_value, _ne>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<bool _ne, class _bs> arrayref_t(const cpparray_t<t_value, _ne, _bs>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<bool _ne> arrayref_t(const carray_r_t<t_value, _ne>& x) throw() : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<class Tr, class A> arrayref_t(const std::basic_string<t_value, Tr, A>& x) throw() { __pad1 = 0; *this = x; }
+    arrayref_t(const t_value* px) __bmdx_noex { __pad1 = 0; link(px, 0); if (px) { while (*px++ != T()) { ++_n; } } }
+    arrayref_t(const t_value* px, _s_ll n) __bmdx_noex { __pad1 = 0; link(px, n); }
+    arrayref_t(const arrayref_t& x) __bmdx_noex : _n(x._n) { __pad1 = 0; _data = x._data; }
+    template<bool _ne> arrayref_t(const carray_t<t_value, _ne>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<bool _ne, class _bs> arrayref_t(const cpparray_t<t_value, _ne, _bs>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<bool _ne> arrayref_t(const carray_r_t<t_value, _ne>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<class Tr, class A> arrayref_t(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { __pad1 = 0; *this = x; }
     template<class Q> explicit arrayref_t(const Q& x __bmdx_noarg) { __pad1 = 0; _data = (T*)_arrayref_adapter_t<T>::Fp(x); _n = _arrayref_adapter_t<T>::Fn(x); }
 
-    arrayref_t& operator=(const arrayref_t& x) throw() { _data = x._data; _n = x._n; return *this; }
-    template<bool _ne> arrayref_t& operator=(const carray_t<t_value, _ne>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<bool _ne, class _bs> arrayref_t& operator=(const cpparray_t<t_value, _ne, _bs>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<bool _ne> arrayref_t& operator=(const carray_r_t<t_value, _ne>& x) throw() { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<class Tr, class A> arrayref_t& operator=(const std::basic_string<t_value, Tr, A>& x) throw() { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; } _data = const_cast<T*>(&x[0]); return *this; }
+    arrayref_t& operator=(const arrayref_t& x) __bmdx_noex { _data = x._data; _n = x._n; return *this; }
+    template<bool _ne> arrayref_t& operator=(const carray_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<bool _ne, class _bs> arrayref_t& operator=(const cpparray_t<t_value, _ne, _bs>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<bool _ne> arrayref_t& operator=(const carray_r_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<class Tr, class A> arrayref_t& operator=(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; } _data = const_cast<T*>(&x[0]); return *this; }
 
       // Set all existing (or [i0..i2) cut to [0..n()) elements to x, using operator=.
       //  Returns: 1 - all set successfully, 0 - all assignments failed, -1 - part of assignments failed.
       //    (If operator= always succeeds, the function will also succeed and return 1.)
-    inline int set(const t_value& x) throw()
+    inline int set(const t_value& x) __bmdx_noex
     {
       t_size i0 = 0; t_size nf(0); while (i0 < t_size(_n)) { try { for (; i0 < t_size(_n); ++i0) { _carr_asgx_t<T>::try_asg(_data[i0], x); } } catch (...) { ++i0; ++nf; } }
       return nf ? (nf == t_size(_n) ? 0 : -1) : 1;
     }
-    inline int set(const t_value& x, _s_ll i0, _s_ll i2) throw()
+    inline int set(const t_value& x, _s_ll i0, _s_ll i2) __bmdx_noex
     {
       if (i0 < 0) { i0 = 0; } if (i2 > _n) { i2 = _n; }
       t_size _i0 = t_size(i0); const t_size _i2 = t_size(i2); if (!(_s_ll(_i0) == i0 && _s_ll(_i2) == i2)) { return 0; }
@@ -1536,7 +1542,7 @@ namespace bmdx
       // Returns true if *this and x are equal as such (i.e. their pd(), n()).
     bool is_eq_pn(const arrayref_t<t_value>& x)        const { return x.pd() == this->pd() && x.n() == this->n(); }
 
-    inline void swap(arrayref_t& src) throw() { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; bmdx_str::words::memmove_t<t_value>::sf_memcpy(x, &src, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(&src, this, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(this, x, sizeof(t_a)); }
+    inline void swap(arrayref_t& src) __bmdx_noex { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; bmdx_str::words::memmove_t<t_value>::sf_memcpy(x, &src, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(&src, this, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(this, x, sizeof(t_a)); }
 
       // NOTE operator==, operator!= do comparison by value.
       //  See also is_eq, is_eq_pn.
@@ -1567,11 +1573,11 @@ namespace bmdx
       // On default construction, the ringbuffer makes no allocations and cannot contain data.
       //  Copying and assignment of such object is exceptionless.
       // To make the working ringbuffer, able to contain > 0 values, resize it with set_cap().
-    cringbuf1_t() throw() { _ipush = _ipop = 0; }
+    cringbuf1_t() __bmdx_noex { _ipush = _ipop = 0; }
 
       // Default copy ctor. and dtor. are working correctly.
     //cringbuf1_t(const cringbuf1_t& x);
-    //~cringbuf1_t() throw();
+    //~cringbuf1_t() __bmdx_noex;
 
     cringbuf1_t& operator=(const cringbuf1_t& x) { cringbuf1_t a2(x); swap(a2); return *this; }
 
@@ -1582,7 +1588,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    void clear() throw() { a.clear(); _ipush = _ipop = 0; }
+    void clear() __bmdx_noex { a.clear(); _ipush = _ipop = 0; }
 
       // Change the container capacity (ncap()), i.e. max. number of elements that can be held at the same time.
       //  a) (b_rmv_el == true)
@@ -1607,7 +1613,7 @@ namespace bmdx
       //    1 - success.
       //    -1 - n < 0.
       //    -2 - failure (mem. alloc.).
-    _s_long set_cap(_s_ll n, bool b_rmv_el) throw()
+    _s_long set_cap(_s_ll n, bool b_rmv_el) __bmdx_noex
     {
       if (n < 0) { return -1; }
       if (!b_rmv_el && n == a.n()) { return 1; }
@@ -1627,7 +1633,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    void swap(cringbuf1_t& x) throw() { bmdx_str::words::swap_bytes(*this, x); }
+    void swap(cringbuf1_t& x) __bmdx_noex { bmdx_str::words::swap_bytes(*this, x); }
 
     // COMMON part
 
@@ -1635,14 +1641,14 @@ namespace bmdx
       // ipop(): abs. index of the next of value to be popped.
       // Concurrency:
       //    can change at any time as side effect of value pushing and popping by Supplier and Consumer, respectively.
-    _s_ll ipush() const throw() { return _ipush; }
-    _s_ll ipop() const throw() { return _ipop; }
+    _s_ll ipush() const __bmdx_noex { return _ipush; }
+    _s_ll ipop() const __bmdx_noex { return _ipop; }
 
       // Max. number of values that can be kept in the buffer.
       // Concurrency:
       //    can be changed as side effect of resize() by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    _s_ll ncap() const throw() { return a.n(); }
+    _s_ll ncap() const __bmdx_noex { return a.n(); }
 
     // SUPPLIER part
 
@@ -1652,7 +1658,7 @@ namespace bmdx
       //    navl() is mainly for use by Supplier.
       //    a) from Supplier side: nfree() may only increase, up to ncap(), at any time, as side effect of value popping by Consumer.
       //    b) from Consumer side: nfree() may only decrease, down to 0, at any time, as side effect of value pushing by Supplier.
-    _s_ll nfree() const throw() { return a.n() - navl(); }
+    _s_ll nfree() const __bmdx_noex { return a.n() - navl(); }
 
       // Push new value (using operator=).
       // Returns:
@@ -1660,7 +1666,7 @@ namespace bmdx
       //    -1 - no place in the buffer currently.
       //    -3 - failure on elem. assignment (not expected).
       // Concurrency: may be called by Supplier only.
-    _s_long push_1(const t_value& s) throw() { if (navl() >= a.n()) { return -1; } try { tail(0) = s; } catch (...) { return -3; } _ipush += 1; return 1; }
+    _s_long push_1(const t_value& s) __bmdx_noex { if (navl() >= a.n()) { return -1; } try { tail(0) = s; } catch (...) { return -3; } _ipush += 1; return 1; }
 
       // Push n (>= 0) values, using operator=. n must be [0..nfree()] to succeed.
       // Returns:
@@ -1669,7 +1675,7 @@ namespace bmdx
       //    -1 - a) n < 0, b) there's no place for n elements in the buffer currently.
       //    -3 - failure on elem. assignment (not expected).
       // Concurrency: may be called by Supplier only.
-    _s_long push_n(const t_value* pss, _s_ll n) throw()
+    _s_long push_n(const t_value* pss, _s_ll n) __bmdx_noex
     {
       if (!pss) { return 0; }
       if (n < 0) { return -1; }
@@ -1689,8 +1695,8 @@ namespace bmdx
       // NOTE tail may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency:
       //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
-    t_value& tail(_s_ll ineg) throw() { _s_ll i = (_ipush + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
-    const t_value& tail(_s_ll ineg) const throw() { return ((cringbuf1_t*)this)->tail(ineg); }
+    t_value& tail(_s_ll ineg) __bmdx_noex { _s_ll i = (_ipush + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
+    const t_value& tail(_s_ll ineg) const __bmdx_noex { return ((cringbuf1_t*)this)->tail(ineg); }
 
     // CONSUMER part
 
@@ -1699,7 +1705,7 @@ namespace bmdx
       //    navl() may be called by any side, but is mainly for use by Consumer.
       //    a) from Consumer side: navl() may only increase, up to ncap(), at any time, as side effect of value pushing by Supplier.
       //    b) from Supplier side: navl() may only decrease, down to 0, at any time, as side effect of value popping by Consumer.
-    _s_ll navl() const throw() { return _ipush - _ipop; }
+    _s_ll navl() const __bmdx_noex { return _ipush - _ipop; }
 
       // Returns max. number of contiguous values, available for efficient reading and popping.
       //    A pointer to the first available value is &(*this)[0].
@@ -1708,14 +1714,14 @@ namespace bmdx
       //      If n2 > 0, the second contiguous part (n2 values), starts at &(*this)[navl_contig()].
       // Concurrency:
       //    same as navl(), only navl_contig() may not be used to access the second contiguous part of values.
-    _s_ll navl_contig() const throw() { return bmdx_minmax::myllmin(a.n() - _ipop % a.n(), navl()); }
+    _s_ll navl_contig() const __bmdx_noex { return bmdx_minmax::myllmin(a.n() - _ipop % a.n(), navl()); }
 
       // Pop one value.
       // Returns:
       //    true - popped successfully,
       //    false - not popped because the buffer is currently empty.
       // Concurrency: may be called by Consumer only.
-    bool pop_1() throw() { if (_ipush <= _ipop) { return false; } _ipop += 1; return true; }
+    bool pop_1() __bmdx_noex { if (_ipush <= _ipop) { return false; } _ipop += 1; return true; }
 
       // Pop multiple values.
       //    n >= 0 specifies max. number of values to be popped.
@@ -1725,15 +1731,15 @@ namespace bmdx
       // Concurrency: may be called by Consumer only.
       // Returns:
       //    the number of elements actually popped. The function does not fail.
-    _s_ll pop_n(_s_ll n) throw() { if (n == 0 || n <= -2) { return 0; } const _s_ll na = navl(); if (n == -1 || n > na) { n = na; } _ipop += n; return n; }
+    _s_ll pop_n(_s_ll n) __bmdx_noex { if (n == 0 || n <= -2) { return 0; } const _s_ll na = navl(); if (n == -1 || n > na) { n = na; } _ipop += n; return n; }
 
       // Returns ref. to absolute pos. (ipop() + i) (internally: by modulus ncap()).
       //    To point to valid position, i must be in [0..navl()).
       //    [0] - is the element that would be popped next.
       // NOTE operator[] may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency: may be called by Consumer only.
-    t_value& operator[] (_s_ll i) throw() { _s_ll j = (_ipop + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
-    const t_value& operator[] (_s_ll i) const throw() { return ((cringbuf1_t&)*this)[i]; }
+    t_value& operator[] (_s_ll i) __bmdx_noex { _s_ll j = (_ipop + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
+    const t_value& operator[] (_s_ll i) const __bmdx_noex { return ((cringbuf1_t&)*this)[i]; }
 
   private:
     carray_t<t_value, false> a; // values
@@ -1771,18 +1777,18 @@ namespace bmdx
   struct cppringbuf1_t
   {
     typedef T t_value;
-    struct exc_cc : std::exception { const char* what() const throw() { return "cppringbuf1_t(const cppringbuf1_t&)"; } };
+    struct exc_cc : std::exception { const char* what() const __bmdx_noex { return "cppringbuf1_t(const cppringbuf1_t&)"; } };
 
     // OWNER part
 
       // On default construction, the ringbuffer makes no allocations and cannot contain data.
       //  Copying and assignment of such object is exceptionless.
       // To make the working ringbuffer, able to contain > 0 values, resize it with set_cap().
-    cppringbuf1_t() throw() { _ipush = _ipop = 0; }
+    cppringbuf1_t() __bmdx_noex { _ipush = _ipop = 0; }
 
     cppringbuf1_t(const cppringbuf1_t& x) { if (!a.resize(x.a.n())) { throw exc_cc(); } if (!_a_copy_n_u(a, x._ipop, x.a, x._ipop, x._ipush - x._ipop)) { throw exc_cc(); } _ipush = x._ipush; _ipop = x._ipop; }
 
-    ~cppringbuf1_t() throw() { _a_pop_n(navl()); }
+    ~cppringbuf1_t() __bmdx_noex { _a_pop_n(navl()); }
 
     cppringbuf1_t& operator=(const cppringbuf1_t& x) { cppringbuf1_t a2(x); swap(a2); return *this; }
 
@@ -1793,7 +1799,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    void clear() throw() { _a_pop_n(navl()); a.clear(); _ipush = _ipop = 0; }
+    void clear() __bmdx_noex { _a_pop_n(navl()); a.clear(); _ipush = _ipop = 0; }
 
       // Change the container capacity (ncap()), i.e. max. number of elements that can be held at the same time.
       //  a) (b_rmv_el == true)
@@ -1819,7 +1825,7 @@ namespace bmdx
       //    -1 - n < 0.
       //    -2 - failure (mem. alloc.).
       //    -3 - failure (existing elements copying).
-    _s_long set_cap(_s_ll n, bool b_rmv_el) throw()
+    _s_long set_cap(_s_ll n, bool b_rmv_el) __bmdx_noex
     {
       if (n < 0) { return -1; }
       if (!b_rmv_el && n == a.n()) { return 1; }
@@ -1838,7 +1844,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    void swap(cppringbuf1_t& x) throw() { bmdx_str::words::swap_bytes(*this, x); }
+    void swap(cppringbuf1_t& x) __bmdx_noex { bmdx_str::words::swap_bytes(*this, x); }
 
     // COMMON part
 
@@ -1846,14 +1852,14 @@ namespace bmdx
       // ipop(): abs. index of the next of value to be popped.
       // Concurrency:
       //    can change at any time as side effect of value pushing and popping by Supplier and Consumer, respectively.
-    _s_ll ipush() const throw() { return _ipush; }
-    _s_ll ipop() const throw() { return _ipop; }
+    _s_ll ipush() const __bmdx_noex { return _ipush; }
+    _s_ll ipop() const __bmdx_noex { return _ipop; }
 
       // Max. number of values that can be kept in the buffer.
       // Concurrency:
       //    can be changed as side effect of resize() by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    _s_ll ncap() const throw() { return a.n(); }
+    _s_ll ncap() const __bmdx_noex { return a.n(); }
 
     // SUPPLIER part
 
@@ -1863,7 +1869,7 @@ namespace bmdx
       //    navl() is mainly for use by Supplier.
       //    a) from Supplier side: nfree() may only INCREASE, up to ncap(), at any time, as side effect of value popping by Consumer.
       //    b) from Consumer side: nfree() may only decrease, down to 0, at any time, as side effect of value pushing by Supplier.
-    _s_ll nfree() const throw() { return a.n() - navl(); }
+    _s_ll nfree() const __bmdx_noex { return a.n() - navl(); }
 
     struct new_dflt { void operator()(T* p) const { new (p) T(); } }; // creates a T() at p
     struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p) const { new (p) T(x); } }; // creates a T(x) at p
@@ -1877,8 +1883,8 @@ namespace bmdx
       //    -1 - no place in the buffer currently,
       //    -3 - element copying failed.
       // Concurrency: may be called by Supplier only.
-    _s_long push_1(const t_value& x) throw() { return _push_1(new_cp(x)); }
-    template<class F> _s_long push_1f(const F& f) throw() { return _push_1(f); }
+    _s_long push_1(const t_value& x) __bmdx_noex { return _push_1(new_cp(x)); }
+    template<class F> _s_long push_1f(const F& f) __bmdx_noex { return _push_1(f); }
 
       // Push n (>= 0) values. n must be [0..nfree()] to succeed.
       // push_n(n): uses copy constructor to create elements.
@@ -1890,8 +1896,8 @@ namespace bmdx
       //    -1 - a) n < 0, b) there's no place for n elements in the buffer currently.
       //    -3 - failure (element creation or copying).
       // Concurrency: may be called by Supplier only.
-    _s_long push_n(const t_value* pss, _s_ll n) throw() { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
-    template<class F> _s_long push_nf(const F& f, _s_ll n) throw() { return _push_n(f, n); }
+    _s_long push_n(const t_value* pss, _s_ll n) __bmdx_noex { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
+    template<class F> _s_long push_nf(const F& f, _s_ll n) __bmdx_noex { return _push_n(f, n); }
 
       // Returns ref. to absolute pos. (ipush() + ineg) (internally: by modulus ncap()).
       //    ineg must be negative, in [-navl()..-1], to point to valid position.
@@ -1899,8 +1905,8 @@ namespace bmdx
       // NOTE tail() may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency:
       //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
-    t_value& tail(_s_ll ineg) throw() { _s_ll i = (_ipush + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
-    const t_value& tail(_s_ll ineg) const throw() { return ((cppringbuf1_t*)this)->tail(ineg); }
+    t_value& tail(_s_ll ineg) __bmdx_noex { _s_ll i = (_ipush + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
+    const t_value& tail(_s_ll ineg) const __bmdx_noex { return ((cppringbuf1_t*)this)->tail(ineg); }
 
     // CONSUMER part
 
@@ -1909,7 +1915,7 @@ namespace bmdx
       //    navl() may be called by any side, but is mainly for use by Consumer.
       //    a) from Consumer side: navl() may only increase, up to ncap(), at any time, as side effect of value pushing by Supplier.
       //    b) from Supplier side: navl() may only decrease, down to 0, at any time, as side effect of value popping by Consumer.
-    _s_ll navl() const throw() { return _ipush - _ipop; }
+    _s_ll navl() const __bmdx_noex { return _ipush - _ipop; }
 
       // Returns max. number of contiguous values, available for efficient reading and popping.
       //    A pointer to the first available value is &(*this)[0].
@@ -1918,14 +1924,14 @@ namespace bmdx
       //      If n2 > 0, the second contiguous part (n2 values), starts at &(*this)[navl_contig()].
       // Concurrency:
       //    same as navl(), only navl_contig() may not be used to access the second contiguous part of values.
-    _s_ll navl_contig() const throw() { return bmdx_minmax::myllmin(a.n() - _ipop % a.n(), navl()); }
+    _s_ll navl_contig() const __bmdx_noex { return bmdx_minmax::myllmin(a.n() - _ipop % a.n(), navl()); }
 
       // Pop one element.
       // Returns:
       //    true - popped successfully,
       //    false - not popped because the buffer is currently empty.
       // Concurrency: may be called by Consumer only.
-    bool pop_1() throw() { if (_ipush <= _ipop) { return false; } _a_pop_1(); return true; }
+    bool pop_1() __bmdx_noex { if (_ipush <= _ipop) { return false; } _a_pop_1(); return true; }
 
       // Pop multiple elements.
       //    n >= 0 specifies max. number of values to be popped.
@@ -1935,23 +1941,23 @@ namespace bmdx
       // Concurrency: may be called by Consumer only.
       // Returns:
       //    the number of elements actually popped. The function does not fail.
-    _s_ll pop_n(_s_ll n) throw() { return _a_pop_n(n == -1 ? a.n() : n); }
+    _s_ll pop_n(_s_ll n) __bmdx_noex { return _a_pop_n(n == -1 ? a.n() : n); }
 
       // Same as pop_1(), but does not call element destructor.
       //  (For use with efficient memory copying on popping elements of movable types.)
-    bool discard_1() throw() { if (_ipush <= _ipop) { return false; } _ipop += 1; return true; }
+    bool discard_1() __bmdx_noex { if (_ipush <= _ipop) { return false; } _ipop += 1; return true; }
 
       // Same as pop_n(), but does not call elements' destructors.
       //  (For use with efficient memory copying on popping elements of movable types.)
-    _s_ll discard_n(_s_ll n) throw() { if (n == 0 || n <= -2) { return 0; } const _s_ll na = navl(); if (n == -1 || n > na) { n = na; } _ipop += n; return n; }
+    _s_ll discard_n(_s_ll n) __bmdx_noex { if (n == 0 || n <= -2) { return 0; } const _s_ll na = navl(); if (n == -1 || n > na) { n = na; } _ipop += n; return n; }
 
       // Returns ref. to absolute pos. (ipop() + i) (internally: by modulus ncap()).
       //    To point to valid position, i must be in [0..navl()).
       //    [0] - is the element that would be popped next.
       // NOTE operator[] may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency: may be safely called by Consumer only.
-    t_value& operator[] (_s_ll i) throw() { _s_ll j = (_ipop + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
-    const t_value& operator[] (_s_ll i) const throw() { return ((cppringbuf1_t&)*this)[i]; }
+    t_value& operator[] (_s_ll i) __bmdx_noex { _s_ll j = (_ipop + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
+    const t_value& operator[] (_s_ll i) const __bmdx_noex { return ((cppringbuf1_t&)*this)[i]; }
 
   private:
     carray_t<t_value, false> a; // certain part of entries contains C++ objects
@@ -2032,9 +2038,9 @@ namespace bmdx
 
     // COMMON part
 
-    struct exc_iter : std::exception { const char* what() const throw() { return "vnnqueue_t::iterator_t op."; } };
-    struct exc_range : std::exception { const char* what() const throw() { return "vnnqueue_t range chk."; } };
-    struct exc_cc : std::exception { const char* what() const throw() { return "vnnqueue_t(const vnnqueue_t&)"; } };
+    struct exc_iter : std::exception { const char* what() const __bmdx_noex { return "vnnqueue_t::iterator_t op."; } };
+    struct exc_range : std::exception { const char* what() const __bmdx_noex { return "vnnqueue_t range chk."; } };
+    struct exc_cc : std::exception { const char* what() const __bmdx_noex { return "vnnqueue_t(const vnnqueue_t&)"; } };
 
     struct column { T* data() { return (T*)(this + 1); } column* prev() const { return _prev; } column* next() const { return _next; } private: friend struct vnnqueue_t; column *_prev, *_next; column(); };
 
@@ -2056,41 +2062,41 @@ namespace bmdx
       typedef std::random_access_iterator_tag iterator_category; typedef iterator_t iterator_type; typedef _s_ll difference_type;
 
         // The default iterator is not bound to any container, thus not practically useful.
-      inline iterator_t() throw() { _ct = 0; _c = 0; _i = _ic = _ipop = _ipush = 0; }
+      inline iterator_t() __bmdx_noex { _ct = 0; _c = 0; _i = _ic = _ipop = _ipush = 0; }
         // Front or end pos. iterator creation.
-      inline iterator_t(const vnnqueue_t& ct_, bool b_front) throw() { _ct = (vnnqueue_t*)&ct_;  _ipop = ct_._ipop; _ipush = ct_._ipush; if (b_front) { _i = _ic = _ipop; _c = ct_._cpop; } else { _s_ll i1 = _ipush; column* c = ct_._cpush; _s_ll i2 = _ipush; if (i2 == i1) { _i = _ic = i1; _c = c; return; } i1 = _ipush; c = ct_._cpush; i2 = _ipush; if (i2 == i1) { _i = _ic = i1; _c = c; return; } *this = iterator_t(ct_, true); move_by(navl()); } }
+      inline iterator_t(const vnnqueue_t& ct_, bool b_front) __bmdx_noex { _ct = (vnnqueue_t*)&ct_;  _ipop = ct_._ipop; _ipush = ct_._ipush; if (b_front) { _i = _ic = _ipop; _c = ct_._cpop; } else { _s_ll i1 = _ipush; column* c = ct_._cpush; _s_ll i2 = _ipush; if (i2 == i1) { _i = _ic = i1; _c = c; return; } i1 = _ipush; c = ct_._cpush; i2 = _ipush; if (i2 == i1) { _i = _ic = i1; _c = c; return; } *this = iterator_t(ct_, true); move_by(navl()); } }
         // Direct conversion from const to non-const and back, for simplicity.
-      inline iterator_t(const iterator_t<false>& x) throw() { *this = (iterator_t&)x; }
-      inline iterator_t(const iterator_t<true>& x) throw() { *this = (iterator_t&)x; }
+      inline iterator_t(const iterator_t<false>& x) __bmdx_noex { *this = (iterator_t&)x; }
+      inline iterator_t(const iterator_t<true>& x) __bmdx_noex { *this = (iterator_t&)x; }
 
         // (Constant)
         // Number of elements in the addressed sequence.
         //  Fixed at the moment when the iterator is created by parent container.
-      _s_ll navl() const throw() { return _ipush - _ipop; }
+      _s_ll navl() const __bmdx_noex { return _ipush - _ipop; }
         // (Constant)
         // Number of elements in a column (single contiguous storage).
-      _s_ll m() const throw() { return _m; }
+      _s_ll m() const __bmdx_noex { return _m; }
         // (Constant)
         // Absolute indices to the beginning and the end of sequence.
         //  Fixed at the moment when the iterator is created by parent container.
-      _s_ll ipop() const throw() { return _ipop; }
-      _s_ll ipush() const throw() { return _ipush; }
+      _s_ll ipop() const __bmdx_noex { return _ipop; }
+      _s_ll ipush() const __bmdx_noex { return _ipush; }
 
         // The absolute index of the addressed element.
-      _s_ll ind() const throw() { return _i; }
+      _s_ll ind() const __bmdx_noex { return _i; }
 
         // Index of the currently addressed element in the current column.
         //  The value is valid only if col() != 0. See also col().
-      _s_ll irow() const throw() { return _i % _ct->_m; }
+      _s_ll irow() const __bmdx_noex { return _i % _ct->_m; }
 
         // Returns true if iterator points to valid element, false otherwise.
-      bool b_elem() const throw() { return _i >= _ipop && _i < _ipush; }
+      bool b_elem() const __bmdx_noex { return _i >= _ipop && _i < _ipush; }
 
         // Returns true if the current iterator position is before the beginning of sequence.
-      bool b_bbeg() const throw() { return _i < _ipop; }
+      bool b_bbeg() const __bmdx_noex { return _i < _ipop; }
 
         // Returns true if the current iterator position >= end of sequence.
-      bool b_aend() const throw() { return _i >= _ipush; }
+      bool b_aend() const __bmdx_noex { return _i >= _ipush; }
 
         // This function may be used to access the current element or any element in the currently addressed column.
         // Returns:
@@ -2099,11 +2105,11 @@ namespace bmdx
         //        col()->data()[irow()] is equivalent to iterator dereferencing.
         //        col()->data()[i], where i is in [0..m()), addresses elements in the same column (should be used only on existing elements).
         //    b) 0: iterator does not point to valid element.
-      column* col() const throw() { if (!b_elem()) { return 0; } return _c; }
+      column* col() const __bmdx_noex { if (!b_elem()) { return 0; } return _c; }
 
         // The parent container.
         //  NOTE Iterators from different containers may not be compared or in any other way related.
-      vnnqueue_t* ctnr() const throw() { return _ct; }
+      vnnqueue_t* ctnr() const __bmdx_noex { return _ct; }
 
       inline reference operator*() const { if (!(_i >= _ipop && _i < _ipush)) { throw exc_range(); } return _c->data()[_i % _ct->_m]; }
       inline pointer operator->() const { return &**this; }
@@ -2121,7 +2127,7 @@ namespace bmdx
         //    and then dereferenced in usual way.
         // Time taken: proportional to abs(delta) / m().
         // NOTE All iterator changes are implemented via move_by().
-      iterator_type& move_by(_s_ll delta) throw()
+      iterator_type& move_by(_s_ll delta) __bmdx_noex
       {
         if (delta == 0) { return *this; }
         const _s_ll i2 = _i + delta;
@@ -2136,17 +2142,17 @@ namespace bmdx
 
         // Movement to absolute position.
         //  The position itself may be anything, but the valid element is addressed only by i in [ipop() .. ipush()).
-      iterator_type& move_to(_s_ll i) throw() { return move_by(i - _i); }
+      iterator_type& move_to(_s_ll i) __bmdx_noex { return move_by(i - _i); }
 
-      inline iterator_type& operator++() throw() { return move_by(1); }
-      inline iterator_type& operator--() throw() { return move_by(-1); }
-      inline iterator_type operator++(int) throw() { iterator_t i(*this); move_by(1); return i; }
-      inline iterator_type operator--(int) throw() { iterator_t i(*this); move_by(-1); return i; }
+      inline iterator_type& operator++() __bmdx_noex { return move_by(1); }
+      inline iterator_type& operator--() __bmdx_noex { return move_by(-1); }
+      inline iterator_type operator++(int) __bmdx_noex { iterator_t i(*this); move_by(1); return i; }
+      inline iterator_type operator--(int) __bmdx_noex { iterator_t i(*this); move_by(-1); return i; }
 
-      inline iterator_type& operator+=(difference_type delta) throw() { return move_by(delta); }
-      inline iterator_type& operator-=(difference_type delta) throw() { return move_by(-delta); }
-      inline iterator_type operator+(difference_type delta) const throw() { return iterator_t(*this).move_by(delta); }
-      inline iterator_type operator-(difference_type delta) const throw() { return iterator_t(*this).move_by(-delta); }
+      inline iterator_type& operator+=(difference_type delta) __bmdx_noex { return move_by(delta); }
+      inline iterator_type& operator-=(difference_type delta) __bmdx_noex { return move_by(-delta); }
+      inline iterator_type operator+(difference_type delta) const __bmdx_noex { return iterator_t(*this).move_by(delta); }
+      inline iterator_type operator-(difference_type delta) const __bmdx_noex { return iterator_t(*this).move_by(-delta); }
 
         // NOTE The operation generates an exception if operands belong to different containers.
       inline difference_type operator-(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return this->_i - x._i; }
@@ -2172,7 +2178,7 @@ namespace bmdx
       //  After the default construction, the client may
       //    1) optionally call set_m() (set chunk size) + set_rsv() (reserve some place for elements) + set_cap_hints() (adjust capacity limits),
       //    2) push an element. NOTE Doing that without the above settings, at once allocates 2 columns (2 * max(m_, 1) places for elements).
-    vnnqueue_t(_s_ll m_ = 10) throw() { _m = m_ >= 1 ? m_ : 1; _scalars_reset(); _pff_reset(); }
+    vnnqueue_t(_s_ll m_ = 10) __bmdx_noex { _m = m_ >= 1 ? m_ : 1; _scalars_reset(); _pff_reset(); }
 
     vnnqueue_t(const vnnqueue_t& q)
     {
@@ -2187,7 +2193,7 @@ namespace bmdx
 
     vnnqueue_t& operator=(const vnnqueue_t& q) { vnnqueue_t q2(q); bmdx_str::words::swap_bytes(*this, q2); return *this; }
 
-    ~vnnqueue_t() throw() { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); }
+    ~vnnqueue_t() __bmdx_noex { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); }
 
       // Remove all values, release all dynamic allocations.
       //  Set min. capacity to 0, max. capacity to unlimited. (May be changed later with set_cap_hints()).
@@ -2197,14 +2203,14 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    void clear() throw() { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); _scalars_reset(); }
+    void clear() __bmdx_noex { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); _scalars_reset(); }
 
       // Swap this container with x.
       // NOTE The container is bytewise movable and swappable.
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    void swap(vnnqueue_t& x) throw() { bmdx_str::words::swap_bytes(*this, x); }
+    void swap(vnnqueue_t& x) __bmdx_noex { bmdx_str::words::swap_bytes(*this, x); }
 
 
       // Sets the new column (place reservation chunk) size.
@@ -2218,7 +2224,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    _s_long set_m(_s_ll m_) throw() { if (m_ < 1) { return -1; } if (_cpush || _cpop) { return -3; } _m = m_; return 1; }
+    _s_long set_m(_s_ll m_) __bmdx_noex { if (m_ < 1) { return -1; } if (_cpush || _cpop) { return -3; } _m = m_; return 1; }
 
       // Sets values of ncapmin(), ncapmax() - hints for container autoresizing on pop and push, respectively.
       //  Rules:
@@ -2255,7 +2261,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    _s_long set_cap_hints(_s_ll nmin, _s_ll nmax) throw() { if (!(nmin >= -1 && nmax >= -2)) { return -1; } if (nmin >= 0 && nmax >= 0 && nmax < nmin) { return -1; } _capmin = nmin; _capmax = nmax; return 1; }
+    _s_long set_cap_hints(_s_ll nmin, _s_ll nmax) __bmdx_noex { if (!(nmin >= -1 && nmax >= -2)) { return -1; } if (nmin >= 0 && nmax >= 0 && nmax < nmin) { return -1; } _capmin = nmin; _capmax = nmax; return 1; }
 
       // Modify the current place reserve for elements to be as close as possible to nrsv.
       //    The container will be capable of holding approx. >= nrsv elements without additional dynamic allocations.
@@ -2276,7 +2282,7 @@ namespace bmdx
       // Concurrency:
       //    may be called by Owner only.
       //    Both Supplier and Consumer must not be active at that time.
-    _s_long set_rsv(_s_ll nrsv) throw()
+    _s_long set_rsv(_s_ll nrsv) __bmdx_noex
     {
       if (nrsv < 0) { return -1; }
       if (_cpush)
@@ -2308,7 +2314,7 @@ namespace bmdx
       // (Constant, informational)
       // Number of elements in a column (single linear part of sequence).
       // Value: >= 1.
-    _s_ll m() const throw() { return _m; }
+    _s_ll m() const __bmdx_noex { return _m; }
 
       // Min. and max. capacity, to which the container shrinks or grows automatically.
       //    ncapmax() >= 0 also serves as the exact limit for max. number of elements at push op.
@@ -2316,8 +2322,8 @@ namespace bmdx
       // Values:
       //    ncapmax: -2 (infinite growth allowed), -1 (no growth allowed), or >=0 (single push will succeed only if navl() < ncapmax()).
       //    ncapmin: -1 (no shrinking allowed), or >= 0.
-    _s_ll ncapmax() const throw() { return _capmax; }
-    _s_ll ncapmin() const throw() { return _capmin; }
+    _s_ll ncapmax() const __bmdx_noex { return _capmax; }
+    _s_ll ncapmin() const __bmdx_noex { return _capmin; }
 
       // The pessimistic estimate of the container capacity:
       //    the guaranteed min. number of places for elements,
@@ -2334,7 +2340,7 @@ namespace bmdx
       //    the returned value is reliable for Consumer only.
       //    (For Supplier, the guaranteed capacity is max(0, min(ncapp(), ncapmin())).
       //      Use pre-set reserve and cap. hints to ensure enough place.)
-    _s_ll ncapp() const throw() { _s_ll n = _cap_push; n += _cap_pop; n -= 1; n *= _m; if (n < 0) { n = 0; } return n; }
+    _s_ll ncapp() const __bmdx_noex { _s_ll n = _cap_push; n += _cap_pop; n -= 1; n *= _m; if (n < 0) { n = 0; } return n; }
 
       // The exact effective value of the current container capacity:
       //    (ncapeff() - navl()) is the guaranteed min. number of places for elements,
@@ -2345,14 +2351,14 @@ namespace bmdx
       //    the returned value is reliable for Consumer only.
       //    (For Supplier, the capacity may decrease at any time between ncapeff() and value pushing.
       //      Use pre-set reserve and cap. hints to ensure enough place.)
-    _s_ll ncapeff() const throw() { _s_ll n = ncapp(); if (n == 0) { return 0; } n = n + _m - 1 - _ipop % _m; if (_capmax >= 0) { n = bmdx_minmax::myllmin(n, _capmax); } return n; }
+    _s_ll ncapeff() const __bmdx_noex { _s_ll n = ncapp(); if (n == 0) { return 0; } n = n + _m - 1 - _ipop % _m; if (_capmax >= 0) { n = bmdx_minmax::myllmin(n, _capmax); } return n; }
 
       // Absolute indices to the beginning and the end of sequence.
-    _s_ll ipop() const throw() { return _ipop; }
-    _s_ll ipush() const throw() { return _ipush; }
+    _s_ll ipop() const __bmdx_noex { return _ipop; }
+    _s_ll ipush() const __bmdx_noex { return _ipush; }
 
       // Number of elements available to pop.
-    _s_ll navl() const throw() { return _ipush - _ipop; }
+    _s_ll navl() const __bmdx_noex { return _ipush - _ipop; }
 
     // SUPPLIER part
 
@@ -2369,8 +2375,8 @@ namespace bmdx
       //    -2 - failure (mem. alloc. or similar).
       //    -3 - failed to construct the new element.
       // Concurrency: may be called by Supplier only.
-    _s_long push_1(const t_value& x) throw() { return _push_1(new_cp(x)); }
-    template<class Fcreate> _s_long push_1f(const Fcreate& f) throw() { return _push_1(f); }
+    _s_long push_1(const t_value& x) __bmdx_noex { return _push_1(new_cp(x)); }
+    template<class Fcreate> _s_long push_1f(const Fcreate& f) __bmdx_noex { return _push_1(f); }
 
       // Push n (>= 0) values.
       // push_n(n): uses copy constructor to create elements.
@@ -2384,8 +2390,8 @@ namespace bmdx
       //    -2 - failure (mem. alloc. or similar).
       //    -3 - failed to construct the new element.
       // Concurrency: may be called by Supplier only.
-    _s_long push_n(const t_value* pss, _s_ll n) throw() { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
-    template<class F> _s_long push_nf(const F& f, _s_ll n) throw() { return _push_n(f, n); }
+    _s_long push_n(const t_value* pss, _s_ll n) __bmdx_noex { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
+    template<class F> _s_long push_nf(const F& f, _s_ll n) __bmdx_noex { return _push_n(f, n); }
 
       // Returns ref. to the last pushed element.
       // Generates an exception on no elements in queue.
@@ -2415,10 +2421,10 @@ namespace bmdx
       //    between two successive pop operations.
       //    (Push operation adds elements, but they are simply ignored by previously created iterators.)
       // Concurrency: iterators may be safely used by Consumer only.
-    iterator begin() const throw() { return iterator(*this, true); }
-    iterator end() const throw() { return iterator(*this, false); }
-    const_iterator cbegin() const throw() { return const_iterator(*this, true); }
-    const_iterator cend() const throw() { return const_iterator(*this, false); }
+    iterator begin() const __bmdx_noex { return iterator(*this, true); }
+    iterator end() const __bmdx_noex { return iterator(*this, false); }
+    const_iterator cbegin() const __bmdx_noex { return const_iterator(*this, true); }
+    const_iterator cend() const __bmdx_noex { return const_iterator(*this, false); }
 
       // Returns ref. to absolute pos. (ipop() + i).
       //    To point to valid position, i must be in [0..navl()).
@@ -2434,7 +2440,7 @@ namespace bmdx
       //  Returns
       //    a) true if element existed (it was anyway removed).
       //    b) false otherwise.
-    bool pop_1() throw() { const _s_ll i0 = _ipop; const _s_ll i2 = _ipush; if (i2 > i0) { _pop_range(i0, i0 + 1); return true; } return false; }
+    bool pop_1() __bmdx_noex { const _s_ll i0 = _ipop; const _s_ll i2 = _ipush; if (i2 > i0) { _pop_range(i0, i0 + 1); return true; } return false; }
 
       // Removes multiple elements.
       //    n >= 0 specifies max. number of values to be popped.
@@ -2451,14 +2457,14 @@ namespace bmdx
       // Concurrency:
       //    the function may be safely called by Consumer only.
       //    Note that Supplier may safely continue pushing elements during any pop*() operation.
-    _s_ll pop_n(_s_ll n) throw() { if (n == 0 || n <= -2) { return 0; } const _s_ll i0 = _ipop; _s_ll na = _ipush - i0; if (n == -1 || n > na) { n = na; } if (n > 0) { _pop_range(i0, i0 + n); } return n; }
+    _s_ll pop_n(_s_ll n) __bmdx_noex { if (n == 0 || n <= -2) { return 0; } const _s_ll i0 = _ipop; _s_ll na = _ipush - i0; if (n == -1 || n > na) { n = na; } if (n > 0) { _pop_range(i0, i0 + n); } return n; }
 
   private:
     typedef void* (*F_alloc)(_s_ll nbytes); typedef void (*F_free)(void* p);
-    inline void* _alloc(_s_ll nbytes) throw() { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_calloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
-    inline void _free(void* p) throw() { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
-    inline void _destroy1(T* pd_) throw() { (void)pd_; try { pd_->~T(); } catch (...) {} }
-    inline column* _vnncol_alloc(_s_ll m) throw() { return (column*)_alloc(sizeof(column) + m * sizeof(T)); }
+    inline void* _alloc(_s_ll nbytes) __bmdx_noex { if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { return _carray_tu_alloc_t<T>::_sf_calloc(nbytes); } return ((F_alloc)_pff[1])(nbytes); }
+    inline void _free(void* p) __bmdx_noex { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
+    inline void _destroy1(T* pd_) __bmdx_noex { (void)pd_; try { pd_->~T(); } catch (...) {} }
+    inline column* _vnncol_alloc(_s_ll m) __bmdx_noex { return (column*)_alloc(sizeof(column) + m * sizeof(T)); }
 
     void _pop_range(_s_ll i0, _s_ll i2) // constraints: i0 == _ipop, i2 <= _ipush
     {
@@ -2607,7 +2613,7 @@ namespace bmdx
     volatile _s_ll _ipush, _ipop; // the next push position, if valid: _cpush->data()[_ipush % _m]; the next pop position, if valid: _cpop->data()[_ipop % _m]
     volatile _s_ll _ilnknew; _s_ll _ilnkused;
   };
-  template<class T, bool b> typename vnnqueue_t<T>::template iterator_t<b> operator+(typename vnnqueue_t<T>::template iterator_t<b>::difference_type delta, const typename vnnqueue_t<T>::template iterator_t<b>& x) throw() { typename vnnqueue_t<T>::template iterator_t<b> i(x); i += delta; return i; }
+  template<class T, bool b> typename vnnqueue_t<T>::template iterator_t<b> operator+(typename vnnqueue_t<T>::template iterator_t<b>::difference_type delta, const typename vnnqueue_t<T>::template iterator_t<b>& x) __bmdx_noex { typename vnnqueue_t<T>::template iterator_t<b> i(x); i += delta; return i; }
 
 }
 
@@ -2655,8 +2661,8 @@ namespace bmdx
 
 
 typedef HANDLE _t_threadctl_nat_handle;
-static void _threadctl_thproc_impl(void* _p) throw();
-static DWORD WINAPI _threadctl_thproc(LPVOID _p) throw()    { _threadctl_thproc_impl(_p); return 1; }
+static void _threadctl_thproc_impl(void* _p) __bmdx_noex;
+static DWORD WINAPI _threadctl_thproc(LPVOID _p) __bmdx_noex    { _threadctl_thproc_impl(_p); return 1; }
   // NOTE this object may be implemented differently (except the 1st member) in different binary modules.
 template<class T> struct _critsec_data0_t
 {
@@ -2690,9 +2696,9 @@ struct _threadctl_tid_data
 template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
 {
   static _critsec_data0_t<T> dat;
-  static void csdata_init(_critsec_data0_t<T>* p) throw() { if (p) { p->psm = sm; p->cnt = 0; p->cnt2 = 0; p->tid = 0; } }
-  static void csdata_deinit(_critsec_data0_t<T>*) throw() { }
-  static void cs_init(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags, _s_ll check_period_mcs, _s_long timeout_ms) throw()
+  static void csdata_init(_critsec_data0_t<T>* p) __bmdx_noex { if (p) { p->psm = sm; p->cnt = 0; p->cnt2 = 0; p->tid = 0; } }
+  static void csdata_deinit(_critsec_data0_t<T>*) __bmdx_noex { }
+  static void cs_init(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags, _s_ll check_period_mcs, _s_long timeout_ms) __bmdx_noex
   {
     if (!pflags) { return; }
     pflags->_tms = timeout_ms; pflags->_bl = 0;
@@ -2716,12 +2722,12 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
     }
     _p->tid = GetCurrentThreadId(); ++_p->cnt2; pflags->_bl = 1;
   }
-  static void cs_deinit(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags) throw()
+  static void cs_deinit(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags) __bmdx_noex
   {
     if (!pflags) { return; }
     if (!!pflags->_bl && _p) { if (--_p->cnt2 == 0) { _p->tid = 0; InterlockedDecrement(&_p->cnt); } pflags->_bl = 0; }
   }
-  static _critsec_data0_t<T>* cs_pdefcsd() throw() { return &_critsec_tu_static_t<T>::dat; }
+  static _critsec_data0_t<T>* cs_pdefcsd() __bmdx_noex { return &_critsec_tu_static_t<T>::dat; }
 
   static void* sm(_s_long ind)
   {
@@ -2742,7 +2748,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
 template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
 {
   struct _threadctl_thproc_cleanup;
-  static void _tid_set(_threadctl_tid_data& x, const _threadctl_tid_data::t_native_tid& nat_id0) throw()
+  static void _tid_set(_threadctl_tid_data& x, const _threadctl_tid_data::t_native_tid& nat_id0) __bmdx_noex
   {
     _threadctl_tid_data::t_native_tid nat_id = nat_id0;
     x.__pad1 = 0;
@@ -2755,7 +2761,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (b || n >= 8) { bmdx_str::words::memmove_t<char>::sf_memcpy(p, p0, n); }
       else { bmdx_str::words::memmove_t<char>::sf_memcpy(p + 8 - n, p0, n); }
   }
-  static _s_long tid_is_eq(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2) throw()
+  static _s_long tid_is_eq(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2) __bmdx_noex
   {
     if (!(p_my && p2)) { return p_my == p2; }
     if (p_my == p2) { return 1; }
@@ -2772,14 +2778,14 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   }
 
     // ret. 2..0
-  static _s_long th_state(_threadctl_ctx_data* p) throw()
+  static _s_long th_state(_threadctl_ctx_data* p) __bmdx_noex
   {
     if (!p) { return 0; }
     DWORD c(0); GetExitCodeThread(p->th, &c);
     return c == STILL_ACTIVE ? 2 : 1;
   }
     // ret. 1, 0
-  static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) throw()
+  static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) __bmdx_noex
   {
     if (!p) { return 0; }
     if (p->in_ctl > 0 || p->in_thread) { return false; }
@@ -2796,7 +2802,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     return 0;
   }
     // ret. 1, 0
-  static _s_long th_set_priority(_threadctl_ctx_data* p, _s_long prio) throw()
+  static _s_long th_set_priority(_threadctl_ctx_data* p, _s_long prio) __bmdx_noex
   {
     if (!prio) { return 0; }
     switch (prio)
@@ -2822,7 +2828,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     //    0 - thread was not running (threadctl is empty).
     //    -1 - detached. threadctl is cleared.
     //    -2 - still running (timeout). threadctl continues to reference the thread.
-  static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) throw()
+  static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) __bmdx_noex
   {
     if (!p) { return 0; }
     if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl <= 1))) { p->bs = 1; }
@@ -2844,7 +2850,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     //    1 - thread already exited. threadctl is cleared.
     //    0 - thread was not running (threadctl is empty).
     //    -3 - failure (flags specify no valid method, or by other reason).
-  static _s_long th_terminate(_threadctl_ctx_data* p, _s_long flags) throw()
+  static _s_long th_terminate(_threadctl_ctx_data* p, _s_long flags) __bmdx_noex
   {
     if (!p) { return 0; }
     if (!p->bs && !(flags & 0x1000)) { p->bs = 1; }
@@ -2856,11 +2862,11 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     th_ctx_release(p, 2);
     return 2;
   }
-  static _s_long th_in_ctl_incr(_threadctl_ctx_data* p) throw();
+  static _s_long th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx_noex;
 
-  static _s_long th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) throw();
-  static _s_long th_ctx_release(_threadctl_ctx_data* p, _s_long what) throw();
-  static _s_long _th_ctx_rel_handle(_threadctl_ctx_data* p) throw() { if (!p) { return 1; } return CloseHandle(p->th) != 0; }
+  static _s_long th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) __bmdx_noex;
+  static _s_long th_ctx_release(_threadctl_ctx_data* p, _s_long what) __bmdx_noex;
+  static _s_long _th_ctx_rel_handle(_threadctl_ctx_data* p) __bmdx_noex { if (!p) { return 1; } return CloseHandle(p->th) != 0; }
 
   static void* sm(_s_long ind)
   {
@@ -2987,9 +2993,9 @@ namespace bmdx
 
 
 typedef pthread_t _t_threadctl_nat_handle;
-static void _threadctl_thproc_impl(void* _p) throw();
+static void _threadctl_thproc_impl(void* _p) __bmdx_noex;
 extern "C" typedef void* (*PF_threadctl_thproc)(void* _p);
-static void* _threadctl_thproc(void* _p) throw() { _threadctl_thproc_impl(_p); return 0; }
+static void* _threadctl_thproc(void* _p) __bmdx_noex { _threadctl_thproc_impl(_p); return 0; }
 static pthread_key_t* _threadctl_psjstg()
 {
   static char init(0);
@@ -3071,7 +3077,7 @@ struct _threadctl_tid_data
 template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
 {
   static _critsec_data1_t<T> dat;
-  static void csdata_init(_critsec_data0_t<T>* p) throw()
+  static void csdata_init(_critsec_data0_t<T>* p) __bmdx_noex
   {
     if (!p) { return; }
     p->psm = sm;
@@ -3083,12 +3089,12 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
       if (b && pthread_mutex_init(&p->_m, &a) != 0) { pthread_mutexattr_destroy(&a); b = false; }
     if (b) { p->_kind = 2; } else { pthread_mutex_t _m_temp = PTHREAD_MUTEX_INITIALIZER; p->_m = _m_temp; }
   }
-  static void csdata_deinit(_critsec_data0_t<T>* p) throw()
+  static void csdata_deinit(_critsec_data0_t<T>* p) __bmdx_noex
   {
     if (!p) { return; }
     if (p->_kind == 2) { pthread_mutex_destroy(&p->_m); }
   }
-  static void cs_init(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags, _s_ll check_period_mcs, _s_long timeout_ms) throw()
+  static void cs_init(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags, _s_ll check_period_mcs, _s_long timeout_ms) __bmdx_noex
   {
     if (!pflags) { return; }
     pflags->_tms = timeout_ms; pflags->_bl = 0;  pflags->_bignore = 0; pflags->_bl = 0; pflags->_brec = 0;
@@ -3105,7 +3111,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
     }
     pflags->_bl = 1; if (_p->_kind == 1) { new (&_p->_tid) pthread_t(pthread_self()); _p->_b_lk1 = 1; }
   }
-  static void cs_deinit(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags) throw()
+  static void cs_deinit(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags) __bmdx_noex
   {
     if (!pflags) { return; }
     if (!!pflags->_bignore || !_p) { return; }
@@ -3115,7 +3121,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
     if (_p == &_pg_dat->_trecur) { pthread_mutex_lock(&_pg_dat->_tglobal._m); if (--_pg_dat->_cnt == 0) { csdata_deinit(&_pg_dat->_trecur); } pthread_mutex_unlock(&_pg_dat->_tglobal._m); }
     pflags->_bignore = 1;
   }
-  static _critsec_data0_t<T>* cs_pdefcsd() throw() { return &_critsec_tu_static_t<T>::dat._trecur; }
+  static _critsec_data0_t<T>* cs_pdefcsd() __bmdx_noex { return &_critsec_tu_static_t<T>::dat._trecur; }
 
   static void* sm(_s_long ind)
   {
@@ -3136,7 +3142,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
 template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
 {
   struct _threadctl_thproc_cleanup;
-  static void _tid_set(_threadctl_tid_data& x, const _threadctl_tid_data::t_native_tid& nat_id0) throw()
+  static void _tid_set(_threadctl_tid_data& x, const _threadctl_tid_data::t_native_tid& nat_id0) __bmdx_noex
   {
     _threadctl_tid_data::t_native_tid nat_id = nat_id0;
     x.__pad1 = 0;
@@ -3149,7 +3155,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (b || n >= 8) { bmdx_str::words::memmove_t<char>::sf_memcpy(p, p0, n); }
       else { bmdx_str::words::memmove_t<char>::sf_memcpy(p + 8 - n, p0, n); }
   }
-  static _s_long tid_is_eq(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2) throw()
+  static _s_long tid_is_eq(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2) __bmdx_noex
   {
     if (!(p_my && p2)) { return p_my == p2; }
     if (p_my == p2) { return 1; }
@@ -3175,13 +3181,13 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
 
 
     // ret. 2..0
-  static _s_long th_state(_threadctl_ctx_data* p) throw()
+  static _s_long th_state(_threadctl_ctx_data* p) __bmdx_noex
   {
     if (!p) { return 0; }
     return p->in_thread ? 2 : 1;
   }
     // ret. 1, 0
-  static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) throw()
+  static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) __bmdx_noex
   {
     if (!p) { return 0; }
     if (p->in_ctl > 0 || p->in_thread) { return false; }
@@ -3203,7 +3209,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     return 0;
   }
     // ret. 1, 0
-  static _s_long th_set_priority(_threadctl_ctx_data* p, _s_long prio) throw()
+  static _s_long th_set_priority(_threadctl_ctx_data* p, _s_long prio) __bmdx_noex
   {
     if (!p) { return 0; }
     struct __local
@@ -3254,7 +3260,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     //    0 - thread was not running (threadctl is empty).
     //    -1 - detached. threadctl is cleared.
     //    -2 - still running (timeout). threadctl continues to reference the thread.
-  static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) throw()
+  static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) __bmdx_noex
   {
     if (!p) { return 0; }
     if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl <= 1))) { p->bs = 1; }
@@ -3265,13 +3271,13 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     return -2;
   }
 
-  static _s_long th_terminate(_threadctl_ctx_data* p, _s_long flags) throw();
+  static _s_long th_terminate(_threadctl_ctx_data* p, _s_long flags) __bmdx_noex;
 
-  static _s_long th_in_ctl_incr(_threadctl_ctx_data* p) throw();
+  static _s_long th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx_noex;
 
-  static _s_long th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) throw();
-  static _s_long th_ctx_release(_threadctl_ctx_data* p, _s_long what) throw();
-  static _s_long _th_ctx_rel_handle(_threadctl_ctx_data*) throw() { return 1; }
+  static _s_long th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) __bmdx_noex;
+  static _s_long th_ctx_release(_threadctl_ctx_data* p, _s_long what) __bmdx_noex;
+  static _s_long _th_ctx_rel_handle(_threadctl_ctx_data*) __bmdx_noex { return 1; }
 
   static void* sm(_s_long ind)
   {
@@ -3351,7 +3357,7 @@ namespace bmdx
       // pdata: csdata object or correctly initialized _critsec_data0_t.
       //    Allows for creating individual crit. sec. independent on T and default lock associated with T.
       //    NOTE pdata is weak-referenced, i.e. the crit. sec. must be valid until the last lock on it is destroyed.
-    critsec_t(_s_ll check_period_mcs, _s_long timeout_ms, _critsec_data0_t<T>* pdata = 0 __bmdx_noarg) throw()
+    critsec_t(_s_ll check_period_mcs, _s_long timeout_ms, _critsec_data0_t<T>* pdata = 0 __bmdx_noarg) __bmdx_noex
     {
       _p = pdata ? pdata : ff_mc().pdefcsd();
       _flags._tms = timeout_ms; _flags._bl = 0;
@@ -3363,8 +3369,8 @@ namespace bmdx
       // NOTE csdata object size may vary. Use it in local binary module only, or pass by pointer.
     struct csdata : _critsec_data0_t<T>
     {
-      csdata(__bmdx_noarg1) throw() { _critsec_tu_static_t<T>::csdata_init(this); }
-      ~csdata() throw() { if (this->psm) { typedef void (*PF)(_critsec_data0_t<T>*); try { PF f = (PF)this->psm(2); if (f) { f(this); } } catch (...) {} } }
+      csdata(__bmdx_noarg1) __bmdx_noex { _critsec_tu_static_t<T>::csdata_init(this); }
+      ~csdata() __bmdx_noex { if (this->psm) { typedef void (*PF)(_critsec_data0_t<T>*); try { PF f = (PF)this->psm(2); if (f) { f(this); } } catch (...) {} } }
     private: csdata(const csdata&); void operator=(const csdata&);
     };
 
@@ -3377,16 +3383,16 @@ namespace bmdx
     struct ff_mc
     {
         // Default csdata object, used by critsec_t for type T (per binary module or per compiler).
-      inline csdata* pdefcsd() throw() { typedef _critsec_data0_t<T>* (*PF)(); PF f = (PF)_critsec_tu_static_t<T>::sm(5); return static_cast<csdata*>(f()); }
+      inline csdata* pdefcsd() __bmdx_noex { typedef _critsec_data0_t<T>* (*PF)(); PF f = (PF)_critsec_tu_static_t<T>::sm(5); return static_cast<csdata*>(f()); }
     };
 
 
       // Return value: a) true, b) false - lock tries were timed out (may occur ONLY on constructor timeout_ms >= 0).
-    inline bool is_locked() const throw() { return !!_flags._bl; }
-    inline operator bool() const throw() { return !!_flags._bl; }
+    inline bool is_locked() const __bmdx_noex { return !!_flags._bl; }
+    inline operator bool() const __bmdx_noex { return !!_flags._bl; }
 
 
-    ~critsec_t() throw()
+    ~critsec_t() __bmdx_noex
     {
       if (!(_p && _p->psm)) { return; }
       typedef void (*PF)(_critsec_data0_t<T>* _p, typename _critsec_data0_t<T>::t_flags* pflags);
@@ -3394,7 +3400,7 @@ namespace bmdx
     }
 
     critsec_t(const critsec_t& x __bmdx_noarg) { new (this) critsec_t(x._flags._bl ? 10 : -1, x._flags._tms, x._p); }
-    critsec_t& operator=(const critsec_t& x) throw(__bmdx_noargt1) { critsec_t cs3(x); bmdx_str::words::swap_bytes(*this, cs3); return *this; }
+    critsec_t& operator=(const critsec_t& x) { critsec_t cs3(x); bmdx_str::words::swap_bytes(*this, cs3); return *this; }
 
     private:
       _critsec_data0_t<T>* _p; typename _critsec_data0_t<T>::t_flags _flags;
@@ -3433,7 +3439,7 @@ namespace bmdx
       ctx_base(const ctx_base&) { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); } // NOTE the new context does not copy anything from the source object
       _threadctl_ctx_data& _dat() { return __dat; }
     private:
-      friend void _threadctl_thproc_impl(void* _p) throw();
+      friend void _threadctl_thproc_impl(void* _p) __bmdx_noex;
       friend struct threadctl;
       _threadctl_ctx_data __dat;
     };
@@ -3455,21 +3461,21 @@ namespace bmdx
     typedef _threadctl_tid_data::t_native_tid t_native_tid;
     struct tid
     {
-      tid() throw()    { clear(); }
-      ~tid() throw()    { }
-      void clear() throw()    { _dat.psm = _threadctl_tu_static_t<>::sm; _dat.stg1 = 0; _dat.stg2 = 0; }
+      tid() __bmdx_noex    { clear(); }
+      ~tid() __bmdx_noex    { }
+      void clear() __bmdx_noex    { _dat.psm = _threadctl_tu_static_t<>::sm; _dat.stg1 = 0; _dat.stg2 = 0; }
 
-      tid(const t_native_tid& x_ __bmdx_noarg) throw()    { _threadctl_tu_static_t<>::_tid_set(_dat, x_); }
-      tid(const tid& x_) throw()    { _dat = x_._dat; }
-      tid& operator=(const t_native_tid& x_) throw()    { _threadctl_tu_static_t<>::_tid_set(_dat, x_); return *this; }
-      tid& operator=(const tid& x_) throw()    { _dat = x_._dat; return *this; }
+      tid(const t_native_tid& x_ __bmdx_noarg) __bmdx_noex    { _threadctl_tu_static_t<>::_tid_set(_dat, x_); }
+      tid(const tid& x_) __bmdx_noex    { _dat = x_._dat; }
+      tid& operator=(const t_native_tid& x_) __bmdx_noex    { _threadctl_tu_static_t<>::_tid_set(_dat, x_); return *this; }
+      tid& operator=(const tid& x_) __bmdx_noex    { _dat = x_._dat; return *this; }
 
         // Comparison is not trivial.
-      bool operator==(const tid& x_) const throw() { if (!_dat.psm) { return !x_._dat.psm; } if (!x_._dat.psm) { return false; } typedef _s_long (*Peq)(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2); try { Peq f_eq = (Peq)_dat.psm(19); if (!f_eq) { return false; } return !!f_eq(&_dat, &x_._dat); } catch (...) {} return false; }
-      bool operator!=(const tid& x_) const throw() { return !this->operator==(x_); }
+      bool operator==(const tid& x_) const __bmdx_noex { if (!_dat.psm) { return !x_._dat.psm; } if (!x_._dat.psm) { return false; } typedef _s_long (*Peq)(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2); try { Peq f_eq = (Peq)_dat.psm(19); if (!f_eq) { return false; } return !!f_eq(&_dat, &x_._dat); } catch (...) {} return false; }
+      bool operator!=(const tid& x_) const __bmdx_noex { return !this->operator==(x_); }
 
         // If tid object is valid in the current context, returns ptr. to native handle, otherwise 0.
-      t_native_tid* pnat_id(__bmdx_noarg1) const throw()
+      t_native_tid* pnat_id(__bmdx_noarg1) const __bmdx_noex
       {
         if (!_dat.psm) { return 0; }
         const int n = sizeof(_threadctl_tid_data::t_native_tid);
@@ -3483,12 +3489,12 @@ namespace bmdx
           else { return (t_native_tid*)((char*)&_dat.stg1 + 8 - n); }
       }
 
-      bool is_null() const throw()    { return _dat.stg1 == 0 && _dat.stg2 == 0; }
-      operator bool() const throw()    { return is_null(); }
+      bool is_null() const __bmdx_noex    { return _dat.stg1 == 0 && _dat.stg2 == 0; }
+      operator bool() const __bmdx_noex    { return is_null(); }
 
         // Numeric value of tid. 0 if tid is null.
         //  The value is most suitable for displaying.
-      _s_ll num_id() const throw()    { if (is_null()) { return 0; } _s_ll n = _dat.stg1 ^ _dat.stg2; if (!n) { n = _dat.stg1; } return n; }
+      _s_ll num_id() const __bmdx_noex    { if (is_null()) { return 0; } _s_ll n = _dat.stg1 ^ _dat.stg2; if (!n) { n = _dat.stg1; } return n; }
 
     private: friend struct threadctl; _threadctl_tid_data _dat;
     };
@@ -3496,7 +3502,7 @@ namespace bmdx
     struct ff_mc
     {
         // Returns thread ID of the current (caller's) thread.
-      tid tid_self() throw()
+      tid tid_self() __bmdx_noex
       {
         #ifdef _bmdxpl_Wnds
           return GetCurrentThreadId();
@@ -3508,12 +3514,12 @@ namespace bmdx
     };
 
 
-    threadctl(__bmdx_noarg1) throw() : _tid() { __pad1 = 0; _pctx = 0; }
-    ~threadctl() throw() { clear(); }
+    threadctl(__bmdx_noarg1) __bmdx_noex : _tid() { __pad1 = 0; _pctx = 0; }
+    ~threadctl() __bmdx_noex { clear(); }
 
       // If threadctl fails to increment ref. cnt, the new object will have state() == 0 and th_id().is_null() == true.
       //  Normally, this occurs only if x is empty.
-    threadctl(const threadctl& x __bmdx_noarg) throw()
+    threadctl(const threadctl& x __bmdx_noarg) __bmdx_noex
       {
         __pad1 = 0; _pctx = 0; if (!x._pctx) { return; }
         typedef _s_long (*Pincr)(_threadctl_ctx_data* p); if (!x._pctx->__dat.pthsm) { return; }
@@ -3521,16 +3527,16 @@ namespace bmdx
         _pctx = x._pctx;
         _tid = x._tid;
       }
-    threadctl& operator=(const threadctl& x) throw(__bmdx_noargt1)    { threadctl x3(x); swap(x3); return *this; }
+    threadctl& operator=(const threadctl& x)    { threadctl x3(x); swap(x3); return *this; }
 
       // !is_null() when thread is running.
-    const tid& th_id() const throw() { return _tid; }
+    const tid& th_id() const __bmdx_noex { return _tid; }
 
 
       // 2 - context is referenced, thread is running (volatile state!).
       // 1 - context is referenced, thread has already exited.
       // 0 - no context, thread state is unknown (e.g. the initial value, or threadctl has been cleared).
-    _s_long state() const throw()
+    _s_long state() const __bmdx_noex
     {
       if (!_pctx) { return 0; }
       typedef _s_long (*Pstate)(_threadctl_ctx_data* p); Pstate f_state = (Pstate)_pctx->__dat.pthsm(8);
@@ -3538,9 +3544,9 @@ namespace bmdx
       try { return f_state(&_pctx->__dat); } catch (...) {}
       return 0;
     }
-    operator bool() const throw() { return state() == 2; }
+    operator bool() const __bmdx_noex { return state() == 2; }
 
-    ctx_base* pctx() const throw() { return _pctx; }
+    ctx_base* pctx() const __bmdx_noex { return _pctx; }
 
       // Starts a new thread, using the given context.
       //    Succeeds only in state() == 0, if the new thread has been created and started successfully.
@@ -3561,7 +3567,7 @@ namespace bmdx
       // Returns:
       //    true - thread started successfully.
       //    false - thread failed to start.
-    bool start(ctx_base* p __bmdx_noarg) throw()
+    bool start(ctx_base* p __bmdx_noarg) __bmdx_noex
     {
       if (_pctx || !p || p->__dat.in_thread || p->__dat.in_ctl > 0) { return false; }
       typedef _s_long (*Pstart)(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj); Pstart f_start = (Pstart)p->__dat.pthsm(9);
@@ -3588,7 +3594,7 @@ namespace bmdx
       //    true on successful thread start.
       //    false on any failure. All temp. objects are deleted.
     template<class Ctx, class Data>
-    bool start_auto(const Data& d = Data() __bmdx_noarg) throw()
+    bool start_auto(const Data& d = Data() __bmdx_noarg) __bmdx_noex
     {
       if (_pctx) { return false; }
       ctx_wrapper<Ctx, Data>* p(0);
@@ -3609,7 +3615,7 @@ namespace bmdx
       //  3 - below normal,
       //  2 - low,
       //  1 - background.
-    bool set_priority(_s_long p) throw()
+    bool set_priority(_s_long p) __bmdx_noex
     {
       if (!_pctx) { return false; }
       typedef _s_long (*Pset_priority)(_threadctl_ctx_data* p, _s_long prio); Pset_priority f_set_priority = (Pset_priority)_pctx->__dat.pthsm(10);
@@ -3623,19 +3629,19 @@ namespace bmdx
       // Returns:
       //    true - successful, the client may wait until state() becomes != 2.
       //    false - could not set the flag, threadctl has no context. state() will return 0.
-    bool signal_stop(_s_long v = 1) throw() { if (!_pctx) { return false; } if (!_pctx->__dat.bs) { _pctx->__dat.bs = v; } return true; }
+    bool signal_stop(_s_long v = 1) __bmdx_noex { if (!_pctx) { return false; } if (!_pctx->__dat.bs) { _pctx->__dat.bs = v; } return true; }
 
       // Returns a pointer to 4-byte flag variable available for r/w inside thread procedure.
       //    By default, signal_stop() sets the variable to 1 to ask thread to exit.
       //    pflag() allows to use the flag in any other way.
-    volatile _s_long* pflag() const throw() { if (!_pctx) { return 0; } return &_pctx->__dat.bs; }
+    volatile _s_long* pflag() const __bmdx_noex { if (!_pctx) { return 0; } return &_pctx->__dat.bs; }
 
       // 1) If this threadctl is the last one referencing the thread, set b_stop() flag to 1 if it was 0.
       // 2) Detach from the current thread object.
-    void clear() throw() { stop(-2); _pctx = 0; _tid.clear(); }
+    void clear() __bmdx_noex { stop(-2); _pctx = 0; _tid.clear(); }
 
       // Detach from the current thread object.
-    void detach() throw() { stop(-3); _pctx = 0; _tid.clear(); }
+    void detach() __bmdx_noex { stop(-3); _pctx = 0; _tid.clear(); }
 
       // Sets pctx()->b_stop() flag to 1 (only if it was 0), and possibly waits (depending on timeout) for thread exiting.
       //    If thread had exited, detaches from its context
@@ -3656,7 +3662,7 @@ namespace bmdx
       //    -1 - detached. threadctl is cleared.
       //    -2 - still running (timeout). threadctl continues to reference the thread.
       //    -3 - failure (normally, it does not occur). threadctl is not changed.
-    int stop(_s_long timeout_ms) throw()
+    int stop(_s_long timeout_ms) __bmdx_noex
     {
       if (!_pctx) { return 0; }
       typedef _s_long (*Pstop)(_threadctl_ctx_data* p, _s_long timeout_ms); Pstop f_stop = (Pstop)_pctx->__dat.pthsm(11);
@@ -3692,7 +3698,7 @@ namespace bmdx
       //    1 - thread already exited. threadctl is cleared.
       //    0 - thread was not running (threadctl is empty).
       //    -3 - failure (flags specify no valid method, or by other reason). threadctl is not modified.
-    int terminate(_s_long flags = 0x101) throw()
+    int terminate(_s_long flags = 0x101) __bmdx_noex
     {
       if (!_pctx) { return 0; }
       typedef _s_long (*Pterminate)(_threadctl_ctx_data* p, _s_long flags); Pterminate f_terminate = (Pterminate)_pctx->__dat.pthsm(12);
@@ -3715,9 +3721,9 @@ template<class _>
 struct _threadctl_tu_static_t<_>::_threadctl_thproc_cleanup
 {
   void* _p;
-  _threadctl_thproc_cleanup(void* p_) throw() : _p(p_) {}
-  ~_threadctl_thproc_cleanup() throw() { exec(); }
-  void exec() throw()
+  _threadctl_thproc_cleanup(void* p_) __bmdx_noex : _p(p_) {}
+  ~_threadctl_thproc_cleanup() __bmdx_noex { exec(); }
+  void exec() __bmdx_noex
   {
     if (!_p) { return; }
     threadctl::ctx_base* pbase = (threadctl::ctx_base*)((_threadctl_ctx_data*)_p)->pctxbase;
@@ -3735,7 +3741,7 @@ struct _threadctl_tu_static_t<_>::_threadctl_thproc_cleanup
   //    0 - what is not 1 or 2.
   //    -1 - failure, p == 0 or *p is not valid.
 template<class _>
-_s_long _threadctl_tu_static_t<_>::th_ctx_release(_threadctl_ctx_data* p, _s_long what) throw()
+_s_long _threadctl_tu_static_t<_>::th_ctx_release(_threadctl_ctx_data* p, _s_long what) __bmdx_noex
 {
   if (!p) { return -1; }
   if (!p->in_thread && p->in_ctl <= 0) { return -1; }
@@ -3762,7 +3768,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_release(_threadctl_ctx_data* p, _s_lon
   return res;
 }
 template<class _>
-_s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw()
+_s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx_noex
 {
   if (!p) { return 0; }
   critsec_t<_threadctl_ctx_data> __lock(10, -1, &p->csd); if (sizeof(__lock)) {}
@@ -3782,11 +3788,11 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
     {
       struct ff_mc;
 
-      bool has_ref() const throw() { return !!_hp; }
-      operator bool() const throw() { return !!_hp; }
+      bool has_ref() const __bmdx_noex { return !!_hp; }
+      operator bool() const __bmdx_noex { return !!_hp; }
 
         //  NOTE (Platform-dependent: This function is not protected against PID reuse.)
-      bool is_running() const throw()
+      bool is_running() const __bmdx_noex
       {
         if (!has_ref()) { return false; }
         DWORD res = WaitForSingleObject(_hp, 0);
@@ -3795,16 +3801,16 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
 
         // On has_ref() == true, pid() has meaningful value.
       typedef DWORD t_pid;
-      t_pid pid() const throw() { return _pid; }
+      t_pid pid() const __bmdx_noex { return _pid; }
 
         // OS-dependent handles (not cross-platform).
-      HANDLE _phandle() const throw() { return _hp; }
-      HANDLE _thandle() const throw() { return _ht; }
+      HANDLE _phandle() const __bmdx_noex { return _hp; }
+      HANDLE _thandle() const __bmdx_noex { return _ht; }
 
-      processctl() throw() : _hp(0), _ht(0), _pid(0), _exited(false) {}
-      ~processctl() throw() { clear(); }
+      processctl() __bmdx_noex : _hp(0), _ht(0), _pid(0), _exited(false) {}
+      ~processctl() __bmdx_noex { clear(); }
 
-      processctl(const processctl& x) throw() : _hp(0), _ht(0), _pid(0), _exited(false)
+      processctl(const processctl& x) __bmdx_noex : _hp(0), _ht(0), _pid(0), _exited(false)
       {
         if (x._hp) { DuplicateHandle(GetCurrentProcess(), x._hp, GetCurrentProcess(), &_hp, 0, TRUE, DUPLICATE_SAME_ACCESS); }
         if (x._ht) { DuplicateHandle(GetCurrentProcess(), x._ht, GetCurrentProcess(), &_ht, 0, TRUE, DUPLICATE_SAME_ACCESS); }
@@ -3812,7 +3818,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
       }
       processctl& operator=(const processctl& x) { if (this == &x) { return *this; } clear(); new (this) processctl(x); return *this; }
 
-      void clear() throw() { _pid = 0; _exited = false; if (_hp) { CloseHandle(_hp); _hp = 0; } if (_ht) { CloseHandle(_ht); _ht = 0; } }
+      void clear() __bmdx_noex { _pid = 0; _exited = false; if (_hp) { CloseHandle(_hp); _hp = 0; } if (_ht) { CloseHandle(_ht); _ht = 0; } }
 
         // Creates new process and returns immediately.
         //
@@ -3837,7 +3843,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
         //  Returned value:
         //    On success, launch() returns true.
         //    On failure, launch() returns false.
-      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false) throw()
+      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false) __bmdx_noex
       { try {
         clear();
         if (fnp_process.empty()) { return false; }
@@ -3885,7 +3891,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
         //    0 - the process had been completed before wait_exit() was called. *ret_pec = 0.
         //    -1 - the process is not started, nothing to wait. *ret_pec not changed.
         //    -2 - failure, process may exist, but its state is undefined. *ret_pec not changed.
-      int wait_exit(long* ret_pec = 0) throw()
+      int wait_exit(long* ret_pec = 0) __bmdx_noex
       {
         if (!_hp) { return -1; }
         if (_exited) { if (ret_pec) { *ret_pec = 0; } return 0; }
@@ -3900,7 +3906,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
 
       struct ff_mc
       {
-        t_pid pid_self() throw() { return t_pid(GetCurrentProcessId()); }
+        t_pid pid_self() __bmdx_noex { return t_pid(GetCurrentProcessId()); }
 
           // Represent s as single argument for passing into program command line.
           //  (Appropriate quoting and escaping is made as necessary).
@@ -3948,7 +3954,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
         // b_enabled_ == false makes all in console_io a no-op.
       console_io(bool b_enabled_ = true) { _b_enabled = b_enabled_; }
 
-      unsigned int ugetch(unsigned int no_char = 0) throw()
+      unsigned int ugetch(unsigned int no_char = 0) __bmdx_noex
       {
         if (!b_enabled()) { return no_char; }
         critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
@@ -3965,7 +3971,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) throw(
     };
 
 
-static void _threadctl_thproc_impl(void* _p) throw()
+static void _threadctl_thproc_impl(void* _p) __bmdx_noex
 {
   _threadctl_tu_static_t<>::_threadctl_thproc_cleanup __cln(_p); if (sizeof(__cln)) {}
   threadctl::ctx_base* pbase = (threadctl::ctx_base*)((_threadctl_ctx_data*)_p)->pctxbase;
@@ -3979,7 +3985,7 @@ static void _threadctl_thproc_impl(void* _p) throw()
   // 1 - success (succeeds p and pctx are non-0). NOTE
   //  -1 - p or pctx is 0.
 template<class _>
-_s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) throw()
+_s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) __bmdx_noex
 {
   if (!(p && pctxbase)) { return -1; }
   p->pthsm = _threadctl_tu_static_t<>::sm; p->pctxbase = pctxbase; p->pthdata = pthdata;
@@ -4008,11 +4014,11 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
     {
       struct ff_mc;
 
-      bool has_ref() const throw() { return _pid > 0; }
-      operator bool() const throw() { return _pid > 0; }
+      bool has_ref() const __bmdx_noex { return _pid > 0; }
+      operator bool() const __bmdx_noex { return _pid > 0; }
 
         //  NOTE This function is not protected against PID reuse.
-      bool is_running() const throw()
+      bool is_running() const __bmdx_noex
       {
         if (!has_ref()) { return false; }
         int res = kill(pid_t(_pid), 0);
@@ -4021,12 +4027,12 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
         // On has_ref() == true, pid() has meaningful value.
       typedef pid_t t_pid;
-      t_pid pid() const throw() { return t_pid(_pid); }
+      t_pid pid() const __bmdx_noex { return t_pid(_pid); }
 
-      processctl() throw() : _pid(-1) {}
-      ~processctl() throw() { clear(); }
+      processctl() __bmdx_noex : _pid(-1) {}
+      ~processctl() __bmdx_noex { clear(); }
 
-      void clear() throw() { _pid = -1; if (_processctl_has_sigchld()) { _processctl_handler_sigchld(0, 0, 0); } }
+      void clear() __bmdx_noex { _pid = -1; if (_processctl_has_sigchld()) { _processctl_handler_sigchld(0, 0, 0); } }
 
         // Creates new process and returns immediately.
         //
@@ -4059,7 +4065,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
           #define bmdx_processctl_allowshell 1
         #endif
       #endif
-      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false) throw()
+      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false) __bmdx_noex
       { try {
         clear();
         if (fnp_process.empty()) { return false; }
@@ -4156,7 +4162,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         //    0 - the process had been completed before wait_exit() was called. *ret_pec = 0.
         //    -1 - the process is not started, nothing to wait. *ret_pec not changed.
         //    -2 - failure, process may exist, but its state is undefined. *ret_pec not changed.
-      int wait_exit(long* ret_pec = 0) throw()
+      int wait_exit(long* ret_pec = 0) __bmdx_noex
       {
         if (_pid == -2) { if (ret_pec) { *ret_pec = 0; } return 0; }
         if (_pid < 0) { return -1; }
@@ -4176,7 +4182,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
       struct ff_mc
       {
-        t_pid pid_self() throw() { return t_pid(getpid()); }
+        t_pid pid_self() __bmdx_noex { return t_pid(getpid()); }
 
           // Represent s as single argument for passing into program command line.
           //  (Appropriate quoting and escaping is made as necessary).
@@ -4224,10 +4230,10 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         //  NOTE Using console_io in the program running as co-process, detached from console input,
         //    may be unsafe, regardless of all internal checks.
         //    It's recommended to disable console_io in co-processes.
-      console_io(bool b_enabled_ = true) throw() { static termios t; static _s_long n(0); __pt = &t; __pnr = &n; _b_en = b_enabled_; _set_unbuf(true); }
-      ~console_io() throw() { _set_unbuf(false); }
+      console_io(bool b_enabled_ = true) __bmdx_noex { static termios t; static _s_long n(0); __pt = &t; __pnr = &n; _b_en = b_enabled_; _set_unbuf(true); }
+      ~console_io() __bmdx_noex { _set_unbuf(false); }
 
-      unsigned int ugetch(unsigned int no_char = 0) throw()
+      unsigned int ugetch(unsigned int no_char = 0) __bmdx_noex
       {
         if (!b_enabled()) { return no_char; }
         critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
@@ -4243,7 +4249,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
     private:
       termios* __pt; _s_long* __pnr; bool _b_en;
-      void _set_unbuf(bool b_on) throw()
+      void _set_unbuf(bool b_on) __bmdx_noex
       {
         if (!_b_en) { return; }
         critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
@@ -4280,7 +4286,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
     };
 
 
-static void _threadctl_thproc_impl(void* _p) throw()
+static void _threadctl_thproc_impl(void* _p) __bmdx_noex
 {
   pthread_key_t* pk = _threadctl_psjstg();
     if (!pk) { return; }
@@ -4308,7 +4314,7 @@ static void _threadctl_thproc_impl(void* _p) throw()
   // 1 - success (succeeds p and pctx are non-0). NOTE
   //  -1 - p or pctx is 0.
 template<class _>
-_s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) throw()
+_s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pctxbase, void* pthdata) __bmdx_noex
 {
   if (!(p && pctxbase)) { return -1; }
   p->pthsm = _threadctl_tu_static_t<>::sm; p->pctxbase = pctxbase; p->pthdata = pthdata;
@@ -4323,7 +4329,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
   //    0 - thread was not running (threadctl is empty).
   //    -3 - failure (flags specify no valid method, or by other reason).
 template<class _>
-_s_long _threadctl_tu_static_t<_>::th_terminate(_threadctl_ctx_data* p, _s_long flags) throw()
+_s_long _threadctl_tu_static_t<_>::th_terminate(_threadctl_ctx_data* p, _s_long flags) __bmdx_noex
 {
   #ifdef __ANDROID__
     enum { sig_th_term = SIGUSR2 };
@@ -4508,35 +4514,35 @@ namespace bmdx
 
   struct _cref_t_exceptions
   {
-    struct exc_ref : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::ref"; } };
-    struct exc_ref_ts : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::ref_ts"; } };
-    struct exc_create0 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create0"; } };
-    struct exc_create1 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create1"; } };
-    struct exc_create2 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create2"; } };
-    struct exc_create3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create3"; } };
-    struct exc_create4 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create4"; } };
-    struct exc_create5 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create5"; } };
-    struct exc_create6 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create6"; } };
-    struct exc_create7 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create7"; } };
-    struct exc_create8 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::[cm_]create8"; } };
-    struct exc_irefcr0 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create0"; } };
-    struct exc_irefcr1 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create1"; } };
-    struct exc_irefcr2 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create2"; } };
-    struct exc_irefcr3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create3"; } };
-    struct exc_irefcr4 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create4"; } };
-    struct exc_irefcr5 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create5"; } };
-    struct exc_irefcr6 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create6"; } };
-    struct exc_irefcr7 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create7"; } };
-    struct exc_irefcr8 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref::[cm_]create8"; } };
-    struct exc_assign : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::assign"; } };
-    struct exc_copy : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::copy"; } };
-    struct exc_cm_assign : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::cm_assign"; } };
-    struct exc_cm_copy : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::cm_copy"; } };
-    struct exc_cc3 : std::exception { inline const char* what() const throw() { return "bmdx::cref_t(x,is_own,false)"; } };
-    struct exc_refcast_s_u : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref2::refcast_s_u"; } };
-    struct exc_refcast_d_u : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref2::refcast_d_u"; } };
-    struct exc_iref2_create_any : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref2::create_any"; } };
-    struct exc_iref2_assign : std::exception { inline const char* what() const throw() { return "bmdx::cref_t::iref2::assign"; } };
+    struct exc_ref : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::ref"; } };
+    struct exc_ref_ts : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::ref_ts"; } };
+    struct exc_create0 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create0"; } };
+    struct exc_create1 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create1"; } };
+    struct exc_create2 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create2"; } };
+    struct exc_create3 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create3"; } };
+    struct exc_create4 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create4"; } };
+    struct exc_create5 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create5"; } };
+    struct exc_create6 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create6"; } };
+    struct exc_create7 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create7"; } };
+    struct exc_create8 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::[cm_]create8"; } };
+    struct exc_irefcr0 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create0"; } };
+    struct exc_irefcr1 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create1"; } };
+    struct exc_irefcr2 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create2"; } };
+    struct exc_irefcr3 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create3"; } };
+    struct exc_irefcr4 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create4"; } };
+    struct exc_irefcr5 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create5"; } };
+    struct exc_irefcr6 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create6"; } };
+    struct exc_irefcr7 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create7"; } };
+    struct exc_irefcr8 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref::[cm_]create8"; } };
+    struct exc_assign : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::assign"; } };
+    struct exc_copy : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::copy"; } };
+    struct exc_cm_assign : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::cm_assign"; } };
+    struct exc_cm_copy : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::cm_copy"; } };
+    struct exc_cc3 : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t(x,is_own,false)"; } };
+    struct exc_refcast_s_u : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref2::refcast_s_u"; } };
+    struct exc_refcast_d_u : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref2::refcast_d_u"; } };
+    struct exc_iref2_create_any : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref2::create_any"; } };
+    struct exc_iref2_assign : std::exception { inline const char* what() const __bmdx_noex { return "bmdx::cref_t::iref2::assign"; } };
   };
 
   struct iref2_flags
@@ -4692,10 +4698,10 @@ namespace bmdx
     typedef void (*F_free)(void* p);
     typedef void (*F_des)(T* p);
     typedef void (*F_del)(T* p);
-    static void* sf_alloc(_s_ll nb) throw() { return _carray_tu_alloc_t<T>::_sf_calloc(nb); }
-    static void sf_free(void* p) throw() { return _carray_tu_alloc_t<T>::_sf_free(p); }
-    static void sf_destroy1(T* p) throw() { return _carray_tu_alloc_t<T>::_sf_destroy1(p); }
-    static void sf_delete1(T* p) throw() { return _carray_tu_alloc_t<T>::_sf_delete1(p); }
+    static void* sf_alloc(_s_ll nb) __bmdx_noex { return _carray_tu_alloc_t<T>::_sf_calloc(nb); }
+    static void sf_free(void* p) __bmdx_noex { return _carray_tu_alloc_t<T>::_sf_free(p); }
+    static void sf_destroy1(T* p) __bmdx_noex { return _carray_tu_alloc_t<T>::_sf_destroy1(p); }
+    static void sf_delete1(T* p) __bmdx_noex { return _carray_tu_alloc_t<T>::_sf_delete1(p); }
   };
 
 
@@ -4793,8 +4799,8 @@ namespace bmdx
       //  b) on has_ref() == false, generates an exception.
       // The reference, returned by ref(), may be unsafe at the time
       //  when cref_t object is overwritten by another thread.
-    const T& ref() const volatile throw(exc_ref)    { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
-    const T* ptr() const volatile throw()    { return const_cast<const T*>(_p); }
+    const T& ref() const volatile __bmdx_exs(exc_ref)    { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+    const T* ptr() const volatile __bmdx_noex    { return const_cast<const T*>(_p); }
 
 
 
@@ -4818,18 +4824,18 @@ namespace bmdx
       const cref_t& ref;
       T& xnc;
 
-      const T& operator()() const throw()    { return xnc; }
+      const T& operator()() const __bmdx_noex    { return xnc; }
 
-      safe_refnc(const cref_t& r) throw(exc_ref_ts)        : __lock(r), ref(r), xnc(_ref(r)) {}
+      safe_refnc(const cref_t& r) __bmdx_exs(exc_ref_ts)        : __lock(r), ref(r), xnc(_ref(r)) {}
 
         // Copying and assignment do not generate exceptions,
         //  because the reference remains valid and locked.
-      safe_refnc(const safe_refnc& x) throw()        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
-      void operator=(const safe_refnc& x) throw()    { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
+      safe_refnc(const safe_refnc& x) __bmdx_noex        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
+      void operator=(const safe_refnc& x) __bmdx_noex    { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
     private:
-      static T& _ref(const cref_t& r __bmdx_noarg) throw(exc_ref_ts)    { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
+      static T& _ref(const cref_t& r __bmdx_noarg) __bmdx_exs(exc_ref_ts)    { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
     };
-    safe_refnc ref_ts() const throw(exc_ref_ts)    { return *this; }
+    safe_refnc ref_ts() const __bmdx_exs(exc_ref_ts)    { return *this; }
 
 
 
@@ -4838,7 +4844,7 @@ namespace bmdx
       // NOTE Original meaning of cref_t is "reference to constant object".
       //   Treating constant as variable is an agreement and may be unsafe.
       //   Only the client is responsible for logically correct and synchronized modifications.
-    T* _pnonc_u() const volatile throw()    { return const_cast<T*>(_p); }
+    T* _pnonc_u() const volatile __bmdx_noex    { return const_cast<T*>(_p); }
     T& _rnonc() const volatile { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
 
 
@@ -4864,49 +4870,49 @@ namespace bmdx
       //    the last one during call.
       //    This can lead to unpredictable delays and cannot be used in time-critical routines, like drive callbacks.
       //    I.e. in cref_t, "--->" action is quite different from "->".
-    cref_t operator--(int) const throw()    { return *this; }
+    cref_t operator--(int) const __bmdx_noex    { return *this; }
 
 
 
       // false only if
       //  a) no-exception construction from const T& failed,
       //  b) after cref_t().
-    bool has_ref() const throw()    { return !!_p; }
-    operator bool() const throw()    { return !!_p; }
+    bool has_ref() const __bmdx_noex    { return !!_p; }
+    operator bool() const __bmdx_noex    { return !!_p; }
 
       // true if this object contains a strong reference, false - weak reference or empty.
-    bool is_own() const throw()    { return !!_ph; }
+    bool is_own() const __bmdx_noex    { return !!_ph; }
 
       // true if this object contains a strong reference in detached state (i.e. ref. counting continues, but object pointer is not deleted automatically, see _detach_u()).
-    bool is_detached() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_detached(); }
+    bool is_detached() const __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_detached(); }
 
       // true if cref_t contains a cross-module object, namely,
       //  a) cross-module strong reference (i.e. type 1), or
       //  b) multi-functional strong reference  (type 2).
       // "if (is_cm()) { ... }" is equivalent of "int type; flags(&type); if (type == 1 || type ==2) { .... }".
-    bool is_cm() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && (_ph->b_v1() || _ph->b_v2()); }
+    bool is_cm() const __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && (_ph->b_v1() || _ph->b_v2()); }
 
       // n_refs():
       //  0 - unknown (weak ref., is_own() == false).
       //  >=1 - number of strong references (on is_own() == true).
-    t_cnt n_refs() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph ? _ph->cnt & _m : 0; }
+    t_cnt n_refs() const __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph ? _ph->cnt & _m : 0; }
 
       // Return a pointer to the crit. sec. data object, that is used by this cref_t for locking (if locking is not disabled).
       //  The returned pointer is non-0.
-    _critsec_data0_t<LockSelector>* pcsd0() const throw()    { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
-    typename critsec_t<LockSelector>::csdata* pcsd() const throw()    { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
+    _critsec_data0_t<LockSelector>* pcsd0() const __bmdx_noex    { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
+    typename critsec_t<LockSelector>::csdata* pcsd() const __bmdx_noex    { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
 
       // Returns true is this object actually uses locking, false otherwise.
     bool b_cs() const { if (!t_lock::does_locking()) { return false; } t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph && _ph->b_v2()) { return !!_ps; } return true; }
 
       // Return aux. object pointer or 0 if this cref_t does not contain aux. object.
       //  Only multi-functional cref_t may contain aux. object. See also struct iref2.
-    void* paux() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() && (_ph->flags & iref2_flags::use_aux) ? _s_paux(_s_ph2(_ph)) : 0; }
+    void* paux() const __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() && (_ph->flags & iref2_flags::use_aux) ? _s_paux(_s_ph2(_ph)) : 0; }
 
       // Multi-functional reference only: return the main pointer to the referenced object, that had been initially assigned
       //    to the first cref_t that holds this object. The object is deleted by the last destroyed cref_t by calling handler with this pointer.
       //  For all other ref. types: returns 0.
-    void* pobj() const throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() ? (_s_ph2(_ph))->pobj : 0; }
+    void* pobj() const __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} return _ph && _ph->b_v2() ? (_s_ph2(_ph))->pobj : 0; }
 
       // Returns flags of the object, and optionally, reference type.
       //  *ptype -2: null reference. flags == 0.
@@ -4915,7 +4921,7 @@ namespace bmdx
       //  *ptype 1: cross-module strong reference, with ref. counting, no other functions. flags may contain disable_des (0x2), use_critsec (0x4).
       //  *ptype 2: multi-functional strong reference, with ref. counting. flags may contain anything from iref2_flags.
       //  (not expected) *ptype -3: corrupted object. flags == 0.
-    t_cnt flags(int* ptype = 0) const throw()
+    t_cnt flags(int* ptype = 0) const __bmdx_noex
     {
       t_lock __lock(*this); if (sizeof(__lock)) {}
       if (!_ph) { if (ptype) { *ptype = _p ? -1 : -2; } return 0; }
@@ -4950,11 +4956,11 @@ namespace bmdx
 
 
       // NOTE The following 6 functions do not throw exceptions.
-    cref_t() throw()
+    cref_t() __bmdx_noex
       : _ph(0), _p(0), _ps(typename critsec_t<LockSelector>::ff_mc().pdefcsd())
       {}
 
-    cref_t(const cref_t& x) throw()
+    cref_t(const cref_t& x) __bmdx_noex
       : _ph(0), _p(0), _ps(0)
       {
         t_lock __lock(x); _ps = x._ps; if (sizeof(__lock)) {}
@@ -4966,15 +4972,15 @@ namespace bmdx
         }
         _p = x._p;
       }
-    //cref_t(const volatile cref_t& x) throw() : _ph(0), _p(0), _ps(0) { new (this) cref_t((const cref_t&)x); }
+    //cref_t(const volatile cref_t& x) __bmdx_noex : _ph(0), _p(0), _ps(0) { new (this) cref_t((const cref_t&)x); }
 
-    ~cref_t() throw()    { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    ~cref_t() __bmdx_noex    { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
-    cref_t& operator=(const cref_t& x) throw()    { cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
+    cref_t& operator=(const cref_t& x) __bmdx_noex    { cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
 
       // NOTE Clearing does not change the critical section used for object locking, only ensures it to be non-0.
       //  Assign another empty cref_t instead of clear(), for guaranteed setting the default critical section.
-    void clear() throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    void clear() __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
       // Same as clear(), but does not delete the object if it's strongly referenced.
       //    The client becomes responsible for object lifetime.
@@ -4990,7 +4996,7 @@ namespace bmdx
       //    and ensure releasing the object correctly.
       //    For example, take into account that the object may be kept together with internal cref_t data (use_hst),
       //    in which case it's memory is freed automatically when the last reference is destroyed.
-    void _detach_u() throw()    { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
+    void _detach_u() __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
 
 
 
@@ -5561,10 +5567,10 @@ namespace bmdx
 
       void _init(t_cnt n0, _s_long flags_) { cnt = (n0 & _m) | _f2; flags = flags_; f_free = _a::_sf_free; f_handler = (void*)_a::_sf_delete1; }
 
-      bool b_v0() const throw() { return (cnt & _f23) == 0; } // *this is just a t_cnt
-      bool b_v1() const throw() { return (cnt & _f23) == _f2; } // *this is a _cref_handle
-      bool b_v2() const throw() { return (cnt & _f23) == _f3; } // *this is variable size _cref_handle2
-      bool b_detached() const throw() { return !!(cnt & _f1); }
+      bool b_v0() const __bmdx_noex { return (cnt & _f23) == 0; } // *this is just a t_cnt
+      bool b_v1() const __bmdx_noex { return (cnt & _f23) == _f2; } // *this is a _cref_handle
+      bool b_v2() const __bmdx_noex { return (cnt & _f23) == _f3; } // *this is variable size _cref_handle2
+      bool b_detached() const __bmdx_noex { return !!(cnt & _f1); }
     };
     struct _cref_handle2
     {
@@ -5572,15 +5578,15 @@ namespace bmdx
       _critsec_data0_t<LockSelector>* pcsd;
       void* pobj;
     };
-    static _cref_handle2* _s_ph2(_cref_handle* ph) throw() { return (_cref_handle2*)((char*)ph - offsetof(_cref_handle2, h)); }
+    static _cref_handle2* _s_ph2(_cref_handle* ph) __bmdx_noex { return (_cref_handle2*)((char*)ph - offsetof(_cref_handle2, h)); }
 
     static const int _nbalign = 8; // must be power of two and >= sizeof(double)
     static const int _nbd = sizeof(double);
     static _s_ll _s_roundup_size(_s_ll nb) { return (nb + (_nbalign - 1)) & ~_s_ll(_nbalign - 1); }
     static void* _s_next_aligned(void* p, _s_ll nbsize) { return __bmdx_null_pchar + _s_roundup_size(_s_ll((char*)p - __bmdx_null_pchar) + nbsize); }
-    static void* _s_paux(_cref_handle2* ph) throw() { return _s_next_aligned(ph, sizeof(_cref_handle2)); }
-    static void* _s_pobj(_cref_handle2* ph, bool b_aux, _s_ll nb_aux) throw() { return b_aux ? _s_next_aligned(_s_paux(ph), nb_aux) : _s_paux(ph); }
-    static _s_ll _s_nb_h_iref2(bool b_aux, bool b_hst, _s_ll nb_aux, _s_ll nb_hst) throw()
+    static void* _s_paux(_cref_handle2* ph) __bmdx_noex { return _s_next_aligned(ph, sizeof(_cref_handle2)); }
+    static void* _s_pobj(_cref_handle2* ph, bool b_aux, _s_ll nb_aux) __bmdx_noex { return b_aux ? _s_next_aligned(_s_paux(ph), nb_aux) : _s_paux(ph); }
+    static _s_ll _s_nb_h_iref2(bool b_aux, bool b_hst, _s_ll nb_aux, _s_ll nb_hst) __bmdx_noex
     {
       if (b_aux || b_hst)
       {
@@ -5592,7 +5598,7 @@ namespace bmdx
       return _s_ll(sizeof(_cref_handle2));
     }
 
-    void _reset(__bmdx_noarg1) throw()
+    void _reset(__bmdx_noarg1) __bmdx_noex
     {
       if (_ph)
       {
@@ -5605,8 +5611,8 @@ namespace bmdx
       if (!_ps) { _ps = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
       _p = 0;
     }
-    static t_cnt* _new_pcnt(t_cnt n0 __bmdx_noarg) throw() { t_cnt* p = (t_cnt*)_a::_sf_calloc(sizeof(t_cnt)); if (p) { *p = n0; }  return p; }
-    static _cref_handle* _new_ph(t_cnt n0, _s_long flags __bmdx_noarg) throw()
+    static t_cnt* _new_pcnt(t_cnt n0 __bmdx_noarg) __bmdx_noex { t_cnt* p = (t_cnt*)_a::_sf_calloc(sizeof(t_cnt)); if (p) { *p = n0; }  return p; }
+    static _cref_handle* _new_ph(t_cnt n0, _s_long flags __bmdx_noarg) __bmdx_noex
     {
       _cref_handle* ph = (_cref_handle*)_a::_sf_calloc(sizeof(_cref_handle));
       if (ph) { new (ph) _cref_handle(); ph->_init(n0, (flags & 0x2) | 0x4); } // use_critsec is forced in this type of handler, the flag only indicates that it's enabled
@@ -5620,7 +5626,7 @@ namespace bmdx
       const typename iref2_args_t<Aux>::i_new& args_aux,
       _s_ll nb_aux // if < 0, use sizeof(Aux)
       __bmdx_noarg
-    ) throw()
+    ) __bmdx_noex
     {
       struct f : iref2_flags {};
       const bool b_aux = !!(flags & f::use_aux);
@@ -5638,7 +5644,7 @@ namespace bmdx
       if (b_aux) { try { peh(f::ev_aux_con, ph->h.flags, 0, 0, pcsd, 0, 0,  _s_paux(ph)); } catch (...) {} }
       return ph;
     }
-    static void _del_onrc0(_cref_handle* ph, T* p __bmdx_noarg) throw()
+    static void _del_onrc0(_cref_handle* ph, T* p __bmdx_noarg) __bmdx_noex
     {
       if (ph->b_detached() || !!(ph->cnt & _m)) { return; }
       if (ph->b_v0()) { try { delete p; } catch (...) {} return; }
@@ -5658,8 +5664,8 @@ namespace bmdx
       }
       ((F_des)0)(0);
     }
-    static void _del_pcnt(t_cnt* pcnt __bmdx_noarg) throw() { if (!pcnt) { return; } _a::_sf_free(pcnt); }
-    static void _del_ph(_cref_handle* ph __bmdx_noarg) throw()
+    static void _del_pcnt(t_cnt* pcnt __bmdx_noarg) __bmdx_noex { if (!pcnt) { return; } _a::_sf_free(pcnt); }
+    static void _del_ph(_cref_handle* ph __bmdx_noarg) __bmdx_noex
     {
       struct f : iref2_flags {};
       if (!ph) { return; }
@@ -5699,18 +5705,18 @@ namespace bmdx
     {
       cref_t<icb> rx;
       bool b_ok; // true mans successful construction
-      cbarg(__bmdx_noarg1) throw() : b_ok(true) {}
-      cbarg(const cbarg& x_ __bmdx_noarg) throw() : rx(x_.rx), b_ok(x_.b_ok) {}
-      template<class Cb> cbarg(const Cb& x_ __bmdx_noarg) throw() : b_ok(false) { try { icb* pbase = new Cb(x_); if (!rx.cm_assign(*pbase, 0, 0, true)) { delete pbase; } } catch (...) {} b_ok = !!rx; }
+      cbarg(__bmdx_noarg1) __bmdx_noex : b_ok(true) {}
+      cbarg(const cbarg& x_ __bmdx_noarg) __bmdx_noex : rx(x_.rx), b_ok(x_.b_ok) {}
+      template<class Cb> cbarg(const Cb& x_ __bmdx_noarg) __bmdx_noex : b_ok(false) { try { icb* pbase = new Cb(x_); if (!rx.cm_assign(*pbase, 0, 0, true)) { delete pbase; } } catch (...) {} b_ok = !!rx; }
     };
 
 
-    multithread(__bmdx_noarg1) : _ps(0) {}
+    multithread(__bmdx_noarg1) : _ps(0) { _pdestr = _destr; }
 
       // NOTE On destruction, the multithread object automatically sets b_stop() flag to all its running threads
       //  (same as signal_stop()) and then detaches from them.
       //  If this has is not desired, the client should call detach() before multithread object is destroyed.
-    ~multithread() throw(__bmdx_noargt1) { _clear(); }
+    ~multithread() { _pdestr(this); }
 
       // Start multithread.
       //  nth: 1..5000.
@@ -5724,7 +5730,7 @@ namespace bmdx
       //    b) if cb is not specified or empty, c.rcb() is used as callback. E.g. it may have been set with ictx::set_cb.
     template<class C>
     multithread(_s_long nth, _s_long mode, const C& c, cbarg cb = cbarg(__bmdx_noargv1), _s_long priority = 4 __bmdx_noarg) : _ps(0)
-      { this->start(nth, mode, c, cb, priority); }
+      { _pdestr = _destr; this->start(nth, mode, c, cb, priority); }
 
       // See constructor for args.
       // Returns:
@@ -5781,7 +5787,7 @@ namespace bmdx
       // True if at least one thread runs.
       //  After successful start in mode 2 or 3,
       //  the client may wait for the value to become false as signal for full job completion.
-    operator bool() const throw(__bmdx_noargt1) { return n_run() > 0; }
+    operator bool() const __bmdx_exs(__bmdx_noargt1) { return n_run() > 0; }
 
       // The number of currently running threads [0..nth()].
       //  After successful start in mode 2 or 3,
@@ -5837,25 +5843,25 @@ namespace bmdx
       virtual void mt_proc() = 0;
 
 
-      ictx(__bmdx_noarg1) throw() : _pm(0), _cb(), _nth(1), _ith(0), _pr(4), _rb_run(), _rth() {}
+      ictx(__bmdx_noarg1) __bmdx_noex : _pm(0), _cb(), _nth(1), _ith(0), _pr(4), _rb_run(), _rth() {}
 
         // Parent multithread object.
         //  This pointer is valid only if the client did not detach from the running threads.
-      const multithread* pm(__bmdx_noarg1) const throw() { return _pm; }
+      const multithread* pm(__bmdx_noarg1) const __bmdx_noex { return _pm; }
 
         // Total number of running threads.
-      _s_long nth(__bmdx_noarg1) const throw() { return _nth; }
+      _s_long nth(__bmdx_noarg1) const __bmdx_noex { return _nth; }
 
         // The current thread number [0..nth()).
-      _s_long ith(__bmdx_noarg1) const throw() { return _ith; }
+      _s_long ith(__bmdx_noarg1) const __bmdx_noex { return _ith; }
 
         // Controls for all the running threads.
         //  NOTE The array may be empty if the client called mt_proc directly (strong call without multithread).
-      cref_t<cpparray_t<threadctl> > rth(__bmdx_noarg1) const throw() { return _rth; }
+      cref_t<cpparray_t<threadctl> > rth(__bmdx_noarg1) const __bmdx_noex { return _rth; }
 
         // User callback, may be set or replaced at any time (before/during thread run or on direct mt_proc call).
-      cref_t<icb> rcb(__bmdx_noarg1) const throw() { return _cb; }
-      void set_cb(const cref_t<icb>& x __bmdx_noarg) throw() { _cb = x; }
+      cref_t<icb> rcb(__bmdx_noarg1) const __bmdx_noex { return _cb; }
+      void set_cb(const cref_t<icb>& x __bmdx_noarg) __bmdx_noex { _cb = x; }
 
         // Helper function. Divides n into nth() ranges.
         //  Calculates and sets i0 and i2 to half-open range [i0..i2),
@@ -5917,6 +5923,7 @@ namespace bmdx
     };
 
   private:
+    void (*_pdestr)(multithread* p); static void _destr(multithread* p) { p->_clear(); }
     struct _starter_base { virtual ictx* pc() = 0; virtual _s_long pr() const = 0; virtual ictx* start(threadctl& tc, _s_long ith) = 0; virtual ~_starter_base() {} };
     template<class C> struct _starter_t : _starter_base
     {
@@ -5965,12 +5972,12 @@ namespace bmdx
 
 
       // Returns true if the specified path points to the existing file, false in all other cases.
-    static bool is_ex_file(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
-    static inline bool is_ex_file(const std::string& path __bmdx_noarg) throw()    { return is_ex_file(path.c_str()); }
+    static bool is_ex_file(const char* ppath __bmdx_noarg) __bmdx_noex    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
+    static inline bool is_ex_file(const std::string& path __bmdx_noarg) __bmdx_noex    { return is_ex_file(path.c_str()); }
 
       // Returns true if the specified path points to the existing directory, false in all other cases.
-    static bool is_ex_dir(const char* ppath __bmdx_noarg) throw()    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
-    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) throw()    { return is_ex_dir(path.c_str()); }
+    static bool is_ex_dir(const char* ppath __bmdx_noarg) __bmdx_noex    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
+    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) __bmdx_noex    { return is_ex_dir(path.c_str()); }
 
       // Creates the specified directory (NOTE POSIX: with rwx access),
       //    or does nothing if the directory already exists.
@@ -5987,18 +5994,18 @@ namespace bmdx
     //  open, close, seek, seek_end, tell, read, write, flush.
     //  static: is_ex_file, is_ex_dir, load_bytes, save_bytes
 
-    file_io() throw() : _desc(0), _nwr(0), _mode(0), _res(0) { __pad4 = 0; _last_op_wr = 0; }
-    ~file_io() throw() { if (is_open()) { close(); } }
+    file_io() __bmdx_noex : _desc(0), _nwr(0), _mode(0), _res(0) { __pad4 = 0; _last_op_wr = 0; }
+    ~file_io() __bmdx_noex { if (is_open()) { close(); } }
 
       // NOTE Copy constructor does not actually copy.
       //    Defined for compatibility only.
-    file_io(const file_io&) throw() { new (this) file_io(); }
+    file_io(const file_io&) __bmdx_noex { new (this) file_io(); }
 
 
-    inline bool is_open() const throw() { return !!_desc; }
+    inline bool is_open() const __bmdx_noex { return !!_desc; }
       // mode 0: file is not open, mode 1: file is open read-only, mode 2: file is open read-write.
-    inline _s_long mode() const throw() { return _desc ? _mode : 0; }
-    inline _s_long result() const throw() { return _res; }
+    inline _s_long mode() const __bmdx_noex { return _desc ? _mode : 0; }
+    inline _s_long result() const __bmdx_noex { return _res; }
 
       // Platform-dependent file handle.
     inline t_handle _handle() const { return _desc; }
@@ -6011,7 +6018,7 @@ namespace bmdx
       //    -3 file does not exist, cannot open for reading.
       //    -4 file does not exist, file creation (for r/w) failed.
       //    -5 pfilename is null.
-    inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false) throw()
+    inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false) __bmdx_noex
     {
       if (!pfilename || *pfilename == '\0') { _res = -5; }
       if (is_open()) { close(); }
@@ -6030,7 +6037,7 @@ namespace bmdx
       //    1 - success,
       //    0 - the file was not open,
       //    -1 - an error, the file is regarded closed.
-    inline void close() throw()
+    inline void close() __bmdx_noex
     {
       if (!is_open()) { _res = 0; return; }
       _res = fclose(_desc) == 0 ? 1 : -1;
@@ -6041,7 +6048,7 @@ namespace bmdx
       //    1 - success,
       //    -1 - the file is not open,
       //    -2 - seek error.
-    inline void seek(_s_ll pos) throw()
+    inline void seek(_s_ll pos) __bmdx_noex
     {
       if (!is_open()) { _res = -1; return; }
       if (pos < 0) { _res = -2; return; }
@@ -6053,7 +6060,7 @@ namespace bmdx
       //    1 - success,
       //    -1 - the file is not open,
       //    -2 - seek error.
-    inline void seek_end() throw()
+    inline void seek_end() __bmdx_noex
     {
       if (!is_open()) { _res = -1; return; }
       if (_last_op_wr && _nwr) { fflush(_desc); _nwr = 0; }
@@ -6071,7 +6078,7 @@ namespace bmdx
       //    1 - success,
       //    -1 - the file is not open,
       //    -2 - error.
-    inline _s_ll tell() const throw()
+    inline _s_ll tell() const __bmdx_noex
     {
       if (!is_open()) { _res = -1; return -1; }
       _s_ll pos = _tell_u();
@@ -6085,7 +6092,7 @@ namespace bmdx
       //    -1 - the file is not open,
       //    -2 - read error, pos. is not changed,
       //    -3 - read error, pos. is changed.
-    inline size_t read(void* dest, size_t size) throw()
+    inline size_t read(void* dest, size_t size) __bmdx_noex
     {
       if (!is_open()) { _res = -1; return 0; }
       if (_last_op_wr)
@@ -6108,7 +6115,7 @@ namespace bmdx
       //    -1 - the file is not open,
       //    -2 - write error, file/pos is not changed,
       //    -3 - write error, file/pos is changed.
-    inline size_t write(const void* src, size_t size) throw()
+    inline size_t write(const void* src, size_t size) __bmdx_noex
     {
       if (!is_open()) { _res = -1; return 0; }
       if (!_last_op_wr)
@@ -6131,7 +6138,7 @@ namespace bmdx
       //    -1 - the file is not open,
       //    -2 - operation error.
       // NOTE Due to system caching, no guarantee that flush() writes to disk immediately.
-    inline void flush() throw()
+    inline void flush() __bmdx_noex
     {
       if (!is_open()) { _res = -1; return; }
       _res = fflush(_desc) == 0 ? 1 : -2;
@@ -6153,7 +6160,7 @@ namespace bmdx
     union { mutable char _last_op_wr; _s_ll __pad4; };
     static const size_t _nwrchunk = 2048;
 
-    inline _s_ll _tell_u() const throw()
+    inline _s_ll _tell_u() const __bmdx_noex
     {
       t_offset pos;
       #if defined(_MSC_VER) || defined(__BORLANDC__)
@@ -6166,7 +6173,7 @@ namespace bmdx
       if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if (pos == t_offset(m)) { return -1; } return _s_ll(pos) & m; }
       return _s_ll(pos);
     }
-    inline int _seek_u(_s_ll pos) throw()
+    inline int _seek_u(_s_ll pos) __bmdx_noex
     {
       if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if ((pos & m) != pos) { return -2; } }
       int res;
@@ -6192,16 +6199,16 @@ namespace bmdx
           // 0 - file does not exist.
           // -1 - memory alloc. error, or wrong arguments.
           // -2 - file i/o error. NOTE On i/o error, dest may be left modified.
-      static inline int load_bytes(const std::string& fnp, std::string& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_str(), &dest); }
-      static inline int load_bytes(const char* fnp, std::string& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_str(), &dest); }
+      static inline int load_bytes(const std::string& fnp, std::string& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_str(), &dest); }
+      static inline int load_bytes(const char* fnp, std::string& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_str(), &dest); }
 
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<signed char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<signed char>& dest __bmdx_noarg) throw() { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noarg) throw();
+      static inline int load_bytes(const std::string& fnp, _carray_base_t<char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, _carray_base_t<char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_ca(), &dest); }
+      static inline int load_bytes(const std::string& fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_ca(), &dest); }
+      static inline int load_bytes(const std::string& fnp, _carray_base_t<signed char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, _carray_base_t<signed char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_ca(), &dest); }
+      static inline int load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noarg) __bmdx_noex;
 
           // Saves bytes from src to the given file.
           //    b_append == false truncates the file before writing, if it exists.
@@ -6210,26 +6217,26 @@ namespace bmdx
           // 0 - failed to create file (or open the existing file for writing).
           // -1 - data size too large, or memory alloc. error, or wrong arguments.
           // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-      static inline int save_bytes(const char* fnp, const std::string& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, src.c_str(), src.length(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const std::string& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), src.c_str(), _s_ll(src.length()), b_append); }
+      static inline int save_bytes(const char* fnp, const std::string& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, src.c_str(), src.length(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const std::string& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), src.c_str(), _s_ll(src.length()), b_append); }
 
-      static inline int save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, pdata, n0, b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<signed char>& src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<signed char>&  src, bool b_append __bmdx_noarg) throw() { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, pdata, n0, b_append); }
+      static inline int save_bytes(const char* fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const char* fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const char* fnp, const arrayref_t<signed char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
+      static inline int save_bytes(const std::string& fnp, const arrayref_t<signed char>&  src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
 
 
 
     private:
-      struct _stra_base { typedef std::string::size_type _t_sz; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() = 0; virtual char* _pd(void* ps __bmdx_noarg) const throw() = 0; };
-      struct _stra_str : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { if (n0 < 0) { n0 = 0; } typedef std::string T; _t_sz n = _t_sz(n0); if (_s_ll(n) != n0) { return false; } try { if (n) { ((T*)ps)->resize(n); } else { ((T*)ps)->clear(); } return true; } catch (...) { return false; } } virtual char* _pd(void* ps __bmdx_noarg) const throw() { typedef std::string T; return &(*(T*)ps)[0]; } };
-      struct _stra_ca : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { if (n0 < 0) { n0 = 0; } typedef _carray_base_t<char> T; return ((T*)ps)->realloc(n0, 0, 0, 0); } virtual char* _pd(void* ps __bmdx_noarg) const throw() { typedef _carray_base_t<char> T; return ((T*)ps)->pd(); } };
+      struct _stra_base { typedef std::string::size_type _t_sz; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex = 0; virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex = 0; };
+      struct _stra_str : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { if (n0 < 0) { n0 = 0; } typedef std::string T; _t_sz n = _t_sz(n0); if (_s_ll(n) != n0) { return false; } try { if (n) { ((T*)ps)->resize(n); } else { ((T*)ps)->clear(); } return true; } catch (...) { return false; } } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { typedef std::string T; return &(*(T*)ps)[0]; } };
+      struct _stra_ca : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { if (n0 < 0) { n0 = 0; } typedef _carray_base_t<char> T; return ((T*)ps)->realloc(n0, 0, 0, 0); } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { typedef _carray_base_t<char> T; return ((T*)ps)->pd(); } };
       struct _stra_rba;
 
-      static int _load_bytes(const char* fnp, const _stra_base& a, void* ps __bmdx_noarg) throw()
+      static int _load_bytes(const char* fnp, const _stra_base& a, void* ps __bmdx_noarg) __bmdx_noex
       {
         if (!fnp) { return -1; }
         file_io f; f.open(fnp, false); if (!f.is_open()) { return f.result() == -3 ? 0 : -2; }
@@ -6242,7 +6249,7 @@ namespace bmdx
         f.read(a._pd(ps), size_t(n0)); if (f.result() < 1) { a._resize(ps, -1); return -2; }
         return 1;
       }
-      static int _save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) throw()
+      static int _save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) __bmdx_noex
       {
         if (!(fnp && n0 >= 0 && !(n0 && !pdata))) { return -1; }
         size_t n = size_t(n0); if (_s_ll(n) != n0) { return -1; }
@@ -6508,7 +6515,7 @@ using namespace bmdx_str::words;
       //    -3 (only on t_retry_mcs < 0)  - name not found.
       //    -4 - search in progress, file descriptor is still unknown. On t_retry_mcs == 0, this means that currently no fd exposed by any process.
       //    -5 - file descriptor exists, but too large delay during transfer occurred. The client must assume that the descriptor exists and call fd_search again later.
-    int fd_search(const t_name& name_orig, _s_long t_retry_mcs, _s_long n_role_expose) throw()    { return ((p_fd_search)pff[0])(*this, name_orig, t_retry_mcs, n_role_expose); }
+    int fd_search(const t_name& name_orig, _s_long t_retry_mcs, _s_long n_role_expose) __bmdx_noex    { return ((p_fd_search)pff[0])(*this, name_orig, t_retry_mcs, n_role_expose); }
 
       // Try to share a duplicate of the given *io_fd with other processes under the given name.
       //  fd:
@@ -6525,16 +6532,16 @@ using namespace bmdx_str::words;
       //  -1 - wrong fd (<= -3).
       //  -2 - failure (multiple cases).
       //  -3 (only on fd == -2) - failed to enable exposing - name not found.
-    int fd_expose(const t_name& name_orig, int fd, _s_long n_role, bool b_overwrite, bool b_expose) throw()    { return ((p_fd_expose)pff[1])(*this, name_orig, fd, n_role, b_overwrite, b_expose); }
+    int fd_expose(const t_name& name_orig, int fd, _s_long n_role, bool b_overwrite, bool b_expose) __bmdx_noex    { return ((p_fd_expose)pff[1])(*this, name_orig, fd, n_role, b_overwrite, b_expose); }
 
       // Remove the name and all associated tasks, close file descriptor if it exists.
       //  1 - removed.
       //  0 - object with the given name does not exist.
       //  -2 - failure.
-    int fd_remove(const t_name& name_orig) throw()    { return ((p_fd_remove)pff[2])(*this, name_orig); }
+    int fd_remove(const t_name& name_orig) __bmdx_noex    { return ((p_fd_remove)pff[2])(*this, name_orig); }
 
       // Remove all names and search tasks, stop (join with) service thread.
-    void reset(bool b_wait) throw()    { ((p_reset)pff[3])(*this, b_wait); }
+    void reset(bool b_wait) __bmdx_noex    { ((p_reset)pff[3])(*this, b_wait); }
 
     _fd_sharing() { pff[0] = (void*)&_fd_search; pff[1] = (void*)&_fd_expose; pff[2] = (void*)&_fd_remove; pff[3] = (void*)&_reset; }
 private:
@@ -6747,25 +6754,25 @@ namespace _api // public API, merged into namespace bmdx_shm
       //  Queue data array starts inside rfifo_nbl11 object (offset == +24).
       //  Fixed area for data, included into rfifo_nbl11 object, is n0 == 8 bytes.
       // If n_ > n0, additional place for data is taken adjacent to the end of rfifo_nbl11 object.
-    void init_ref(_s_ll n_, _s_ll ipush_ = 0, _s_ll ipop_ = 0) throw() { if (sizeof(void*) < 8) { n_ = bmdx_minmax::myllmin(n_, 1ll << 31); } _n = n_ < 1 ? 1 : n_; _ipush = ipush_; _ipop = ipop_; }
+    void init_ref(_s_ll n_, _s_ll ipush_ = 0, _s_ll ipop_ = 0) __bmdx_noex { if (sizeof(void*) < 8) { n_ = bmdx_minmax::myllmin(n_, 1ll << 31); } _n = n_ < 1 ? 1 : n_; _ipush = ipush_; _ipop = ipop_; }
 
       // Data buffer size.
-    _s_ll n() const throw() { return _n; }
+    _s_ll n() const __bmdx_noex { return _n; }
 
 
 
     // Supplier side.
 
       // The current push position, and the number of bytes (volatile) that may be pushed now.
-    _s_ll ipush() const throw() { return _ipush; }
-    _s_ll nfree() const throw() { return _n - navl(); }
-    void _sndr_set_ipush(_s_ll ipush) throw() { _ipush = ipush; } // for "manual" updating push position if needed
+    _s_ll ipush() const __bmdx_noex { return _ipush; }
+    _s_ll nfree() const __bmdx_noex { return _n - navl(); }
+    void _sndr_set_ipush(_s_ll ipush) __bmdx_noex { _ipush = ipush; } // for "manual" updating push position if needed
 
       // If nmax > 0, pushes min(nmax, npush()) bytes from p into the queue.
       // Returns the number of bytes actually pushed (>=0).
       // If the buffer is valid (indexes are not corrupted), push() is faultless.
       // Pushing is transactional: ipush() is increased only once, at the end of successful operation.
-    _s_ll push(const char* p, _s_ll nmax) throw()
+    _s_ll push(const char* p, _s_ll nmax) __bmdx_noex
     {
       if (!p) { return 0; }
       if (nmax <= 0) { return 0; }
@@ -6787,7 +6794,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       // Same as push(), only pushes byte b up to nmax times.
       // If the buffer is valid (indexes are not corrupted), push_bytes() is faultless.
       // Pushing is transactional: ipush() is increased only once, at the end of successful operation.
-    _s_ll push_bytes(char b, _s_ll nmax) throw()
+    _s_ll push_bytes(char b, _s_ll nmax) __bmdx_noex
     {
       if (nmax <= 0) { return 0; }
       _s_ll i2 = _ipush, i1 = _ipop;
@@ -6808,22 +6815,22 @@ namespace _api // public API, merged into namespace bmdx_shm
     // Receiver side.
 
       // The current pop position, and the number of bytes (volatile) that may be popped now.
-    _s_ll ipop() const throw() { return _ipop; }
-    _s_ll navl() const throw() { return _ipush - _ipop; }
-    void _rcv_set_ipop(_s_ll ipop) throw() { _ipop = ipop; } // for skipping data if needed
+    _s_ll ipop() const __bmdx_noex { return _ipop; }
+    _s_ll navl() const __bmdx_noex { return _ipush - _ipop; }
+    void _rcv_set_ipop(_s_ll ipop) __bmdx_noex { _ipop = ipop; } // for skipping data if needed
 
       // How many bytes, which may be popped, are located contiguously. [0..npop()].
-    _s_ll navl_contig() const throw() { _s_ll i2 = _ipush, i1 = _ipop; return bmdx_minmax::myllmin(i2 - i1, _n - i1 % _n); }
+    _s_ll navl_contig() const __bmdx_noex { _s_ll i2 = _ipush, i1 = _ipop; return bmdx_minmax::myllmin(i2 - i1, _n - i1 % _n); }
 
       // Pointer to the next byte that would be popped.
-    const char* peek1() const throw() { return &d[0] + _ipop % _n; }
+    const char* peek1() const __bmdx_noex { return &d[0] + _ipop % _n; }
 
       // If nmax > 0, pops min(nmax, npop()) bytes from the queue into pdest.
       // If b_do_pop == false, ipop() is not increased, so the client just gets a copy of buffer data.
       // pchs: signed 32-bit checksum accumulator (each char unsigned value is added to *pchs).
       // Returns the number of bytes actually popped (>=0).
       // NOTE popping is transactional (ipop() is increased only once, at the end of successful operation).
-    _s_ll pop(char* pdest, _s_ll nmax, bool b_do_pop = true, _s_long* pchs = 0) throw()
+    _s_ll pop(char* pdest, _s_ll nmax, bool b_do_pop = true, _s_long* pchs = 0) __bmdx_noex
     {
       if (!pdest) { return 0; }
       if (nmax <= 0) { return 0; }
@@ -6846,7 +6853,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       // If nmax > 0, skip min(nmax, npop()) bytes.
       // Returns the number of bytes actually skipped (>=0).
       // NOTE discarding is transactional (ipop() is increased only once, at the end of successful operation).
-    _s_ll discard(_s_ll nmax) throw()
+    _s_ll discard(_s_ll nmax) __bmdx_noex
     {
       if (nmax <= 0) { return 0; }
       _s_ll i2 = _ipush, i1 = _ipop;
@@ -6893,45 +6900,46 @@ namespace _api // public API, merged into namespace bmdx_shm
       // critsec_gn(name_): copies object name with possible formatting, suitable for system,
       //  and does nothing more.
       //  See also name().
-    critsec_gn(const char* name_, f_shm_name_prefix prefix_cs = &f_prefix_critsec_gn __bmdx_noarg) throw()
-      { __pad1 = 0; _b_locked = false; _setname(name_, prefix_cs ? prefix_cs() : f_prefix_critsec_gn()); _init0(); }
+    critsec_gn(const char* name_, f_shm_name_prefix prefix_cs = &f_prefix_critsec_gn __bmdx_noarg) __bmdx_noex
+      { _pdestr = _destr; __pad1 = 0; _b_locked = false; _setname(name_, prefix_cs ? prefix_cs() : f_prefix_critsec_gn()); _init0(); }
 
       // Factual name, used for creating the global object in the system.
       //  1. name() is different from name_ arg. of critsec_gn constructor.
       //  2. name() usually includes system-dependent prefix and maybe few additional characters.
       //  3. name().n() > 0, and may be limited as system requires (e.g. MAX_PATH).
       //  4. name() may contain null characters.
-    const t_name& name() const throw() { return _name; }
+    const t_name& name() const __bmdx_noex { return _name; }
 
       // true: the named object already exists, is opened and is locked.
       // false: in any other case.
-    bool b_opened(__bmdx_noarg1) const throw() { return _b_handle(); }
+    bool b_opened(__bmdx_noarg1) const __bmdx_noex { return _b_handle(); }
 
       // true: the named object already exists, is opened and is locked.
       // false: in any other case.
-    bool b_locked(__bmdx_noarg1) const throw() { return _b_locked; }
+    bool b_locked(__bmdx_noarg1) const __bmdx_noex { return _b_locked; }
 
       // 1. If the named object already exists, return true.
       // 2. Otherwise, open or create the named object. Return true (success) or false (failure).
-    bool cr_op(__bmdx_noarg1) throw() { _init1(); return b_opened(); }
+    bool cr_op(__bmdx_noarg1) __bmdx_noex { _init1(); return b_opened(); }
 
       // 1. If the named object already exists and is locked, return true.
       // 2. Otherwise, open or create the named object if this is not done yet. Return false if failed.
       // 3. Lock the named object. Return true (success) or false (failure).
-    bool lock(__bmdx_noarg1) throw() { _lock(); return _b_locked; }
+    bool lock(__bmdx_noarg1) __bmdx_noex { _lock(); return _b_locked; }
 
       // Unlock the named object (but do not release it).
-    void unlock(__bmdx_noarg1) throw() { _unlock(); }
+    void unlock(__bmdx_noarg1) __bmdx_noex { _unlock(); }
 
       // Unlock and release the named object.
       //  The next call to lock() will re-open the object + lock it.
-    void close(__bmdx_noarg1) throw() { _reset(); }
+    void close(__bmdx_noarg1) __bmdx_noex { _reset(); }
 
       // The destructor automatically unlocks and releases the named object.
-    ~critsec_gn() throw(__bmdx_noargt1) { _reset(); }
+    ~critsec_gn() { _pdestr(this); }
 
   private:
     critsec_gn(const critsec_gn&); void operator=(const critsec_gn&);
+    void (*_pdestr)(critsec_gn* p); static void _destr(critsec_gn* p) { p->_reset(); }
     t_name _name;
     union { bool _b_locked; _s_long __pad1; };
 
@@ -7099,7 +7107,7 @@ namespace _api // public API, merged into namespace bmdx_shm
   };
 
 
-  struct _shmobj2s_t_exceptions { struct exc_shmobj2s : std::exception { const char* what() const throw() { return "exc_shmobj2s::operator->: p==0"; } }; };
+  struct _shmobj2s_t_exceptions { struct exc_shmobj2s : std::exception { const char* what() const __bmdx_noex { return "exc_shmobj2s::operator->: p==0"; } }; };
 
 
     // Wrapper for an object in shared memory, with two-sided access (2 separate locks).
@@ -7114,7 +7122,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //   or created and successfully initialized.
       // Otherwise 0.
     T* p() const { return _p; }
-    T* operator->() const throw (exc_shmobj2s __bmdx_noargt)    { if (!_p) { throw exc_shmobj2s(); } return _p; }
+    T* operator->() const __bmdx_exs(exc_shmobj2s)    { if (!_p) { throw exc_shmobj2s(); } return _p; }
 
 
       // (Constructor-defined parameter.)
@@ -7229,7 +7237,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    (optional) while !(f_constructed() == 1 || b_bad()): sleep
       //    (optional) check !b_bad();
       //    use p or operator->
-    shmobj2s_t(const char* name, bool b_side1, _s_ll nb = sizeof(T), const hints& hints_ = hints() __bmdx_noarg) throw()    { _p = 0; _b_side1 = b_side1; _hh = hints_; _hh.htype = hints_.htype != 0 ? hints_.htype : -1; _name = hints_.prefix_m ? hints_.prefix_m() : f_prefix_shmobj2s(); _name += name; _ctor_nbt = bmdx_minmax::myllmax(nb, 0); _rsems.cm_create2(0, 0, 1, _name.c_str(), hints_.prefix_cs); _shm_init0(); }
+    shmobj2s_t(const char* name, bool b_side1, _s_ll nb = sizeof(T), const hints& hints_ = hints() __bmdx_noarg) __bmdx_noex    { _pdestr = _destr; _p = 0; _b_side1 = b_side1; _hh = hints_; _hh.htype = hints_.htype != 0 ? hints_.htype : -1; _name = hints_.prefix_m ? hints_.prefix_m() : f_prefix_shmobj2s(); _name += name; _ctor_nbt = bmdx_minmax::myllmax(nb, 0); _rsems.cm_create2(0, 0, 1, _name.c_str(), hints_.prefix_cs); _shm_init0(); }
 
 
       // Open/create/initialize/lock the shared memory in role as specified by b_side1 on shmobj2s_t construction.
@@ -7284,25 +7292,25 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    true: shared memory is open and this->p now points to valid object (constructed or already existed).
       //    false: otherwise.
       //    exception: only if no_exc == false, and T() generated an exception.
-    bool obj_create0(bool no_exc) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1> bool obj_create1(bool no_exc, const A1& x1) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2> bool obj_create2(bool no_exc, const A1& x1, const A2& x2) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3> bool obj_create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4> bool obj_create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5> bool obj_create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7, x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    bool obj_create0(bool no_exc  __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1> bool obj_create1(bool no_exc, const A1& x1 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2> bool obj_create2(bool no_exc, const A1& x1, const A2& x2 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3> bool obj_create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4> bool obj_create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool obj_create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T(x1, x2, x3, x4, x5, x6, x7, x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
 
           // Same as obj_create#(), but args. are cast to non-const when passed to constructor.
-        template<class A1> bool obj_create1nc(bool no_exc, const A1& x1) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2> bool obj_create2nc(bool no_exc, const A1& x1, const A2& x2) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3> bool obj_create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4> bool obj_create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5> bool obj_create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1> bool obj_create1nc(bool no_exc, const A1& x1 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2> bool obj_create2nc(bool no_exc, const A1& x1, const A2& x2 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3> bool obj_create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4> bool obj_create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool obj_create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool obj_create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool obj_create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool obj_create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8 __bmdx_noarg) { _s_long q = this->f_constructed(); if (q == 1) { return true; } if (q == 0 || q == 2) { try { new (_p) T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); set_f_constructed(1); return true; } catch (...) { if (!no_exc) { throw; } } } return false; }
 
       // Explicitly call the destructor, if it can be done (!b_bad() && f_constructed() == 1).
       // If T is accessible and currently constructed, obj_destroy calls ~T(), and after, marks the object it destroyed.
@@ -7339,20 +7347,20 @@ namespace _api // public API, merged into namespace bmdx_shm
       // shmobj2s_t destructor automatically closes shared memory,
       //    and releases locks held by this shmobj2s_t.
       //    See also close().
-    ~shmobj2s_t() throw(__bmdx_noargt1) { _close(true); }
+    ~shmobj2s_t() { _pdestr(this); }
 
 
     struct shared_lock
     {
         // true if side 1 lock is set.
-      bool b_lk1() const throw()    { return vlk1 >= 0; }
+      bool b_lk1() const __bmdx_noex    { return vlk1 >= 0; }
         // true if side 2 lock is set.
-      bool b_lk2() const throw()    { return vlk2 >= 0; }
+      bool b_lk2() const __bmdx_noex    { return vlk2 >= 0; }
         // true if any of he locks is set.
-      bool b_lk_any() const throw()    { return b_lk1() || b_lk2(); }
+      bool b_lk_any() const __bmdx_noex    { return b_lk1() || b_lk2(); }
 
         // Create an empty object (no any locks).
-      shared_lock(__bmdx_noarg1) : vlk1(-1), vlk2(-1) {}
+      shared_lock(__bmdx_noarg1) : vlk1(-1), vlk2(-1) { _pdestr = _destr; }
 
         // Try to do global locking of shared memory, from the specified side (or sides).
         //    b_lk_any() reports if locking succeeded.
@@ -7372,17 +7380,20 @@ namespace _api // public API, merged into namespace bmdx_shm
         //      If this is not acceptable, it must be additionally protected with conventional multi-thread critical section.
         // NOTE shared_lock is useful only if prepare() was called with b_keeplk == false,
         //    or if the client needs to additionally set a lock for side other than (b_side1() ? 1 : 2) of the parent shmobj2s_t.
-      shared_lock(shmobj2s_t& parent, _s_long sides = 4, _s_long timeout_ms = 0 __bmdx_noarg) throw();
+      shared_lock(shmobj2s_t& parent, _s_long sides = 4, _s_long timeout_ms = 0 __bmdx_noarg) __bmdx_noex;
 
-      ~shared_lock() throw(__bmdx_noargt1)    { clear(); }
+      ~shared_lock() { _pdestr(this); }
 
         // After clear(), the client may safely execute new (p) shared_lock(...).
-      void clear(__bmdx_noarg1) throw()    { if (r) { r._pnonc_u()->unlock_normal(*this); } vlk1 = -1; vlk2 = -1; r.clear(); }
+      void clear(__bmdx_noarg1) __bmdx_noex    { if (r) { r._pnonc_u()->unlock_normal(*this); } vlk1 = -1; vlk2 = -1; r.clear(); }
 
         // May be used if a new object is created with another set of locks than some other existing one.
-      void swap(shared_lock& x __bmdx_noarg) throw()    { bmdx_str::words::swap_bytes(*this, x); }
+      void swap(shared_lock& x __bmdx_noarg) __bmdx_noex    { bmdx_str::words::swap_bytes(*this, x); }
 
-    private: friend struct _shm_sems; cref_t<_shm_sems> r; _s_ll vlk1, vlk2; shared_lock(const shared_lock&); void operator=(const shared_lock&);
+    private:
+      friend struct _shm_sems;
+      void (*_pdestr)(shared_lock* p); static void _destr(shared_lock* p) { p->clear(); }
+      cref_t<_shm_sems> r; _s_ll vlk1, vlk2; shared_lock(const shared_lock&); void operator=(const shared_lock&);
     };
 
 
@@ -7415,6 +7426,7 @@ namespace _api // public API, merged into namespace bmdx_shm
 
   private:
     shmobj2s_t(const shmobj2s_t&); void operator=(const shmobj2s_t&);
+    void (*_pdestr)(shmobj2s_t* p); static void _destr(shmobj2s_t* p) { p->_close(true); }
 
     struct _shmdesc_base
     {
@@ -7443,11 +7455,11 @@ namespace _api // public API, merged into namespace bmdx_shm
       critsec_gn lkside2;
       _s_long nlk1, nlk2;
       _s_ll vlk1, vlk2;
-      _shm_sems(const char* name, f_shm_name_prefix prefix_cs __bmdx_noarg) throw() : lkside1((critsec_gn::t_name("M1\t") += name).c_str(), prefix_cs), lkside2((critsec_gn::t_name("M2\t") += name).c_str(), prefix_cs), nlk1(0), nlk2(0), vlk1(0), vlk2(0) {}
+      _shm_sems(const char* name, f_shm_name_prefix prefix_cs __bmdx_noarg) __bmdx_noex : lkside1((critsec_gn::t_name("M1\t") += name).c_str(), prefix_cs), lkside2((critsec_gn::t_name("M2\t") += name).c_str(), prefix_cs), nlk1(0), nlk2(0), vlk1(0), vlk2(0) {}
 
         // If sides (ORed 0x1, 0x2) specify at least one lock,
         //  lock_normal removes all previous locks, then tries to set the new locks as specified.
-      static void lock_normal(shared_lock& target, _s_long sides __bmdx_noarg) throw()
+      static void lock_normal(shared_lock& target, _s_long sides __bmdx_noarg) __bmdx_noex
       {
         if (!(target.r && !!(sides & 3))) { return; }
         unlock_normal(target);
@@ -7461,7 +7473,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         //  Parent object reference (target.r) is not cleared.
         //  NOTE _shm_sems works as counted shared lock,
         //    so only the last unlock does release the global mutex.
-      static void unlock_normal(shared_lock& target __bmdx_noarg) throw()
+      static void unlock_normal(shared_lock& target __bmdx_noarg) __bmdx_noex
       {
         _shm_sems* ps = target.r._pnonc_u();
         if (!(ps && (target.vlk1 == ps->vlk1 || target.vlk2 == ps->vlk2))) { target.vlk1 = -1; target.vlk2 = -1; return; }
@@ -7472,7 +7484,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       }
 
         // Unconditional unlocking, only for ~shmobj2s_t / _close(true).
-      void unlock_forced(_s_long sides __bmdx_noarg) throw()
+      void unlock_forced(_s_long sides __bmdx_noarg) __bmdx_noex
       {
         if (!(sides & 3)) { return; }
         critsec_t<_shm_sems> __lock(10, -1, &lkd); if (sizeof(__lock)) {}
@@ -7570,7 +7582,7 @@ namespace _api // public API, merged into namespace bmdx_shm
 
     #if 0
         // Clear platform-specific handles (not including this->p).
-      void _shm_init0() throw();
+      void _shm_init0() __bmdx_noex;
 
         // a) Open (create if necessary) a shared memory area, map into this process address space.
         //    Set platform-specific handles as necessary.
@@ -7582,17 +7594,17 @@ namespace _api // public API, merged into namespace bmdx_shm
         //    (not initialized by other side, or memory handle transfer pending),
         //    return (void*)1.
         // d) On failure, close and clear platform-specific handles. Return 0.
-      void* _shm_open(bool b_maycreate, _s_ll nbtotal) throw();
+      void* _shm_open(bool b_maycreate, _s_ll nbtotal) __bmdx_noex;
 
         // Close the shared memory area, if it's open. Clear platform-specific handles.
         // NOTE on ~shmobj2s_t, _shm_close is called automatically.
-      void _shm_close() throw();
+      void _shm_close() __bmdx_noex;
     #endif
 
     #ifdef _bmdxpl_Wnds
       HANDLE __h; void* __p;
-      void _shm_init0(__bmdx_noarg1) throw() { __h = 0; __p = 0; }
-      void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) throw()
+      void _shm_init0(__bmdx_noarg1) __bmdx_noex { __h = 0; __p = 0; }
+      void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) __bmdx_noex
       {
         if (nbtotal < 0) { nbtotal = 0; }
         bool b_reset = false;
@@ -7618,15 +7630,15 @@ namespace _api // public API, merged into namespace bmdx_shm
         __h = h2; __p = p2;
         return __p;
       }
-      void _shm_close(__bmdx_noarg1) throw() { if (__p) { UnmapViewOfFile(__p); __p = 0; } if (__h) { CloseHandle(__h); __h = 0; } }
+      void _shm_close(__bmdx_noarg1) __bmdx_noex { if (__p) { UnmapViewOfFile(__p); __p = 0; } if (__h) { CloseHandle(__h); __h = 0; } }
     #endif
     #ifdef _bmdxpl_Psx
       #if 0
       #elif defined(__ANDROID__)
         int __fd; size_t __nb; void* __p; _fd_sharing __sh;
-        int __shmfd_getnb(int fd) throw() { int res = ioctl(fd, ASHMEM_GET_SIZE, 0); if (res < 0) { return -1; } return res; }
-        bool __shmfd_resize(int fd, _s_ll nb) throw() { int res = ioctl(fd, ASHMEM_SET_SIZE, size_t(nb)); return res >= 0; }
-        int __shmfd_create(_s_ll nb) throw()
+        int __shmfd_getnb(int fd) __bmdx_noex { int res = ioctl(fd, ASHMEM_GET_SIZE, 0); if (res < 0) { return -1; } return res; }
+        bool __shmfd_resize(int fd, _s_ll nb) __bmdx_noex { int res = ioctl(fd, ASHMEM_SET_SIZE, size_t(nb)); return res >= 0; }
+        int __shmfd_create(_s_ll nb) __bmdx_noex
         {
           int fda = ::open("/dev/ashmem", O_RDWR);
             if (fda < 0) { return -1; }
@@ -7634,9 +7646,9 @@ namespace _api // public API, merged into namespace bmdx_shm
           if (ioctl(fda, ASHMEM_SET_PROT_MASK, (unsigned long)(PROT_READ | PROT_WRITE)) < 0) { ::close(fda); return -1; }
           return fda;
         }
-        void __shmfd_close(int fd __bmdx_noarg) throw() { if (fd != -1) { ::close(fd); } }
-        void _shm_init0(__bmdx_noarg1) throw() { __fd = -1; __p = 0; __nb = 0; }
-        void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) throw()
+        void __shmfd_close(int fd __bmdx_noarg) __bmdx_noex { if (fd != -1) { ::close(fd); } }
+        void _shm_init0(__bmdx_noarg1) __bmdx_noex { __fd = -1; __p = 0; __nb = 0; }
+        void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) __bmdx_noex
         {
           bool b_reset = false;
           if (nbtotal < 0) { nbtotal = 0; }
@@ -7673,14 +7685,14 @@ namespace _api // public API, merged into namespace bmdx_shm
           __nb = nbtotal;
           return __p;
         }
-        void _shm_close(__bmdx_noarg1) throw()
+        void _shm_close(__bmdx_noarg1) __bmdx_noex
         {
           if (__p) { munmap(__p, __nb); __p = 0; __nb = 0; }
           if (__fd != -1) { __shmfd_close(__fd); __fd = -1; }
         }
       #else
         int __fd; int __perm; size_t __nb; void* __p;
-        int __shmfile_open(int flags __bmdx_noarg) throw()
+        int __shmfile_open(int flags __bmdx_noarg) __bmdx_noex
         {
           #if 0
             return -1;
@@ -7694,9 +7706,9 @@ namespace _api // public API, merged into namespace bmdx_shm
             return ::open(_shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str(), flags, __perm);
           #endif
         }
-        void __shmfd_close(int fd __bmdx_noarg) throw() { if (fd != -1) { ::close(fd); } }
-        void _shm_init0(__bmdx_noarg1) throw() { __fd = -1; __p = 0; __nb = 0; __perm = 0666; }
-        void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) throw()
+        void __shmfd_close(int fd __bmdx_noarg) __bmdx_noex { if (fd != -1) { ::close(fd); } }
+        void _shm_init0(__bmdx_noarg1) __bmdx_noex { __fd = -1; __p = 0; __nb = 0; __perm = 0666; }
+        void* _shm_open(bool b_maycreate, _s_ll nbtotal __bmdx_noarg) __bmdx_noex
         {
           bool b_reset = false;
           int fd2 = -1;
@@ -7722,7 +7734,7 @@ namespace _api // public API, merged into namespace bmdx_shm
           __fd = fd2; __p = p2; __nb = n2;
           return __p;
         }
-        void _shm_close(__bmdx_noarg1) throw()
+        void _shm_close(__bmdx_noarg1) __bmdx_noex
         {
           if (__p) { munmap(__p, __nb); __p = 0; __nb = 0; }
           if (__fd != -1) { __shmfd_close(__fd); __fd = -1; }
@@ -7731,9 +7743,10 @@ namespace _api // public API, merged into namespace bmdx_shm
     #endif
   };
 
-  template<class T> shmobj2s_t<T>::shared_lock::shared_lock(shmobj2s_t& parent, _s_long sides, _s_long timeout_ms __bmdx_noargt) throw()
+  template<class T> shmobj2s_t<T>::shared_lock::shared_lock(shmobj2s_t& parent, _s_long sides, _s_long timeout_ms __bmdx_noargt) __bmdx_noex
     : vlk1(-1), vlk2(-1)
   {
+    _pdestr = _destr;
     double t0 = clock_ms();
     if (!parent._rsems) { parent._rsems.cm_create2(0, 0, 1, parent._name.c_str(), parent._hh.prefix_cs); }
     if (!parent._rsems) { return; }
@@ -7795,7 +7808,7 @@ typedef arrayref_t<char> _t_stringref;
 typedef char _t_rstr_ct; // make_rba's cref_t Aux object of context-dependent size; pointer to the object is _t_rstr_ct*, which is char*
 
   // Creates a zero-initialized byte array of length nb.
-static cref_t<_t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd) throw()
+static cref_t<_t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd) __bmdx_noex
 {
   typedef cref_t<_t_stringref>::iref2<_t_stringref, _t_rstr_ct> t_iref2;
   if (nb < 0) { return cref_t<_t_stringref>(); }
@@ -7807,7 +7820,7 @@ static cref_t<_t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd) throw()
 }
   // Creates a byte array from msg, by value (self-contained), or by reference (msg->pd() must be valid until all referring cref_t's are destroyed).
   //  nbadd > 0 (used only on b_byval == true): adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of msg data. E.g. nbadd == 1 makes conventional C string.
-static cref_t<_t_stringref> make_rba(_t_stringref msg, bool b_byval, _s_ll nbadd = 0) throw()
+static cref_t<_t_stringref> make_rba(_t_stringref msg, bool b_byval, _s_ll nbadd = 0) __bmdx_noex
 {
   typedef cref_t<_t_stringref>::iref2<_t_stringref, _t_rstr_ct> t_iref2;
   if (!msg.is_valid()) { return cref_t<_t_stringref>(); }
@@ -7820,7 +7833,7 @@ static cref_t<_t_stringref> make_rba(_t_stringref msg, bool b_byval, _s_ll nbadd
 }
   // Creates a byte array as concatenated copies of the given parts.
   //  nbadd > 0: adds hidden (i.e. not accounted in t_stringref::n()) zero bytes after the copy of parts data. E.g. nbadd == 1 makes conventional C string.
-static cref_t<_t_stringref> make_rba_mp(_t_stringref part1, _t_stringref part2, _t_stringref part3 = _t_stringref(), _s_ll nbadd = 0) throw()
+static cref_t<_t_stringref> make_rba_mp(_t_stringref part1, _t_stringref part2, _t_stringref part3 = _t_stringref(), _s_ll nbadd = 0) __bmdx_noex
 {
   typedef cref_t<_t_stringref>::iref2<_t_stringref, _t_rstr_ct> t_iref2;
   if (!(part1.is_valid() && part2.is_valid() && part3.is_valid())) { return cref_t<_t_stringref>(); }
@@ -7989,13 +8002,13 @@ struct shmqueue_ctx
       // Size of the currently sent parts of the message.
     _s_ll msend1_n() { if (!pmsend1) { return 0; } return bmdx_minmax::myllmin(pmsend1->n(), __bmdx_shmfifo_msg_nbytes_max); }
     _s_ll msend2_n() { if (!pmsend2) { return 0; } return bmdx_minmax::myllmin(pmsend2->n(), __bmdx_shmfifo_msg_nbytes_max - msend1_n()); }
-    void _msend_clear() throw() { if (pmsend1) { msgs.pop_n(3); } else if (pmsend2) { msgs.pop_1(); } pmsend1 = pmsend2 = 0; nmsend = 0; }
+    void _msend_clear() __bmdx_noex { if (pmsend1) { msgs.pop_n(3); } else if (pmsend2) { msgs.pop_1(); } pmsend1 = pmsend2 = 0; nmsend = 0; }
       //
-    bool _lqsend_mprg_pending() const throw() { return _mprg_ver != _mprg_ver_proc || _mprg_cmd.iend < _mprg_iend_done; }
+    bool _lqsend_mprg_pending() const __bmdx_noex { return _mprg_ver != _mprg_ver_proc || _mprg_cmd.iend < _mprg_iend_done; }
       //
       // From sender queue, removes all message message refs. and pointers between [msgs.ipop() .. iend).
       //  If anything has been removed, returns true.
-    bool _lqsend_mprg_update() throw()
+    bool _lqsend_mprg_update() __bmdx_noex
     {
       if (buf.b_side1()) { return false; } // not a sender
       if (_mprg_ver != _mprg_ver_proc)
@@ -8024,15 +8037,15 @@ struct shmqueue_ctx
 
     #ifdef _bmdxpl_Wnds
         // NOTE Here, locking is not implemented due to inefficiency.
-      void _mrcv_lock() throw() {}
-      void _mrcv_unlock() throw() {}
+      void _mrcv_lock() __bmdx_noex {}
+      void _mrcv_unlock() __bmdx_noex {}
     #endif
     #ifdef _bmdxpl_Psx
-      void _mrcv_lock() throw() { b_rcv_mlk = false; if (msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { b_rcv_mlk = 0 == mlock(msg_rcv->pd(), (size_t)msg_rcv->n()); } }
-      void _mrcv_unlock() throw() { if (b_rcv_mlk && msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { munlock(msg_rcv->pd(), (size_t)msg_rcv->n()); } b_rcv_mlk = false; }
+      void _mrcv_lock() __bmdx_noex { b_rcv_mlk = false; if (msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { b_rcv_mlk = 0 == mlock(msg_rcv->pd(), (size_t)msg_rcv->n()); } }
+      void _mrcv_unlock() __bmdx_noex { if (b_rcv_mlk && msg_rcv && !!msg_rcv->pd() && msg_rcv->n() >= __bmdx_shmfifo_pop_nbmin_mlock) { munlock(msg_rcv->pd(), (size_t)msg_rcv->n()); } b_rcv_mlk = false; }
     #endif
       //
-    void _mrcv_clear() throw() { if (!msg_rcv) { return; } _mrcv_unlock(); msg_rcv.clear(); }
+    void _mrcv_clear() __bmdx_noex { if (!msg_rcv) { return; } _mrcv_unlock(); msg_rcv.clear(); }
 
 
 
@@ -8070,7 +8083,7 @@ struct shmqueue_ctx
       //      -2 - failure during operation (it's generally unknown if the shared object is available).
       //      -3 - lock of side 1 (for b_side1()==true) or side 2 (for b_side1()==false) is set by someone else.
       //      -4 - the memory exists, but not accessible yet: a) pending initialization by other side, b) pending memory handle transfer from other side.
-    int _reset() throw()
+    int _reset() __bmdx_noex
     { try {
       _s_long res = buf.prepare(true);
       if (res < 0) { return res; }
@@ -8202,7 +8215,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
   {
     typedef std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> t_ctxmap;
 
-    inline static bool _part_update_ctxmap(t_ctxmap& m2, _s_ll& iver_m2) throw()
+    inline static bool _part_update_ctxmap(t_ctxmap& m2, _s_ll& iver_m2) __bmdx_noex
     {
       cref_t<i_shmqueue_ctxx> mqq1;
       _shmqueue_ctxx_impl* pqq1 = 0;
@@ -8219,7 +8232,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       return true;
     }
 
-    inline static bool _part_validate_ctx1(shmqueue_ctx& q, bool& b_changed) throw()
+    inline static bool _part_validate_ctx1(shmqueue_ctx& q, bool& b_changed) __bmdx_noex
     {
       // 0. Pre-update volatile settings.
 
@@ -8344,7 +8357,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       return true;
     }
 
-    inline static void _part_update_conf_rcv(shmqueue_ctx& q, bool& b_changed, bool b_validated) throw()
+    inline static void _part_update_conf_rcv(shmqueue_ctx& q, bool& b_changed, bool b_validated) __bmdx_noex
     {
       (void)b_validated;
       if (!q.buf.b_side1()) { return; }
@@ -8362,7 +8375,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       }
     }
 
-    inline static void _part_update_conf_send(shmqueue_ctx& q, bool& b_changed, bool b_validated) throw()
+    inline static void _part_update_conf_send(shmqueue_ctx& q, bool& b_changed, bool b_validated) __bmdx_noex
     {
       (void)b_validated;
       if (q.buf.b_side1()) { return; }
@@ -8377,7 +8390,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       }
     }
 
-    inline static void _x_update_lqcap(shmqueue_ctx& q, unsigned char& retcode) throw()
+    inline static void _x_update_lqcap(shmqueue_ctx& q, unsigned char& retcode) __bmdx_noex
     {
       retcode = 0;
       // The client-side lock is necessary to avoid clash with mget(), bufstate() etc.
@@ -8397,7 +8410,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       if (retcode == 1) { if (b_cap_changed) { q.msgs.set_cap_hints(nmin_prv, nmax_prv); } }
         else if (b_cap_changed || b_rsv_changed) { retcode = 2; }
     }
-    inline static void _x_update_conf_lqcap_back(shmqueue_ctx& q) throw()
+    inline static void _x_update_conf_lqcap_back(shmqueue_ctx& q) __bmdx_noex
     {
       typedef shmqueue_ctx::lqconf_cap lqconf_cap;
       lqconf_cap c = (lqconf_cap&)q.v_inq_cap_back.x;
@@ -8785,18 +8798,18 @@ namespace _api // public API, merged into namespace bmdx_shm
   struct allocctl_pre : i_allocctl
   {
       // Allocator creation. See impl. for descr.
-    static inline cref_t<i_allocctl> create(_s_long flags_, _s_ll nbdata_, _s_ll hint_nobj_max_ = -1) throw();
+    static inline cref_t<i_allocctl> create(_s_long flags_, _s_ll nbdata_, _s_ll hint_nobj_max_ = -1) __bmdx_noex;
 
       // Returns the exact amount of memory, pre-allocated by allocctl_pre::create,
       //  given the same arguments.
       // See create() impl. for description of how this memory will be used.
-    static inline _s_ll nbmem(_s_ll nbdata_, _s_ll nobj_max_) throw();
+    static inline _s_ll nbmem(_s_ll nbdata_, _s_ll nobj_max_) __bmdx_noex;
 
       // Convenience function, allocating single area (zero-filled and zero-terminated)
       //  in a way, specified by flags.
       //  The allocator is created for that purpose only temporarily.
       // flags, nbdata: see impl. of create().
-    static inline cref_t<t_stringref> make_rba_special(_s_long flags, _s_ll nbdata) throw()
+    static inline cref_t<t_stringref> make_rba_special(_s_long flags, _s_ll nbdata) __bmdx_noex
       { cref_t<i_allocctl> al = create(flags, nbdata, 1); return al ? al->make_rba(nbdata) : cref_t<t_stringref>(); }
 
       // See create() impl. for flags descr.
@@ -8813,7 +8826,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     enum _Ex_flags { _fl_client_mask = 0xff, _fl_revert_ws = 0x100 };
     cref_t<t_stringref> a; // handles whole mem. area
     struct _header_whole; struct _header_block;
-    static inline void release_hw(_header_whole& hw) throw();
+    static inline void release_hw(_header_whole& hw) __bmdx_noex;
     static inline _s_ll nbblkovr();
     static inline _s_long cref_ev_handler(_s_long optype, _s_ll flags, _s_ll nrefs, _s_ll delta, _critsec_data0_t<t_stringref>* pcsd, void* pobj, void* pinterface, void* paux);
     inline cref_t<t_stringref> make_rba(_s_ll nb);
@@ -8892,7 +8905,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     //        allocctl_pre::create will return an empty object.
     //        (If fl_use_pagelock is not set, fl_pagelock_is_critical is ignored.)
     //
-  cref_t<i_allocctl> allocctl_pre::create(_s_long flags_, _s_ll nbdata_, _s_ll hint_nobj_max_) throw()
+  cref_t<i_allocctl> allocctl_pre::create(_s_long flags_, _s_ll nbdata_, _s_ll hint_nobj_max_) __bmdx_noex
   {
     #define __bmdx_allocctl_pre_csname_base "bmdx_shm::allocctl_pre::create_"
     flags_ &= _fl_client_mask;
@@ -8978,7 +8991,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     return rv;
   }
 
-  _s_ll allocctl_pre::nbmem(_s_ll nbdata_, _s_ll nobj_max_) throw()
+  _s_ll allocctl_pre::nbmem(_s_ll nbdata_, _s_ll nobj_max_) __bmdx_noex
   {
     _s_ll n = nbdata_ > 0 ? nbdata_ : 0;
     if (nobj_max_ < 1) { nobj_max_ = 1; }
@@ -8986,7 +8999,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     return n;
   }
 
-  void allocctl_pre::release_hw(_header_whole& hw) throw()
+  void allocctl_pre::release_hw(_header_whole& hw) __bmdx_noex
   {
     if (!hw.mem.pd()) { return; }
     #ifdef _bmdxpl_Psx
@@ -9143,7 +9156,7 @@ namespace _api // public API, merged into namespace bmdx_shm
   private:
     const _s_ll _nbdflt; const _s_long _flags; const _s_long _idle_t_mcs;
     mutable cref_t<shmqueue_ctx> _rq; // cached reference to the queue with the specified name
-    struct exc_new_pack3 : std::exception { const char* what() const throw() { return "new_pack3::operator()(t*)"; } };
+    struct exc_new_pack3 : std::exception { const char* what() const __bmdx_noex { return "new_pack3::operator()(t*)"; } };
     struct new_pack3 { typedef cref_t<t_stringref> t; const t &prefix, &msg; mutable _s_long ind; new_pack3(const t& prefix_, const t& msg_) : prefix(prefix_), msg(msg_), ind(-1) {} void operator()(t* p) const { ++ind; if (ind == 0) { new (p) t(); } else if (ind == 1) { new (p) t(prefix); } else if (ind == 2) { new (p) t(msg); } else { throw exc_new_pack3(); } } };
   public:
 
@@ -9152,7 +9165,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       // nbdflt_: IPC queue buffer size hint. Dflt. == -1, which means use __bmdx_shmfifo_nbytes_dflt.
       // flags_ (ORed): see flags(). Default value == 1 (use client-side locks).
       // idle_t_mcs_: sleep time at each iteration inside client-side blocking mget or msend (0..1e6 mcs). Dflt. 5000 mcs.
-    shmqueue_s(const t_name& name_, const _s_ll nbdflt_ = -1, _s_long flags_ = 1, _s_ll idle_t_mcs_ = -1) throw()
+    shmqueue_s(const t_name& name_, const _s_ll nbdflt_ = -1, _s_long flags_ = 1, _s_ll idle_t_mcs_ = -1) __bmdx_noex
       : name(name_.n() ? name_ : "_"), res(0), _nbdflt(nbdflt_), _flags(flags_), _idle_t_mcs(idle_t_mcs_ >= 0 ? _s_long(bmdx_minmax::myllmin(1000000, idle_t_mcs_)) : 5000)
     { if (_flags & 4) { bufstate(2); } if (_flags & 8) { bufstate(3); } }
 
@@ -9178,7 +9191,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    0x4 - constructor's flag (already done): automatically connect to sender side, and create local queue for msend (i.e. call bufstate(2)).
       //    0x8 - constructor's flag (already done): automatically connect to receiver side, and create local queue for mget (i.e. call bufstate(3)).
       // NOTE flags() does not modify this->res.
-    _s_long flags() const throw() { return _flags; }
+    _s_long flags() const __bmdx_noex { return _flags; }
 
 
 
@@ -9205,7 +9218,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //  -5 - configuration setting is unsafe, because client-side locks are disabled: (flags() & 1) == 0.
       //  In addition, this->res holds the result of the last bufstate() call.
       //
-    _s_long conf_set_al_in(const cref_t<i_allocctl>* p_al = 0, double timeout_ms = -1) const throw()
+    _s_long conf_set_al_in(const cref_t<i_allocctl>* p_al = 0, double timeout_ms = -1) const __bmdx_noex
     {
       if (!(_flags & 1)) { return -5; }
       _s_long res2 = bufstate(3); if (!(res2 >= 3 && res2 <= 5)) { return -2; }
@@ -9256,7 +9269,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //  -2 - failure, r_al is cleared.
       //  In addition, this->res holds the result of the last bufstate() call.
       //
-    _s_long conf_get_al_in(cref_t<i_allocctl>& r_al) const throw()
+    _s_long conf_get_al_in(cref_t<i_allocctl>& r_al) const __bmdx_noex
     {
       r_al.clear();
       _s_long res2 = bufstate(3); if (!(res2 >= 3 && res2 <= 5)) { return -2; }
@@ -9302,7 +9315,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //  -5 - configuration setting is unsafe, because client-side locks are disabled: (flags() & 1) == 0.
       //  In addition, this->res holds the result of the last bufstate() call.
       //
-    _s_long conf_set_lqcap(bool b_receiver, _s_ll ncapmin = -3, _s_ll ncapmax = -3, _s_ll nrsv = -3, double timeout_ms = -1) const throw()
+    _s_long conf_set_lqcap(bool b_receiver, _s_ll ncapmin = -3, _s_ll ncapmax = -3, _s_ll nrsv = -3, double timeout_ms = -1) const __bmdx_noex
     {
       if (!(_flags & 1)) { return -5; }
       _s_long res2 = bufstate(b_receiver ? 3 : 2);
@@ -9356,7 +9369,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //  -2 - failure, all *pn* are set to -3.
       //  In addition, this->res holds the result of the last bufstate() call.
       //
-    _s_long conf_get_lqcap(bool b_receiver, _s_ll* pncapmin = 0, _s_ll* pncapmax = 0, _s_ll* pnrsv = 0) const throw()
+    _s_long conf_get_lqcap(bool b_receiver, _s_ll* pncapmin = 0, _s_ll* pncapmax = 0, _s_ll* pnrsv = 0) const __bmdx_noex
     {
       if (pncapmin) { *pncapmin = -3; } if (pncapmax) { *pncapmax = -3; } if (pnrsv) { *pnrsv = -3; }
       _s_long res2 = bufstate(b_receiver ? 3 : 2);
@@ -9388,15 +9401,15 @@ namespace _api // public API, merged into namespace bmdx_shm
       // NOTE navl*() do not make automatic initialization of queues (as msend, mget do).
       // NOTE navl*() do not modify this->res.
       //
-    _s_ll navl(bool b_receiver) const throw()
+    _s_ll navl(bool b_receiver) const __bmdx_noex
     {
       if (!_shmqueue_ctxx_impl::_th_enable()) { return 0; }
       if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, b_receiver ? 1 : 0, _nbdflt); } catch (...) {} }
       if (!_rq) { return 0; }
       return _rq->msgs.navl();
     }
-    _s_ll navl_out() const throw() { return navl(false); }
-    _s_ll navl_in() const throw() { return navl(true); }
+    _s_ll navl_out() const __bmdx_noex { return navl(false); }
+    _s_ll navl_in() const __bmdx_noex { return navl(true); }
 
       // Convenience functions.
       //  A. For sender (lqwait_out): waits until a) navl_out() <= n, or b) timeout occurs.
@@ -9416,8 +9429,8 @@ namespace _api // public API, merged into namespace bmdx_shm
       // NOTE lqwait_*() do not make automatic initialization of queues (as msend, mget do).
       // NOTE lqwait_*() do not modify this->res.
       //
-    _s_ll lqwait_out(double timeout_ms, _s_ll n = 0) const throw()        { const double t0 = clock_ms(); while (1) { const _s_ll na = navl_out(); if (na <= n || timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return na; } sleep_mcs(_idle_t_mcs); } }
-    _s_ll lqwait_in(double timeout_ms, _s_ll n = 1) const throw()       { const double t0 = clock_ms(); while (1) { const _s_ll na = navl_in(); if (na >= n || timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return na; } sleep_mcs(_idle_t_mcs); } }
+    _s_ll lqwait_out(double timeout_ms, _s_ll n = 0) const __bmdx_noex        { const double t0 = clock_ms(); while (1) { const _s_ll na = navl_out(); if (na <= n || timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return na; } sleep_mcs(_idle_t_mcs); } }
+    _s_ll lqwait_in(double timeout_ms, _s_ll n = 1) const __bmdx_noex       { const double t0 = clock_ms(); while (1) { const _s_ll na = navl_in(); if (na >= n || timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { return na; } sleep_mcs(_idle_t_mcs); } }
 
 
 
@@ -9463,7 +9476,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    *pipush, *pipop - the current (volatile) push/pop message index in the local queue.
       //      Meaningful values are set only if lqstate returns >= 0, i.e. only when the queue exists.
       //        Otherwise, values are set to -1.
-    _s_long lqstate(bool b_receiver, _s_ll* pipush = 0, _s_ll* pipop = 0, _s_ll iend_sender = -2, double dtms_end = 0) const throw()
+    _s_long lqstate(bool b_receiver, _s_ll* pipush = 0, _s_ll* pipop = 0, _s_ll iend_sender = -2, double dtms_end = 0) const __bmdx_noex
     {
       if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
@@ -9523,7 +9536,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //      Hint: in application-specific context, along with regular sending some messages,
       //        *pipop may be used (in sender process) to check if the receiving process is alive and actively consumes messages.
       //    enrq:
-    _s_long bufstate(_s_long rqtype, _s_ll* pipush = 0, _s_ll* pipop = 0) const throw()
+    _s_long bufstate(_s_long rqtype, _s_ll* pipush = 0, _s_ll* pipop = 0) const __bmdx_noex
     {
       if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
@@ -9619,7 +9632,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    -3 - shared memory is locked by some other side.
       //      NOTE When locked state is detected, msend does not wait for timeout and returns immediately.
       //    -4 - shared memory exists, but not ready yet (during initialization by the receiver side).
-    _s_long msend(cref_t<t_stringref> msg, double timeout_ms = 0, cref_t<t_stringref> prefix = cref_t<t_stringref>(), _s_ll* pipush_last = 0) const throw()
+    _s_long msend(cref_t<t_stringref> msg, double timeout_ms = 0, cref_t<t_stringref> prefix = cref_t<t_stringref>(), _s_ll* pipush_last = 0) const __bmdx_noex
     {
       const double t0 = clock_ms();
       if (pipush_last) { *pipush_last = -1; }
@@ -9660,8 +9673,8 @@ namespace _api // public API, merged into namespace bmdx_shm
 
       // Convenience function.
       //  Sends a copy of the given string(s), through msend(cref_t...).
-    _s_long msend(t_stringref msg, double timeout_ms = 0) const throw()    { return msend(_bmdx_shm::make_rba(msg, true), timeout_ms); }
-    _s_long msend(t_stringref msg, double timeout_ms, t_stringref prefix) const throw()    { return msend(_bmdx_shm::make_rba(msg, true), timeout_ms, _bmdx_shm::make_rba(prefix, true)); }
+    _s_long msend(t_stringref msg, double timeout_ms = 0) const __bmdx_noex    { return msend(_bmdx_shm::make_rba(msg, true), timeout_ms); }
+    _s_long msend(t_stringref msg, double timeout_ms, t_stringref prefix) const __bmdx_noex    { return msend(_bmdx_shm::make_rba(msg, true), timeout_ms, _bmdx_shm::make_rba(prefix, true)); }
 
 
 
@@ -9681,7 +9694,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    on success: valid non-empty cref_t<t_stringref>,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba(msg, b_byval, nbadd); }
+    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, _s_ll nbadd = 0) __bmdx_noex    { return ::bmdx_shm::_bmdx_shm::make_rba(msg, b_byval, nbadd); }
       //
       // Convenience function for msend.
       //    Creates a byte array as concatenation of copies of the given parts.
@@ -9692,7 +9705,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_mp(part1, part2, part3, nbadd); }
+    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), _s_ll nbadd = 0) __bmdx_noex    { return ::bmdx_shm::_bmdx_shm::make_rba_mp(part1, part2, part3, nbadd); }
       //
       // Convenience function for msend.
       //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
@@ -9701,7 +9714,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    on success: valid non-empty cref_t<t_stringref>,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_z(nb, nbadd); }
+    static cref_t<t_stringref> make_rba_z(_s_ll nb, _s_ll nbadd = 0) __bmdx_noex    { return ::bmdx_shm::_bmdx_shm::make_rba_z(nb, nbadd); }
       //
       // Convenience function for msend.
       //  Creates cref_t, pointing to the given arrayref_t object (msg).
@@ -9717,7 +9730,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //      shmqueue_s q("shared queue name");
       //      q.msend(shmqueue_s::make_rrba(kw));
       //
-    static cref_t<t_stringref> make_rrba(t_stringref& msg) throw()    { cref_t<t_stringref> rv; rv.assign(msg, false, 1); return rv; }
+    static cref_t<t_stringref> make_rrba(t_stringref& msg) __bmdx_noex    { cref_t<t_stringref> rv; rv.assign(msg, false, 1); return rv; }
 
 
 
@@ -9743,7 +9756,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //    -3 - shared memory is locked by some other side.
       //      NOTE When locked state is detected, mget does not wait for timeout and returns immediately.
       //  On any result < 0, this->d is not modified.
-    _s_long mget(double timeout_ms = 0, bool b_do_pop = true) throw()
+    _s_long mget(double timeout_ms = 0, bool b_do_pop = true) __bmdx_noex
     {
       const double t0 = clock_ms();
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
@@ -9768,7 +9781,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       }
     }
 
-    struct exc_mget_str : std::exception { const char* what() const throw() { return "shmqueue_s::_mget_str"; } };
+    struct exc_mget_str : std::exception { const char* what() const __bmdx_noex { return "shmqueue_s::_mget_str"; } };
 
       // Convenience function.
       //  Gets the next message as std::string.
@@ -9805,8 +9818,8 @@ namespace _api // public API, merged into namespace bmdx_shm
 
 namespace bmdx
 {
-  struct file_io::_stra_rba : _stra_base { typedef cref_t<arrayref_t<char> > t_rba; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const throw() { t_rba& x = *(t_rba*)ps; if (n0 < 0) { x.clear(); return true; } x = ::bmdx_shm::_bmdx_shm::make_rba_z(n0, 1); return !!x; } virtual char* _pd(void* ps __bmdx_noarg) const throw() { return (*(t_rba*)ps)->pd(); } };
-  int file_io::load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noargt) throw()
+  struct file_io::_stra_rba : _stra_base { typedef cref_t<arrayref_t<char> > t_rba; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { t_rba& x = *(t_rba*)ps; if (n0 < 0) { x.clear(); return true; } x = ::bmdx_shm::_bmdx_shm::make_rba_z(n0, 1); return !!x; } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { return (*(t_rba*)ps)->pd(); } };
+  int file_io::load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noargt) __bmdx_noex
   {
     cref_t<arrayref_t<char> > retval;
     int res = _load_bytes(fnp, _stra_rba(), &retval);

@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-06-16
+// rev. 2020-06-23
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -62,15 +62,15 @@ struct refmaker_t
     //      and for safe clearing of the strong reference at any time.
     // NOTEs:
     //    after refmaker_t creation, check .info == true.
-  refmaker_t(const cref_t<T>& strongref_) throw() : info(), strongref(strongref_) { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; _info.create0(1); }
+  refmaker_t(const cref_t<T>& strongref_) __bmdx_noex : info(), strongref(strongref_) { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; _info.create0(1); }
   refmaker_t() {} // null ref., no critsec_t
 
     // Sets this->info to the new object, created by dflt. If succeeds, returns true.
-  bool create_info(bool b_may_replace) throw() { if (info && !b_may_replace) { return false; } cref_t<ref_info> _info2; if (!_info2.create0(1)) { return false; } (cref_t<ref_info>&)info = _info2; return true; }
-  void set_ref(const cref_t<T>& strongref_) throw() { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; cref_t<T>& r = (cref_t<T>&)strongref; if (_info) { t_lock __lock(*this); if (sizeof(__lock)) {} r = strongref_; _info->b_ref_valid = 1; } else { r = strongref_; } }
-  void clear() throw() { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; cref_t<T>& r = (cref_t<T>&)strongref; if (_info) { t_lock __lock(*this); if (sizeof(__lock)) {} _info->b_ref_valid = 0; r.clear(); } else { r.clear(); } _info.clear(); }
-  void operator=(const refmaker_t& rm) throw() { if (this == &rm) { return; } clear(); new (this) refmaker_t(rm); }
-  ~refmaker_t() throw() { clear(); }
+  bool create_info(bool b_may_replace) __bmdx_noex { if (info && !b_may_replace) { return false; } cref_t<ref_info> _info2; if (!_info2.create0(1)) { return false; } (cref_t<ref_info>&)info = _info2; return true; }
+  void set_ref(const cref_t<T>& strongref_) __bmdx_noex { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; cref_t<T>& r = (cref_t<T>&)strongref; if (_info) { t_lock __lock(*this); if (sizeof(__lock)) {} r = strongref_; _info->b_ref_valid = 1; } else { r = strongref_; } }
+  void clear() __bmdx_noex { cref_t<ref_info>& _info = (cref_t<ref_info>&)info; cref_t<T>& r = (cref_t<T>&)strongref; if (_info) { t_lock __lock(*this); if (sizeof(__lock)) {} _info->b_ref_valid = 0; r.clear(); } else { r.clear(); } _info.clear(); }
+  void operator=(const refmaker_t& rm) __bmdx_noex { if (this == &rm) { return; } clear(); new (this) refmaker_t(rm); }
+  ~refmaker_t() __bmdx_noex { clear(); }
 
   struct t_lock
   {
@@ -95,8 +95,8 @@ struct weakref_t
   weakref_t() : pwk(0) {}
   weakref_t(const weakref_t& w) : info(w.info), pwk(w.pwk) {} // NOTE weakref_t() is not locked => w must not be modified concurrently with weakref_t()
     // NOTE assignment: both *this and x must not be modified concurrently with assignment *this = x
-  void operator=(const refmaker_t<T>& x) throw() { info = x.info; pwk = x.strongref._pnonc_u(); }
-  void operator=(const weakref_t<T>& x) throw() { info = x.info; pwk = x.pwk; }
+  void operator=(const refmaker_t<T>& x) __bmdx_noex { info = x.info; pwk = x.strongref._pnonc_u(); }
+  void operator=(const weakref_t<T>& x) __bmdx_noex { info = x.info; pwk = x.pwk; }
 };
 } // namespace bmdx_main_intl_lib
 namespace yk_c
@@ -111,8 +111,8 @@ namespace bmdx_main_intl_lib
 #define __shmqueue_ms_buf_uid __bmdx_shmfifo_ver
 #define __shmqueue_ms_nbytes_overhead 12 // see all occurrences before any modification
 
-static s_long _shmqms_hash_len(s_ll __length) throw() { const s_ll e = __shmqueue_ms_buf_uid; return yk_c::hashx_common::kf_basic<s_ll>()(e * (e + 3 * __length)); }
-//static s_ll _lmsc_hash_pid_deriv(s_ll pid, s_ll key = 0) throw() { const s_ll e = __shmqueue_ms_buf_uid; return yk_c::hashx_common::kf_basic<s_ll>()(e * (e + 7 * (key + pid))); }
+static s_long _shmqms_hash_len(s_ll __length) __bmdx_noex { const s_ll e = __shmqueue_ms_buf_uid; return yk_c::hashx_common::kf_basic<s_ll>()(e * (e + 3 * __length)); }
+//static s_ll _lmsc_hash_pid_deriv(s_ll pid, s_ll key = 0) __bmdx_noex { const s_ll e = __shmqueue_ms_buf_uid; return yk_c::hashx_common::kf_basic<s_ll>()(e * (e + 7 * (key + pid))); }
 
   // 8 bytes
 struct _shmqms_header { s_long length; s_long lhash; _shmqms_header() { length = lhash = 0; } };
@@ -139,7 +139,7 @@ struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender
     //    0 - the shared memory exists, but not yet accessible, or the contained object is not yet initialized by the receiver.
     //    -2 - failure.
     //    -3 - couldn't get the shared object side 2 lock.
-  s_long attempt_open() throw()
+  s_long attempt_open() __bmdx_noex
   {
     if (so.f_constructed() == 1) { return 1; }
     if (qname.n() <= 0) { return -2; }
@@ -173,7 +173,7 @@ struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender
     //    -2 - failure.
     //    -3 (only b_immediately == true) - "try again later" - a) couldn't get the shared object side 2 lock, b) shared queue overflow.
     //    -5 - size of msg or any of msgs is too large for the shared queue (in case of msgs, all msgs not sent and not queued).
-  s_long msend_1(t_stringref msg, bool b_immediately) throw()
+  s_long msend_1(t_stringref msg, bool b_immediately) __bmdx_noex
   {
     if (!msg.is_valid()){ return -1; }
     s_long res = attempt_open(); if (res < 1) { return res; }
@@ -187,7 +187,7 @@ struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender
     }
     return res;
   }
-  s_long msend_n(const arrayref_t<t_stringref>& msgs, bool b_immediately) throw()
+  s_long msend_n(const arrayref_t<t_stringref>& msgs, bool b_immediately) __bmdx_noex
   {
     if (!msgs.is_valid()) { return -1; } for (s_ll i = 0; i < msgs.n(); ++i) { if (!msgs[i].is_valid()) { return -1; } }
     s_long res = attempt_open(); if (res < 1) { return res; }
@@ -201,7 +201,7 @@ struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender
     }
     return res;
   }
-  s_long msend_pending() throw()
+  s_long msend_pending() __bmdx_noex
   {
     s_long res = attempt_open(); if (res < 1) { return res; }
     if (lq.navl() <= 0) { return 2; }
@@ -232,7 +232,7 @@ private:
 
     // NOTE _make_rmsg succeeds only if this->so is currently valid.
     // 1 - success (and rmsg contains valid ref.), -1 - bad msg, -2 - failure, -5 - msg is too long.
-  s_long _make_rmsg(t_stringref msg, cref_t<t_stringref>& rmsg) throw()
+  s_long _make_rmsg(t_stringref msg, cref_t<t_stringref>& rmsg) __bmdx_noex
   {
     if (!msg.is_valid()){ return -1; }
     if (so.f_constructed() != 1) { return -2; }
@@ -454,8 +454,8 @@ namespace bmdx_main_intl_lib
 {
 
   // Creates the given name's representation, suitable for global objects (UTF-8-encoded, limited to bmdx_shm::t_name_shm capacity).
-static bmdx_shm::t_name_shm make_fixed_utf8_name(arrayref_t<wchar_t> name) throw() { return bmdx_shm::t_name_shm(name.pd(), name.n()); }
-static bool is_arch_le() throw() { s_long q = 1; return *(unsigned char*)&q == 1; }
+static bmdx_shm::t_name_shm make_fixed_utf8_name(arrayref_t<wchar_t> name) __bmdx_noex { return bmdx_shm::t_name_shm(name.pd(), name.n()); }
+static bool is_arch_le() __bmdx_noex { s_long q = 1; return *(unsigned char*)&q == 1; }
 
 //========
 //Structure of plain bytearray, passed by dispatcher controllers via IPC and network:
@@ -938,7 +938,7 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
   struct i_callback
   {
       // See local_write "enc" arg. for comments on ret. val.
-    inline static s_long umsg_enc_type(bool b_utf8) throw() { if (b_utf8) { return 2; } if (is_arch_le() && sizeof(wchar_t) == 2) { return 1; } return 0; }
+    inline static s_long umsg_enc_type(bool b_utf8) __bmdx_noex { if (b_utf8) { return 2; } if (is_arch_le() && sizeof(wchar_t) == 2) { return 1; } return 0; }
 
       // Ensure calling dispatcher_mt::thread_proxy::_s_write with the correct reference to user message WCS.
       //  umsg: user message in string form.
@@ -967,7 +967,7 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
   };
 
     // name_pr: process_name arg. of dispatcher_mt ctor.
-  lm_slot_controller(arrayref_t<wchar_t> name_pr, s_ll nb_qum_, s_ll nb_qinfo_, const unity& apeer_names) throw()
+  lm_slot_controller(arrayref_t<wchar_t> name_pr, s_ll nb_qum_, s_ll nb_qinfo_, const unity& apeer_names) __bmdx_noex
   :
     _nb_qum(nb_qum_),
     _fl_chs(fpt_md|fpt_msg),
@@ -979,7 +979,7 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
     _hnew_name_peerf.hashx_setf_can_shrink(0);
     _qinfo_rcv.auxd_init.disp_ses_state = -2;
   }
-  ~lm_slot_controller() throw() { _x_close(); }
+  ~lm_slot_controller() __bmdx_noex { _x_close(); }
 
 
 private:
@@ -987,7 +987,7 @@ private:
   {
     volatile s_ll sig, pid, pid_deriv, livecnt, disp_ses_state, prc_inst_id; // NOTE prc_inst_id must be the last in sequence
 
-    _r_prc_uid() throw() { sig = Fsig(); pid = pid_deriv = livecnt = 0; disp_ses_state = -2; prc_inst_id = 0; }
+    _r_prc_uid() __bmdx_noex { sig = Fsig(); pid = pid_deriv = livecnt = 0; disp_ses_state = -2; prc_inst_id = 0; }
 
     static inline s_long Fsig() { return yk_c::bytes::cmti_base_t<_r_prc_uid, 2020, 2, 28, 23>::ind() + 1; }
 
@@ -1016,15 +1016,15 @@ private:
   };
   static s_ll pid_deriv_v1(s_ll pid) { return pid; }
   enum { nmdemax = 3 };
-  inline static s_ll limit_nbqueue(s_ll nb_orig, s_ll nbmin, s_ll nbmax, s_ll nbdflt) throw() { if (nb_orig < 0) { nb_orig = nbdflt; } return bmdx_minmax::myllrange_ub(nb_orig, nbmin, nbmax); }
+  inline static s_ll limit_nbqueue(s_ll nb_orig, s_ll nbmin, s_ll nbmax, s_ll nbdflt) __bmdx_noex { if (nb_orig < 0) { nb_orig = nbdflt; } return bmdx_minmax::myllrange_ub(nb_orig, nbmin, nbmax); }
 public:
     // Peer process activity tracker; one for each working dispatcher_mt in other processes, with which IPC occurs.
   struct peer_tracker
   {
-    inline peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) throw();
-    inline ~peer_tracker() throw() { _cltpt_close(); }
-    inline s_long state() const throw() { return _state; }
-    inline s_ll id_peer() const throw() { return _id_peer; } // for local process use only
+    inline peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) __bmdx_noex;
+    inline ~peer_tracker() __bmdx_noex { _cltpt_close(); }
+    inline s_long state() const __bmdx_noex { return _state; }
+    inline s_ll id_peer() const __bmdx_noex { return _id_peer; } // for local process use only
 
   private:
     //================================
@@ -1084,45 +1084,45 @@ public:
 
       // normally called from both lm_slot_controller and peer_tracker
     inline double _cltpt_tm_last_init_ms() { return _tm_lastinit; }
-    inline s_long _cltpt_ensure_comm(bool b_wait, bool b_force_check) throw();
-    inline bool _cltpt_close() throw();
-    inline void _cltpt_qum_conf_reset(bool b_rcv, bool b_forced) throw();
+    inline s_long _cltpt_ensure_comm(bool b_wait, bool b_force_check) __bmdx_noex;
+    inline bool _cltpt_close() __bmdx_noex;
+    inline void _cltpt_qum_conf_reset(bool b_rcv, bool b_forced) __bmdx_noex;
 
       // purely private (peer_tracker use only)
     static s_ll _x_idgen_peer() { static s_ll x(0); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
     inline s_long _x_qinfo_upd_prc_act_time();
-    inline void _x_init() throw();
+    inline void _x_init() __bmdx_noex;
   };
 
     // 1. Helper functions (for any thread).
 
-  static inline char make_identifier_char(wchar_t c0)  throw();
-  static inline bmdx_shm::t_name_shm __make_name_one_impl(arrayref_t<char> name) throw();
-  static inline bmdx_shm::t_name_shm __make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) throw();
-  static inline bmdx_shm::t_name_shm make_name_onef(const bmdx_shm::t_name_shm& name) throw() { return __make_name_one_impl(arrayref_t<char>(name.pd(), name.n())); }
-  static inline bmdx_shm::t_name_shm make_name_twof(const bmdx_shm::t_name_shm& name1, const bmdx_shm::t_name_shm& name2) throw() { return __make_name_two_impl(arrayref_t<char>(name1.pd(), name1.n()), arrayref_t<char>(name2.pd(), name2.n())); }
+  static inline char make_identifier_char(wchar_t c0)  __bmdx_noex;
+  static inline bmdx_shm::t_name_shm __make_name_one_impl(arrayref_t<char> name) __bmdx_noex;
+  static inline bmdx_shm::t_name_shm __make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) __bmdx_noex;
+  static inline bmdx_shm::t_name_shm make_name_onef(const bmdx_shm::t_name_shm& name) __bmdx_noex { return __make_name_one_impl(arrayref_t<char>(name.pd(), name.n())); }
+  static inline bmdx_shm::t_name_shm make_name_twof(const bmdx_shm::t_name_shm& name1, const bmdx_shm::t_name_shm& name2) __bmdx_noex { return __make_name_two_impl(arrayref_t<char>(name1.pd(), name1.n()), arrayref_t<char>(name2.pd(), name2.n())); }
 
     // 2. Servicing thread API.
     //
     //  Called from LMSC servicing thread only (except det_init() once called by dispatcher_mt).
 
-  inline s_long det_state() const throw() { return _state; }
-  inline void det_init() throw();
-  inline void det_periodic(i_callback& cb, bool& b_active) throw();
-  inline void det_close() throw() { _x_close(); }
+  inline s_long det_state() const __bmdx_noex { return _state; }
+  inline void det_init() __bmdx_noex;
+  inline void det_periodic(i_callback& cb, bool& b_active) __bmdx_noex;
+  inline void det_close() __bmdx_noex { _x_close(); }
 
     // 3. Client API (exclusively for dispatcher_mt).
 
   inline void clt_setparam_chsbin(bool b_enable);
   inline void clt_set_ses_state(s_long st);
 
-  inline s_long clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw();
-  inline s_long clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) throw();
-  inline s_long clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) throw();
+  inline s_long clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) __bmdx_noex;
+  inline s_long clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) __bmdx_noex;
+  inline s_long clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) __bmdx_noex;
 
-  inline s_long clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, bool b_rcv, bool b_forced) throw();
-  inline s_long clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, bool b_al, bool b_lqcap, s_long& res_al, s_long& res_lqcap, const cref_t<bmdx_shm::i_allocctl>* p_al, double timeout_ms_al, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw();
-  inline s_long clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, s_long& res_lqcap, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw();
+  inline s_long clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, bool b_rcv, bool b_forced) __bmdx_noex;
+  inline s_long clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, bool b_al, bool b_lqcap, s_long& res_al, s_long& res_lqcap, const cref_t<bmdx_shm::i_allocctl>* p_al, double timeout_ms_al, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) __bmdx_noex;
+  inline s_long clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, s_long& res_lqcap, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) __bmdx_noex;
 
 private:
   s_ll _nb_qum; volatile s_long _fl_chs;
@@ -1148,10 +1148,10 @@ private:
   critsec_t<lm_slot_controller>::csdata lkd_peer_hpt; // for locking *_hpt* read/modify
   hashx<bmdx_shm::t_name_shm, cref_t<peer_tracker> > _hpt; // grow-only { name_peerf (global), peer tracker }; locking: lkd_peer_hpt
 
-  inline bool _x_qinfo_rcv_init() throw();
-  inline void _x_qinfo_rcv_update_ses_state() throw();
+  inline bool _x_qinfo_rcv_init() __bmdx_noex;
+  inline void _x_qinfo_rcv_update_ses_state() __bmdx_noex;
   inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate);
-  inline void _x_close() throw();
+  inline void _x_close() __bmdx_noex;
 
   struct _mtrk_fn_handler
   {
@@ -1188,7 +1188,7 @@ private:
 
   // name_prf_: make_fixed_utf8_name of process name of the parent dispatcher_mt.
   // name_peerf_: make_fixed_utf8_name of process peer's process name, taken from message destination address, supplied by client.
-lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) throw()
+lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) __bmdx_noex
 :
   _name_prf(name_prf_), _name_peerf(name_peerf_), b_self(name_peerf_ == name_prf_),
   _qinfo_send(make_name_onef(name_peerf_)),
@@ -1222,7 +1222,7 @@ lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_
   //  1 - the peer process is communicable normally (all needed queues are working).
   //  0 - the peer process appears a) hanged, lagging, terminated, b) normally exited.
   //  -1 - the peer process is not available.
-s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_force_check) throw()
+s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_force_check) __bmdx_noex
 {
   if (_state != 1)
   {
@@ -1283,7 +1283,7 @@ s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_
   // For calling from lm_slot_controller many times.
   //  1st call initiates closing, next calls are only checking if all done.
   //  Returns true is all done, false - not yet.
-bool lm_slot_controller::peer_tracker::_cltpt_close() throw()
+bool lm_slot_controller::peer_tracker::_cltpt_close() __bmdx_noex
 {
   if (_state == -4) { return true; }
   critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
@@ -1373,7 +1373,7 @@ s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
   //    To make _qum_send surely available, _cltpt_ensure_comm sends tech. msg.
   //    via _qinfo_send, and waits until the peer reads it and creates its own _qum_rcv with the offered name;
   //    it thus initializes the shared memory; if successful, _qum_send here is able to connect to the memory and thus comes into working state.
-void lm_slot_controller::peer_tracker::_x_init() throw()
+void lm_slot_controller::peer_tracker::_x_init() __bmdx_noex
 {
   if (!(_state == 0 || _state == -2)) { return; }
 
@@ -1403,7 +1403,7 @@ void lm_slot_controller::peer_tracker::_x_init() throw()
   // NOTE If init. fails, it will really retry only after some delay (see _x_qinfo_rcv_init).
   //  b_active: is set to true by det_periodic each time it makes useful action.
   //    If it did not set b_active for long, LMSC thread will make itself more sleepy.
-void lm_slot_controller::det_periodic(i_callback& cb, bool& b_active) throw()
+void lm_slot_controller::det_periodic(i_callback& cb, bool& b_active) __bmdx_noex
 {
   if (_state != 1) { return; }
   if (!_x_qinfo_rcv_init()) { return; }
@@ -1709,7 +1709,7 @@ lCont2:;
 }
   // NOTE _x_qinfo_rcv_init depends on _tms_next_init.
   //  After failure, it does real init. attempt only when pre-calculated _tms_next_init is reached.
-bool lm_slot_controller::_x_qinfo_rcv_init() throw()
+bool lm_slot_controller::_x_qinfo_rcv_init() __bmdx_noex
 {
   const double t = clock_ms();
     if (t < _tms_next_init) { return false; }
@@ -1802,7 +1802,7 @@ cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const b
   // NOTE det_init() is called 1st time right after LMSC creation, in dispatcher_mt::thread_proxy::_s_disp_ctor.
   //  Servicing thread is not run yet at this time.
   //  If init. fails, it will be retried on the next call to det_init(). See also _x_qinfo_rcv_init.
-void lm_slot_controller::det_init() throw()
+void lm_slot_controller::det_init() __bmdx_noex
 {
   if (!(_state == 0 || _state == -2)) { return; }
 
@@ -1841,7 +1841,7 @@ void lm_slot_controller::clt_set_ses_state(s_long st)
   _qinfo_rcv.auxd_init.disp_ses_state = st;
   _x_qinfo_rcv_update_ses_state();
 }
-void lm_slot_controller::_x_qinfo_rcv_update_ses_state() throw()
+void lm_slot_controller::_x_qinfo_rcv_update_ses_state() __bmdx_noex
 {
   if (_qinfo_rcv.so.f_constructed() == 1) { _qinfo_rcv.so->auxd.disp_ses_state = _qinfo_rcv.auxd_init.disp_ses_state; }
 }
@@ -1853,7 +1853,7 @@ void lm_slot_controller::_x_qinfo_rcv_update_ses_state() throw()
   //    -2 - failed to create or access peer tracker.
   //    -3 - the peer process is not available.
   //    -14 - peer process appears to be hanged or terminated.
-s_long lm_slot_controller::clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) throw()
+s_long lm_slot_controller::clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long comm_mode) __bmdx_noex
 {
   cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true); if (!pt) { return -2; }
   bool b_comm_wait = comm_mode == 1;
@@ -1883,7 +1883,7 @@ s_long lm_slot_controller::clt_ensure_comm(arrayref_t<wchar_t> name_peer, s_long
   //          1) if peer process is not available (e.g. not created yet).
   //          2) if peer process has no valid dispatcher session on its side. Session state must be 1 (working).
   //    -14 - (only: with b_ignore_hanged == false): failed to send because peer process appears to be hanged or terminated.
-s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) throw()
+s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, unsigned char flags_mtrk, arrayref_t<wchar_t> name_peer, arrayref_t<wchar_t> msg, const cref_t<t_stringref>& bin, s_long flags_clt_msend, const weakref_t<t_htracking_proxy>& rhtrprx) __bmdx_noex
 {
   if (mtrk_id_msg == -1) { return -2; }
   const bool b_ignore_hanged = !!(flags_clt_msend & dispatcher_mt_flags::ignore_hanged);
@@ -1945,7 +1945,7 @@ s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, u
   //          1) if peer process is not available (e.g. not created yet).
   //          2) if peer process session state is not valid for technical messages. Must be 1 (working) or -1 (late initialization).
   //    -14 - failed to send because peer process appears to be hanged or terminated.
-s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) throw()
+s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_peer, const netmsg_header::msg_builder& msg, const weakref_t<t_htracking_proxy>& rhtrprx, s_long comm_mode) __bmdx_noex
 {
   if (mtrk_id == -1) { return -2; }
   if (!msg.b_complete()) { return -2; }
@@ -1979,7 +1979,7 @@ s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_pee
   // Returns:
   //    1 - success.
   //    -2 - failed to create or access peer tracker.
-s_long lm_slot_controller::clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, bool b_rcv, bool b_forced) throw()
+s_long lm_slot_controller::clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, bool b_rcv, bool b_forced) __bmdx_noex
 {
   cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, false);
     if (!pt) { return -2; }
@@ -1989,7 +1989,7 @@ s_long lm_slot_controller::clt_qum_conf_reset(arrayref_t<wchar_t> name_peer, boo
   pt->_cltpt_qum_conf_reset(b_rcv, b_forced);
   return 1;
 }
-s_long lm_slot_controller::clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, bool b_al, bool b_lqcap, s_long& res_al, s_long& res_lqcap, const cref_t<bmdx_shm::i_allocctl>* p_al, double timeout_ms_al, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw()
+s_long lm_slot_controller::clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, bool b_al, bool b_lqcap, s_long& res_al, s_long& res_lqcap, const cref_t<bmdx_shm::i_allocctl>* p_al, double timeout_ms_al, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) __bmdx_noex
 {
   cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true);
     if (!pt) { return -2; }
@@ -2004,7 +2004,7 @@ s_long lm_slot_controller::clt_qum_conf_set_rcv(arrayref_t<wchar_t> name_peer, b
   if (b_lqcap) { res_lqcap = pt->_qum_rcv.conf_set_lqcap(true, ncapmin, ncapmax, nrsv, timeout_ms_lqcap); }
   return 1;
 }
-s_long lm_slot_controller::clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, s_long& res_lqcap, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) throw()
+s_long lm_slot_controller::clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, s_long& res_lqcap, s_ll ncapmin, s_ll ncapmax, s_ll nrsv, double timeout_ms_lqcap) __bmdx_noex
 {
   cref_t<peer_tracker> pt = _x_pt_getcr(make_fixed_utf8_name(name_peer), false, true);
     if (!pt) { return -2; }
@@ -2017,7 +2017,7 @@ s_long lm_slot_controller::clt_qum_conf_set_send(arrayref_t<wchar_t> name_peer, 
   if (1) { res_lqcap = pt->_qum_send.conf_set_lqcap(false, ncapmin, ncapmax, nrsv, timeout_ms_lqcap); }
   return 1;
 }
-void lm_slot_controller::peer_tracker::_cltpt_qum_conf_reset(bool b_rcv, bool b_forced) throw()
+void lm_slot_controller::peer_tracker::_cltpt_qum_conf_reset(bool b_rcv, bool b_forced) __bmdx_noex
 {
   bool b1 = b_rcv && (b_forced || this->_qum_rcv_conf_reset_on_exit);
   bool b2 = !b_rcv && (b_forced || this->_qum_send_conf_reset_on_exit);
@@ -2045,7 +2045,7 @@ void lm_slot_controller::peer_tracker::_cltpt_qum_conf_reset(bool b_rcv, bool b_
   //  Formally, _x_close() is also called from ~lm_slot_controller(),
   //  but this call does nothing because of the above.
   //  (_thread_proc, servicing LMSC, exits when notices dispatcher session end and/or thread stop flag set.)
-void lm_slot_controller::_x_close() throw()
+void lm_slot_controller::_x_close() __bmdx_noex
 {
   if (_state == -4) { return; }
   if (_state != 1) { _state = -4; return; }
@@ -2072,7 +2072,7 @@ void lm_slot_controller::_x_close() throw()
   _state = -4;
 }
   // Converts any wchar_t to a char of subset of programmatic identifier: [a-zA-Z0-9_].
-char lm_slot_controller::make_identifier_char(wchar_t c0)  throw()
+char lm_slot_controller::make_identifier_char(wchar_t c0)  __bmdx_noex
 {
   static const char* const map = "abcdefghijklmnop0123456789abcdefgABCDEFGHIJKLMNOPQRSTUVWXYZhijk_labcdefghijklmnopqrstuvwxyzmnopq";
   unsigned int c = (unsigned int)c0 & 0xffff; c ^= c >> 8; c &= 0x7f; if (c < 32) { c += '0'; } c -= 32;
@@ -2083,7 +2083,7 @@ char lm_slot_controller::make_identifier_char(wchar_t c0)  throw()
   //    1) __lm_slot_controller_name_prefix,
   //    2) 4-byte hash of the given name, converted with make_identifier_char() into symbolic form (also 4 characters),
   //    3) characters of the given name itself, converted with make_identifier_char() into symbolic form, up to least of name length and t_name_shm capacity.
-bmdx_shm::t_name_shm lm_slot_controller::__make_name_one_impl(arrayref_t<char> name) throw()
+bmdx_shm::t_name_shm lm_slot_controller::__make_name_one_impl(arrayref_t<char> name) __bmdx_noex
 {
   if (!name.is_valid()) { return bmdx_shm::t_name_shm(); }
   t_stringref prefix(__lm_slot_controller_name_prefix);
@@ -2107,7 +2107,7 @@ bmdx_shm::t_name_shm lm_slot_controller::__make_name_one_impl(arrayref_t<char> n
   //    4) characters of name1 (max. __lm_slot_controller_nbmax_peer_name_root, which is less than 1/2 of t_name_shm capacity),
   //    5) characters of name2 (max. __lm_slot_controller_nbmax_peer_name_root, which is less than 1/2 of t_name_shm capacity).
   // See also make_name_one().
-bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) throw()
+bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> name1, arrayref_t<char> name2) __bmdx_noex
 {
   if (!(name1.is_valid() && name2.is_valid())) { return bmdx_shm::t_name_shm(); }
   t_stringref prefix(__lm_slot_controller_name_prefix);
@@ -2643,7 +2643,7 @@ namespace bmdx
     // Returns:
     //    a) if found -- the position in range [begin..end).
     //    b) if not found -- s.n().
-  s_ll _find_char_except(arrayref_t<wchar_t> s, s_ll begin, s_ll end, const wchar_t* chars) throw()
+  s_ll _find_char_except(arrayref_t<wchar_t> s, s_ll begin, s_ll end, const wchar_t* chars) __bmdx_noex
   {
     if (begin <= 0) { begin = 0; }
     if (end > s.n()) { end = s.n(); }
@@ -2700,46 +2700,46 @@ struct _unity_hl_impl : public unity::_hl_i, protected yk_c::hashx<unity, unity,
   _unity_hl_impl(const _unity_hl_impl& x);
   void assign(const _unity_hl_impl& x);
 
-  s_long n() const throw();
-  unity& operator[] (const unity& k) throw (exc_subscript);
-  const entry* operator() (s_long ind) const throw();
-  const entry* find(const unity& k, s_long* ret_pind = 0) const throw();
-  s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = -1) throw();
-  s_long remove(const unity& k) throw();
-  s_long remove_i(s_long ind) throw();
-  const entry* h(s_long ind_h) const throw();
-  s_long hl_clear(bool full) throw();
-  const f_kf* pkf() const throw();
-  bool hl_set_kf(const f_kf& kf) throw();
+  s_long n() const __bmdx_noex;
+  unity& operator[] (const unity& k) __bmdx_exs(exc_subscript);
+  const entry* operator() (s_long ind) const __bmdx_noex;
+  const entry* find(const unity& k, s_long* ret_pind = 0) const __bmdx_noex;
+  s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = -1) __bmdx_noex;
+  s_long remove(const unity& k) __bmdx_noex;
+  s_long remove_i(s_long ind) __bmdx_noex;
+  const entry* h(s_long ind_h) const __bmdx_noex;
+  s_long hl_clear(bool full) __bmdx_noex;
+  const f_kf* pkf() const __bmdx_noex;
+  bool hl_set_kf(const f_kf& kf) __bmdx_noex;
 
-  s_long qi_noel() const throw();
-  s_long qi_next(s_long pos) const throw();
-  s_long qi_prev(s_long pos) const throw();
-  s_long qi_indk(s_long ind) const throw();
-  s_long compatibility() const throw();
+  s_long qi_noel() const __bmdx_noex;
+  s_long qi_next(s_long pos) const __bmdx_noex;
+  s_long qi_prev(s_long pos) const __bmdx_noex;
+  s_long qi_indk(s_long ind) const __bmdx_noex;
+  s_long compatibility() const __bmdx_noex;
 private:
   struct _vecm_x : vecm { friend struct _unity_hl_impl; };
 
   vecm _list; // n == 1 + hash n
   mutable vecm _indk; // n == hash n
 
-  bool _a_rsv_1() throw();
-  bool _a_inserted(s_long ind_before = -1) throw();
-  void _a_removed(s_long ind) throw();
-  void _a_cleared() throw();
-  bool _a_indk() const throw();
+  bool _a_rsv_1() __bmdx_noex;
+  bool _a_inserted(s_long ind_before = -1) __bmdx_noex;
+  void _a_removed(s_long ind) __bmdx_noex;
+  void _a_cleared() __bmdx_noex;
+  bool _a_indk() const __bmdx_noex;
 
-  bool _check() const throw();
-  const _vecm_x& __crvx(const vecm& v) const throw();
-  meta::s_ll _v(s_long prev, s_long next) const throw();
-  s_long _iprev(meta::s_ll x) const throw();
-  s_long _inext(meta::s_ll x) const throw();
-  meta::s_ll _v_of(s_long ind) const throw();
-  s_long _prev_of(s_long ind) const throw();
-  s_long _next_of(s_long ind) const throw();
-  void _setv(s_long ind, meta::s_ll x) const throw();
-  void __eject(s_long ind) throw();
-  void __insert(s_long ind, s_long after) throw();
+  bool _check() const __bmdx_noex;
+  const _vecm_x& __crvx(const vecm& v) const __bmdx_noex;
+  meta::s_ll _v(s_long prev, s_long next) const __bmdx_noex;
+  s_long _iprev(meta::s_ll x) const __bmdx_noex;
+  s_long _inext(meta::s_ll x) const __bmdx_noex;
+  meta::s_ll _v_of(s_long ind) const __bmdx_noex;
+  s_long _prev_of(s_long ind) const __bmdx_noex;
+  s_long _next_of(s_long ind) const __bmdx_noex;
+  void _setv(s_long ind, meta::s_ll x) const __bmdx_noex;
+  void __eject(s_long ind) __bmdx_noex;
+  void __insert(s_long ind, s_long after) __bmdx_noex;
 
   void operator=(const _unity_hl_impl& x); // assign() used instead
 };
@@ -3174,7 +3174,7 @@ struct cv_ff
       //  1 - success.
       //   0 - utt_dest is same as the current type.
       //  < 0 - failure (the number shows where it occurred.)
-    static s_long Fcnv_this(unity* p, s_long cs, s_long utt_dest, s_long keep_name) throw();
+    static s_long Fcnv_this(unity* p, s_long cs, s_long utt_dest, s_long keep_name) __bmdx_noex;
 
       // flags:
       //    0x1 - keep object name, if it exists.
@@ -3188,7 +3188,7 @@ struct cv_ff
       //  < 0 - failure (the number shows where it occurred.)
     typedef s_long (*PFasg)(unity* p, const unity* px, s_long flags);
     static void Lasg(unity* p, const unity* px, s_long flags);
-    static s_long Fasg(unity* p, const unity* px, s_long flags) throw();
+    static s_long Fasg(unity* p, const unity* px, s_long flags) __bmdx_noex;
   };
 
   struct u_set_name
@@ -3708,7 +3708,7 @@ s_long cv_ff::cv_rootldr::Frootldr(unity_common::__Psm offer, unity_common::__Ps
 }
 
 typedef hashx<std::string, unity_common::__Psm> t_hipsm;
-unity_common::__Psm _ls_psm_find(const char* piname) throw()
+unity_common::__Psm _ls_psm_find(const char* piname) __bmdx_noex
 {
   if (!piname) { return 0; }
   svf_m_t<t_hipsm, unity_common>::L __lock; if (!__lock.b_valid()) { return 0; }
@@ -3718,7 +3718,7 @@ unity_common::__Psm _ls_psm_find(const char* piname) throw()
   unity_common::__Psm pf = e ? e->v : 0;
   return pf;
 }
-void unity_common::_ls_psm_set(const char* piname, unity_common::__Psm pf) throw()
+void unity_common::_ls_psm_set(const char* piname, unity_common::__Psm pf) __bmdx_noex
 {
   if (!piname) { return; }
   svf_m_t<t_hipsm, unity_common>::L __lock; if (!__lock.b_valid()) { return; }
@@ -3726,10 +3726,10 @@ void unity_common::_ls_psm_set(const char* piname, unity_common::__Psm pf) throw
       t_hipsm* phi = rsth.px(); if (!phi) { return; }
   try { phi->opsub(piname) = pf; } catch (...) {}
 }
-void* _ls_obj_pi(void*, const char*) throw() { return 0; }
-void* _ls_obj_cpvoid(void*, s_long) throw() { return 0; }
-unity* _ls_obj_punity(void*) throw() { return 0; }
-void* _ls_obj_prefo(void*, const char*) throw() { return 0; }
+void* _ls_obj_pi(void*, const char*) __bmdx_noex { return 0; }
+void* _ls_obj_cpvoid(void*, s_long) __bmdx_noex { return 0; }
+unity* _ls_obj_punity(void*) __bmdx_noex { return 0; }
+void* _ls_obj_prefo(void*, const char*) __bmdx_noex { return 0; }
 
 void* unity_common::ls_modsm(s_long ind)
 {
@@ -5489,7 +5489,7 @@ void _static_conv::conv_utStringArray_CharVector(s_long fc, const unity& x, std:
 //  ~_trace_cnv_s() { _trace_cnv_f(line, false); }
 //};
 
-s_long unity::_def_size(s_long utt) throw()
+s_long unity::_def_size(s_long utt) __bmdx_noex
 {
   enum { sp = sizeof(void*) };
   static s_long size_table[2 * _ut_end] =
@@ -5500,11 +5500,11 @@ s_long unity::_def_size(s_long utt) throw()
   return size_table[(utt & utMaskNoArray) + (utt & utArray ? _ut_end : 0)];
 }
 
-s_long unity::_compat_id(unity_common::__Psm pmsm_, s_long utype) const throw () // class method
+s_long unity::_compat_id(unity_common::__Psm pmsm_, s_long utype) const __bmdx_noex // class method
   { meta::s_ll n = ((char*)pmsm_ - (char*)0) + utype; n ^= (n >> (32 - _xCompatShift)); return s_long(n & _xCompatMask); }
-bool unity::_compat_chk() const throw()
+bool unity::_compat_chk() const __bmdx_noex
   { if (!this) { return false; } if (pmsm == unity_common::ls_modsm) { return true; } const s_long v1 = (ut >> _xCompatShift) & _xCompatMask; const s_long v2 = _compat_id(&unity_common::ls_modsm, utype()); if (v1 == v2) { return true; } const s_long v3 = _compat_id(&unity_common::ls_modsm, -1); if (v1 == v3) { return false; } if (_compatibility() > 0) { ut = _uttf() | (v2 << _xCompatShift); return true; } ut = _uttf() | (v3 << _xCompatShift); return false; }
-s_long unity::_compatibility() const throw()
+s_long unity::_compatibility() const __bmdx_noex
 {
   if (!this) { return -3; }
   if (pmsm == unity_common::ls_modsm) { return 2; }
@@ -5530,7 +5530,7 @@ s_long unity::_compatibility() const throw()
 }
 
 void unity::_x_cnv_this(EConvStrength cs, s_long utt_dest, bool keep_name)  { if (utt_dest == utype()) { return; } cv_ff::cv_convert::Lcnv_this(this, cs, utt_dest, keep_name);  }
-s_long cv_ff::cv_convert::Fcnv_this(unity* p, s_long cs, s_long utt_dest, s_long keep_name) throw()
+s_long cv_ff::cv_convert::Fcnv_this(unity* p, s_long cs, s_long utt_dest, s_long keep_name) __bmdx_noex
 {
   if (utt_dest == p->utype()) { return 0; }
   void* _pn = keep_name && p->isNamed() ? p->_data.p2 : 0;
@@ -5573,7 +5573,7 @@ s_long cv_ff::cv_convert::Fcnv_this(unity* p, s_long cs, s_long utt_dest, s_long
 }
   // _x_asg: see Fasg decl. for flags.
 void unity::_x_asg(const unity& x, s_long flags) { cv_ff::cv_convert::Lasg(this, &x, flags); }
-s_long cv_ff::cv_convert::Fasg(unity* p, const unity* px, s_long flags) throw()
+s_long cv_ff::cv_convert::Fasg(unity* p, const unity* px, s_long flags) __bmdx_noex
 {
   if (!(p && px)) { return -11; } if (px == p) { return 0; }
   if ((flags & 0x1) && p->isNamed()) { flags |= 0x100; }
@@ -5784,7 +5784,7 @@ s_long cv_ff::u_clear::Fu_clear(unity* p, s_long flags)
 
 
 
-unity* unity::_path_u(const std::wstring& keylist, bool forced) throw()
+unity* unity::_path_u(const std::wstring& keylist, bool forced) __bmdx_noex
 {
   try {
     unity k;
@@ -5877,8 +5877,8 @@ unity::unity(const meta::s_ll& x)        { ut = utInt; pmsm = unity_common::ls_m
 unity::unity(const double& x)        { ut = utFloat; pmsm = unity_common::ls_modsm; _data.p2 = 0; *_drf_c_i<utFloat>() = x; }
 unity::unity(const _unitychar& x)        { ut = utChar; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; *_drf_c_i<utChar>() = x; }
 unity::unity(const _unitydate& x)        { ut = utEmpty; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; *this = x; }
-unity::~unity() throw() { clear(); }
-void unity::clear() throw()
+unity::~unity() __bmdx_noex { clear(); }
+void unity::clear() __bmdx_noex
 {
   if (!this) { return; }
   s_long uttf = _uttf();
@@ -5906,7 +5906,7 @@ unity& unity::operator=(const double& src) { clear(); ut = utFloat; *_drf_c_i<ut
 unity& unity::operator=(const _unitydate& src) { clear(); ut = utDate; *_drf_c_i<utDate>() = src; return *this; }
 unity& unity::operator=(const _unitychar& src) { clear(); ut = utChar; *_drf_c_i<utChar>() = src; return *this; }
 
-void unity::swap(unity& x) throw()
+void unity::swap(unity& x) __bmdx_noex
 {
   if (this == &x) { return; }
   meta::s_ll temp[1 + sizeof(unity) / 8];
@@ -5915,9 +5915,9 @@ void unity::swap(unity& x) throw()
   bytes::memmove_t<char>::F(&x, temp, sizeof(unity));
 }
 
-bool unity::unity_delete() throw() { return _Ldelete_this() > 0; }
-unity& unity::recreate() throw() { this->~unity(); new (this) unity(); return *this; }
-unity& unity::recreate_as(const unity& modsrc) throw() { this->~unity(); new (this) unity(); this->pmsm = modsrc.pmsm; return *this; }
+bool unity::unity_delete() __bmdx_noex { return _Ldelete_this() > 0; }
+unity& unity::recreate() __bmdx_noex { this->~unity(); new (this) unity(); return *this; }
+unity& unity::recreate_as(const unity& modsrc) __bmdx_noex { this->~unity(); new (this) unity(); this->pmsm = modsrc.pmsm; return *this; }
 
 s_long unity::arrlb() const { if (isArray()) { return cv_ff::cv_array::Llb_u(this); } throw(XUTypeMismatch("arrlb", _tname0(utype()), "array")); }
 s_long unity::arrub() const { if (isArray()) { return cv_ff::cv_array::Lub_u(this); } throw(XUTypeMismatch("arrub", _tname0(utype()), "array")); }
@@ -5953,7 +5953,7 @@ bool unity::arr_insrem(s_long ind, s_long m, EConvStrength cs)
 
 
 
-meta::s_ll unity::lenstr() const throw()
+meta::s_ll unity::lenstr() const __bmdx_noex
 {
   if (!this || !pmsm) { return -3; }
   if (isEmpty()) { return -1; }
@@ -5993,7 +5993,7 @@ s_long unity::vint_l() const { return s_long(val<utInt>(csNormal)); }
 s_long unity::vint_l(s_long ind) const { return s_long(_arr_el_get<utInt>::F(this, ind, csNormal)); }
 double unity::vfp() const { return val<utFloat>(csNormal); }
 double unity::vfp(s_long ind) const { return _arr_el_get<utFloat>::F(this, ind, csNormal); }
-_fls75 unity::vflstr() const throw()
+_fls75 unity::vflstr() const __bmdx_noex
 {
   switch (utype())
   {
@@ -6085,9 +6085,9 @@ unity::_wr_wstring::_wr_wstring(const std::wstring& x) : t_base(x) {}
 std::string unity::_wr_wstring::cstr() const { return wsToBs(*this); }
 const unity::_wr_wstring::t_base& unity::_wr_wstring::wstr() const { return *this; }
 
-bool unity::isAssoc() const throw () { if (!this) { return false; } s_long t = utype(); return t == utHash || t == utMap; } // true if unity is utHash or utMap
-bool unity::isBoolTrue() const throw () { return this && utype() == utChar && *_drf_c_i<utChar>() != 0; } // true if *this contains char != 0
-bool unity::isBoolFalse() const throw () { return this && utype() == utChar && *_drf_c_i<utChar>() == 0; } // true if *this contains char == 0
+bool unity::isAssoc() const __bmdx_noex { if (!this) { return false; } s_long t = utype(); return t == utHash || t == utMap; } // true if unity is utHash or utMap
+bool unity::isBoolTrue() const __bmdx_noex { return this && utype() == utChar && *_drf_c_i<utChar>() != 0; } // true if *this contains char != 0
+bool unity::isBoolFalse() const __bmdx_noex { return this && utype() == utChar && *_drf_c_i<utChar>() == 0; } // true if *this contains char == 0
 bool unity::isLocal() const { return pmsm == unity_common::ls_modsm; }
 bool unity::operator==(const unity& x) const { return k_eq(x, 0); }
 bool unity::operator!=(const unity& x) const { return !k_eq(x, 0); }
@@ -6113,7 +6113,7 @@ std::wstring unity::tname(bool allowArrDim) const
   else { return bsToWs(_tname0(utype())); }
 }
 
-_fls75 unity::_tname0(s_long uttf) throw()
+_fls75 unity::_tname0(s_long uttf) __bmdx_noex
 {
     s_long utt = uttf & xfmUtype;
     switch (utt)
@@ -6724,7 +6724,7 @@ unity& unity::mapi_del(s_long ind)        { _ensure_m(); const t_map::entry* e =
 
 
 
-unity& _unity_hl_impl::operator[] (const unity& k) throw (exc_subscript)
+unity& _unity_hl_impl::operator[] (const unity& k) __bmdx_exs(exc_subscript)
 {
   const t_hash::entry* e(0);
   s_long res = this->t_hash::insert(k, &e);
@@ -6732,18 +6732,18 @@ unity& _unity_hl_impl::operator[] (const unity& k) throw (exc_subscript)
   if (res >= 0) { return e->v; } throw exc_subscript();
 }
   // Returns same as hashx remove_all (>= 0 - success, < 0 - failure, no changes.)
-s_long _unity_hl_impl::hl_clear(bool full) throw()
+s_long _unity_hl_impl::hl_clear(bool full) __bmdx_noex
 {
   if (full) { s_long n_prev = _n; hashx_clear(); _a_cleared(); return n_prev; }
   s_long res = this->t_hash::remove_all(); if (res >= 0) { _a_cleared(); } return res;
 }
 
-bool _unity_hl_impl::_a_rsv_1() throw()  // reserve place in list and indk before possible adding 1 elem. to hash
+bool _unity_hl_impl::_a_rsv_1() __bmdx_noex  // reserve place in list and indk before possible adding 1 elem. to hash
   { return _list.el_reserve_n(n() + 2, false) && _indk.el_reserve_n(n() + 1, false); }
 
   // Adjustment notifications for list and keys index, on each hashlist change.
 
-bool _unity_hl_impl::_a_inserted(s_long ind_before) throw() // adjust list and indk after adding 1 elem. to hashlist, true on success
+bool _unity_hl_impl::_a_inserted(s_long ind_before) __bmdx_noex // adjust list and indk after adding 1 elem. to hashlist, true on success
 {
   if (ind_before == -1) {}
     else { if (!(ind_before >= 0 && ind_before < n())) { return false; } }
@@ -6754,7 +6754,7 @@ bool _unity_hl_impl::_a_inserted(s_long ind_before) throw() // adjust list and i
   if (_indk.n()) { _indk.vecm_clear(); }
   return true;
 }
-void _unity_hl_impl::_a_removed(s_long ind) throw() // adjust list and indk after removing 1 elem. from hash
+void _unity_hl_impl::_a_removed(s_long ind) __bmdx_noex // adjust list and indk after removing 1 elem. from hash
 {
   if (!(ind >= 0 && ind <= n() && _list.n() == n() + 2)) { return; }
   if (_indk.n())
@@ -6767,10 +6767,10 @@ void _unity_hl_impl::_a_removed(s_long ind) throw() // adjust list and indk afte
   if (ind == n()) { _list.el_expunge_last<meta::s_ll>(); return; }
   s_long ip = _prev_of(n()); __eject(n()); _list.el_expunge_last<meta::s_ll>(); __insert(ind, ip);
 }
-void _unity_hl_impl::_a_cleared() throw() // clear list and indk
+void _unity_hl_impl::_a_cleared() __bmdx_noex // clear list and indk
   {  _list.el_expand_n(1); *_list.pval_first<meta::s_ll>() = _v(-1, -1);  _indk.vecm_clear(); }
 
-bool _unity_hl_impl::_a_indk() const throw() // ensure indk containing full index of hashlist elems.
+bool _unity_hl_impl::_a_indk() const __bmdx_noex // ensure indk containing full index of hashlist elems.
 {
   if (_indk.n() == n()) { return true; }
   if (!_indk.el_expand_n(n())) { _indk.vecm_clear(); return false; }
@@ -6779,13 +6779,13 @@ bool _unity_hl_impl::_a_indk() const throw() // ensure indk containing full inde
   return true;
 }
 
-void _unity_hl_impl::__eject(s_long ind) throw()
+void _unity_hl_impl::__eject(s_long ind) __bmdx_noex
 {
   s_long ipr = _prev_of(ind); s_long inx = _next_of(ind);
   if (ipr == inx) { _setv(ipr, _v(ipr, ipr)); }
     else if (_list.n() > 2) { meta::s_ll xp = _v(_prev_of(ipr), inx); meta::s_ll xn =  _v(ipr, _next_of(inx)); _setv(ipr, xp); _setv(inx, xn); }
 }
-void _unity_hl_impl::__insert(s_long ind, s_long after) throw()
+void _unity_hl_impl::__insert(s_long ind, s_long after) __bmdx_noex
 {
   if (_list.n() > 2)
   {
@@ -6810,24 +6810,24 @@ bool unity::kf_unity::less21(const unity& x1, const unity& x2) const { return x1
 
 unity::_hl_i::_hl_i() { pmsm = unity_common::ls_modsm; }
 unity::_hl_i::_hl_i(const _hl_i& x) : pmsm(0) { if (x.compatibility() < 1) { throw exc_consistency(); } pmsm = x.pmsm; }
-s_long unity::_hl_i::n() const throw() { return static_cast<const _unity_hl_impl*>(this)->n(); }
-unity& unity::_hl_i::operator[] (const unity& k) throw (exc_subscript) { return static_cast<_unity_hl_impl*>(this)->operator[](k); }
-const unity::_hl_i::entry* unity::_hl_i::operator() (s_long ind) const throw() { return static_cast<const _unity_hl_impl*>(this)->operator()(ind); }
-const unity::_hl_i::entry* unity::_hl_i::find(const unity& k, s_long* ret_pind) const throw() { return static_cast<const _unity_hl_impl*>(this)->find(k, ret_pind); }
-s_long unity::_hl_i::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) throw() { return static_cast<_unity_hl_impl*>(this)->insert(k, ret_pentry, ret_pind, ind_before); }
-s_long unity::_hl_i::remove(const unity& k) throw() { return static_cast<_unity_hl_impl*>(this)->remove(k); }
-s_long unity::_hl_i::remove_i(s_long ind) throw() { return static_cast<_unity_hl_impl*>(this)->remove_i(ind); }
-const unity::_hl_i::entry* unity::_hl_i::h(s_long ind_h) const throw() { return static_cast<const _unity_hl_impl*>(this)->h(ind_h); }
-s_long unity::_hl_i::hl_clear(bool full) throw() { return static_cast<_unity_hl_impl*>(this)->hl_clear(full); }
-const unity::_hl_i::t_hash::f_kf* unity::_hl_i::pkf() const throw() { return static_cast<const _unity_hl_impl*>(this)->pkf(); }
-bool unity::_hl_i::hl_set_kf(const unity::_hl_i::t_hash::f_kf& kf) throw() { return static_cast<_unity_hl_impl*>(this)->hl_set_kf(kf); }
+s_long unity::_hl_i::n() const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->n(); }
+unity& unity::_hl_i::operator[] (const unity& k) __bmdx_exs(exc_subscript) { return static_cast<_unity_hl_impl*>(this)->operator[](k); }
+const unity::_hl_i::entry* unity::_hl_i::operator() (s_long ind) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->operator()(ind); }
+const unity::_hl_i::entry* unity::_hl_i::find(const unity& k, s_long* ret_pind) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->find(k, ret_pind); }
+s_long unity::_hl_i::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) __bmdx_noex { return static_cast<_unity_hl_impl*>(this)->insert(k, ret_pentry, ret_pind, ind_before); }
+s_long unity::_hl_i::remove(const unity& k) __bmdx_noex { return static_cast<_unity_hl_impl*>(this)->remove(k); }
+s_long unity::_hl_i::remove_i(s_long ind) __bmdx_noex { return static_cast<_unity_hl_impl*>(this)->remove_i(ind); }
+const unity::_hl_i::entry* unity::_hl_i::h(s_long ind_h) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->h(ind_h); }
+s_long unity::_hl_i::hl_clear(bool full) __bmdx_noex { return static_cast<_unity_hl_impl*>(this)->hl_clear(full); }
+const unity::_hl_i::t_hash::f_kf* unity::_hl_i::pkf() const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->pkf(); }
+bool unity::_hl_i::hl_set_kf(const unity::_hl_i::t_hash::f_kf& kf) __bmdx_noex { return static_cast<_unity_hl_impl*>(this)->hl_set_kf(kf); }
 
-s_long unity::_hl_i::qi_noel() const throw() { return t_hash::no_elem; }
-s_long unity::_hl_i::qi_next(s_long pos) const throw() { return static_cast<const _unity_hl_impl*>(this)->qi_next(pos); }
-s_long unity::_hl_i::qi_prev(s_long pos) const throw() { return static_cast<const _unity_hl_impl*>(this)->qi_prev(pos); }
-s_long unity::_hl_i::qi_indk(s_long ind) const throw() { return static_cast<const _unity_hl_impl*>(this)->qi_indk(ind); }
+s_long unity::_hl_i::qi_noel() const __bmdx_noex { return t_hash::no_elem; }
+s_long unity::_hl_i::qi_next(s_long pos) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->qi_next(pos); }
+s_long unity::_hl_i::qi_prev(s_long pos) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->qi_prev(pos); }
+s_long unity::_hl_i::qi_indk(s_long ind) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->qi_indk(ind); }
 
-s_long unity::_hl_i::compatibility() const throw()
+s_long unity::_hl_i::compatibility() const __bmdx_noex
 {
   if (pmsm == unity_common::ls_modsm) { return 2; }
   s_long ver = ((cv_ff::cv_ver::PFver)pmsm(unity_common::msm_ver_hl))();
@@ -6846,53 +6846,53 @@ void _unity_hl_impl::assign(const _unity_hl_impl& x)
   s_long res = 100 * hashx_copy(x, true) + 10 * _list.vecm_copy(x._list, true) + _indk.vecm_copy(x._indk, true);
   if (res != 111 || !_check()) { hl_clear(true);  throw exc_consistency(); }
 }
-s_long _unity_hl_impl::n() const throw() { return _n; }
-const _unity_hl_impl::entry* _unity_hl_impl::operator() (s_long ind) const throw() { return this->t_hash::operator()(qi_indk(ind)); }
-const _unity_hl_impl::entry* _unity_hl_impl::find(const unity& k, s_long* ret_pind) const throw() { const entry* e; s_long ind; this->t_hash::find2(k, *this->t_hash::pkf(), 0, &e, &ind); if (ret_pind) { *ret_pind = ind; } return e; }
-s_long _unity_hl_impl::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) throw() { const t_hash::entry* e(0); s_long ind; s_long res = this->t_hash::insert(k, &e, &ind); if (res > 0) { if (!_a_inserted(ind_before)) { this->t_hash::remove_e(e); e = 0; ind = no_elem; res = -1; } } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; } return res; }
-s_long _unity_hl_impl::remove(const unity& k) throw() { s_long ind; this->t_hash::find2(k, *this->t_hash::pkf(), 0, 0, &ind); return remove_i(ind); }
-s_long _unity_hl_impl::remove_i(s_long ind) throw() { s_long res = this->t_hash::remove_i(ind); if (res == 1) { _a_removed(ind); } return res; }
-const _unity_hl_impl::entry* _unity_hl_impl::h(s_long ind_h) const throw() { return this->t_hash::operator()(ind_h); }
-const _unity_hl_impl::f_kf* _unity_hl_impl::pkf() const throw() { return this->t_hash::pkf(); }
-bool _unity_hl_impl::hl_set_kf(const f_kf& kf) throw() { return this->t_hash::hashx_set_kf(kf); }
-s_long _unity_hl_impl::qi_noel() const throw() { return no_elem; } // starting pos for iterating the list in both directions
+s_long _unity_hl_impl::n() const __bmdx_noex { return _n; }
+const _unity_hl_impl::entry* _unity_hl_impl::operator() (s_long ind) const __bmdx_noex { return this->t_hash::operator()(qi_indk(ind)); }
+const _unity_hl_impl::entry* _unity_hl_impl::find(const unity& k, s_long* ret_pind) const __bmdx_noex { const entry* e; s_long ind; this->t_hash::find2(k, *this->t_hash::pkf(), 0, &e, &ind); if (ret_pind) { *ret_pind = ind; } return e; }
+s_long _unity_hl_impl::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) __bmdx_noex { const t_hash::entry* e(0); s_long ind; s_long res = this->t_hash::insert(k, &e, &ind); if (res > 0) { if (!_a_inserted(ind_before)) { this->t_hash::remove_e(e); e = 0; ind = no_elem; res = -1; } } if (ret_pentry) { *ret_pentry = e; } if (ret_pind) { *ret_pind = ind; } return res; }
+s_long _unity_hl_impl::remove(const unity& k) __bmdx_noex { s_long ind; this->t_hash::find2(k, *this->t_hash::pkf(), 0, 0, &ind); return remove_i(ind); }
+s_long _unity_hl_impl::remove_i(s_long ind) __bmdx_noex { s_long res = this->t_hash::remove_i(ind); if (res == 1) { _a_removed(ind); } return res; }
+const _unity_hl_impl::entry* _unity_hl_impl::h(s_long ind_h) const __bmdx_noex { return this->t_hash::operator()(ind_h); }
+const _unity_hl_impl::f_kf* _unity_hl_impl::pkf() const __bmdx_noex { return this->t_hash::pkf(); }
+bool _unity_hl_impl::hl_set_kf(const f_kf& kf) __bmdx_noex { return this->t_hash::hashx_set_kf(kf); }
+s_long _unity_hl_impl::qi_noel() const __bmdx_noex { return no_elem; } // starting pos for iterating the list in both directions
   // Next, prev. elem. ind. >= 0, or qi_noel() at list end
-s_long _unity_hl_impl::qi_next(s_long pos) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(pos); return p ? _inext(*p) : s_long(no_elem); }
-s_long _unity_hl_impl::qi_prev(s_long pos) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(pos); return p ? _iprev(*p) : s_long(no_elem); }
+s_long _unity_hl_impl::qi_next(s_long pos) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(pos); return p ? _inext(*p) : s_long(no_elem); }
+s_long _unity_hl_impl::qi_prev(s_long pos) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(pos); return p ? _iprev(*p) : s_long(no_elem); }
   // Index of ind-th element in hashlist, according to list, or qi_noel() for bad ind or indk.
-s_long _unity_hl_impl::qi_indk(s_long ind) const throw() { if (!_a_indk()) { return no_elem; } s_long* p = _indk.pval<s_long>(ind); return p ? *p : s_long(no_elem); }
-s_long _unity_hl_impl::compatibility() const throw() { const s_long ti = bytes::type_index_t<s_long>::ind(); const s_long ti2 = bytes::type_index_t<meta::s_ll>::ind(); s_long c = __crvx(_list)._t_ind == ti2  && __crvx(_indk)._t_ind == ti && __crvx(_ht)._t_ind == ti && sizeof(*this) == ((char*)&_indk - (char*)this) + sizeof(vecm) ? this->vecm::compatibility() : -1; if (c == 0) { c = -1; } return c; }
-bool _unity_hl_impl::_check() const throw() { return nexc() == 0 && _list.n() == n() + 1 && (_indk.n() == 0 || _indk.n() == n()); }
-const _unity_hl_impl::_vecm_x& _unity_hl_impl::__crvx(const vecm& v) const throw() { return *static_cast<const _vecm_x*>(&v); } // class method
-meta::s_ll _unity_hl_impl::_v(s_long prev, s_long next) const throw() { return (meta::s_ll(prev) << 32) | (meta::s_ll(next) & 0xffffffffll); } // class method
-s_long _unity_hl_impl::_iprev(meta::s_ll x) const throw() { return s_long(x >> 32); } // class method
-s_long _unity_hl_impl::_inext(meta::s_ll x) const throw() { return s_long(x & 0xffffffffll); } // class method
-meta::s_ll _unity_hl_impl::_v_of(s_long ind) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? *p : -1; }
-s_long _unity_hl_impl::_prev_of(s_long ind) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? _iprev(*p) : -1; }
-s_long _unity_hl_impl::_next_of(s_long ind) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? _inext(*p) : -1; }
-void _unity_hl_impl::_setv(s_long ind, meta::s_ll x) const throw() { meta::s_ll* p = _list.pval<meta::s_ll>(ind); if (p) { *p = x; } }
+s_long _unity_hl_impl::qi_indk(s_long ind) const __bmdx_noex { if (!_a_indk()) { return no_elem; } s_long* p = _indk.pval<s_long>(ind); return p ? *p : s_long(no_elem); }
+s_long _unity_hl_impl::compatibility() const __bmdx_noex { const s_long ti = bytes::type_index_t<s_long>::ind(); const s_long ti2 = bytes::type_index_t<meta::s_ll>::ind(); s_long c = __crvx(_list)._t_ind == ti2  && __crvx(_indk)._t_ind == ti && __crvx(_ht)._t_ind == ti && sizeof(*this) == ((char*)&_indk - (char*)this) + sizeof(vecm) ? this->vecm::compatibility() : -1; if (c == 0) { c = -1; } return c; }
+bool _unity_hl_impl::_check() const __bmdx_noex { return nexc() == 0 && _list.n() == n() + 1 && (_indk.n() == 0 || _indk.n() == n()); }
+const _unity_hl_impl::_vecm_x& _unity_hl_impl::__crvx(const vecm& v) const __bmdx_noex { return *static_cast<const _vecm_x*>(&v); } // class method
+meta::s_ll _unity_hl_impl::_v(s_long prev, s_long next) const __bmdx_noex { return (meta::s_ll(prev) << 32) | (meta::s_ll(next) & 0xffffffffll); } // class method
+s_long _unity_hl_impl::_iprev(meta::s_ll x) const __bmdx_noex { return s_long(x >> 32); } // class method
+s_long _unity_hl_impl::_inext(meta::s_ll x) const __bmdx_noex { return s_long(x & 0xffffffffll); } // class method
+meta::s_ll _unity_hl_impl::_v_of(s_long ind) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? *p : -1; }
+s_long _unity_hl_impl::_prev_of(s_long ind) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? _iprev(*p) : -1; }
+s_long _unity_hl_impl::_next_of(s_long ind) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? _inext(*p) : -1; }
+void _unity_hl_impl::_setv(s_long ind, meta::s_ll x) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(ind); if (p) { *p = x; } }
 
 void unity::_ensure_m() { if (!isMap()) { u_clear(utMap); } if (!(_m()->pkf() && _compat_chk())) { throw XUExec("_ensure_m"); } }
 void unity::_ensure_sc() { if (!isScalar()) { u_clear(utEmpty); } }
 void unity::_ensure_h() { if (!isHash()) { u_clear(utHash); } if (!(_h()->pkf() && _compat_chk())) { throw XUExec("_ensure_h"); } }
 
-unity::checked_ptr<const unity> unity::path(const std::wstring& keylist) const throw() { return const_cast<unity*>(this)->_path_u(keylist, false); }
-unity::checked_ptr<const unity> unity::path(const wchar_t* keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(keylist, false); } catch (...) { return 0; } }
-unity::checked_ptr<const unity> unity::path(const std::string& keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
-unity::checked_ptr<const unity> unity::path(const char* keylist) const throw() { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
-unity::checked_ptr<const unity> unity::path(const unity& keylist) const throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), false); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), false); } return px->_path_u(keylist.vstr(), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const std::wstring& keylist) const __bmdx_noex { return const_cast<unity*>(this)->_path_u(keylist, false); }
+unity::checked_ptr<const unity> unity::path(const wchar_t* keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(keylist, false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const std::string& keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const char* keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const unity& keylist) const __bmdx_noex { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), false); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), false); } return px->_path_u(keylist.vstr(), false); } catch (...) { return 0; } }
 
-unity::checked_ptr<const unity> unity::path(const std::wstring& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const wchar_t* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const std::string& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const char* keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const unity& keylist, const unity& x_dflt) const throw() { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const std::wstring& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const wchar_t* keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const std::string& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const char* keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const unity& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
 
-unity* unity::_path_w(const std::wstring& keylist) throw() { return _path_u(keylist, true); }
-unity* unity::_path_w(const wchar_t* keylist) throw() { try { return _path_u(keylist, true); } catch (...) { return 0; } }
-unity* unity::_path_w(const std::string& keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
-unity* unity::_path_w(const char* keylist) throw() { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
-unity* unity::_path_w(const unity& keylist) throw() { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const std::wstring& keylist) __bmdx_noex { return _path_u(keylist, true); }
+unity* unity::_path_w(const wchar_t* keylist) __bmdx_noex { try { return _path_u(keylist, true); } catch (...) { return 0; } }
+unity* unity::_path_w(const std::string& keylist) __bmdx_noex { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const char* keylist) __bmdx_noex { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
+unity* unity::_path_w(const unity& keylist) __bmdx_noex { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
 
 
 std::ostream& operator<<(std::ostream& s, const unity::iofmt& f) { unity::write_fmt(s, *f.px, f, false); return s; }
@@ -7966,9 +7966,9 @@ void* unity::cpvoid() const
       { return o_api(this).pvoid(1); }
 void* unity::cpvoidkey() const
       { return o_api(this).pvoid(0); }
-o_type_info unity::objTypeInfo(s_long flags) const throw()
+o_type_info unity::objTypeInfo(s_long flags) const __bmdx_noex
       { return o_api(this).type_info(flags); }
-o_ref_info unity::objRefInfo() const throw()
+o_ref_info unity::objRefInfo() const __bmdx_noex
       { return o_api(this).ref_info(); }
 bool unity::objSetStrongRef(bool b_strong)
       {
@@ -8029,7 +8029,7 @@ struct unity::o_api::_itfslist_temp1
   cpparray_t<handle> list; meta::s_ll n_del; meta::s_ll n_bd;
   _itfslist_temp1();
   ~_itfslist_temp1();
-  void clear() throw();
+  void clear() __bmdx_noex;
 private: _itfslist_temp1(const _itfslist_temp1&); void operator=(const _itfslist_temp1&);
 };
 
@@ -8038,7 +8038,7 @@ bool unity::o_api::_itfslist_temp1::handle::b_valid_f() const { return p_itfssm 
 bool unity::o_api::_itfslist_temp1::handle::b_valid_all() const { return p_itfs && b_valid_f(); }
 unity::o_api::_itfslist_temp1::_itfslist_temp1() : n_del(0), n_bd(0) {}
 unity::o_api::_itfslist_temp1::~_itfslist_temp1() { clear(); }
-void unity::o_api::_itfslist_temp1::clear() throw()
+void unity::o_api::_itfslist_temp1::clear() __bmdx_noex
 {
   for (meta::s_ll i = n_bd - 1; i >= 0; --i) { if (i < list.n() && list[i].b_valid_all()) { try { list[i].f_bd(list[i].p_itfs, 0); } catch (...) {} } }
   for (meta::s_ll i = 0; i < n_del; ++i) { if (i < list.n() && list[i].b_valid_all()) { try { list[i].f_del(list[i].p_itfs); } catch (...) {} } }
@@ -8053,12 +8053,12 @@ s_long unity::o_api::critsec_rc::state() const
   { if (!posm) { return -1; } __Posm_lock_state f = (__Posm_lock_state)posm(unity_common::osm_lock_state); if (!f) { return -1; } return f(&stg[0]); }
 
   // Creates non-functional object.
-unity::o_api::o_api() throw()
+unity::o_api::o_api() __bmdx_noex
     : pu(0), prc(0), pidyn(0) {}
 
   // Creates fully functional object.
   // NOTE "const" is ignored.
-unity::o_api::o_api(const unity* pu_) throw()
+unity::o_api::o_api(const unity* pu_) __bmdx_noex
 {
   prc = 0; pidyn = 0;
   pu = const_cast<unity*>(pu_); if (!(pu && pu->isObject())) { return; }
@@ -8069,21 +8069,21 @@ unity::o_api::o_api(const unity* pu_) throw()
 }
 
   // Creates partially functional object (not able to manipulate parent unity object).
-unity::o_api::o_api(_o_itfslist& list) throw()
+unity::o_api::o_api(_o_itfslist& list) __bmdx_noex
 {
   pu = 0;
   pidyn = &list;
   prc = list.prc;
 }
   // Implementation; assumes p is (b_pidyn ? _o_itfslist* : _o_refcnt*).
-unity::o_api::o_api(void* p, bool b_pidyn) throw()
+unity::o_api::o_api(void* p, bool b_pidyn) __bmdx_noex
   : pu(0), prc(0), pidyn(0)
 {
   if (!p) { return; }
   if (b_pidyn) { pidyn = (_o_itfslist*)p; prc = pidyn->prc; return; }
   prc = (_o_refcnt*)p;
 }
-void* unity::o_api::p_head() const throw()
+void* unity::o_api::p_head() const __bmdx_noex
   { if (pidyn) { return pidyn; } return prc; }
   // flags OR-ed:
   //  1 - get static type info,
@@ -8091,7 +8091,7 @@ void* unity::o_api::p_head() const throw()
   //  4 - get type index (see type_index_t in vecm_hashx.h),
   //  8 - return _pobj even if the object is deleted.
   //  16 - get sizeof for object static type.
-o_type_info unity::o_api::type_info(s_long flags) const throw()
+o_type_info unity::o_api::type_info(s_long flags) const __bmdx_noex
 {
   o_type_info ti(0,0,0,0,0,0,-1);
   if (!prc) { return ti; }
@@ -8100,7 +8100,7 @@ o_type_info unity::o_api::type_info(s_long flags) const throw()
 }
   // ref_info contains full info on number of references, plus boolean strong/weak ref. type flag taken from the wrapping unity object (pu).
   //    If pu == 0 (wrapping object not accessible), ref. type will be set to undefined value (0).
-o_ref_info unity::o_api::ref_info() const throw()
+o_ref_info unity::o_api::ref_info() const __bmdx_noex
 {
   o_ref_info ri(0, 0, 0);
   if (!prc) { return ri; }
@@ -8109,7 +8109,7 @@ o_ref_info unity::o_api::ref_info() const throw()
 }
   // Returns a pointer to the referenced object. If b_checked and the object is deleted, returns 0.
   //    Does not check compat. of the referenced object with the current binary module.
-void* unity::o_api::pvoid(bool b_checked) const throw()
+void* unity::o_api::pvoid(bool b_checked) const __bmdx_noex
 {
   if (!prc) { return 0; } if (!prc->rc_posm) { return 0; }
   return ((__Posm_pvoid)prc->rc_posm(unity_common::osm_pvoid))(prc, b_checked);
@@ -8124,7 +8124,7 @@ void* unity::o_api::pvoid(bool b_checked) const throw()
   //    b) >=0 - sizeof(T) is checked for == t_size in case if tname == typeid(T).name() in the module of T.
   //      (For t_ind matching, t_size is ignored.)
   //    c) >= 0 - sizeof(R), assuming T is a cref_t<R>.
-void* unity::o_api::prefo(const char* tname, s_long t_ind, s_long t_size) const throw()
+void* unity::o_api::prefo(const char* tname, s_long t_ind, s_long t_size) const __bmdx_noex
 {
   if (!prc) { return 0; } if (!prc->rc_posm) { return 0; }
   return ((__Posm_prefo)prc->rc_posm(unity_common::osm_prefo))(prc, tname, t_ind, t_size);
@@ -8133,7 +8133,7 @@ void* unity::o_api::prefo(const char* tname, s_long t_ind, s_long t_size) const 
   // Change type of reference.
   //  Argument and returned value: same as _o_sm_t<Obj>::rc_incdec (see).
   //  NOTE If pu != 0, pu and its flags are ignored. See also upd_ut_ref_type.
-s_long unity::o_api::rc_incdec(s_long flags) const throw()
+s_long unity::o_api::rc_incdec(s_long flags) const __bmdx_noex
 {
   if (!prc) { return 0; }
   critsec_rc __lock(prc); if (sizeof(__lock)) {}
@@ -8145,7 +8145,7 @@ s_long unity::o_api::rc_incdec(s_long flags) const throw()
   //    Should be called after rc_incdec, when pu's ref. type has changed.
   //  Returns: 1 - success (if pu != 0, the function always succeeds).
   //    -1 - pu == 0.
-s_long unity::o_api::upd_ut_ref_type(bool b_strong) const throw()
+s_long unity::o_api::upd_ut_ref_type(bool b_strong) const __bmdx_noex
 {
   if (!pu) { return -1; }
   if (b_strong) { pu->ut |= unity::xfObjStrongRef; return 1; }
@@ -8159,7 +8159,7 @@ s_long unity::o_api::upd_ut_ref_type(bool b_strong) const throw()
   //  NOTE this function will always return 0 is called from within an attached interface,
   //    because interfaces already are in the list and use pidyn to access the list.
   // Returns: 1 - success. 0 - list object already exists. -1 - pu == 0 or !isObject(), cannot do. -2 - failure.
-s_long unity::o_api::itfslist_create() throw()
+s_long unity::o_api::itfslist_create() __bmdx_noex
 {
   if (!prc) { return -2; }
   if (pidyn) { return 0; }
@@ -8178,7 +8178,7 @@ s_long unity::o_api::itfslist_create() throw()
   // Returns:
   //  >= 0 - the number of interface sets attached to object.
   //  -2 - failure (o_api is not valid).
-s_long unity::o_api::itfslist_n() const throw()
+s_long unity::o_api::itfslist_n() const __bmdx_noex
 {
   if (!prc) { return -2; }
   if (!pidyn) { return 0; }
@@ -8191,7 +8191,7 @@ s_long unity::o_api::itfslist_n() const throw()
   //    0 - src references same object as *this.
   //    -1 - pidyn == 0 (list of interf. sets is not created - call itfslist_create() first).
   //    -2 - failure.
-s_long unity::o_api::itfs_append_cp(const o_api& src) const throw()
+s_long unity::o_api::itfs_append_cp(const o_api& src) const __bmdx_noex
 {
   if (!(prc && src.prc)) { return -2; }
   if (!pidyn) { return -1; }
@@ -8252,7 +8252,7 @@ s_long unity::o_api::itfs_append_cp(const o_api& src) const throw()
   // Removes the specified set of interfaces.
   // Returns: 1 - success, -1 - wrong ind, -2 - failure.
   // NOTE if the last set of interfaces is removed, the function does not remove the empty list of sets.
-s_long unity::o_api::itfs_remove_ind(s_long ind) const throw()
+s_long unity::o_api::itfs_remove_ind(s_long ind) const __bmdx_noex
 {
   if (!prc) { return -2; }
   if (!pidyn) { return -1; }
@@ -8279,7 +8279,7 @@ s_long unity::o_api::itfs_remove_ind(s_long ind) const throw()
   // Removes all sets of interfaces.
   // Returns: 1 - success, 0 - no list of interface sets (pidyn == 0), -2 - failure.
   // NOTE the function does not remove the empty list of sets.
-s_long unity::o_api::itfs_remove_all() const throw()
+s_long unity::o_api::itfs_remove_all() const __bmdx_noex
 {
   if (!prc) { return -2; } if (!pidyn) { return 0; }
   critsec_rc __lock(prc); if (sizeof(__lock)) {}
@@ -8305,7 +8305,7 @@ s_long unity::o_api::itfs_remove_all() const throw()
   //    type of reference: 1 - strong, 2 - weak (only one of them must be set).
   //  NOTE If pu != 0, its pmsm and flag xfObjStrongRef are ignored.
   // Returns: o_api with pu == 0, prc != 0, and also pidyn != 0 if the current o_api references a set of interface lists.
-unity::o_api unity::o_api::_ref_newcp(unity_common::__Psm pmsm_dest, s_long flags) const throw()
+unity::o_api unity::o_api::_ref_newcp(unity_common::__Psm pmsm_dest, s_long flags) const __bmdx_noex
 {
   o_api x;
   if (!prc || (flags & 3) == 3 || (flags & 3) == 0) { return x; }
@@ -8333,7 +8333,7 @@ unity::o_api unity::o_api::_ref_newcp(unity_common::__Psm pmsm_dest, s_long flag
   //    (The referenced object may have been deleted if the last strong ref. released.)
   //  -1: bad flags.
   //  -2: failure (o_api does not reference a correct object).
-s_long unity::o_api::_ref_del(s_long flags) throw()
+s_long unity::o_api::_ref_del(s_long flags) __bmdx_noex
 {
   if (!prc) { return -2; }
   if ((flags & 3) == 3 || (flags & 3) == 0) { return -1; }
@@ -8351,7 +8351,7 @@ s_long unity::o_api::_ref_del(s_long flags) throw()
   return 1;
 }
   // Returns: >= 0 - index of the found set. -1 - not found. -2 - failure.
-s_long unity::o_api::find_by_pitfs(o_itfset_base* p) const throw()
+s_long unity::o_api::find_by_pitfs(o_itfset_base* p) const __bmdx_noex
 {
   if (!prc) { return -2; } if (!pidyn) { return -1; }
   critsec_rc __lock(prc); if (sizeof(__lock)) {}
@@ -8360,7 +8360,7 @@ s_long unity::o_api::find_by_pitfs(o_itfset_base* p) const throw()
   return -1;
 }
   // NOTE Class method.
-meta::s_ll unity::o_api::_itfslist_nrsv(meta::s_ll n) const throw()
+meta::s_ll unity::o_api::_itfslist_nrsv(meta::s_ll n) const __bmdx_noex
   { if (n < 0) { return 0; } if (n < 8) { return n; } if (n < 64) { return (n | 7) + 1; } return (n | 31) + 1; }
 
 
@@ -9043,7 +9043,7 @@ lLogicalDecodeError:
   return;
 }
 
-bool paramline::x_decode1v_auto_date(const std::wstring& s, unity& retval) throw()
+bool paramline::x_decode1v_auto_date(const std::wstring& s, unity& retval) __bmdx_noex
 {
   try { _unitydate d; if (!_static_conv::conv_String_Date0(s, d, true)) { return false; } retval = d; return true; }
     catch(...) { return false; }
@@ -9233,7 +9233,7 @@ namespace bmdx
       return buf;
     }
 
-    bool __cl2argv(const wchar_t* cl, std::vector<std::wstring>& retv) throw()
+    bool __cl2argv(const wchar_t* cl, std::vector<std::wstring>& retv) __bmdx_noex
     {
       typedef std::wstring::size_type _t_wz;
       // const _t_wz end = std::wstring::npos;
@@ -10315,9 +10315,9 @@ lExitFor1:
     else { if (&ret_s!=&unity::_0nc) { ret_s.clear(); return false; } else { return unity(); } }
 }
 
-bool file_utils::save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const throw()
+bool file_utils::save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const __bmdx_noex
   { return save_text(format_string, str, bsToWs(sTargetFilePath), pd, sUserDefDir); }
-bool file_utils::save_text(const std::string& format_string, const std::wstring& s0, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const throw()
+bool file_utils::save_text(const std::string& format_string, const std::wstring& s0, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const __bmdx_noex
 {
   try {
     typedef unsigned char u_char;
@@ -10402,9 +10402,9 @@ bool file_utils::save_text(const std::string& format_string, const std::wstring&
   } catch (...) { return false; }
 }
 
-int file_utils::load_bytes(const std::wstring& fnp, std::string& dest) throw() { return file_io::load_bytes(wsToBs(fnp), dest); }
-int file_utils::load_bytes(const std::string& fnp, std::string& dest) throw() { return file_io::load_bytes(fnp, dest); }
-int file_utils::load_bytes(const char* fnp, std::string& dest) throw() { return file_io::load_bytes(fnp, dest); }
+int file_utils::load_bytes(const std::wstring& fnp, std::string& dest) __bmdx_noex { return file_io::load_bytes(wsToBs(fnp), dest); }
+int file_utils::load_bytes(const std::string& fnp, std::string& dest) __bmdx_noex { return file_io::load_bytes(fnp, dest); }
+int file_utils::load_bytes(const char* fnp, std::string& dest) __bmdx_noex { return file_io::load_bytes(fnp, dest); }
 
   // Saves bytes from src to the given file.
   //    b_append == false truncates the file before writing, if it exists.
@@ -10413,10 +10413,10 @@ int file_utils::load_bytes(const char* fnp, std::string& dest) throw() { return 
   // 0 - failed to create file (or open the existing file for writing).
   // -1 - data size too large, or memory alloc. error, or wrong arguments.
   // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-int file_utils::save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(wsToBs(fnp), src, b_append); }
-int file_utils::save_bytes(const std::string& fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(fnp, src, b_append); }
-int file_utils::save_bytes(const char* fnp, const std::string& src, bool b_append) throw() { return file_io::save_bytes(fnp, src, b_append); }
-int file_utils::save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) throw() { return file_io::save_bytes(fnp, pdata, n, b_append); }
+int file_utils::save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) __bmdx_noex { return file_io::save_bytes(wsToBs(fnp), src, b_append); }
+int file_utils::save_bytes(const std::string& fnp, const std::string& src, bool b_append) __bmdx_noex { return file_io::save_bytes(fnp, src, b_append); }
+int file_utils::save_bytes(const char* fnp, const std::string& src, bool b_append) __bmdx_noex { return file_io::save_bytes(fnp, src, b_append); }
+int file_utils::save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) __bmdx_noex { return file_io::save_bytes(fnp, pdata, n, b_append); }
 
 bool file_utils::xHasCurDirShortCut(const std::wstring& sPath) { return sPath==L"." || sPath.substr(0,1+pslen)==L"."+wpathsep(); }
 bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath=="." || sPath.substr(0,1+pslen)=="."+cpathsep(); }
@@ -10430,8 +10430,8 @@ bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath==".
 namespace bmdx
 {
 
-s_long unity::compatibility() const throw() { return _compatibility(); }
-s_long unity::sig_struct() throw()
+s_long unity::compatibility() const __bmdx_noex { return _compatibility(); }
+s_long unity::sig_struct() __bmdx_noex
 {
   unity x;
   return ((sizeof(&x) - 1) << 28)
@@ -10450,19 +10450,19 @@ s_long unity::sig_struct() throw()
 
     unity_common::__Psm pmsm_rl; prequest prq; union { meta::s_ll __2; HMODULE handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
 
-    _mod_exhandle(bool b_autounload = true) throw() { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
+    _mod_exhandle(bool b_autounload = true) __bmdx_noex { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
 
-    bool b_h() const throw() { return f.htype > 0; }
-    bool b_msm() const throw() { return b_h() && pmsm_rl; }
-    bool b_rq() const throw() { return b_h() && prq; }
-    bool b_gms() const throw() { return b_h() && pgms; }
-    bool b_mainexe() const throw() { return f.htype == 2; }
+    bool b_h() const __bmdx_noex { return f.htype > 0; }
+    bool b_msm() const __bmdx_noex { return b_h() && pmsm_rl; }
+    bool b_rq() const __bmdx_noex { return b_h() && prq; }
+    bool b_gms() const __bmdx_noex { return b_h() && pgms; }
+    bool b_mainexe() const __bmdx_noex { return f.htype == 2; }
 
     #if bmdx_part_dllmgmt
-      ~_mod_exhandle() throw() { if (f.b_au) { mod_unload(); } }
+      ~_mod_exhandle() __bmdx_noex { if (f.b_au) { mod_unload(); } }
 
         // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
-      s_long mod_load(const char* name, s_long flags) throw()
+      s_long mod_load(const char* name, s_long flags) __bmdx_noex
       {
         if (f.htype > 0) { return 0; } if (!name) { return -1; }
 
@@ -10475,14 +10475,14 @@ s_long unity::sig_struct() throw()
         pgms = (pget_modsm)sym("__bmdx_ls_modsm");
         return 1;
       }
-      void mod_unload() throw()
+      void mod_unload() __bmdx_noex
       {
         if (f.htype == 1) { FreeLibrary(handle); }
         if (f.htype > 0) { handle = 0; f.htype = 0; }
         prq = 0;
         pgms = 0;
       }
-      void* sym(const char* name) const throw() { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)GetProcAddress(handle, name); }
+      void* sym(const char* name) const __bmdx_noex { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)GetProcAddress(handle, name); }
     #endif
   private: _mod_exhandle(const _mod_exhandle&); void operator=(const _mod_exhandle&);
   };
@@ -10496,20 +10496,20 @@ s_long unity::sig_struct() throw()
 
     unity_common::__Psm pmsm_rl; prequest prq; union { meta::s_ll __2; void* handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
 
-    bool b_h() const throw() { return f.htype > 0; }
-    bool b_msm() const throw() { return b_h() && pmsm_rl; }
-    bool b_rq() const throw() { return b_h() && prq; }
-    bool b_gms() const throw() { return b_h() && pgms; }
-    bool b_mainexe() const throw() { return f.htype == 2; }
+    bool b_h() const __bmdx_noex { return f.htype > 0; }
+    bool b_msm() const __bmdx_noex { return b_h() && pmsm_rl; }
+    bool b_rq() const __bmdx_noex { return b_h() && prq; }
+    bool b_gms() const __bmdx_noex { return b_h() && pgms; }
+    bool b_mainexe() const __bmdx_noex { return f.htype == 2; }
 
-    _mod_exhandle(bool b_autounload = true) throw() { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
+    _mod_exhandle(bool b_autounload = true) __bmdx_noex { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
 
 
     #if bmdx_part_dllmgmt
-      ~_mod_exhandle() throw() { if (f.b_au) { mod_unload(); } }
+      ~_mod_exhandle() __bmdx_noex { if (f.b_au) { mod_unload(); } }
 
         // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
-      s_long mod_load(const char* name, s_long flags) throw()
+      s_long mod_load(const char* name, s_long flags) __bmdx_noex
       {
         if (f.htype > 0) { return 0; } if (!name) { return -1; }
 
@@ -10561,7 +10561,7 @@ s_long unity::sig_struct() throw()
         pgms = (pget_modsm)sym("__bmdx_ls_modsm");
         return 1;
       }
-      void mod_unload() throw()
+      void mod_unload() __bmdx_noex
       {
         #ifdef RTLD_MAIN_ONLY
         #else
@@ -10571,7 +10571,7 @@ s_long unity::sig_struct() throw()
         if (f.htype > 0) { handle = 0; f.htype = 0; }
         prq = 0; pgms = 0;
       }
-      void* sym(const char* name) const throw() { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)dlsym(handle, name); }
+      void* sym(const char* name) const __bmdx_noex { if (!name || !*name) { return 0; } if (f.htype <= 0) { return 0; } return (void*)dlsym(handle, name); }
     #endif
   private: _mod_exhandle(const _mod_exhandle&); void operator=(const _mod_exhandle&);
   };
@@ -10601,25 +10601,25 @@ struct t_hmods
 };
 typedef svf_m_t<t_hmods, unity, 0, void, 100, 60000> t_hmods_svf;
 
-bool unity::mod_handle::is_valid() const throw()
+bool unity::mod_handle::is_valid() const __bmdx_noex
   { return _rex && _rex.ref()().b_h(); } // implementation-independent
-unity::mod_handle::operator bool() const throw()
+unity::mod_handle::operator bool() const __bmdx_noex
   { return _rex && _rex.ref()().b_h(); } // implementation-independent
-bool unity::mod_handle::is_mainexe() const throw()
+bool unity::mod_handle::is_mainexe() const __bmdx_noex
   { return _rex && _rex.ref()().b_mainexe(); } // implementation-independent
-unity::mod_handle::t_nativehandle unity::mod_handle::native() const throw()
+unity::mod_handle::t_nativehandle unity::mod_handle::native() const __bmdx_noex
   { if (!_rex) { return 0; } return _rex.ref()().handle; } // implementation-independent
-bool unity::mod_handle::operator==(const mod_handle& x) const throw()
+bool unity::mod_handle::operator==(const mod_handle& x) const __bmdx_noex
   { if (!_rex) { return !x._rex; } if (!x._rex) { return false; } return _rex.ref()().handle == x._rex.ref()().handle; } // implementation-independent
-bool unity::mod_handle::operator!=(const mod_handle& x) const throw()
+bool unity::mod_handle::operator!=(const mod_handle& x) const __bmdx_noex
   { return !operator==(x); }
 
-unity::mod_handle::mod_handle() throw()
+unity::mod_handle::mod_handle() __bmdx_noex
   : _rex()
     { __rsv1 = 0; }
-unity::mod_handle::~mod_handle() throw()
+unity::mod_handle::~mod_handle() __bmdx_noex
   { clear(); }
-unity::mod_handle::mod_handle(const mod_handle& h1) throw()
+unity::mod_handle::mod_handle(const mod_handle& h1) __bmdx_noex
   : _rex()
 {
   __rsv1 = 0;
@@ -10629,11 +10629,11 @@ unity::mod_handle::mod_handle(const mod_handle& h1) throw()
     if (!f_ch) { return; } // this is not expected to occur (see ls_modsm).
   try { f_ch(&h1, this); } catch (...) {}
 }
-void unity::mod_handle::operator=(const mod_handle& h1) throw()
+void unity::mod_handle::operator=(const mod_handle& h1) __bmdx_noex
   { mod_handle h3(h1); this->clear(); this->swap(h3); }
-void unity::mod_handle::swap(mod_handle& h1) throw()
+void unity::mod_handle::swap(mod_handle& h1) __bmdx_noex
   { bmdx_str::words::swap_bytes(*this, h1); }
-void unity::mod_handle::clear() throw()
+void unity::mod_handle::clear() __bmdx_noex
 {
   if (!_rex) { return; }
   do
@@ -10648,7 +10648,7 @@ void unity::mod_handle::clear() throw()
   new (&_rex) cref_t<_stg_mh>();
 }
 
-void* unity::mod_handle::sym(const char* name) const throw()
+void* unity::mod_handle::sym(const char* name) const __bmdx_noex
 {
   if (!_rex) { return 0; }
   unity::_mod_exhandle& h = _rex.ref()();
@@ -10659,7 +10659,7 @@ void* unity::mod_handle::sym(const char* name) const throw()
   return 0;
 }
 
-s_long unity::mod_handle::request(const unity& para, unity& retval) const throw()
+s_long unity::mod_handle::request(const unity& para, unity& retval) const __bmdx_noex
 {
   if (!_rex) { return -4; }
   unity::_mod_exhandle& h = _rex.ref()();
@@ -10669,21 +10669,21 @@ s_long unity::mod_handle::request(const unity& para, unity& retval) const throw(
   try { return f1(this, &para, &retval); } catch (...) {}
   return -2;
 }
-unity_common::f_ls_modsm unity::mod_handle::_pmsm() const throw()
+unity_common::f_ls_modsm unity::mod_handle::_pmsm() const __bmdx_noex
 {
   if (!_rex) { return 0; }
   unity::_mod_exhandle& h = _rex.ref()();
     if (!h.b_gms()) { return 0; }
   return h.pgms();
 }
-unity_common::f_ls_modsm unity::mod_handle::_pmsm_rl() const throw()
+unity_common::f_ls_modsm unity::mod_handle::_pmsm_rl() const __bmdx_noex
 {
   if (!_rex) { return 0; }
   unity::_mod_exhandle& h = _rex.ref()();
     if (!h.b_msm()) { return 0; }
   return h.pmsm_rl;
 }
-unity::mod_handle unity::mod_handle::hself(bool b_autounload) throw()
+unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
 {
   unity::mod_handle h;
   unity_common::f_ls_modsm pmsm = unity_common::pls_modsm();
@@ -10725,7 +10725,7 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) throw()
 namespace bmdx
 {
 #if bmdx_part_dllmgmt
-  unity::mod_handle unity::mod(const char* name, bool b_au, s_long flags) throw()
+  unity::mod_handle unity::mod(const char* name, bool b_au, s_long flags) __bmdx_noex
   {
     unity::mod_handle mh;
 
@@ -11237,8 +11237,8 @@ struct inprocess_message
   cref_t<unity, cref_nonlock> hmsg; // message as hashlist, local to dispatcher_mt module
   cref_t<t_stringref> att; // binary attachment as enclosed object, or object reference, local to one of a) sender module, b) dispatcher_mt module
 
-  bool has_hmsg() const throw() { return hmsg && hmsg->isHash() && hmsg->hashS_c() > 0; }
-  bool has_att() const throw() { return att && att->is_valid(); }
+  bool has_hmsg() const __bmdx_noex { return hmsg && hmsg->isHash() && hmsg->hashS_c() > 0; }
+  bool has_att() const __bmdx_noex { return att && att->is_valid(); }
 
   void clear() { hmsg.clear(); att.clear(); }
 
@@ -11248,7 +11248,7 @@ struct inprocess_message
     //    1 - success, got 1 part. If b_may_clear == true, the current object is cleared.
     //    0 - no message in hmsg.
     //    -2 - failure (mem. alloc. or smth. else). The current object is not modified.
-  s_long move_to_retvals(unity& retmsg, cref_t<t_stringref>* retatt, s_long flags_mget, s_long flags_ses) throw()
+  s_long move_to_retvals(unity& retmsg, cref_t<t_stringref>* retatt, s_long flags_mget, s_long flags_ses) __bmdx_noex
   {
     const bool b_retstr = (flags_mget & _fl_mget_get_hashlist) == 0;
     const bool b_discard_msg = (flags_mget & _fl_mget_discard_msg) != 0;
@@ -11329,7 +11329,7 @@ struct inprocess_message
   }
 
     // 1 - success, 0 - no message in both hmsg, -2 - failure
-  static s_long create_msg_wstr(const unity& hmsg, unity& x, bool b_local_to_x) throw()
+  static s_long create_msg_wstr(const unity& hmsg, unity& x, bool b_local_to_x) __bmdx_noex
   {
     try {
       if (b_local_to_x && x._pmsm() != unity_common::ls_modsm)
@@ -11582,18 +11582,18 @@ struct dispatcher_mt::cch_session
   //  to set actions in order and also, in certain cases, cancel them.
 struct dispatcher_mt::mst_semaphore
 {
-  int m_sl_acquire() throw();
-  int m_th_acquire() throw();
-  int m_th_ro_acquire() throw();
-  void release() throw();
+  int m_sl_acquire() __bmdx_noex;
+  int m_th_acquire() __bmdx_noex;
+  int m_th_ro_acquire() __bmdx_noex;
+  void release() __bmdx_noex;
   void set_refs(dispatcher_mt::cch_session& ths_, const std::wstring& thn_);
   mst_semaphore(dispatcher_mt::cch_session& ths_, const std::wstring& thn_);
   mst_semaphore(const mst_semaphore& x);
   mst_semaphore();
-  ~mst_semaphore() throw();
+  ~mst_semaphore() __bmdx_noex;
 
-  int r_sl(const std::wstring& sln, cref_t<cch_slot>& ret_sl) throw();
-  cch_thread* p_thread(bool b_inited_only = false) throw();
+  int r_sl(const std::wstring& sln, cref_t<cch_slot>& ret_sl) __bmdx_noex;
+  cch_thread* p_thread(bool b_inited_only = false) __bmdx_noex;
   dispatcher_mt::cch_session* p_ses();
   const std::wstring& thn();
 
@@ -11647,56 +11647,56 @@ struct dispatcher_mt::thread_proxy : i_dispatcher_mt
 
   struct address
   {
-    const unity& addr() const throw();
-    bool is_empty() const throw();
-    s_long n() const throw();
+    const unity& addr() const __bmdx_noex;
+    bool is_empty() const __bmdx_noex;
+    s_long n() const __bmdx_noex;
     const unity& addr(s_long ind) const;
     std::wstring wstr_addr() const;
     std::wstring wstr_sln() const;
     unity sln_v() const;
     std::wstring wstr_sln_1() const;
     std::wstring wstr_sln_tail() const;
-    bool has_sln_tail() const throw();
+    bool has_sln_tail() const __bmdx_noex;
     std::wstring wstr_thn() const;
     std::wstring wstr_pn() const;
 //    std::wstring wstr_hostn() const;
 
-    s_long set_addr(const unity& x) throw();
+    s_long set_addr(const unity& x) __bmdx_noex;
     s_long set_addr_LP(const std::wstring& thn, const unity& sln);
 
-    bool isLP_any() const throw();
-    bool isLP() const throw();
-    bool isLPA() const throw();
-    bool isLM() const throw();
-    bool isLMA() const throw();
-    bool isR() const throw();
-    bool isRMA() const throw();
+    bool isLP_any() const __bmdx_noex;
+    bool isLP() const __bmdx_noex;
+    bool isLPA() const __bmdx_noex;
+    bool isLM() const __bmdx_noex;
+    bool isLMA() const __bmdx_noex;
+    bool isR() const __bmdx_noex;
+    bool isRMA() const __bmdx_noex;
 
-    s_long sln_ind() const throw();
-    _fls75 slt() const throw();
+    s_long sln_ind() const __bmdx_noex;
+    _fls75 slt() const __bmdx_noex;
 
-    bool _conv_LP_LM(arrayref_t<wchar_t> name_peer) throw();
-    bool _conv_LM_LP() throw();
-    s_long _sln_ind0(const _fls75& k1) const throw();
+    bool _conv_LP_LM(arrayref_t<wchar_t> name_peer) __bmdx_noex;
+    bool _conv_LM_LP() __bmdx_noex;
+    s_long _sln_ind0(const _fls75& k1) const __bmdx_noex;
 
   private:
     unity _addr;
   };
   static void __append_vals(unity& dest, const unity& src, s_long n_skip = 0);
-  static s_long __recode_slotname(const unity& sn, std::wstring* retval = 0, std::wstring* pn1 = 0, std::wstring* ptail = 0, const address* pdtailcmp = 0) throw();
+  static s_long __recode_slotname(const unity& sn, std::wstring* retval = 0, std::wstring* pn1 = 0, std::wstring* ptail = 0, const address* pdtailcmp = 0) __bmdx_noex;
 
 
 
-  static bool thnchk(arrayref_t<wchar_t> s) throw();
-  static bool pnchk(arrayref_t<wchar_t> s) throw();
-  static bool hostportchk(const std::wstring& s) throw();
-  static bool is_addr_cat_all(arrayref_t<wchar_t> s) throw();
+  static bool thnchk(arrayref_t<wchar_t> s) __bmdx_noex;
+  static bool pnchk(arrayref_t<wchar_t> s) __bmdx_noex;
+  static bool hostportchk(const std::wstring& s) __bmdx_noex;
+  static bool is_addr_cat_all(arrayref_t<wchar_t> s) __bmdx_noex;
 
   static std::wstring sln1_root(const std::wstring& sln1);
   static bool sln1chk_main(const std::wstring& sln1);
   static bool sln1chk_main_qs(const std::wstring& sln1);
   static bool sln1chk_qs(const std::wstring& sln1);
-  static bool sln1chk_subscriber(const std::wstring& sln1) throw();
+  static bool sln1chk_subscriber(const std::wstring& sln1) __bmdx_noex;
   static bool sln1chk_main_o(const std::wstring& sln1);
   static bool sln1chk_main_i(const std::wstring& sln1);
   static bool sln1chk_main_bo(const std::wstring& sln1);
@@ -11731,40 +11731,40 @@ public:
     st_update_subs_output = 4 // direct call from _s_update_subs_lists to _s_subscribe
   };
 
-  static s_long _s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw();
-  static s_long _s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) throw();
-  static s_long _s_request(thread_proxy* pprx, cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, int frqperm, s_long flags) throw();
-  static s_long _s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) throw();
+  static s_long _s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) __bmdx_noex;
+  static s_long _s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) __bmdx_noex;
+  static s_long _s_request(thread_proxy* pprx, cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, int frqperm, s_long flags) __bmdx_noex;
+  static s_long _s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) __bmdx_noex;
 
-  static s_long _s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) throw();
-  static s_long _s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs, s_ll* pnmsent) throw();
+  static s_long _s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) __bmdx_noex;
+  static s_long _s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs, s_ll* pnmsent) __bmdx_noex;
 
-  static s_long _s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0, s_long flags_cr) throw();
-  static s_long _s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn, const unity* pthn = 0) throw();
+  static s_long _s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0, s_long flags_cr) __bmdx_noex;
+  static s_long _s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn, const unity* pthn = 0) __bmdx_noex;
 
-  static s_long _s_add_slots_nl(cch_session& rses, const std::wstring& k_th, const unity& slotscfg, t_hsubs& hsubs_ins, t_hsubs& hsubs_outs, mst_semaphore* pms = 0) throw();
-  static s_long _s_slots_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotnames, const std::wstring& _name_th, s_long flags_rmv) throw();
-  static s_long _s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) throw();
-  static s_long _s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) throw();
+  static s_long _s_add_slots_nl(cch_session& rses, const std::wstring& k_th, const unity& slotscfg, t_hsubs& hsubs_ins, t_hsubs& hsubs_outs, mst_semaphore* pms = 0) __bmdx_noex;
+  static s_long _s_slots_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotnames, const std::wstring& _name_th, s_long flags_rmv) __bmdx_noex;
+  static s_long _s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) __bmdx_noex;
+  static s_long _s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) __bmdx_noex;
 
-  static void _s_thh_signal_stop(cch_session& rses) throw() { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
-  static bool _s_thh_active(cch_session& rses) throw() { return rses.th_lqsd || rses.th_lmsc; }
+  static void _s_thh_signal_stop(cch_session& rses) __bmdx_noex { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
+  static bool _s_thh_active(cch_session& rses) __bmdx_noex { return rses.th_lqsd || rses.th_lmsc; }
 
-  static void _s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) throw();
-  static void _s_disp_dtor(dispatcher_mt* pdisp) throw();
-  static s_long _s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, arrayref_t<wchar_t> _name_th) throw();
-  static s_long _s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, arrayref_t<wchar_t> thread_name) throw();
+  static void _s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) __bmdx_noex;
+  static void _s_disp_dtor(dispatcher_mt* pdisp) __bmdx_noex;
+  static s_long _s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, arrayref_t<wchar_t> _name_th) __bmdx_noex;
+  static s_long _s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, arrayref_t<wchar_t> thread_name) __bmdx_noex;
 
   thread_proxy();
   virtual ~thread_proxy();
-  virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw();
-  virtual s_long msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) throw();
-  virtual s_long request(s_long rt, unity& retval, const unity& args, s_long flags) throw();
-  virtual s_long slots_create(const unity& _cfg0, s_long flags) throw();
-  virtual s_long slots_remove(const unity& slotnames, s_long flags) throw();
-  virtual s_long thread_name(unity& retname) throw();
-  virtual s_long process_name(unity& retname) throw();
-  virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) throw();
+  virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) __bmdx_noex;
+  virtual s_long msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) __bmdx_noex;
+  virtual s_long request(s_long rt, unity& retval, const unity& args, s_long flags) __bmdx_noex;
+  virtual s_long slots_create(const unity& _cfg0, s_long flags) __bmdx_noex;
+  virtual s_long slots_remove(const unity& slotnames, s_long flags) __bmdx_noex;
+  virtual s_long thread_name(unity& retname) __bmdx_noex;
+  virtual s_long process_name(unity& retname) __bmdx_noex;
+  virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) __bmdx_noex;
 };
 
 
@@ -11811,7 +11811,7 @@ cch_thread::~cch_thread() {}
   //        (-1 - multiple causes. -3 - thread does not exist.)
   //    0 - the client should wait until allowed to operate (ret. code 1) or fail (ret. code < 0).
   //    1 - success, the client should make intended operations.
-int dispatcher_mt::mst_semaphore::m_sl_acquire() throw()
+int dispatcher_mt::mst_semaphore::m_sl_acquire() __bmdx_noex
 {
   if (!_p_ths) { return -1; }
   if (m_allowed == 1) { return 1; } else if (m_allowed != 0 || !(rsv == 0 || rsv == 1)) { return -1; }
@@ -11825,7 +11825,7 @@ int dispatcher_mt::mst_semaphore::m_sl_acquire() throw()
   th.mst |= 1; m_allowed = 1; // start with +-sl in the current thread
   return 1;
 }
-int dispatcher_mt::mst_semaphore::m_th_acquire() throw()
+int dispatcher_mt::mst_semaphore::m_th_acquire() __bmdx_noex
 {
   if (!_p_ths) { return -1; }
   if (m_allowed == 2) { return 1; } else if (m_allowed != 0 || !(rsv == 0 || rsv == 2)) { return -1; }
@@ -11838,7 +11838,7 @@ int dispatcher_mt::mst_semaphore::m_th_acquire() throw()
   m_allowed = 2; // start with +-th in the current thread
   return 1;
 }
-int dispatcher_mt::mst_semaphore::m_th_ro_acquire() throw()
+int dispatcher_mt::mst_semaphore::m_th_ro_acquire() __bmdx_noex
 {
   if (!_p_ths) { return -1; }
   if (m_allowed == 4) { return 1; } else if (m_allowed != 0 || !(rsv == 0 || rsv == 4)) { return -1; }
@@ -11853,7 +11853,7 @@ int dispatcher_mt::mst_semaphore::m_th_ro_acquire() throw()
   return 1;
 }
 
-void dispatcher_mt::mst_semaphore::release() throw()
+void dispatcher_mt::mst_semaphore::release() __bmdx_noex
 {
   if (rsv)
   {
@@ -11875,7 +11875,7 @@ dispatcher_mt::mst_semaphore::mst_semaphore(dispatcher_mt::cch_session& ths_, co
   // Semaphore state is not copied - only object references.
 dispatcher_mt::mst_semaphore::mst_semaphore(const mst_semaphore& x): _p_ths(x._p_ths), _thn(x._thn), rsv(0), m_allowed(0) {}
 dispatcher_mt::mst_semaphore::mst_semaphore(): _p_ths(0), _thn(), rsv(0), m_allowed(0) {}
-dispatcher_mt::mst_semaphore::~mst_semaphore() throw() { release(); }
+dispatcher_mt::mst_semaphore::~mst_semaphore() __bmdx_noex { release(); }
 
   // sln: valid (recoded) slot name.
   // Returns:
@@ -11892,7 +11892,7 @@ dispatcher_mt::mst_semaphore::~mst_semaphore() throw() { release(); }
   //    the slot may be still used to complete operation (e.g. read from message queue) without additional checks
   //    or canceling. The slot object is automatically deleted when the last cref_t<cch_slot>
   //    goes out of scope.
-int dispatcher_mt::mst_semaphore::r_sl(const std::wstring& sln, cref_t<cch_slot>& ret_sl) throw()
+int dispatcher_mt::mst_semaphore::r_sl(const std::wstring& sln, cref_t<cch_slot>& ret_sl) __bmdx_noex
 {
   if (!_p_ths) { return -1; }
   critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
@@ -11913,7 +11913,7 @@ int dispatcher_mt::mst_semaphore::r_sl(const std::wstring& sln, cref_t<cch_slot>
   //    if true, p_thread() will return 0 during cch_thread initialization and destruction, even if thread exists.
   //    This should be used for short-time access to special thread members (mtrk_htracking),
   //    under lkd_disp_ths instead of m_*_acquire().
-cch_thread* dispatcher_mt::mst_semaphore::p_thread(bool b_inited_only) throw()
+cch_thread* dispatcher_mt::mst_semaphore::p_thread(bool b_inited_only) __bmdx_noex
 {
   if (!_p_ths) { return 0; }
   critsec_t<dispatcher_mt> __lock(10, -1, &_p_ths->lkd_disp_ths); if (sizeof(__lock)) {}
@@ -11965,8 +11965,8 @@ dispatcher_mt::thread_proxy::~thread_proxy()
   _r_ths.clear();
 }
 
-s_long dispatcher_mt::thread_proxy::mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw() { return _s_pop(_r_ths, _name_th, slotname, retmsg, retatt, flags); }
-s_long dispatcher_mt::thread_proxy::msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) throw()
+s_long dispatcher_mt::thread_proxy::mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) __bmdx_noex { return _s_pop(_r_ths, _name_th, slotname, retmsg, retatt, flags); }
+s_long dispatcher_mt::thread_proxy::msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) __bmdx_noex
 {
   if (!tracking)
   {
@@ -12001,11 +12001,11 @@ s_long dispatcher_mt::thread_proxy::msend(const unity& msg, cref_t<t_stringref> 
     return res;
   }
 }
-s_long dispatcher_mt::thread_proxy::request(s_long rt, unity& retval, const unity& args, s_long flags) throw()
+s_long dispatcher_mt::thread_proxy::request(s_long rt, unity& retval, const unity& args, s_long flags) __bmdx_noex
 {
   return dispatcher_mt::thread_proxy::_s_request(this, _r_ths, rt, retval, args, _r_ths ? _r_ths.ref().frqperm : 0, flags);
 }
-s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0, s_long flags_cr) throw()
+s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0, s_long flags_cr) __bmdx_noex
 {
   if (!_r_ths.has_ref()) { return -2; }
   if (_r_ths.ref().ses_state != 1) { return -3; }
@@ -12027,10 +12027,10 @@ s_long dispatcher_mt::thread_proxy::slots_create(const unity& _cfg0, s_long flag
   else if (res == -3) { res = -7; }
   return res;
 }
-s_long dispatcher_mt::thread_proxy::slots_remove(const unity& slotnames, s_long flags) throw() { return dispatcher_mt::thread_proxy::_s_slots_remove(_r_ths, slotnames, _name_th, flags); }
-s_long dispatcher_mt::thread_proxy::thread_name(unity& retname) throw() { if (!_r_ths.has_ref()) { return -2; } try { retname = _name_th; return 1; } catch (...) { return -2; } }
-s_long dispatcher_mt::thread_proxy::process_name(unity& retname) throw() { if (!_r_ths.has_ref()) { return -2; } try { retname = _name_pr; return 1; } catch (...) { return -2; } }
-s_long dispatcher_mt::thread_proxy::subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) throw()
+s_long dispatcher_mt::thread_proxy::slots_remove(const unity& slotnames, s_long flags) __bmdx_noex { return dispatcher_mt::thread_proxy::_s_slots_remove(_r_ths, slotnames, _name_th, flags); }
+s_long dispatcher_mt::thread_proxy::thread_name(unity& retname) __bmdx_noex { if (!_r_ths.has_ref()) { return -2; } try { retname = _name_th; return 1; } catch (...) { return -2; } }
+s_long dispatcher_mt::thread_proxy::process_name(unity& retname) __bmdx_noex { if (!_r_ths.has_ref()) { return -2; } try { retname = _name_pr; return 1; } catch (...) { return -2; } }
+s_long dispatcher_mt::thread_proxy::subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) __bmdx_noex
 {
   try {
     address qsa, suba;
@@ -12270,7 +12270,7 @@ void dispatcher_mt::thread_proxy::__append_vals(unity& dest, const unity& src, s
   //      a) if the name is not valid. *pretval == const, *pn1, *pntail are undefined.
   //      b) sn tail is != that of *pdtailcmp.
   //    -2 - failure. *pretval == const, *pn1, *pntail are undefined.
-s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstring* pretval, std::wstring* pn1, std::wstring* pntail, const address* pdtailcmp) throw()
+s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstring* pretval, std::wstring* pn1, std::wstring* pntail, const address* pdtailcmp) __bmdx_noex
 {
   try {
     unity _a; const unity* pa(0);
@@ -12307,10 +12307,10 @@ s_long dispatcher_mt::thread_proxy::__recode_slotname(const unity& sn, std::wstr
 }
 
   // Empty, or valid address array (1-based, utUnityArray, containing only strings).
-const unity& dispatcher_mt::thread_proxy::address::addr() const throw() { return _addr; }
+const unity& dispatcher_mt::thread_proxy::address::addr() const __bmdx_noex { return _addr; }
 
-bool dispatcher_mt::thread_proxy::address::is_empty() const throw() { return _addr.isEmpty(); }
-s_long dispatcher_mt::thread_proxy::address::n() const throw() { return _addr.isEmpty() ? 0 : _addr.arrsz(); }
+bool dispatcher_mt::thread_proxy::address::is_empty() const __bmdx_noex { return _addr.isEmpty(); }
+s_long dispatcher_mt::thread_proxy::address::n() const __bmdx_noex { return _addr.isEmpty() ? 0 : _addr.arrsz(); }
 
   // ind is 1..n().
 const unity& dispatcher_mt::thread_proxy::address::addr(s_long ind) const { return _addr.ref<utUnity>(ind); }
@@ -12361,7 +12361,7 @@ std::wstring dispatcher_mt::thread_proxy::address::wstr_sln_tail() const
   paramline().encode1v(_a, s);
   return s;
 }
-bool dispatcher_mt::thread_proxy::address::has_sln_tail() const throw()
+bool dispatcher_mt::thread_proxy::address::has_sln_tail() const __bmdx_noex
 {
   const s_long ind = sln_ind();
   return ind >= 2 && ind < _addr.arrub();
@@ -12409,7 +12409,7 @@ std::wstring dispatcher_mt::thread_proxy::address::wstr_pn() const
   //    1 if set decoded, corrected address.
   //    -1 if x is not a valid address. addr() is cleared.
   //    -2 if setting failed. addr() is cleared.
-s_long dispatcher_mt::thread_proxy::address::set_addr(const unity& x) throw()
+s_long dispatcher_mt::thread_proxy::address::set_addr(const unity& x) __bmdx_noex
 {
   _addr.clear();
   try {
@@ -12465,24 +12465,24 @@ s_long dispatcher_mt::thread_proxy::address::set_addr_LP(const std::wstring& thn
   } catch (...) { _addr.clear(); return -2; }
 }
 
-bool dispatcher_mt::thread_proxy::address::isLP_any() const throw() { return isLP() || isLPA(); }
-bool dispatcher_mt::thread_proxy::address:: isLP() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LP"; } catch (...) {} return false; }
-bool dispatcher_mt::thread_proxy::address:: isLPA() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LPA"; } catch (...) {} return false; }
-bool dispatcher_mt::thread_proxy::address:: isLM() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LM"; } catch (...) {} return false; }
-bool dispatcher_mt::thread_proxy::address:: isLMA() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LMA"; } catch (...) {} return false; }
-bool dispatcher_mt::thread_proxy::address:: isR() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"R"; } catch (...) {} return false; }
-bool dispatcher_mt::thread_proxy::address:: isRMA() const throw() { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"RMA"; } catch (...) {} return false; }
+bool dispatcher_mt::thread_proxy::address::isLP_any() const __bmdx_noex { return isLP() || isLPA(); }
+bool dispatcher_mt::thread_proxy::address:: isLP() const __bmdx_noex { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LP"; } catch (...) {} return false; }
+bool dispatcher_mt::thread_proxy::address:: isLPA() const __bmdx_noex { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LPA"; } catch (...) {} return false; }
+bool dispatcher_mt::thread_proxy::address:: isLM() const __bmdx_noex { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LM"; } catch (...) {} return false; }
+bool dispatcher_mt::thread_proxy::address:: isLMA() const __bmdx_noex { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"LMA"; } catch (...) {} return false; }
+bool dispatcher_mt::thread_proxy::address:: isR() const __bmdx_noex { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"R"; } catch (...) {} return false; }
+bool dispatcher_mt::thread_proxy::address:: isRMA() const __bmdx_noex { if (_addr.isEmpty()) { return false; } try { return _addr.ref<utUnity>(1).vflstr() == L"RMA"; } catch (...) {} return false; }
 
   // Returns base index of slot name in addr():
   //  >= 2 on success.
   //  -1 if addr() is empty.
   //  -2 on failure.
-s_long dispatcher_mt::thread_proxy::address::sln_ind() const throw()
+s_long dispatcher_mt::thread_proxy::address::sln_ind() const __bmdx_noex
 {
   try { return _sln_ind0(_addr[1].vflstr()); } catch (...) {}
   return -2;
 }
-s_long dispatcher_mt::thread_proxy::address::_sln_ind0(const _fls75& k1) const throw()
+s_long dispatcher_mt::thread_proxy::address::_sln_ind0(const _fls75& k1) const __bmdx_noex
 {
   s_long ind = -2;
   if (k1 == L"LP") { ind = 3; } // |LP|thread|slot
@@ -12496,7 +12496,7 @@ s_long dispatcher_mt::thread_proxy::address::_sln_ind0(const _fls75& k1) const t
 
   // Returns slot type part,
   //  or empty string if addr() is empty or on failure.
-_fls75 dispatcher_mt::thread_proxy::address::slt() const throw()
+_fls75 dispatcher_mt::thread_proxy::address::slt() const __bmdx_noex
 {
   try {
     s_long ind = sln_ind(); if (ind < 1) { return _fls75(); }
@@ -12506,7 +12506,7 @@ _fls75 dispatcher_mt::thread_proxy::address::slt() const throw()
   return _fls75();
 }
 
-bool dispatcher_mt::thread_proxy::address::_conv_LP_LM(arrayref_t<wchar_t> name_peer) throw()
+bool dispatcher_mt::thread_proxy::address::_conv_LP_LM(arrayref_t<wchar_t> name_peer) __bmdx_noex
 {
   try {
     if (!isLP()) { return false; }
@@ -12518,7 +12518,7 @@ bool dispatcher_mt::thread_proxy::address::_conv_LP_LM(arrayref_t<wchar_t> name_
   } catch (...) {}
   return false;
 }
-bool dispatcher_mt::thread_proxy::address::_conv_LM_LP() throw()
+bool dispatcher_mt::thread_proxy::address::_conv_LM_LP() __bmdx_noex
 {
   try {
     if (!isLM()) { return false; }
@@ -12530,10 +12530,10 @@ bool dispatcher_mt::thread_proxy::address::_conv_LM_LP() throw()
 }
 
 
-bool dispatcher_mt::thread_proxy::thnchk(arrayref_t<wchar_t> s) throw() { return s.is_valid() && !(s.n() == 0 || (s.n() >= 2 && s[0] == L'_' && s[1] == L'_')); }
-bool dispatcher_mt::thread_proxy::pnchk(arrayref_t<wchar_t> s) throw() { return s.is_valid() && s.n() > 0 && !is_addr_cat_all(s); }
-bool dispatcher_mt::thread_proxy::hostportchk(const std::wstring& s) throw() { return s.length() != 0 && !is_addr_cat_all(s); }
-bool dispatcher_mt::thread_proxy::is_addr_cat_all(arrayref_t<wchar_t> s) throw()
+bool dispatcher_mt::thread_proxy::thnchk(arrayref_t<wchar_t> s) __bmdx_noex { return s.is_valid() && !(s.n() == 0 || (s.n() >= 2 && s[0] == L'_' && s[1] == L'_')); }
+bool dispatcher_mt::thread_proxy::pnchk(arrayref_t<wchar_t> s) __bmdx_noex { return s.is_valid() && s.n() > 0 && !is_addr_cat_all(s); }
+bool dispatcher_mt::thread_proxy::hostportchk(const std::wstring& s) __bmdx_noex { return s.length() != 0 && !is_addr_cat_all(s); }
+bool dispatcher_mt::thread_proxy::is_addr_cat_all(arrayref_t<wchar_t> s) __bmdx_noex
 {
   if (!(s.is_valid() && s.n() > 0)) { return false; }
   if (s[0] == L'L')
@@ -12580,7 +12580,7 @@ bool dispatcher_mt::thread_proxy::sln1chk_main(const std::wstring& sln1)
 }
 bool dispatcher_mt::thread_proxy::sln1chk_main_qs(const std::wstring& sln1) { return sln1chk_main(sln1) && sln1[0] == L'q' && sln1[1] == L's'; }
 bool dispatcher_mt::thread_proxy::sln1chk_qs(const std::wstring& sln1) { return sln1.length() >= 4 && sln1[0] == L'q' && sln1[1] == L's' && sln1[2] == L'_'; }
-bool dispatcher_mt::thread_proxy::sln1chk_subscriber(const std::wstring& sln1) throw() { return sln1.length() >= 4 && (sln1[0] == L'p' || sln1[0] == L'q') && sln1[1] == L'i' && sln1[2] == L'_'; }
+bool dispatcher_mt::thread_proxy::sln1chk_subscriber(const std::wstring& sln1) __bmdx_noex { return sln1.length() >= 4 && (sln1[0] == L'p' || sln1[0] == L'q') && sln1[1] == L'i' && sln1[2] == L'_'; }
 bool dispatcher_mt::thread_proxy::sln1chk_main_o(const std::wstring& sln1)
 {
   if (sln1.length() < 4) { return false; }
@@ -12677,7 +12677,7 @@ bool dispatcher_mt::thread_proxy::sln1chk_iomatch(const std::wstring& ssln1, con
 
 
 
-s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags_mget) throw()
+s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags_mget) __bmdx_noex
 {
   if (!retmsg.isEmpty()) { retmsg.clear(); }
   if (retatt && *retatt) {}
@@ -12836,7 +12836,7 @@ s_long dispatcher_mt::thread_proxy::_s_pop(cref_t<dispatcher_mt::cch_session>& _
   // pb_da_is_local: may be 0; if != 0, receives da.isLP_any(), where da is destination address, taken from msg.
   // NOTE _s_write is called multiple times for one message from _s_subs_deliver,
   //  each time with different "trg" and re-set "src".
-s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags_msend, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) throw()
+s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, const unity& msg, const cref_t<t_stringref>& att, Esender_type sender_type, const s_long flags_msend, bool b_may_swap_msg, s_ll id_msg_nl, s_ll id_msg_orig, refmaker_t<t_htracking_proxy>* prhtrprx, bool* pb_da_is_local) __bmdx_noex
 {
   if (!_r_ths.has_ref()) { return -2; }
   dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
@@ -13459,7 +13459,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
 }
 
   // pprx == 0 means the call directly from dispatcher_mt (not associated with any thread).
-s_long dispatcher_mt::thread_proxy::_s_request(thread_proxy* pprx, cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, int frqperm, s_long flags_rq) throw()
+s_long dispatcher_mt::thread_proxy::_s_request(thread_proxy* pprx, cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, unity& retval, const unity& args, int frqperm, s_long flags_rq) __bmdx_noex
 {
   retval.clear();
   if (!_r_ths.has_ref()) { return -2; }
@@ -13760,7 +13760,7 @@ s_long dispatcher_mt::thread_proxy::_s_request(thread_proxy* pprx, cref_t<dispat
   //    0 - location not determined,
   //    1 - local destination (e.g. direct modification of local qs slot),
   //    2 - non-local destination (e.g. subscription request through LMSC clt_msend).
-s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) throw()
+s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_session>& _r_ths, s_long rt, Esender_type sender_type, const address& qsa, const address& suba, s_ll id_rq_subs, refmaker_t<t_htracking_proxy>* prhtrprx, s_long* pret_destloc) __bmdx_noex
 {
   if (!_r_ths.has_ref()) { return -2; }
   cch_session& rses = *_r_ths._pnonc_u();
@@ -14039,7 +14039,7 @@ s_long dispatcher_mt::thread_proxy::_s_subscribe(cref_t<dispatcher_mt::cch_sessi
   //    -2 - failure for one or more queues, messages for other queues may have been sent.
   //    -3 - session is closed, some part of messages may have been sent before that.
   //    -4 - invalid flags, no messages sent.
-s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) throw()
+s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& _name_th, s_long flags, s_ll* pnmsent) __bmdx_noex
 {
   if (pnmsent) { *pnmsent = 0; }
   if (!_r_ths.has_ref()) { return -1; }
@@ -14167,7 +14167,7 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
   //    -1 - failure, no messages sent.
   //    -2 - failure, some part of messages may have been sent.
   //    -3 - session is closed, no messages sent.
-s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs, s_ll* pnmsent) throw()
+s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_session>& _r_ths, cref_t<cch_slot>& r_qs, const std::wstring& _name_th, const std::wstring& _name_qs, s_ll* pnmsent) __bmdx_noex
 {
   if (pnmsent) { *pnmsent = 0; }
   if (!_r_ths.has_ref()) { return -1; }
@@ -14264,7 +14264,7 @@ s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_se
   //    -3 - session is closed.
   //    -5 - invalid argument (args and/or retval as required by request type).
   //    -6 - thread already exists.
-s_long dispatcher_mt::thread_proxy::_s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0, s_long flags_cr) throw()
+s_long dispatcher_mt::thread_proxy::_s_thread_create(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& _cfg0, s_long flags_cr) __bmdx_noex
 {
   if (!_r_ths) { return -2; }
   dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
@@ -14359,7 +14359,7 @@ s_long dispatcher_mt::thread_proxy::_s_thread_create(cref_t<dispatcher_mt::cch_s
   //    -3 - session is closed.
   //    -5 - invalid argument (args and/or retval as required by request type).
   //    -7 - thread does not exist.
-s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn, const unity* pthn) throw()
+s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const std::wstring& thn, const unity* pthn) __bmdx_noex
 {
   if (!_r_ths) { return -2; }
   dispatcher_mt::cch_session& rses = *_r_ths._pnonc_u();
@@ -14453,7 +14453,7 @@ s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_s
   //  -2 - failure (mem. alloc.).
   //  -3 - thread does not exist.
   //  -4 - one of new slot names is not unique.
-s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std::wstring& _name_th, const unity& slotscfg, t_hsubs& hsubs_ins, t_hsubs& hsubs_outs, mst_semaphore* _pms0) throw()
+s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std::wstring& _name_th, const unity& slotscfg, t_hsubs& hsubs_ins, t_hsubs& hsubs_outs, mst_semaphore* _pms0) __bmdx_noex
 {
   try {
     unity k_slots(L"slots");
@@ -14691,7 +14691,7 @@ lSkip1:;
   return -2;
 }
 
-s_long dispatcher_mt::thread_proxy::_s_slots_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotnames, const std::wstring& _name_th, s_long flags_rmv) throw()
+s_long dispatcher_mt::thread_proxy::_s_slots_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotnames, const std::wstring& _name_th, s_long flags_rmv) __bmdx_noex
 {
   if (!_r_ths.has_ref()) { return -2; }
   if (_r_ths.ref().ses_state != 1) { return -3; }
@@ -14720,7 +14720,7 @@ s_long dispatcher_mt::thread_proxy::_s_slots_remove(cref_t<dispatcher_mt::cch_se
     return 2;
   } catch (...) { return -2; }
 }
-s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) throw()
+s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) __bmdx_noex
 {
   if (!_r_ths.has_ref()) { return -2; }
   if (_r_ths.ref().ses_state != 1) { return -3; }
@@ -14813,7 +14813,7 @@ s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_ses
   //      0x4 - an invalid address detected,
   //      0x8 - failed to update local subscription,
   //      0x10 - failed to update non-local subscription (LMSC request failed).
-s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) throw()
+s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) __bmdx_noex
 {
   if (!_r_ths) { return 0x1; }
   cch_session& rses = *_r_ths._pnonc_u();
@@ -14882,7 +14882,7 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::c
 }
 
 
-void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) throw()
+void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) __bmdx_noex
 {
   if (!(pdisp && process_name.is_valid())) { return; }
   if (!(_cfg0.isString() || _cfg0.isEmpty() || (_cfg0.isAssoc() && _cfg0.compatibility() > 0))) { return; }
@@ -14986,7 +14986,7 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
     pdisp->_r_ths.clear();
   }
 }
-void dispatcher_mt::thread_proxy::_s_disp_dtor(dispatcher_mt* pdisp) throw()
+void dispatcher_mt::thread_proxy::_s_disp_dtor(dispatcher_mt* pdisp) __bmdx_noex
 {
   if (!pdisp) { return; }
   if (pdisp->_r_ths)
@@ -15011,7 +15011,7 @@ void dispatcher_mt::thread_proxy::_s_disp_dtor(dispatcher_mt* pdisp) throw()
   //    -3 - disp. session is closed.
   //    -5 - invalid thread name.
   //    -7 - thread does not exist.
-s_long dispatcher_mt::thread_proxy::_s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, arrayref_t<wchar_t> _name_th) throw()
+s_long dispatcher_mt::thread_proxy::_s_proxy_new(const cref_t<dispatcher_mt::cch_session>& _r_ths, unity& retval, arrayref_t<wchar_t> _name_th) __bmdx_noex
 {
   unity temp; retval.swap(temp);
   if (!_r_ths) { return -2; } if (_r_ths.ref().ses_state != 1) { return -3; }
@@ -15029,7 +15029,7 @@ s_long dispatcher_mt::thread_proxy::_s_proxy_new(const cref_t<dispatcher_mt::cch
   //    -3 - disp. session is closed.
   //    -5 - invalid thread name.
   //    -7 - thread does not exist.
-s_long dispatcher_mt::thread_proxy::_s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, arrayref_t<wchar_t> thread_name) throw()
+s_long dispatcher_mt::thread_proxy::_s_proxy_init(thread_proxy& x, const cref_t<dispatcher_mt::cch_session>& _r_ths, arrayref_t<wchar_t> thread_name) __bmdx_noex
 {
   if (!thnchk(thread_name)) { return -5; }
   if (!_r_ths) { return -2; }
@@ -15061,28 +15061,28 @@ s_long dispatcher_mt::thread_proxy::_s_proxy_init(thread_proxy& x, const cref_t<
 
 
 
-dispatcher_mt::dispatcher_mt(arrayref_t<char> process_name, const unity& cfg, s_long flags_ctor) throw()       { try { dispatcher_mt::thread_proxy::_s_disp_ctor(this, process_name.is_valid() ? bsToWs(process_name.pd(), process_name.n()) : L"", cfg, flags_ctor); } catch (...) {} }
-dispatcher_mt::dispatcher_mt(arrayref_t<wchar_t> process_name, const unity& cfg, s_long flags_ctor) throw()        { dispatcher_mt::thread_proxy::_s_disp_ctor(this, process_name, cfg, flags_ctor); }
-dispatcher_mt::~dispatcher_mt() throw()        { dispatcher_mt::thread_proxy::_s_disp_dtor(this); }
-bool dispatcher_mt::is_valid() const throw()        { return _r_ths; }
-bool dispatcher_mt::has_session() const throw()        { return _r_ths && _r_ths.ref().ses_state == 1; }
-void dispatcher_mt::end_session() throw()
+dispatcher_mt::dispatcher_mt(arrayref_t<char> process_name, const unity& cfg, s_long flags_ctor) __bmdx_noex       { try { dispatcher_mt::thread_proxy::_s_disp_ctor(this, process_name.is_valid() ? bsToWs(process_name.pd(), process_name.n()) : L"", cfg, flags_ctor); } catch (...) {} }
+dispatcher_mt::dispatcher_mt(arrayref_t<wchar_t> process_name, const unity& cfg, s_long flags_ctor) __bmdx_noex        { dispatcher_mt::thread_proxy::_s_disp_ctor(this, process_name, cfg, flags_ctor); }
+dispatcher_mt::~dispatcher_mt() __bmdx_noex        { dispatcher_mt::thread_proxy::_s_disp_dtor(this); }
+bool dispatcher_mt::is_valid() const __bmdx_noex        { return _r_ths; }
+bool dispatcher_mt::has_session() const __bmdx_noex        { return _r_ths && _r_ths.ref().ses_state == 1; }
+void dispatcher_mt::end_session() __bmdx_noex
 {  if (_r_ths)  {
     cch_session& rses = *_r_ths._pnonc_u();
     critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {}
     rses.__set_ses_state(0); dispatcher_mt::thread_proxy::_s_thh_signal_stop(rses); // dispatcher session ends because dispatcher_mt::end_session() is called y client
 } }
-bool dispatcher_mt::frqperm(s_long& f, bool b_get, bool b_set) const throw()
+bool dispatcher_mt::frqperm(s_long& f, bool b_get, bool b_set) const __bmdx_noex
 {
   if (!has_session()) { return false; }
   critsec_t<dispatcher_mt> __lock(10, -1, &_r_ths->lkd_disp_ths); if (sizeof(__lock)) {}
   volatile s_long& x = _r_ths->frqperm; int x0 = x; if (b_set) { x = f; } if (b_get) { f = x0; }
   return true;
 }
-s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<wchar_t> _name_th) const throw() { return thread_proxy::_s_proxy_new(_r_ths, dest, _name_th); }
-s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<char> _name_th) const throw() { if (!_name_th.is_valid()) { return -2; } try { return thread_proxy::_s_proxy_new(_r_ths, dest, bsToWs(_name_th.pd(), _name_th.n())); } catch (...) {} return -2; }
+s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<wchar_t> _name_th) const __bmdx_noex { return thread_proxy::_s_proxy_new(_r_ths, dest, _name_th); }
+s_long dispatcher_mt::new_proxy(unity& dest, arrayref_t<char> _name_th) const __bmdx_noex { if (!_name_th.is_valid()) { return -2; } try { return thread_proxy::_s_proxy_new(_r_ths, dest, bsToWs(_name_th.pd(), _name_th.n())); } catch (...) {} return -2; }
 
-s_long dispatcher_mt::request(s_long rt, unity& retval, const unity& args, s_long flags) throw()
+s_long dispatcher_mt::request(s_long rt, unity& retval, const unity& args, s_long flags) __bmdx_noex
   { try { return thread_proxy::_s_request(0, _r_ths, rt, retval, args, -1, flags); } catch (...) { return -2; } }
 
 } // bmdx ns

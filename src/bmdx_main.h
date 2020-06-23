@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-06-16
+// rev. 2020-06-23
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -126,7 +126,7 @@ namespace bmdx
     typedef void* (*__Psm)(s_long ind_method); // the function returning static function (class or interface method) pointer by given index
     typedef __Psm (*__Pipsm)(const char* interface_name); // the function returning static getter for getter of the given interface static methods
 
-    static void _ls_psm_set(const char* piname, __Psm p) throw();
+    static void _ls_psm_set(const char* piname, __Psm p) __bmdx_noex;
 
     enum Edef_itf_method
     {
@@ -308,7 +308,7 @@ namespace bmdx
   struct _XUBase : std::exception
   {
     _fls75 s;
-    const char* what() const throw() { return s.c_str(); }
+    const char* what() const __bmdx_noex { return s.c_str(); }
     _XUBase(const _fls75& exc_type, const _fls75& src, const _fls75& x1, const _fls75& x2, const _fls75& x3, const _fls75& x4, const _fls75& x5)
     {
       s = exc_type; s += '/'; s += src; s_long n = 0;
@@ -437,7 +437,7 @@ namespace bmdx
     struct t_deinit { ~t_deinit() { if (vecm::specf<TA>::dmode == 0) { return; } L __lock; if (__lock.b_valid()  && _storage.init == 1) { vecm::specf<TA>::Fdestroy_1(&_storage.stg[0]); _storage.init = 2; } } };
       static t_deinit _deinit;
       static t_storage* _pst_m;
-    void _reg_stg() const throw() { if (!_pst_m) { typedef void* (*PFregstg)(const char* tname, void* pstg_offer); PFregstg f = (PFregstg)unity_common::pls_modsm()(unity_common::msm_cv_regstg); if (f) { _pst_m = (t_storage*)f(typeid(t_svf).name(), &_storage); } } }
+    void _reg_stg() const __bmdx_noex { if (!_pst_m) { typedef void* (*PFregstg)(const char* tname, void* pstg_offer); PFregstg f = (PFregstg)unity_common::pls_modsm()(unity_common::msm_cv_regstg); if (f) { _pst_m = (t_storage*)f(typeid(t_svf).name(), &_storage); } } }
   public:
 
       // NOTE Set lock L if a series of checks and accesses must be made safely in multithreaded context.
@@ -769,7 +769,7 @@ namespace bmdx
     o_proxy() : __psm(0), __pi(0) {}
     I* __pci() const { return 0; }
     I* __psi() const { return 0; }
-    void __set_pp(unity_common::__Psm psm, I* pi) throw () { __psm = psm; __pi = pi; }
+    void __set_pp(unity_common::__Psm psm, I* pi) __bmdx_noex { __psm = psm; __pi = pi; }
   };
 
 
@@ -782,8 +782,8 @@ namespace bmdx
 
 
 
-    __I* operator->() const        throw (exc_null_ptr __bmdx_noargt) { return _p_checked(); }
-    __I& operator*() const        throw (exc_null_ptr __bmdx_noargt) { return *_p_checked(); }
+    __I* operator->() const        __bmdx_exs(exc_null_ptr) { return _p_checked(); }
+    __I& operator*() const        __bmdx_exs(exc_null_ptr) { return *_p_checked(); }
 
       // true if o_iptr_t object is non-null, and its referenced object is local.
     bool b_local(__bmdx_noarg1) const { return !!_p; }
@@ -792,41 +792,41 @@ namespace bmdx
     bool b_nonlocal(__bmdx_noarg1) const { return _f && prx().__pci(); }
 
       // Conversion to client-side pointer.
-    operator const void*() const        throw (__bmdx_noargt1) { return _p_u(); }
+    operator const void*() const        { return _p_u(); }
 
       // Client-side pointer for calling interface functions.
       //  Checked version: ptr().
       //  Unchecked version: ptr_u().
-    __I* ptr(__bmdx_noarg1)        throw(exc_null_ptr) { return _p_checked(); }
-    const __I* ptr(__bmdx_noarg1) const        throw(exc_null_ptr) { return _p_checked(); }
-    __I* ptr_u(__bmdx_noarg1)        throw() { return _p_u(); }
-    const __I* ptr_u(__bmdx_noarg1) const        throw() { return _p_u(); }
+    __I* ptr(__bmdx_noarg1)        __bmdx_exs(exc_null_ptr) { return _p_checked(); }
+    const __I* ptr(__bmdx_noarg1) const        __bmdx_exs(exc_null_ptr) { return _p_checked(); }
+    __I* ptr_u(__bmdx_noarg1)        __bmdx_noex { return _p_u(); }
+    const __I* ptr_u(__bmdx_noarg1) const        __bmdx_noex { return _p_u(); }
 
       // In case of local interface, returns local pointer.
       // In case of proxy, returns server-side interface pointer (same as source unity::objPtr()).
       //  NOTE server-side interface pointer may be unsafe to use directly (due to binary incompatibility).
-    __I* psi_u(__bmdx_noarg1)        throw () { return _psi_u(); }
-    const __I* psi_u(__bmdx_noarg1) const        throw () { return _psi_u(); }
+    __I* psi_u(__bmdx_noarg1)        __bmdx_noex { return _psi_u(); }
+    const __I* psi_u(__bmdx_noarg1) const        __bmdx_noex { return _psi_u(); }
 
 
 
       // NOTE In case of proxy, client-side interface pointers are compared.
-    bool operator == (const o_iptr_t& x) const        throw (__bmdx_noargt1) { return _p_u() == x._p_u(); }
-    bool operator != (const o_iptr_t& x) const        throw (__bmdx_noargt1) { return _p_u() != x._p_u(); }
-    bool operator == (const __I* x) const        throw (__bmdx_noargt1) { return _p_u() == x; }
-    bool operator != (const __I* x) const        throw (__bmdx_noargt1) { return _p_u() != x; }
+    bool operator == (const o_iptr_t& x) const        { return _p_u() == x._p_u(); }
+    bool operator != (const o_iptr_t& x) const        { return _p_u() != x._p_u(); }
+    bool operator == (const __I* x) const        { return _p_u() == x; }
+    bool operator != (const __I* x) const        { return _p_u() != x; }
 
 
 
-    void clear(__bmdx_noarg1)        throw () { this->~o_iptr_t(); new (this) o_iptr_t(); }
+    void clear(__bmdx_noarg1)        __bmdx_noex { this->~o_iptr_t(); new (this) o_iptr_t(); }
 
-    o_iptr_t(__bmdx_noarg1)        throw () : _p(0), _f(0) {}
-    ~o_iptr_t()        throw (__bmdx_noargt1) { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
+    o_iptr_t(__bmdx_noarg1)        __bmdx_noex : _p(0), _f(0) {}
+    ~o_iptr_t()        __bmdx_exs(__bmdx_noargt1) { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
 
       // NOTE Construction does not generate exceptions.
       //    If no proxy defined by the client, or the client-defined __Proxy() fails (this is not normal),
       //    o_iptr_t will be null (== false).
-    o_iptr_t(__I* pi, unity_common::__Psm pmsm __bmdx_noarg)        throw () : _p(0), _f(0)
+    o_iptr_t(__I* pi, unity_common::__Psm pmsm __bmdx_noarg)        __bmdx_noex : _p(0), _f(0)
     {
       if (pmsm == unity_common::pls_modsm()) { _p = pi; return; }
         if (!(pi && pmsm)) { return; }
@@ -841,13 +841,13 @@ namespace bmdx
       //    If copying fails, ptr_u() == 0.
       //    If copying succeeds, bool(ptr_u()) == bool(x.ptr_u()).
       //    If the client-defined __Proxy copy constructor does not fail anyway, copying always succeeds as well.
-    o_iptr_t(const o_iptr_t& x __bmdx_noarg)         throw () : _p(x._p), _f(0) { if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} } }
+    o_iptr_t(const o_iptr_t& x __bmdx_noarg)         __bmdx_noex : _p(x._p), _f(0) { if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} } }
 
       // NOTE Assignment does not generate exceptions.
       //    If assignment fails, ptr_u() == 0.
       //    If assignment succeeds, bool(ptr_u()) == bool(x.ptr_u()).
       //    If the client-defined __Proxy copy constructor does not fail anyway, assignment always succeeds as well.
-    o_iptr_t& operator=(const o_iptr_t& x)        throw (__bmdx_noargt1) { this->~o_iptr_t(); new (this) o_iptr_t(x); return *this; }
+    o_iptr_t& operator=(const o_iptr_t& x)        __bmdx_exs(__bmdx_noargt1) { this->~o_iptr_t(); new (this) o_iptr_t(x); return *this; }
 
 
 
@@ -1077,8 +1077,8 @@ namespace bmdx
   template<class T, class Iformal, class Iimpl, class _ = __vecm_tu_selector>
   struct _o_iimpl_f_tu_t
   {
-    static o_ibind<T, Iimpl>* Fnew() throw() { o_ibind<T, Iimpl>* p = 0; try { p = new o_iimpl<T, Iformal, _>(); } catch (...) {} return p;  }
-    static o_ibind<T, Iimpl>* Fnewcp(o_ibind<T, Iimpl>* p0) throw() { o_ibind<T, Iimpl>* p = 0; try { if (p0) { p = new o_iimpl<T, Iformal, _>(static_cast<o_iimpl<T, Iformal, _>&>(*p0)); } } catch (...) {} return p;  }
+    static o_ibind<T, Iimpl>* Fnew() __bmdx_noex { o_ibind<T, Iimpl>* p = 0; try { p = new o_iimpl<T, Iformal, _>(); } catch (...) {} return p;  }
+    static o_ibind<T, Iimpl>* Fnewcp(o_ibind<T, Iimpl>* p0) __bmdx_noex { o_ibind<T, Iimpl>* p = 0; try { if (p0) { p = new o_iimpl<T, Iformal, _>(static_cast<o_iimpl<T, Iformal, _>&>(*p0)); } } catch (...) {} return p;  }
   };
 
   template
@@ -1113,8 +1113,8 @@ namespace bmdx
       __p_iimpl->__p_itfs = this;
     }
     ~o_interfaces() { if (__p_iimpl) { try { delete __p_iimpl; } catch (...) {} } }
-    bool __xx_after_construct(s_long flags, o_itfset_base* src, s_long& nsucc, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw() { try { __p_iimpl->__itf_after_construct(flags, src); ++nsucc; } catch (...) { return false; } return __NextIImpl::__xx_after_construct(flags, src, nsucc); }
-    void __xx_before_destroy(s_long flags, s_long& nsucc, s_long nmax, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw() { ++nsucc; bool b = nmax < 0 || nsucc <= nmax; if (nmax < 0 || nsucc < nmax) { __NextIImpl::__xx_before_destroy(flags, nsucc, nmax); } if (!b) { return; } try { __p_iimpl->__itf_before_destroy(flags); } catch (...) {} }
+    bool __xx_after_construct(s_long flags, o_itfset_base* src, s_long& nsucc, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex { try { __p_iimpl->__itf_after_construct(flags, src); ++nsucc; } catch (...) { return false; } return __NextIImpl::__xx_after_construct(flags, src, nsucc); }
+    void __xx_before_destroy(s_long flags, s_long& nsucc, s_long nmax, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex { ++nsucc; bool b = nmax < 0 || nsucc <= nmax; if (nmax < 0 || nsucc < nmax) { __NextIImpl::__xx_before_destroy(flags, nsucc, nmax); } if (!b) { return; } try { __p_iimpl->__itf_before_destroy(flags); } catch (...) {} }
     virtual void* __ifind(const char* iname) { if (!iname) { return 0; } if (__p_iimpl && 0 == std::strcmp(typeid(t_i1).name(), iname)) { try { return __p_iimpl->__pMyI(); } catch (...) {} } return __NextIImpl::__ifind(iname); }
   };
 
@@ -1134,8 +1134,8 @@ namespace bmdx
     enum { __xx_icnt = __NextIImpl::__xx_icnt };
     o_interfaces(meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) {}
     o_interfaces(const o_interfaces& src, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) {}
-    bool __xx_after_construct(s_long flags, o_itfset_base* src, s_long& nsucc, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw() { ++nsucc; return __NextIImpl::__xx_after_copy(flags, src, nsucc); }
-    void __xx_before_destroy(s_long flags, s_long& nsucc, s_long nmax, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw() { ++nsucc; if (nmax < 0 || nsucc < nmax) { __NextIImpl::__xx_before_destroy(flags, nsucc, nmax); } }
+    bool __xx_after_construct(s_long flags, o_itfset_base* src, s_long& nsucc, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex { ++nsucc; return __NextIImpl::__xx_after_copy(flags, src, nsucc); }
+    void __xx_before_destroy(s_long flags, s_long& nsucc, s_long nmax, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex { ++nsucc; if (nmax < 0 || nsucc < nmax) { __NextIImpl::__xx_before_destroy(flags, nsucc, nmax); } }
     virtual void* __ifind(const char* iname) { if (!iname) { return 0; } return __NextIImpl::find(iname); }
   };
 
@@ -1147,8 +1147,8 @@ namespace bmdx
     enum { __xx_icnt = 0 };
     o_interfaces(meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) {}
     o_interfaces(const o_interfaces& src, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) : o_itfset_base(src) {}
-    bool __xx_after_construct(s_long flags, o_itfset_base* src, s_long& nsucc, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw() { return true; }
-    void __xx_before_destroy(s_long flags, s_long& nsucc, s_long nmax, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw() {}
+    bool __xx_after_construct(s_long flags, o_itfset_base* src, s_long& nsucc, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex { return true; }
+    void __xx_before_destroy(s_long flags, s_long& nsucc, s_long nmax, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex {}
 
       // A shortcut to unity::o_api::pobj.
       // flags OR-ed:
@@ -1211,26 +1211,26 @@ namespace bmdx
     {
       T* p;
 
-      inline checked_ptr(const T* p_)        throw() : p((T*)p_) {}
+      inline checked_ptr(const T* p_)        __bmdx_noex : p((T*)p_) {}
 
-      inline T& operator*() const        throw(XUExec) { check(); return *p; }
-      inline operator T*() const        throw() { return p; }
+      inline T& operator*() const        __bmdx_exs(XUExec) { check(); return *p; }
+      inline operator T*() const        __bmdx_noex { return p; }
 
-      inline operator bool() const        throw() { return !!p; }
-      inline bool operator!() const        throw() { return !p; }
-      inline bool is_null() const        throw() { return !p; }
+      inline operator bool() const        __bmdx_noex { return !!p; }
+      inline bool operator!() const        __bmdx_noex { return !p; }
+      inline bool is_null() const        __bmdx_noex { return !p; }
 
-      inline T* operator->() const        throw(XUExec) { check(); return p; }
-      inline bool operator==(const checked_ptr& p2) const        throw() { return p == p2.p; }
-      inline bool operator!=(const checked_ptr& p2) const        throw() { return p == p2.p; }
+      inline T* operator->() const        __bmdx_exs(XUExec) { check(); return p; }
+      inline bool operator==(const checked_ptr& p2) const        __bmdx_noex { return p == p2.p; }
+      inline bool operator!=(const checked_ptr& p2) const        __bmdx_noex { return p == p2.p; }
 
         // Same as in o_iptr_t.
-      inline const T* ptr() const        throw(XUExec) { check(); return p; }
-      inline T* ptr()        throw(XUExec) { check(); return p; }
-      inline const T* ptr_u() const        throw() { return p; }
-      inline T* ptr_u()        throw() { return p; }
+      inline const T* ptr() const        __bmdx_exs(XUExec) { check(); return p; }
+      inline T* ptr()        __bmdx_exs(XUExec) { check(); return p; }
+      inline const T* ptr_u() const        __bmdx_noex { return p; }
+      inline T* ptr_u()        __bmdx_noex { return p; }
 
-      inline void check() const        throw(XUExec) { if (!p) {        throw XUExec("checked_ptr.p == 0: ", typeid(T*).name()); } }
+      inline void check() const        __bmdx_exs(XUExec) { if (!p) {        throw XUExec("checked_ptr.p == 0: ", typeid(T*).name()); } }
     };
 
       // Hashlist and map key functions.
@@ -1427,10 +1427,10 @@ namespace bmdx
     // Informational functions.
 
       // EUnityType
-    inline s_long utype() const throw () { return ut & xfmUtype; }
+    inline s_long utype() const __bmdx_noex { return ut & xfmUtype; }
 
       // EUnityType without utArray flag
-    inline s_long utype_noarray() const throw () { return ut & utMaskNoArray; }
+    inline s_long utype_noarray() const __bmdx_noex { return ut & utMaskNoArray; }
 
       // Returns type name of the contained object or one of predefined types,
       //  like
@@ -1447,29 +1447,29 @@ namespace bmdx
       //  covers all available types in a valid object.
       //  Empty is a scalar. Bool is represented by 0/non-0 char.
       // NOTE Tests are able to return false on this == 0.
-    inline bool isScalar() const throw () { return this && utype() <= utString; }
-    inline bool isArray() const throw () { return this && !!(ut & utArray); }
-    inline bool isObject() const throw () { return this && utype() == utObject; }
-    bool isAssoc() const throw (); // true if unity is utHash or utMap
+    inline bool isScalar() const __bmdx_noex { return this && utype() <= utString; }
+    inline bool isArray() const __bmdx_noex { return this && !!(ut & utArray); }
+    inline bool isObject() const __bmdx_noex { return this && utype() == utObject; }
+    bool isAssoc() const __bmdx_noex; // true if unity is utHash or utMap
 
       // Tests for particular types and values.
       // NOTE Tests are able to return false on this == 0.
-    inline bool isEmpty() const throw () { return this && utype() == utEmpty; }
-    inline bool isNonempty() const throw () { return !isEmpty(); }
-    inline bool isInt() const throw () { return this && utype() == utInt; }
-    inline bool isFloat() const throw () { return this && utype() == utFloat; }
-    inline bool isDate() const throw () { return this && utype() == utDate; }
-    inline bool isString() const throw () { return this && utype() == utString; }
-    inline bool isChar() const throw () { return this && utype() == utChar; }
+    inline bool isEmpty() const __bmdx_noex { return this && utype() == utEmpty; }
+    inline bool isNonempty() const __bmdx_noex { return !isEmpty(); }
+    inline bool isInt() const __bmdx_noex { return this && utype() == utInt; }
+    inline bool isFloat() const __bmdx_noex { return this && utype() == utFloat; }
+    inline bool isDate() const __bmdx_noex { return this && utype() == utDate; }
+    inline bool isString() const __bmdx_noex { return this && utype() == utString; }
+    inline bool isChar() const __bmdx_noex { return this && utype() == utChar; }
 
-    inline bool isMap() const throw () { return this && utype() == utMap; }
-    inline bool isHash() const throw () { return this && utype() == utHash; }
+    inline bool isMap() const __bmdx_noex { return this && utype() == utMap; }
+    inline bool isHash() const __bmdx_noex { return this && utype() == utHash; }
 
-    inline bool isBool() const throw () { return this && utype() == utChar; }
-    bool isBoolTrue() const throw (); // true if *this contains char != 0
-    bool isBoolFalse() const throw (); // true if *this contains char == 0
+    inline bool isBool() const __bmdx_noex { return this && utype() == utChar; }
+    bool isBoolTrue() const __bmdx_noex; // true if *this contains char != 0
+    bool isBoolFalse() const __bmdx_noex; // true if *this contains char == 0
 
-    inline bool isIntOrFloat() const throw () { return this && utype() == utInt && utype() == utFloat; }
+    inline bool isIntOrFloat() const __bmdx_noex { return this && utype() == utInt && utype() == utFloat; }
 
     // Other tests.
 
@@ -1537,7 +1537,7 @@ namespace bmdx
       // Pointer to function, returning pointers to private static methods (of BMDX) in the binary module
       //    that has created the current object. Value same as _pmsm() is returned by  unity_common::pls_modsm()
       //    of that binary module (main executable or shared library instance).
-    unity_common::f_ls_modsm _pmsm() const throw() { return pmsm; }
+    unity_common::f_ls_modsm _pmsm() const __bmdx_noex { return pmsm; }
 
 
       // Construction.
@@ -1567,7 +1567,7 @@ namespace bmdx
       // NOTE The object may be destroyed in any binary module.
       //   If the object contains simple scalar value (not a string, and having no name),
       //   it may be safely destroyed even after the module where it's created is unloaded.
-    ~unity() throw();
+    ~unity() __bmdx_noex;
 
 
 
@@ -1578,13 +1578,13 @@ namespace bmdx
       //    See also u_assign, u_clear.
 
       // Clears *this and sets it to utEmpty.
-    void clear() throw();
+    void clear() __bmdx_noex;
 
       // Swaps *this and x on the binary level.
       // NOTE If *this and/or x are dynamically constructed, they must belong to the same binary module,
       //    otherwise causes undefined behavior on later object deletion.
       //    For other types of storage allocation, result of swap() is always stable.
-    void swap(unity& x) throw();
+    void swap(unity& x) __bmdx_noex;
 
       // Correctly deleting the current object from within binary module where it was dynamically constructed.
       //    true - the object is deleted successfully.
@@ -1592,18 +1592,18 @@ namespace bmdx
       // NOTE unity_delete() is equivalent to operator delete, executed in the original module on *this.
       //    1. Do not use it if the object was created in other way than dynamic construction (new unity(...)).
       //    2. Do not use it after the object was recreated (see recreate(), recreate_as()).
-    bool unity_delete() throw();
+    bool unity_delete() __bmdx_noex;
 
       // Destroys previous contents and initializes the storage
       //    as an empty value created in the current binary module.
       // NOTE If unity is dynamically constructed (new unity(...)) in binary module A, and "recreated" in module B,
       //    it still must be deleted in module A in usual way ("delete p"). Do not use unity_delete().
-    unity& recreate() throw();
+    unity& recreate() __bmdx_noex;
 
       // Destroys previous contents and initializes the storage
       //    as an empty value created in the binary module of modsrc.
       // See also recreate().
-    unity& recreate_as(const unity& modsrc) throw();
+    unity& recreate_as(const unity& modsrc) __bmdx_noex;
 
       // NOTE all assignments are transactional (on failure, the target object is not modified).
       // NOTE if src is utObject, operator=(const unity& src) copies a reference to that object, not its value.
@@ -1843,7 +1843,7 @@ namespace bmdx
       //  -1 -- the contained value is empty (utEmpty).
       //  -2 -- the value is neither a string nor an empty.
       //  -3 -- (only if) this == 0 or the object is broken.
-    meta::s_ll lenstr() const throw();
+    meta::s_ll lenstr() const __bmdx_noex;
 
       // Wide string representation of a value.
       //    (If the value is itself a wide-character string, vstr returns a copy of that string.)
@@ -1886,7 +1886,7 @@ namespace bmdx
     double vfp(s_long ind) const;
 
       // Short string representation of a value.
-    _fls75 vflstr() const throw();
+    _fls75 vflstr() const __bmdx_noex;
 
 
 
@@ -2246,17 +2246,17 @@ namespace bmdx
       //    a) as string - in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional),
       //    b) as unity array - path as such, split into elements.
       // On error, null pointer is returned: a) path not found, b) array indexing with non-number, c) mem. alloc. error.
-    checked_ptr<const unity> path(const std::wstring& keylist) const throw();
-    checked_ptr<const unity> path(const wchar_t* keylist) const throw();
-    checked_ptr<const unity> path(const std::string& keylist) const throw();
-    checked_ptr<const unity> path(const char* keylist) const throw();
-    checked_ptr<const unity> path(const unity& keylist) const throw();
+    checked_ptr<const unity> path(const std::wstring& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const wchar_t* keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const std::string& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const char* keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const unity& keylist) const __bmdx_noex;
 
-    checked_ptr<const unity> path(const std::wstring& keylist, const unity& x_dflt) const throw();
-    checked_ptr<const unity> path(const wchar_t* keylist, const unity& x_dflt) const throw();
-    checked_ptr<const unity> path(const std::string& keylist, const unity& x_dflt) const throw();
-    checked_ptr<const unity> path(const char* keylist, const unity& x_dflt) const throw();
-    checked_ptr<const unity> path(const unity& keylist, const unity& x_dflt) const throw();
+    checked_ptr<const unity> path(const std::wstring& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const wchar_t* keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const std::string& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const char* keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const unity& keylist, const unity& x_dflt) const __bmdx_noex;
 
       // Return a pointer to the element in a branch of the tree, consisting of maps, hashlists, arrays,
       //  with autocreation of the given path.
@@ -2267,11 +2267,11 @@ namespace bmdx
       //      With other key types, such branch element is converted to hashlist,
       //      and only one element is inserted (the key with and empty value).
       // On error, null pointer is returned: a) existing array indexing with non-number, b) mem. alloc. error.
-    checked_ptr<unity> path_w(const std::wstring& keylist)        throw() { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const wchar_t* keylist)        throw() { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const std::string& keylist)        throw() { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const char* keylist)        throw() { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const unity& keylist)        throw() { return _path_w(keylist); }
+    checked_ptr<unity> path_w(const std::wstring& keylist)        __bmdx_noex { return _path_w(keylist); }
+    checked_ptr<unity> path_w(const wchar_t* keylist)        __bmdx_noex { return _path_w(keylist); }
+    checked_ptr<unity> path_w(const std::string& keylist)        __bmdx_noex { return _path_w(keylist); }
+    checked_ptr<unity> path_w(const char* keylist)        __bmdx_noex { return _path_w(keylist); }
+    checked_ptr<unity> path_w(const unity& keylist)        __bmdx_noex { return _path_w(keylist); }
 
 
 
@@ -2477,7 +2477,7 @@ namespace bmdx
       //      See also struct o_interfaces_top.
       //    false (default) - create wrapped object T only, do not create any structures related to interfaces.
     template<class T> objt_binder_t<T>
-      objt(bool no_exc, s_long lkt = 1, bool b_atop = false, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) throw()
+      objt(bool no_exc, s_long lkt = 1, bool b_atop = false, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) __bmdx_noex
           { return objt_binder_t<T>(*this, no_exc, b_atop, lkt); }
 
       // Returns object pointer !=0 if unity references a valid (not deleted) object.
@@ -2521,9 +2521,9 @@ namespace bmdx
       //  4 - get vecm type index (see type_index_t in vecm_hashx.h),
       //  8 - return _pobj even if the object is deleted.
       //  16 - get sizeof for object static type.
-    o_type_info objTypeInfo(s_long flags) const throw();
+    o_type_info objTypeInfo(s_long flags) const __bmdx_noex;
 
-    o_ref_info objRefInfo() const throw();
+    o_ref_info objRefInfo() const __bmdx_noex;
 
       // Returns true on success (ref. type set, or not changed if new == old), false on failure.
     bool objSetStrongRef(bool b_strong);
@@ -2664,46 +2664,46 @@ namespace bmdx
       private: critsec_rc(const critsec_rc&); void operator=(const critsec_rc&);
       };
 
-      o_api() throw();
-      o_api(const unity* pu_) throw(); // NOTE "const" is ignored
-      o_api(_o_itfslist& list) throw();
-      o_api(void* p, bool b_pidyn) throw();
+      o_api() __bmdx_noex;
+      o_api(const unity* pu_) __bmdx_noex; // NOTE "const" is ignored
+      o_api(_o_itfslist& list) __bmdx_noex;
+      o_api(void* p, bool b_pidyn) __bmdx_noex;
 
-      void* p_head() const throw();
+      void* p_head() const __bmdx_noex;
 
-      o_type_info type_info(s_long flags) const throw();
-      o_ref_info ref_info() const throw();
-      void* pvoid(bool b_checked) const throw();
-      void* prefo(const char* tname, s_long t_ind, s_long t_size) const throw();
-      s_long rc_incdec(s_long flags) const throw();
-      s_long upd_ut_ref_type(bool b_strong) const throw();
-      s_long itfslist_create() throw();
-      s_long itfslist_n() const throw();
-      s_long itfs_append_cp(const o_api& src) const throw();
-      s_long itfs_remove_ind(s_long ind) const throw();
-      s_long itfs_remove_all() const throw();
-      s_long find_by_pitfs(o_itfset_base* p) const throw();
+      o_type_info type_info(s_long flags) const __bmdx_noex;
+      o_ref_info ref_info() const __bmdx_noex;
+      void* pvoid(bool b_checked) const __bmdx_noex;
+      void* prefo(const char* tname, s_long t_ind, s_long t_size) const __bmdx_noex;
+      s_long rc_incdec(s_long flags) const __bmdx_noex;
+      s_long upd_ut_ref_type(bool b_strong) const __bmdx_noex;
+      s_long itfslist_create() __bmdx_noex;
+      s_long itfslist_n() const __bmdx_noex;
+      s_long itfs_append_cp(const o_api& src) const __bmdx_noex;
+      s_long itfs_remove_ind(s_long ind) const __bmdx_noex;
+      s_long itfs_remove_all() const __bmdx_noex;
+      s_long find_by_pitfs(o_itfset_base* p) const __bmdx_noex;
       #if defined(__GNUC__) || defined(__clang__)
-        template<class T> T* pobj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const throw();
-        template<class I> o_iptr_t<I> pinterface(s_long flags, const o_itfset_base* ps0 = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const throw();
-        template<class I> o_iptr_t<I> pinterface_at(s_long ind, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const throw();
-        template<class Itfs> s_long itfs_attach(meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const throw();
-        template<class Itfs> s_long find_local_by_itfs(s_long flags, s_long ind0 = 0, s_long ind2 = -1, meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const throw();
-        template<class I> s_long find_by_itf(s_long flags, o_itfset_base* ps0 = 0, std::basic_string<s_long>* pret = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const throw();
+        template<class T> T* pobj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const __bmdx_noex;
+        template<class I> o_iptr_t<I> pinterface(s_long flags, const o_itfset_base* ps0 = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const __bmdx_noex;
+        template<class I> o_iptr_t<I> pinterface_at(s_long ind, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const __bmdx_noex;
+        template<class Itfs> s_long itfs_attach(meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const __bmdx_noex;
+        template<class Itfs> s_long find_local_by_itfs(s_long flags, s_long ind0 = 0, s_long ind2 = -1, meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const __bmdx_noex;
+        template<class I> s_long find_by_itf(s_long flags, o_itfset_base* ps0 = 0, std::basic_string<s_long>* pret = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const __bmdx_noex;
       #else
-        template<class T> T* pobj(s_long flags, meta::noarg_tu_t<T>) const throw();
-        template<class I> o_iptr_t<I> pinterface(s_long flags, const o_itfset_base* ps0, meta::noarg_tu_t<I>) const throw();
-        template<class I> o_iptr_t<I> pinterface_at(s_long ind, meta::noarg_tu_t<I>) const throw();
-        template<class Itfs> s_long itfs_attach(meta::noarg_tu_t<Itfs>) const throw();
-        template<class Itfs> s_long find_local_by_itfs(s_long flags, s_long ind0, s_long ind2, meta::noarg_tu_t<Itfs>) const throw();
-        template<class I> s_long find_by_itf(s_long flags, o_itfset_base* ps0, std::basic_string<s_long>* pret, meta::noarg_tu_t<I>) const throw();
+        template<class T> T* pobj(s_long flags, meta::noarg_tu_t<T>) const __bmdx_noex;
+        template<class I> o_iptr_t<I> pinterface(s_long flags, const o_itfset_base* ps0, meta::noarg_tu_t<I>) const __bmdx_noex;
+        template<class I> o_iptr_t<I> pinterface_at(s_long ind, meta::noarg_tu_t<I>) const __bmdx_noex;
+        template<class Itfs> s_long itfs_attach(meta::noarg_tu_t<Itfs>) const __bmdx_noex;
+        template<class Itfs> s_long find_local_by_itfs(s_long flags, s_long ind0, s_long ind2, meta::noarg_tu_t<Itfs>) const __bmdx_noex;
+        template<class I> s_long find_by_itf(s_long flags, o_itfset_base* ps0, std::basic_string<s_long>* pret, meta::noarg_tu_t<I>) const __bmdx_noex;
       #endif
-      template<class T> T& robj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const throw(XUExec) { return *unity::checked_ptr<T>(this->pobj<T>(flags)); }
+      template<class T> T& robj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const __bmdx_exs(XUExec) { return *unity::checked_ptr<T>(this->pobj<T>(flags)); }
 
     private:
-      o_api _ref_newcp(unity_common::__Psm pmsm_itfslist, s_long flags) const throw();
-      s_long _ref_del(s_long flags) throw();
-      meta::s_ll _itfslist_nrsv(meta::s_ll n) const throw();
+      o_api _ref_newcp(unity_common::__Psm pmsm_itfslist, s_long flags) const __bmdx_noex;
+      s_long _ref_del(s_long flags) __bmdx_noex;
+      meta::s_ll _itfslist_nrsv(meta::s_ll n) const __bmdx_noex;
       struct _itfslist_temp1;
     };
 
@@ -2729,18 +2729,18 @@ namespace bmdx
       static _o_refcnt* rc_create(Obj* pobj, s_long flags, s_long lkt);
       static s_long rc_incdec(_o_refcnt* prc, s_long flags);
       static s_long lock_state(const meta::s_ll* pstg);
-      static void* sm(s_long ind) throw();
+      static void* sm(s_long ind) __bmdx_noex;
     };
 
     template<class Itfs, class _> struct _o_itfssm_t
     {
-      static o_itfset_base* itfs_new() throw();
-      static o_itfset_base* itfs_new_copy(o_itfset_base* x) throw();
-      static void itfs_delete(o_itfset_base* x) throw();
-      static void itfs_type_info(o_itfset_base* x, o_type_info* pret, s_long flags) throw();
-      static s_long __xx_after_construct(o_itfset_base* x, o_itfset_base* src, s_long flags) throw();
-      static void __xx_before_destroy(o_itfset_base* x, s_long flags) throw();
-      static void* sm(s_long ind) throw();
+      static o_itfset_base* itfs_new() __bmdx_noex;
+      static o_itfset_base* itfs_new_copy(o_itfset_base* x) __bmdx_noex;
+      static void itfs_delete(o_itfset_base* x) __bmdx_noex;
+      static void itfs_type_info(o_itfset_base* x, o_type_info* pret, s_long flags) __bmdx_noex;
+      static s_long __xx_after_construct(o_itfset_base* x, o_itfset_base* src, s_long flags) __bmdx_noex;
+      static void __xx_before_destroy(o_itfset_base* x, s_long flags) __bmdx_noex;
+      static void* sm(s_long ind) __bmdx_noex;
     };
 
 
@@ -2755,12 +2755,12 @@ namespace bmdx
       //  3. Simultaneous calls to different mod_handle objects are safe.
     struct mod_handle
     {
-      mod_handle() throw();
-      ~mod_handle() throw();
-      mod_handle(const mod_handle&) throw(); // normally, produces a copy of the original handle; does not fail (no allocations)
-      void operator=(const mod_handle&) throw(); // normally, produces a copy of the original handle; does not fail (no allocations)
-      void swap(mod_handle&) throw();
-      void clear() throw();
+      mod_handle() __bmdx_noex;
+      ~mod_handle() __bmdx_noex;
+      mod_handle(const mod_handle&) __bmdx_noex; // normally, produces a copy of the original handle; does not fail (no allocations)
+      void operator=(const mod_handle&) __bmdx_noex; // normally, produces a copy of the original handle; does not fail (no allocations)
+      void swap(mod_handle&) __bmdx_noex;
+      void clear() __bmdx_noex;
 
       #ifdef _bmdxpl_Wnds
         typedef HINSTANCE t_nativehandle;
@@ -2769,15 +2769,15 @@ namespace bmdx
         typedef void* t_nativehandle;
       #endif
 
-      bool is_valid() const throw(); // true if this handle is valid
-      operator bool() const throw(); // == is_valid()
-      bool is_mainexe() const throw(); // true if this handle is valid and references the main executable
-      t_nativehandle native() const throw(); // native shared library or main executable handle (platform-dependent)
-      bool operator==(const mod_handle& x) const throw();
-      bool operator!=(const mod_handle& x) const throw();
+      bool is_valid() const __bmdx_noex; // true if this handle is valid
+      operator bool() const __bmdx_noex; // == is_valid()
+      bool is_mainexe() const __bmdx_noex; // true if this handle is valid and references the main executable
+      t_nativehandle native() const __bmdx_noex; // native shared library or main executable handle (platform-dependent)
+      bool operator==(const mod_handle& x) const __bmdx_noex;
+      bool operator!=(const mod_handle& x) const __bmdx_noex;
 
         // Pointer to procedure or variable by name (GetProcAddress, dlsym).
-      void* sym(const char* name) const throw();
+      void* sym(const char* name) const __bmdx_noex;
 
         // Call into shared module (.dll, .so) predefined function:
         //    s_long bmdx_mod_request(s_long sig_struct, s_long action, const unity* ppara, unity* pretval);
@@ -2804,7 +2804,7 @@ namespace bmdx
         //  -4 - the handle is not valid.
         //  -5 - module-side exception.
         //  <= -10 - module-side error.
-      s_long request(const unity& para, unity& retval) const throw();
+      s_long request(const unity& para, unity& retval) const __bmdx_noex;
 
         // Pointer to function, returning pointers to private static methods (of BMDX) in the binary module
         //    that is held by the current handle. Value same as _pmsm() is returned by  unity_common::pls_modsm()
@@ -2814,11 +2814,11 @@ namespace bmdx
         //    b) same as (a) if the handle addresses the main executable - this may occur in shared library,
         //      when it uses bmdx_part_dllmgmt 1, but main executable does not.
         //    c) if the handle is null.
-      unity_common::f_ls_modsm _pmsm() const throw();
+      unity_common::f_ls_modsm _pmsm() const __bmdx_noex;
 
         // Same as _pmsm, but for root loader of the shared library (the topmost loaded module with BMDX,
         //    that has loaded directly or indirectly all other such modules).
-      unity_common::f_ls_modsm _pmsm_rl() const throw();
+      unity_common::f_ls_modsm _pmsm_rl() const __bmdx_noex;
 
         // Returns a handle to the current module.
         //  b_autounload:
@@ -2837,7 +2837,7 @@ namespace bmdx
         //      2. On that notification, the library destroys all handles to itself that are kept inside the library.
         //      3. On the same notification, the library stops all its threads, or at least threads
         //          that may call hself() as part of their working.
-      static mod_handle hself(bool b_autounload) throw();
+      static mod_handle hself(bool b_autounload) __bmdx_noex;
 
       struct _stg_mh { enum { n = 8 }; void* _d[n]; _stg_mh(); ~_stg_mh(); _mod_exhandle& operator()() const; };
       private: friend struct unity; friend struct cv_ff; cref_t<_stg_mh> _rex; meta::s_ll __rsv1;
@@ -2886,7 +2886,7 @@ namespace bmdx
         //  The lock should only be set if the shared library may be loaded concurrently
         //  in the way other way than unity::mod_handle::request.
         // timeout_ms < 0 (dflt.): do not set the lock, only check compatibility.
-      rqcheck(s_long sig, s_long action, const unity* ppara, const unity* pretval, s_long timeout_ms = -1 __bmdx_noarg) throw()
+      rqcheck(s_long sig, s_long action, const unity* ppara, const unity* pretval, s_long timeout_ms = -1 __bmdx_noarg) __bmdx_noex
         : res(0), lock(timeout_ms >= 0 ? 1000 : -1, timeout_ms)
       {
         if (timeout_ms >= 0 && !lock) { res = -2; return; }
@@ -2927,15 +2927,15 @@ namespace bmdx
         // NOTE The client must ensure that no high-level cross-module objects
         //    left in memory when the module is unloaded.
     #if bmdx_part_dllmgmt
-      static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) throw();
+      static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) __bmdx_noex;
     #else
         // With bmdx_part_dllmgmt 0, mod() returns a null handle.
-      static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) throw() { return mod_handle(); }
+      static mod_handle mod(const char* name, bool b_autounload, s_long flags = bmdx_mod_load_def_flags) __bmdx_noex { return mod_handle(); }
     #endif // bmdx_part_dllmgmt
 
 
         // unity object structure signature for binary compatibility check.
-    static s_long sig_struct() throw ();
+    static s_long sig_struct() __bmdx_noex;
 
       // Assume U <=> *this.
       //
@@ -2978,7 +2978,7 @@ namespace bmdx
       //      and in practice it is not expected to occur across known compilers,
       //      independently on version, including future versions.)
       //
-    s_long compatibility() const throw ();
+    s_long compatibility() const __bmdx_noex;
 
 
     //==  IN-PROCESS COMMON OBJECTS STORAGE (PCOS)
@@ -3098,17 +3098,17 @@ namespace bmdx
         //    The client may pas a handle (h) to any loaded shared library,
         //    to address the storage of that library, or null handle to create non-functional pcos,
         //    which is not associated with any storage.
-      pcos(unity::mod_handle h = unity::mod("", 1)) throw()        { if (!h) { return; } unity_common::f_ls_modsm pmsm = h._pmsm(); if (!pmsm) { return; } typedef f_pcos_cons tf; tf f = (tf)pmsm(em::msm_pcos_cons); if (!f) { return; } try { f(&_d, &h); } catch (...) {} }
+      pcos(unity::mod_handle h = unity::mod("", 1)) __bmdx_noex        { if (!h) { return; } unity_common::f_ls_modsm pmsm = h._pmsm(); if (!pmsm) { return; } typedef f_pcos_cons tf; tf f = (tf)pmsm(em::msm_pcos_cons); if (!f) { return; } try { f(&_d, &h); } catch (...) {} }
 
         // Binary module handle of the current storage.
         // May be:
         //  a) by default, the main executable.
         //  b) a shared library, loaded into the process.
         //  c) null handle (if pcos constructor was given a null handle).
-      unity::mod_handle hhost() const throw()        { t_d d = _d; return d ? d->hhost : unity::mod_handle(); }
+      unity::mod_handle hhost() const __bmdx_noex        { t_d d = _d; return d ? d->hhost : unity::mod_handle(); }
 
         // True if this pcos addresses a normally functioning storage (in the main executable, or in a shared library).
-      operator bool() const throw()        { return _d; }
+      operator bool() const __bmdx_noex        { return _d; }
 
         // True if this pcos addresses a normally functioning storage in the main executable.
         //  NOTE The common storage of the main executable is regarded the single storage
@@ -3116,7 +3116,7 @@ namespace bmdx
         //    Usually it has longer lifetime than any shared library instance.
         //    Storages of shared library instances should be used for private purposes or if main executable
         //    does not support common storage.
-      bool b_mainexe() const throw()        { t_d d = _d; return d && d->hhost.is_mainexe(); }
+      bool b_mainexe() const __bmdx_noex        { t_d d = _d; return d && d->hhost.is_mainexe(); }
 
 
         // Get a reference to the value with key k, from the current storage.
@@ -3127,7 +3127,7 @@ namespace bmdx
         //    0 - the value does not exist.
         //    -2 - op. failed.
         //    -3 - pcos object is non-functional.
-      cref_t<unity> operator()(const unity& k, s_long* pres = 0) throw()        {  cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; }  typedef f_pcos_oppar tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_oppar); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &k, &rv); } catch (...) {}  if (pres) { *pres = res; } return rv; }
+      cref_t<unity> operator()(const unity& k, s_long* pres = 0) __bmdx_noex        {  cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; }  typedef f_pcos_oppar tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_oppar); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &k, &rv); } catch (...) {}  if (pres) { *pres = res; } return rv; }
 
         // Set the new value into the current storage, or remove the existing one (setref only).
         //    xc, xm: the value is moved (xm) or copied (xc) into the storage.
@@ -3158,9 +3158,9 @@ namespace bmdx
         //        b) xm or the wrapped object (unity/utObject in xm, xc) is from other binary module than hx or pcos (if hx is not specified).
         //  -2 - op. failed.
         //  -3 - pcos object is non-functional.
-      s_long setref(const unity& k, cref_t<unity> xr) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xr); } catch (...) {} return res; }
-      s_long setmv(const unity& k, unity& xm, unity::mod_handle hx = unity::mod_handle()) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setmv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setmv); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xm, &hx); } catch (...) {} return res; }
-      s_long setcp(const unity& k, const unity& xc, unity::mod_handle hx = unity::mod_handle()) throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setcp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setcp); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xc, &hx); } catch (...) {} return res; }
+      s_long setref(const unity& k, cref_t<unity> xr) __bmdx_noex        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xr); } catch (...) {} return res; }
+      s_long setmv(const unity& k, unity& xm, unity::mod_handle hx = unity::mod_handle()) __bmdx_noex        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setmv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setmv); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xm, &hx); } catch (...) {} return res; }
+      s_long setcp(const unity& k, const unity& xc, unity::mod_handle hx = unity::mod_handle()) __bmdx_noex        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_setcp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_setcp); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &k, &xc, &hx); } catch (...) {} return res; }
 
         // Check if the given reference is correct for passing into setref,
         //    i.e. made with makemv, makecp, or returned by pcos operator().
@@ -3170,7 +3170,7 @@ namespace bmdx
         //  -1 - bad xr structure, module or version: xr won't be accepted by setref().
         //  -2 - op. failed.
         //  -3 - pcos object is non-functional.
-      s_long checkref(cref_t<unity> xr) throw()        { if (!xr) { return 0; } t_d d = _d; if (!d) { return -3; } typedef f_pcos_checkref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_checkref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &xr); } catch (...) {} return res; }
+      s_long checkref(cref_t<unity> xr) __bmdx_noex        { if (!xr) { return 0; } t_d d = _d; if (!d) { return -3; } typedef f_pcos_checkref tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_checkref); if (!f) { return -2; } s_long res = -2; try { res = f(&d, &xr); } catch (...) {} return res; }
 
         // Clear the referenced storage.
         //    Removes all objects, so that all references and shared library handles, associated with values,
@@ -3183,7 +3183,7 @@ namespace bmdx
         //    0 - the storage is not initialized, no objects, nothing done.
         //    -2 - op. failed.
         //    -3 - pcos object is non-functional.
-      s_long clearstg() throw()        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_clearstg tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_clearstg); if (!f) { return -2; } s_long res = -2; try { res = f(&d); } catch (...) {} return res; }
+      s_long clearstg() __bmdx_noex        { t_d d = _d; if (!d) { return -3; } typedef f_pcos_clearstg tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { return -2; } tf f = (tf)pmsm(em::msm_pcos_clearstg); if (!f) { return -2; } s_long res = -2; try { res = f(&d); } catch (...) {} return res; }
 
         // Create a strong multi-functional reference to the given value.
         //    The value is moved (xm) or copied (xc) into the reference.
@@ -3206,8 +3206,8 @@ namespace bmdx
         //      is from other binary module than hx or pcos (if hx is not specified).
         //    -2 - op. failed.
         //    -3 - pcos object is non-functional.
-      cref_t<unity> makemv(unity& xm, unity::mod_handle hx = unity::mod_handle(), s_long* pres = 0) throw()        { cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; } typedef f_pcos_makemv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_makemv); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &xm, &hx, &rv); } catch (...) {} if (pres) { *pres = res; } return rv; }
-      cref_t<unity> makecp(const unity& xc, unity::mod_handle hx = unity::mod_handle(), s_long* pres = 0) throw()        { cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; } typedef f_pcos_makecp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_makecp); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &xc, &hx, &rv); } catch (...) {} if (pres) { *pres = res; } return rv; }
+      cref_t<unity> makemv(unity& xm, unity::mod_handle hx = unity::mod_handle(), s_long* pres = 0) __bmdx_noex        { cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; } typedef f_pcos_makemv tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_makemv); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &xm, &hx, &rv); } catch (...) {} if (pres) { *pres = res; } return rv; }
+      cref_t<unity> makecp(const unity& xc, unity::mod_handle hx = unity::mod_handle(), s_long* pres = 0) __bmdx_noex        { cref_t<unity> rv; t_d d = _d; if (!d) { if (pres) { *pres = -3; } return rv; } typedef f_pcos_makecp tf; t_msm pmsm = d->hhost._pmsm(); if (!pmsm) { if (pres) { *pres = -2; } return rv; } tf f = (tf)pmsm(em::msm_pcos_makecp); if (!f) { if (pres) { *pres = -2; } return rv; } s_long res = -3; try { res = f(&d, &xc, &hx, &rv); } catch (...) {} if (pres) { *pres = res; } return rv; }
     };
 
   private:
@@ -3223,17 +3223,17 @@ namespace bmdx
 
     friend struct cv_ff; friend struct _static_conv; friend struct paramline;
 
-    inline t_map_tu* _m() const throw () { return reinterpret_cast<t_map_tu*>(_data.p1); }
-    inline t_hash* _h() const throw () { return reinterpret_cast<t_hash*>(_data.p1); }
-    inline s_long _uttf() const throw () { return ut & xfmUtypeAndFlags; }
-    static _fls75 _tname0(s_long utt) throw ();
-    static s_long _def_size(s_long utt) throw();
-    template<int utt> inline typename valtype_t<utt>::t* _drf_c_i(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>()) const throw () { return reference_t<typename valtype_t<utt>::t>::_drf_c(this); }
-    template<int utt> inline typename valtype_t<utt>::t_tu* _drf_c_ai(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>()) const throw () { return (typename valtype_t<utt>::t_tu*)reference_t<typename valtype_t<utt>::t>::_drf_c(this); }
+    inline t_map_tu* _m() const __bmdx_noex { return reinterpret_cast<t_map_tu*>(_data.p1); }
+    inline t_hash* _h() const __bmdx_noex { return reinterpret_cast<t_hash*>(_data.p1); }
+    inline s_long _uttf() const __bmdx_noex { return ut & xfmUtypeAndFlags; }
+    static _fls75 _tname0(s_long utt) __bmdx_noex;
+    static s_long _def_size(s_long utt) __bmdx_noex;
+    template<int utt> inline typename valtype_t<utt>::t* _drf_c_i(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>()) const __bmdx_noex { return reference_t<typename valtype_t<utt>::t>::_drf_c(this); }
+    template<int utt> inline typename valtype_t<utt>::t_tu* _drf_c_ai(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>()) const __bmdx_noex { return (typename valtype_t<utt>::t_tu*)reference_t<typename valtype_t<utt>::t>::_drf_c(this); }
 
-    s_long _compat_id(unity_common::__Psm pmsm, s_long utype) const throw();
-    bool _compat_chk() const throw();
-    s_long _compatibility() const throw();
+    s_long _compat_id(unity_common::__Psm pmsm, s_long utype) const __bmdx_noex;
+    bool _compat_chk() const __bmdx_noex;
+    s_long _compatibility() const __bmdx_noex;
     inline vec2_t<meta::s_ll>* _drf_q() const { return reinterpret_cast<vec2_t<meta::s_ll>*>(_data.p1); }
     inline unity*& _drf_name() const { return *reinterpret_cast<unity**>(&_data.p2); }
 
@@ -3263,12 +3263,12 @@ namespace bmdx
     void _ensure_m();
     void _ensure_sc();
 
-    unity* _path_u(const std::wstring& keylist, bool forced) throw();
-    unity* _path_w(const std::wstring& keylist) throw();
-    unity* _path_w(const wchar_t* keylist) throw();
-    unity* _path_w(const std::string& keylist) throw();
-    unity* _path_w(const char* keylist) throw();
-    unity* _path_w(const unity& keylist) throw();
+    unity* _path_u(const std::wstring& keylist, bool forced) __bmdx_noex;
+    unity* _path_w(const std::wstring& keylist) __bmdx_noex;
+    unity* _path_w(const wchar_t* keylist) __bmdx_noex;
+    unity* _path_w(const std::string& keylist) __bmdx_noex;
+    unity* _path_w(const char* keylist) __bmdx_noex;
+    unity* _path_w(const unity& keylist) __bmdx_noex;
   };
 
 
@@ -3284,9 +3284,9 @@ namespace bmdx
     //  0x20 - return obj. pointer if object belongs to the current binary module.
     //  0x40 - return obj. pointer if object belongs to any other binary module.
   #if defined(__GNUC__) || defined(__clang__)
-    template<class T> T* unity::o_api::pobj(s_long flags, meta::noarg_tu_t<T>) const throw()
+    template<class T> T* unity::o_api::pobj(s_long flags, meta::noarg_tu_t<T>) const __bmdx_noex
   #else
-    template<class T> T* unity::o_api::pobj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const throw()
+    template<class T> T* unity::o_api::pobj(s_long flags, meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) const __bmdx_noex
   #endif
   {
     if (!((flags & 0x60) && (flags & 0xd))) { return 0; }
@@ -3310,9 +3310,9 @@ namespace bmdx
     //  0x10 - search includes interfaces in sets attached after ps0.
     //  If ps0 == 0, any of flags 4, 8, 0x10 includes all interfaces in sequence.
   #if defined(__GNUC__) || defined(__clang__)
-    template<class I> o_iptr_t<I> unity::o_api::pinterface(s_long flags, const o_itfset_base* ps0, meta::noarg_tu_t<I>) const throw()
+    template<class I> o_iptr_t<I> unity::o_api::pinterface(s_long flags, const o_itfset_base* ps0, meta::noarg_tu_t<I>) const __bmdx_noex
   #else
-    template<class I> o_iptr_t<I> unity::o_api::pinterface(s_long flags, const o_itfset_base* ps0 = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const throw()
+    template<class I> o_iptr_t<I> unity::o_api::pinterface(s_long flags, const o_itfset_base* ps0 = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const __bmdx_noex
   #endif
   {
     if (!(prc && pidyn && (flags & 0x1c) && (flags & 3))) { return o_iptr_t<I>(); }
@@ -3350,9 +3350,9 @@ namespace bmdx
     // NOTE o_iptr_t is not thread-safe or ref.-counted.
     //    The referenced interface object must not be deleted in any way during client use of o_iptr_t.
   #if defined(__GNUC__) || defined(__clang__)
-    template<class I> inline o_iptr_t<I> unity::o_api::pinterface_at(s_long ind, meta::noarg_tu_t<I>) const throw()
+    template<class I> inline o_iptr_t<I> unity::o_api::pinterface_at(s_long ind, meta::noarg_tu_t<I>) const __bmdx_noex
   #else
-    template<class I> inline o_iptr_t<I> unity::o_api::pinterface_at(s_long ind, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const throw()
+    template<class I> inline o_iptr_t<I> unity::o_api::pinterface_at(s_long ind, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const __bmdx_noex
   #endif
   {
     while (1) // once
@@ -3392,9 +3392,9 @@ namespace bmdx
     //    to avoid incorrect aliasing of virtual and static functions.
     //    See detailed note near unity::objItfsAttach.
   #if defined(__GNUC__) || defined(__clang__)
-    template<class Itfs> s_long unity::o_api::itfs_attach(meta::noarg_tu_t<Itfs>) const throw()
+    template<class Itfs> s_long unity::o_api::itfs_attach(meta::noarg_tu_t<Itfs>) const __bmdx_noex
   #else
-    template<class Itfs> s_long unity::o_api::itfs_attach(meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const throw()
+    template<class Itfs> s_long unity::o_api::itfs_attach(meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const __bmdx_noex
   #endif
   {
     if (!prc) { return -2; }
@@ -3428,9 +3428,9 @@ namespace bmdx
     //    ind2: least index to not include (-1 == end).
     // Returns: >= 0 - index of the found set. -1 - not found. -2 - failure.
   #if defined(__GNUC__) || defined(__clang__)
-    template<class Itfs> s_long unity::o_api::find_local_by_itfs(s_long flags, s_long ind0, s_long ind2, meta::noarg_tu_t<Itfs>) const throw()
+    template<class Itfs> s_long unity::o_api::find_local_by_itfs(s_long flags, s_long ind0, s_long ind2, meta::noarg_tu_t<Itfs>) const __bmdx_noex
   #else
-    template<class Itfs> s_long unity::o_api::find_local_by_itfs(s_long flags, s_long ind0 = 0, s_long ind2 = -1, meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const throw()
+    template<class Itfs> s_long unity::o_api::find_local_by_itfs(s_long flags, s_long ind0 = 0, s_long ind2 = -1, meta::noarg_tu_t<Itfs> = meta::noarg_tu_t<Itfs>()) const __bmdx_noex
   #endif
   {
     if (!prc) { return -2; } if (!pidyn) { return -1; } if (!(flags & 7)) { return -1; }
@@ -3463,9 +3463,9 @@ namespace bmdx
     //  If pret != 0, indexes of all matching sets are pushed into it.
     // Returns: >= 0 - index of the first matching set (last attached set that can be cast into I). -1 - not found. -2 - failure.
   #if defined(__GNUC__) || defined(__clang__)
-    template<class I> s_long unity::o_api::find_by_itf(s_long flags, o_itfset_base* ps0, std::basic_string<s_long>* pret, meta::noarg_tu_t<I>) const throw()
+    template<class I> s_long unity::o_api::find_by_itf(s_long flags, o_itfset_base* ps0, std::basic_string<s_long>* pret, meta::noarg_tu_t<I>) const __bmdx_noex
   #else
-    template<class I> s_long unity::o_api::find_by_itf(s_long flags, o_itfset_base* ps0 = 0, std::basic_string<s_long>* pret = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const throw()
+    template<class I> s_long unity::o_api::find_by_itf(s_long flags, o_itfset_base* ps0 = 0, std::basic_string<s_long>* pret = 0, meta::noarg_tu_t<I> = meta::noarg_tu_t<I>()) const __bmdx_noex
   #endif
   {
     if (!(prc && pidyn)) { return -2; }
@@ -3686,7 +3686,7 @@ namespace bmdx
     }
     return 0;
   }
-  template<class Obj, class _> void* unity::_o_sm_t<Obj, _>::sm(s_long ind) throw()
+  template<class Obj, class _> void* unity::_o_sm_t<Obj, _>::sm(s_long ind) __bmdx_noex
   {
     enum { size = unity_common::sizeof_osm };
     static void* smt[size] =
@@ -3706,17 +3706,17 @@ namespace bmdx
   }
 
 
-  template<class Itfs, class _> o_itfset_base* unity::_o_itfssm_t<Itfs, _>::itfs_new() throw()
+  template<class Itfs, class _> o_itfset_base* unity::_o_itfssm_t<Itfs, _>::itfs_new() __bmdx_noex
     { try { o_itfset_base* p = new _o_itfs_topmost<Itfs>(); p->__pidyn = 0; return p; } catch (...) {} return 0; }
     // NOTE __pidyn of the new copy is set to 0. Should be initialized to point to the new set's container.
-  template<class Itfs, class _> o_itfset_base* unity::_o_itfssm_t<Itfs, _>::itfs_new_copy(o_itfset_base* x0) throw()
+  template<class Itfs, class _> o_itfset_base* unity::_o_itfssm_t<Itfs, _>::itfs_new_copy(o_itfset_base* x0) __bmdx_noex
     { try { if (!x0) { return 0; } _o_itfs_topmost<Itfs>* x = (_o_itfs_topmost<Itfs>*)x0->__itfs_cast(typeid(Itfs).name()); if (!x) { return 0; } o_itfset_base* p = new _o_itfs_topmost<Itfs>(*x); p->__pidyn = 0; return p; } catch (...) {} return 0; }
-  template<class Itfs, class _> void unity::_o_itfssm_t<Itfs, _>::itfs_delete(o_itfset_base* x) throw()
+  template<class Itfs, class _> void unity::_o_itfssm_t<Itfs, _>::itfs_delete(o_itfset_base* x) __bmdx_noex
     { if (!x) { return; } try { delete x; } catch (...) {} }
     // flags OR-ed: 1 - get static type info, 2 - get dynamic type info, 4 - get vecm type index (see type_index_t in vecm_hashx.h),
     //  8 - return _pobj even if the object is deleted,
     //  16 - return sizeof(Obj).
-  template<class Itfs, class _> void unity::_o_itfssm_t<Itfs, _>::itfs_type_info(o_itfset_base* x, o_type_info* pret, s_long flags) throw()
+  template<class Itfs, class _> void unity::_o_itfssm_t<Itfs, _>::itfs_type_info(o_itfset_base* x, o_type_info* pret, s_long flags) __bmdx_noex
   {
     if (!pret) { return; }
     bool b_incl_dyn = !!(flags & 2);
@@ -3735,11 +3735,11 @@ namespace bmdx
     //      == 0: the set is constructed / will be destroyed as part of full sets list construction / destruction.
     //      == 1: the set is constructed / will be destroyed individually in the existing list of sets.
     // Returns: 1 - success, 0 - failure.
-  template<class Itfs, class _> s_long unity::_o_itfssm_t<Itfs, _>::__xx_after_construct(o_itfset_base* x0, o_itfset_base* src0, s_long flags) throw()
+  template<class Itfs, class _> s_long unity::_o_itfssm_t<Itfs, _>::__xx_after_construct(o_itfset_base* x0, o_itfset_base* src0, s_long flags) __bmdx_noex
     { _o_itfs_topmost<Itfs>* x = 0; Itfs* src = 0; try { if (x0) { x = (_o_itfs_topmost<Itfs>*)x0->__itfs_cast(typeid(Itfs).name()); } if (src0) { src = (_o_itfs_topmost<Itfs>*)src0->__itfs_cast(typeid(Itfs).name()); } } catch (...) {} if (!x) { return false; } if (src0 && !src) { return false; } bool b = false; s_long n = 0; try { b = x->__xx_after_construct(flags, src0, n); } catch (...) {} if (!b) { try { s_long n2 = 0; x->__xx_before_destroy(flags, n2, n); } catch (...) {} } return b; }
-  template<class Itfs, class _> void unity::_o_itfssm_t<Itfs, _>::__xx_before_destroy(o_itfset_base* x0, s_long flags) throw()
+  template<class Itfs, class _> void unity::_o_itfssm_t<Itfs, _>::__xx_before_destroy(o_itfset_base* x0, s_long flags) __bmdx_noex
     { try { _o_itfs_topmost<Itfs>* x = 0; if (x0) { x = (_o_itfs_topmost<Itfs>*)x0->__itfs_cast(typeid(Itfs).name()); } if (!x) { return; } s_long n = 0; x->__xx_before_destroy(flags, n, -1); } catch (...) {} }
-  template<class Itfs, class _> void* unity::_o_itfssm_t<Itfs, _>::sm(s_long ind) throw()
+  template<class Itfs, class _> void* unity::_o_itfssm_t<Itfs, _>::sm(s_long ind) __bmdx_noex
   {
     enum { size = unity_common::sizeof_itfssm };
     static void* smt[size] =
@@ -3792,11 +3792,11 @@ namespace bmdx
     static void* __sm(s_long ind) { return ind >= 0 && ind < __Proxy::__Methods::fn_cnt ? __smt()[ind] : 0; }
     I* __pci() const { return const_cast<o_proxy_base*>(this); } // client-side interface ptr.
     I* __psi() const { return __pi; } // server-side interface ptr.
-    void __set_pp(unity_common::__Psm psm, I* pi) throw () { __psm = psm; __pi = pi; }
+    void __set_pp(unity_common::__Psm psm, I* pi) __bmdx_noex { __psm = psm; __pi = pi; }
 
     template<class T> typename T::PF __call() const
     {
-      struct exc_call : std::exception {  _fls75 msg; exc_call() { msg += "o_proxy_base __call "; msg += typeid(I).name(); msg += ' '; msg += typeid(T).name(); } const char* what() const throw() { return msg.c_str(); } };
+      struct exc_call : std::exception {  _fls75 msg; exc_call() { msg += "o_proxy_base __call "; msg += typeid(I).name(); msg += ' '; msg += typeid(T).name(); } const char* what() const __bmdx_noex { return msg.c_str(); } };
       typedef typename T::PF t_f;
       t_f f = (t_f)__psm(unity_common::find_type<T, typename __Proxy::__Methods>::ind);
       if (!f) { throw exc_call(); }
@@ -3842,24 +3842,24 @@ namespace bmdx
     typedef t_hash::entry entry;
 
 
-    s_long n() const throw();
-    unity& operator[] (const unity& k) throw (exc_subscript);
-    const entry* operator() (s_long ind) const throw();
-    const entry* find(const unity& k, s_long* ret_pind = 0) const throw();
-    s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = hashx_common::no_elem) throw();
-    s_long remove(const unity& k) throw();
-    s_long remove_i(s_long ind) throw();
-    const entry* h(s_long ind_h) const throw();
-    s_long hl_clear(bool full) throw();
-    const t_hash::f_kf* pkf() const throw();
-    bool hl_set_kf(const t_hash::f_kf& kf) throw();
+    s_long n() const __bmdx_noex;
+    unity& operator[] (const unity& k) __bmdx_exs(exc_subscript);
+    const entry* operator() (s_long ind) const __bmdx_noex;
+    const entry* find(const unity& k, s_long* ret_pind = 0) const __bmdx_noex;
+    s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = hashx_common::no_elem) __bmdx_noex;
+    s_long remove(const unity& k) __bmdx_noex;
+    s_long remove_i(s_long ind) __bmdx_noex;
+    const entry* h(s_long ind_h) const __bmdx_noex;
+    s_long hl_clear(bool full) __bmdx_noex;
+    const t_hash::f_kf* pkf() const __bmdx_noex;
+    bool hl_set_kf(const t_hash::f_kf& kf) __bmdx_noex;
 
-    s_long qi_noel() const throw();
-    s_long qi_next(s_long pos) const throw();
-    s_long qi_prev(s_long pos) const throw();
-    s_long qi_indk(s_long ind) const throw();
+    s_long qi_noel() const __bmdx_noex;
+    s_long qi_next(s_long pos) const __bmdx_noex;
+    s_long qi_prev(s_long pos) const __bmdx_noex;
+    s_long qi_indk(s_long ind) const __bmdx_noex;
 
-    s_long compatibility() const throw();
+    s_long compatibility() const __bmdx_noex;
     void assign_impl(const _hl_i& x);
 
   protected: unity_common::__Psm pmsm; // == pmsm of the containing unity object (factual _hl_i object may not be moved between wrappers)
@@ -3891,9 +3891,9 @@ namespace
   {
   private: const unity* _p;
   public:
-    unitypc(const unity* p_)         throw() : _p(p_) {}
-    unitypc(const unity& x)         throw() : _p(&x) {}
-    unity* _pnonc() const         throw() { return const_cast<unity*>(_p); }
+    unitypc(const unity* p_)         __bmdx_noex : _p(p_) {}
+    unitypc(const unity& x)         __bmdx_noex : _p(&x) {}
+    unity* _pnonc() const         __bmdx_noex { return const_cast<unity*>(_p); }
 
     bool b_valid() const { return !!_p; }
 
@@ -3906,30 +3906,30 @@ namespace
     unity& operator*() { check(); return *_pnonc(); }
     const unity& operator*() const { check(); return *_pnonc(); }
 
-    bool operator==(const unitypc& p2) const         throw() { return _p == p2._p; }
-    bool operator==(const unity* p2) const         throw() { return _p == p2; }
-    bool operator!=(const unitypc& p2) const         throw() { return _p == p2._p; }
-    bool operator!=(const unity* p2) const         throw() { return _p != p2; }
+    bool operator==(const unitypc& p2) const         __bmdx_noex { return _p == p2._p; }
+    bool operator==(const unity* p2) const         __bmdx_noex { return _p == p2; }
+    bool operator!=(const unitypc& p2) const         __bmdx_noex { return _p == p2._p; }
+    bool operator!=(const unity* p2) const         __bmdx_noex { return _p != p2; }
 
-    operator bool() const         throw() { return !!_p; }
+    operator bool() const         __bmdx_noex { return !!_p; }
 
-    operator unity*()         throw() { return _pnonc(); }
-    operator const unity*() const         throw() { return _pnonc(); }
+    operator unity*()         __bmdx_noex { return _pnonc(); }
+    operator const unity*() const         __bmdx_noex { return _pnonc(); }
 
     operator unity&() { return **this; }
     operator const unity&() const { return **this; }
 
       // Using objPtr, retrieves T* (without const) from the referenced object.
       //  Returns T* on success, 0 on failure.
-    template<class T> operator T*()         throw() { typedef typename meta::nonc_t<T>::t t; t* px = 0; if (_p) { px = _pnonc()->objPtr<t>(); if (!px) { px = (t*)_pnonc()->objPtr_c<const T>(); } } return px; }
-    template<class T> operator const T*() const         throw() { typedef typename meta::nonc_t<T>::t t; const T* px = 0; if (_p) { px = _pnonc()->objPtr_c<t>(); if (!px) { px = _pnonc()->objPtr_c<const T>(); } } return px; }
+    template<class T> operator T*()         __bmdx_noex { typedef typename meta::nonc_t<T>::t t; t* px = 0; if (_p) { px = _pnonc()->objPtr<t>(); if (!px) { px = (t*)_pnonc()->objPtr_c<const T>(); } } return px; }
+    template<class T> operator const T*() const         __bmdx_noex { typedef typename meta::nonc_t<T>::t t; const T* px = 0; if (_p) { px = _pnonc()->objPtr_c<t>(); if (!px) { px = _pnonc()->objPtr_c<const T>(); } } return px; }
 
       // Using objPtr, retrieves T* (without const) from the referenced object.
       //  Returns T& on success, or generates an exception if T* is 0.
     template<class T> operator T&()        { typedef typename meta::nonc_t<T>::t t; t* px = 0; if (_p) { px = _pnonc()->objPtr<t>(); if (!px) { px = (t*)_pnonc()->objPtr_c<const T>(); } } return *unity::checked_ptr<T>(px); }
     template<class T> operator const T&() const        { typedef typename meta::nonc_t<T>::t t; const T* px = 0; if (_p) { px = _pnonc()->objPtr_c<t>(); if (!px) { px = _pnonc()->objPtr_c<const T>(); } } return *unity::checked_ptr<const T>(px); }
 
-    void check() const throw(XUExec) { if (!_p) { throw XUExec("unitypc.p == 0"); } }
+    void check() const __bmdx_exs(XUExec) { if (!_p) { throw XUExec("unitypc.p == 0"); } }
     template<class T> inline _unitypc2 operator/ (const T& path) const;
   };
 
@@ -3950,7 +3950,7 @@ namespace
 
     // Smart (weak) pointer for advanced functionality
     //    (automatic objPtr, 0-ptr checks, "+x / key / dflt" operator).
-  inline unitypc operator+(const unity& x) throw() { return x; }
+  inline unitypc operator+(const unity& x) __bmdx_noex { return x; }
 
     // Check if the given object contains certain path.
     //  Usage example:
@@ -4358,7 +4358,7 @@ namespace
     static void x_replace2a(std::wstring& s, s_long flags);
     static void x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& flags);
     static void x_decode1v(unity& v, bool v_ar_elem, s_long flags);
-    static bool x_decode1v_auto_date(const std::wstring& s, unity& retval) throw ();
+    static bool x_decode1v_auto_date(const std::wstring& s, unity& retval) __bmdx_noex;
     static bool x_incorrect_numeric_value_str(const std::wstring& s, bool b_nans);
     static bool x_incorrect_integer_value_str(const std::wstring& s, bool allow_float_str);
   };
@@ -4514,8 +4514,8 @@ namespace
       //    On success: true.
       //    On failure or wrong args.: false.
       // NOTE To save UTF-8 string, use couple: wsToBsUtf8, file_io::save_bytes.
-    bool save_text(const std::string& format_string, const std::wstring& str, const std::wstring& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const throw();
-    bool save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const throw();
+    bool save_text(const std::string& format_string, const std::wstring& str, const std::wstring& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
+    bool save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
 
 
       // Loads bytes from the given file into dest.
@@ -4525,9 +4525,9 @@ namespace
       //  0 - file does not exist.
       //  -1 - memory alloc. error, or wrong arguments.
       //  -2 - file i/o error. NOTE On i/o error, dest may be left modified.
-    int load_bytes(const std::wstring& fnp, std::string& dest) throw();
-    int load_bytes(const std::string& fnp, std::string& dest) throw();
-    int load_bytes(const char* fnp, std::string& dest) throw();
+    int load_bytes(const std::wstring& fnp, std::string& dest) __bmdx_noex;
+    int load_bytes(const std::string& fnp, std::string& dest) __bmdx_noex;
+    int load_bytes(const char* fnp, std::string& dest) __bmdx_noex;
 
       // Saves bytes from src to the given file.
       //  (Same as file_io::save_bytes.)
@@ -4538,10 +4538,10 @@ namespace
       //  0 - failed to create file (or open the existing file for writing).
       //  -1 - data size too large, or memory alloc. error, or wrong arguments.
       //  -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-    int save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) throw();
-    int save_bytes(const std::string& fnp, const std::string& src, bool b_append) throw();
-    int save_bytes(const char* fnp, const std::string& src, bool b_append) throw();
-    int save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) throw();
+    int save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) __bmdx_noex;
+    int save_bytes(const std::string& fnp, const std::string& src, bool b_append) __bmdx_noex;
+    int save_bytes(const char* fnp, const std::string& src, bool b_append) __bmdx_noex;
+    int save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) __bmdx_noex;
 
   private:
     static bool xHasCurDirShortCut(const std::wstring& sPath);
@@ -4825,7 +4825,7 @@ namespace
       //    -15 (in tracking->state only) - tracking is stopped (i_dispatcher_mt proxy, to which tracking object was passed, has been released).
       //        NOTE When configured by default, capacities of all types of queues are unlimited.
       //
-    virtual s_long msend(const unity& msg, cref_t<t_stringref> att = cref_t<t_stringref>(), s_long flags = 0, cref_t<tracking_info> tracking = cref_t<tracking_info>()) throw() = 0;
+    virtual s_long msend(const unity& msg, cref_t<t_stringref> att = cref_t<t_stringref>(), s_long flags = 0, cref_t<tracking_info> tracking = cref_t<tracking_info>()) __bmdx_noex = 0;
       //
       // Convenience function for msend.
       //    Creates a byte array from msg.
@@ -4842,7 +4842,7 @@ namespace
       //    on success: valid non-empty cref_t<t_stringref>,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba(msg, b_byval, nbadd); }
+    static cref_t<t_stringref> make_rba(t_stringref msg, bool b_byval = true, s_ll nbadd = 0) __bmdx_noex    { return ::bmdx_shm::_bmdx_shm::make_rba(msg, b_byval, nbadd); }
       //
       // Convenience function for msend.
       //    Creates a byte array as concatenation of copies of the given parts.
@@ -4853,7 +4853,7 @@ namespace
       //    on success: valid non-empty cref_t<t_stringref> with contents equal to part1 + part2 + part3,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_mp(part1, part2, part3, nbadd); }
+    static cref_t<t_stringref> make_rba_mp(t_stringref part1, t_stringref part2, t_stringref part3 = t_stringref(), s_ll nbadd = 0) __bmdx_noex    { return ::bmdx_shm::_bmdx_shm::make_rba_mp(part1, part2, part3, nbadd); }
       //
       // Convenience function for msend.
       //    Creates zero-initialized byte array of length nb + max(nbadd, 0).
@@ -4862,7 +4862,7 @@ namespace
       //    on success: valid non-empty cref_t<t_stringref>,
       //    on failure: cref_t<t_stringref>().
       //
-    static cref_t<t_stringref> make_rba_z(s_ll nb, s_ll nbadd = 0) throw()    { return ::bmdx_shm::_bmdx_shm::make_rba_z(nb, nbadd); }
+    static cref_t<t_stringref> make_rba_z(s_ll nb, s_ll nbadd = 0) __bmdx_noex    { return ::bmdx_shm::_bmdx_shm::make_rba_z(nb, nbadd); }
 
 
 
@@ -4980,7 +4980,7 @@ namespace
       //      -6 - the specified slot does not exist or could not be accessed (locking timeout).
       //      -7 - thread does not exist (see also request() with rt 7).
       //
-    virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt = 0, s_long flags = 1|4) throw() = 0;
+    virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt = 0, s_long flags = 1|4) __bmdx_noex = 0;
 
 
 
@@ -5032,7 +5032,7 @@ namespace
       //    -12 (non-local request only) subscription request failure on peer side.
       //    -15 (non-local request only) subscription tracking is stopped (e.g. end of session during tracking).
       //
-    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking = cref_t<tracking_info>()) throw() = 0;
+    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking = cref_t<tracking_info>()) __bmdx_noex = 0;
 
 
 
@@ -5218,7 +5218,7 @@ namespace
       //      Specific return value:
       //        -6 - the specified qs slot does not exist, or could not be accessed (locking timeout).
       //
-    virtual s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) throw() = 0;
+    virtual s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) __bmdx_noex = 0;
 
 
 
@@ -5282,7 +5282,7 @@ namespace
       //    -4 - one of new slot names is not unique.
       //    -7 - thread does not exist.
       //
-    virtual s_long slots_create(const unity& slotscfg, s_long flags = 0) throw() = 0;
+    virtual s_long slots_create(const unity& slotscfg, s_long flags = 0) __bmdx_noex = 0;
 
 
 
@@ -5327,7 +5327,7 @@ namespace
       //    -3 - no session.
       //    -7 - thread does not exist.
       //
-    virtual s_long slots_remove(const unity& slotnames, s_long flags = 0) throw() = 0;
+    virtual s_long slots_remove(const unity& slotnames, s_long flags = 0) __bmdx_noex = 0;
 
 
 
@@ -5340,7 +5340,7 @@ namespace
       //    1 - success. retname: assigned the current thread name.
       //    -2 - common-case failure. retname is not changed.
       //
-    virtual s_long thread_name(unity& retname) throw() = 0;
+    virtual s_long thread_name(unity& retname) __bmdx_noex = 0;
 
 
 
@@ -5352,7 +5352,7 @@ namespace
       //    1 - success. retname: assigned the dispatcher process name.
       //    -2 - common-case failure. retname is not changed.
       //
-    virtual s_long process_name(unity& retname) throw() = 0;
+    virtual s_long process_name(unity& retname) __bmdx_noex = 0;
 
 
 
@@ -5373,14 +5373,14 @@ namespace
     struct __slots_remove { typedef s_long (*PF)(__Interface* __pi, const unity* slotnames, s_long flags); static s_long F(__Interface* __pi, const unity* slotnames, s_long flags) { return __pi->slots_remove(*slotnames, flags); } };
     struct __thread_name { typedef s_long (*PF)(__Interface* __pi, unity* retname); static s_long F(__Interface* __pi, unity* retname) { return __pi->thread_name(*retname); } };
     struct __process_name { typedef s_long (*PF)(__Interface* __pi, unity* retname); static s_long F(__Interface* __pi, unity* retname) { return __pi->process_name(*retname); } };
-    virtual s_long msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) throw() { return __call<__msend>()(__psi(), &msg, &att, flags, &tracking); }
-    virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) throw() { return __call<__mget>()(__psi(), &slotname, &retmsg, retatt, flags); }
-    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) throw() { return __call<__subscribe>()(__psi(), &addr_qs, &recv_sl, rt, &tracking); }
-    virtual s_long request(s_long rt, unity& retval, const unity& args, s_long flags) throw() { return __call<__request>()(__psi(), rt, &retval, &args, flags); }
-    virtual s_long slots_create(const unity& slotscfg, s_long flags) throw() { return __call<__slots_create>()(__psi(), &slotscfg, flags); }
-    virtual s_long slots_remove(const unity& slotnames, s_long flags) throw() { return __call<__slots_remove>()(__psi(), &slotnames, flags); }
-    virtual s_long thread_name(unity& retname) throw() { return __call<__thread_name>()(__psi(), &retname); }
-    virtual s_long process_name(unity& retname) throw() { return __call<__process_name>()(__psi(), &retname); }
+    virtual s_long msend(const unity& msg, cref_t<t_stringref> att, s_long flags, cref_t<tracking_info> tracking) __bmdx_noex { return __call<__msend>()(__psi(), &msg, &att, flags, &tracking); }
+    virtual s_long mget(const unity& slotname, unity& retmsg, cref_t<t_stringref>* retatt, s_long flags) __bmdx_noex { return __call<__mget>()(__psi(), &slotname, &retmsg, retatt, flags); }
+    virtual s_long subscribe(const unity& addr_qs, const unity& recv_sl, s_long rt, cref_t<tracking_info> tracking) __bmdx_noex { return __call<__subscribe>()(__psi(), &addr_qs, &recv_sl, rt, &tracking); }
+    virtual s_long request(s_long rt, unity& retval, const unity& args, s_long flags) __bmdx_noex { return __call<__request>()(__psi(), rt, &retval, &args, flags); }
+    virtual s_long slots_create(const unity& slotscfg, s_long flags) __bmdx_noex { return __call<__slots_create>()(__psi(), &slotscfg, flags); }
+    virtual s_long slots_remove(const unity& slotnames, s_long flags) __bmdx_noex { return __call<__slots_remove>()(__psi(), &slotnames, flags); }
+    virtual s_long thread_name(unity& retname) __bmdx_noex { return __call<__thread_name>()(__psi(), &retname); }
+    virtual s_long process_name(unity& retname) __bmdx_noex { return __call<__process_name>()(__psi(), &retname); }
     typedef unity_common::fn_list<__msend, __mget, __subscribe, __request, __slots_create, __slots_remove, __thread_name, __process_name> __Methods;
   };
   namespace { o_proxy<i_dispatcher_mt> __o_proxy_i_dispatcher_mt_inst; }
@@ -5457,9 +5457,9 @@ namespace
       //
       //  b) On failure, is_valid() == false.
       //
-    dispatcher_mt(arrayref_t<wchar_t> process_name, const unity& cfg = unity(), s_long flags = 0) throw();
-    dispatcher_mt(arrayref_t<char> process_name, const unity& cfg = unity(), s_long flags = 0) throw();
-    ~dispatcher_mt() throw();
+    dispatcher_mt(arrayref_t<wchar_t> process_name, const unity& cfg = unity(), s_long flags = 0) __bmdx_noex;
+    dispatcher_mt(arrayref_t<char> process_name, const unity& cfg = unity(), s_long flags = 0) __bmdx_noex;
+    ~dispatcher_mt() __bmdx_noex;
 
       // Returns:
       //    true - if dispatcher_mt constructor has succeeded.
@@ -5467,7 +5467,7 @@ namespace
       //
       // Concurrency: is_valid() may be called concurrently.
       //
-    bool is_valid() const throw();
+    bool is_valid() const __bmdx_noex;
 
       // Returns:
       //    true: during the period, starting from successful construction,
@@ -5476,7 +5476,7 @@ namespace
       //
       // Concurrency: has_session() may be called concurrently.
       //
-    bool has_session() const throw();
+    bool has_session() const __bmdx_noex;
 
       // Resets an internal flag to signal that the session is no longer valid.
       //    Internal threads are stop-signaled.
@@ -5485,7 +5485,7 @@ namespace
       //
       // Concurrency: end_session() may be called concurrently.
       //
-    void end_session() throw();
+    void end_session() __bmdx_noex;
 
       // Returns wrapped proxy object with interface i_dispatcher_mt.
       //
@@ -5540,8 +5540,8 @@ namespace
       //    -5 - invalid thread name.
       //    -7 - thread does not exist.
       //
-    s_long new_proxy(unity& dest, arrayref_t<wchar_t>  thread_name) const throw();
-    s_long new_proxy(unity& dest, arrayref_t<char>  thread_name) const throw();
+    s_long new_proxy(unity& dest, arrayref_t<wchar_t>  thread_name) const __bmdx_noex;
+    s_long new_proxy(unity& dest, arrayref_t<char>  thread_name) const __bmdx_noex;
 
       // Similar to i_dispatcher_mt::request. Differences:
       //  1) has all possible permissions.
@@ -5552,7 +5552,7 @@ namespace
       // Return value:
       //    same as i_dispatcher_mt::request.
       //
-    s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) throw();
+    s_long request(s_long rt, unity& retval, const unity& args = unity(), s_long flags = 0) __bmdx_noex;
 
       // Flags, permitting serious operations from the side of any proxy (i_dispatcher_mt request()):
       //    0x1 - create another thread.
@@ -5575,7 +5575,7 @@ namespace
       //    true - success,
       //    false - no session.
       //
-    bool frqperm(s_long& f, bool b_get = true, bool b_set = false) const throw();
+    bool frqperm(s_long& f, bool b_get = true, bool b_set = false) const __bmdx_noex;
 
   private:
     dispatcher_mt(const dispatcher_mt&); dispatcher_mt& operator=(const dispatcher_mt&);
