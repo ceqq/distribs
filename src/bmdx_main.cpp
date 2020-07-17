@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-06-23
+// rev. 2020-07-17
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -5919,9 +5919,9 @@ bool unity::unity_delete() __bmdx_noex { return _Ldelete_this() > 0; }
 unity& unity::recreate() __bmdx_noex { this->~unity(); new (this) unity(); return *this; }
 unity& unity::recreate_as(const unity& modsrc) __bmdx_noex { this->~unity(); new (this) unity(); this->pmsm = modsrc.pmsm; return *this; }
 
-s_long unity::arrlb() const { if (isArray()) { return cv_ff::cv_array::Llb_u(this); } throw(XUTypeMismatch("arrlb", _tname0(utype()), "array")); }
-s_long unity::arrub() const { if (isArray()) { return cv_ff::cv_array::Lub_u(this); } throw(XUTypeMismatch("arrub", _tname0(utype()), "array")); }
-s_long unity::arrsz()const { if (isArray()) { return cv_ff::cv_array::Lsz_u(this); } throw(XUTypeMismatch("arrsz", _tname0(utype()), "array")); }
+s_long unity::arrlb() const { if (isArray()) { return cv_ff::cv_array::Llb_u(this); } throw XUTypeMismatch("arrlb", _tname0(utype()), "array"); }
+s_long unity::arrub() const { if (isArray()) { return cv_ff::cv_array::Lub_u(this); } throw XUTypeMismatch("arrub", _tname0(utype()), "array"); }
+s_long unity::arrsz()const { if (isArray()) { return cv_ff::cv_array::Lsz_u(this); } throw XUTypeMismatch("arrsz", _tname0(utype()), "array"); }
 unity& unity::arrlb_(s_long lbnd)
 {
   s_long res = cv_ff::cv_array::Lsz_set(this, lbnd, 0, 0x1);

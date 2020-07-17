@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-06-23
+// rev. 2020-07-17
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -1493,7 +1493,23 @@ namespace bmdx
         inline const t_value& opsub (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
         inline t_value& opsub (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
 
+
+      // True if *this correctly references a) an empty string, b) non-empty string.
     inline bool is_valid() const __bmdx_noex { return (_data && _n >= 0) || (!_data && _n == 0); }
+
+      // True if *this is not valid, or references an empty string.
+    inline bool is_empty() const __bmdx_noex { return !_data || _n <= 0; }
+
+      // True is *this and x are equal element-by-element.
+    bool is_eq(const arrayref_t<t_value>& x)            const { if (this->_n != x._n) { return false; } if (this->_data == x._data) { return true; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x[i])) { return false; } } return true; }
+
+      // True is *this and x point to same memory location, with same number of elements (n()).
+    bool is_eq_pn(const arrayref_t<t_value>& x)        const { return x.pd() == this->pd() && x.n() == this->n(); }
+
+      // NOTE operator==, operator!= do comparison by value. See also is_eq, is_eq_pn.
+    inline bool operator==(const arrayref_t<t_value>& x) const { return this->is_eq(x); }
+    inline bool operator!=(const arrayref_t<t_value>& x) const { return !this->is_eq(x); }
+
 
     arrayref_t() __bmdx_noex { __pad1 = 0; unlink(); }
     ~arrayref_t() __bmdx_noex { unlink(); }
@@ -1518,6 +1534,13 @@ namespace bmdx
     template<bool _ne> arrayref_t& operator=(const carray_r_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
     template<class Tr, class A> arrayref_t& operator=(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; } _data = const_cast<T*>(&x[0]); return *this; }
 
+      // Returns:
+      //  a) 0-based position of x in *this,
+      //    with search starting from (i0 in [0..n()-1] ? i0 : n())
+      //    and until, not including, (i2 in [0..n()-1] ? i2 : n()).
+      //  b) If not found or *this is not valid, returns n().
+    _s_ll find1(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1) { if (!is_valid()) { return _n; } _yk_reg _s_ll i = i0 >= 0 && i2 < _n ? i0 : _n; _yk_reg _s_ll iend = i2 >= 0 && i2 < _n ? i2 : _n; while (i < iend) { if (_data[i] == x) { return i; } ++i; } return _n; }
+
       // Set all existing (or [i0..i2) cut to [0..n()) elements to x, using operator=.
       //  Returns: 1 - all set successfully, 0 - all assignments failed, -1 - part of assignments failed.
       //    (If operator= always succeeds, the function will also succeed and return 1.)
@@ -1536,18 +1559,8 @@ namespace bmdx
       return nf ? (nf == nset ? 0 : -1) : 1;
     }
 
-      // Element-by-element equality check.
-    bool is_eq(const arrayref_t<t_value>& x)            const { if (this->_n != x._n) { return false; } if (this->_data == x._data) { return true; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x[i])) { return false; } } return true; }
-
-      // Returns true if *this and x are equal as such (i.e. their pd(), n()).
-    bool is_eq_pn(const arrayref_t<t_value>& x)        const { return x.pd() == this->pd() && x.n() == this->n(); }
-
     inline void swap(arrayref_t& src) __bmdx_noex { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; bmdx_str::words::memmove_t<t_value>::sf_memcpy(x, &src, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(&src, this, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(this, x, sizeof(t_a)); }
 
-      // NOTE operator==, operator!= do comparison by value.
-      //  See also is_eq, is_eq_pn.
-    inline bool operator==(const arrayref_t<t_value>& x) const { return this->is_eq(x); }
-    inline bool operator!=(const arrayref_t<t_value>& x) const { return !this->is_eq(x); }
   private:
     _s_ll _n; union { T* _data; _s_ll __pad1; };
   };
