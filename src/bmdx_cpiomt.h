@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-07-17
+// rev. 2020-07-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -32,7 +32,7 @@
 //    Basic unbuffered console input.    (bmdx::  struct console_io)
 //    Bytewise file i/o + save/load whole file as string.    (bmdx::  struct file_io)
 //
-//    Cross-module arrays and non-blocking queues:
+//    Cross-module arrays and non-blocking, lockless queues:
 //      bmdx::  carray_t, cpparray_t, carray_r_t, arrayref_t
 //      bmdx::  cringbuf1_t, cppringbuf1_t, vnnqueue_t
 //
@@ -748,19 +748,19 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     t_string& operator += (unsigned long x) __bmdx_noex { *this += t_string(x); return *this; }
     t_string& operator += (unsigned long long x) __bmdx_noex { *this += t_string(x); return *this; }
 
-    t_string operator + (char c) __bmdx_noex { t_string s2(*this); s2 += c; return s2; }
+    t_string operator + (char c) const __bmdx_noex { t_string s2(*this); s2 += c; return s2; }
 
-    t_string operator + (double x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (wchar_t x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (double x) const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (wchar_t x) const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
 
-    t_string operator + (signed short x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (signed int x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (signed long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (signed long long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned short x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned int x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
-    t_string operator + (unsigned long long x) __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed short x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed int x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed long x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (signed long long x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned short x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned int x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned long x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
+    t_string operator + (unsigned long long x)  const __bmdx_noex { t_string s2(*this); s2 += x; return s2; }
 
       // res(): 1: success; 0: only part is added; -1: length() == nmax() already; -2: ps == 0.
     t_string& append (const char* ps, _s_ll n) __bmdx_noex { _set_res_u(_append_s(ps, n >= 0 ? n : -1)); return *this; }
@@ -768,19 +768,19 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     t_string& operator += (const std::string& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
     t_string& operator = (const char* ps) __bmdx_noex { resize(0); _set_res_u(_append_s(ps, -1)); return *this; }
     t_string& operator = (const std::string& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
-    t_string operator + (const char* ps) __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
-    t_string operator + (const std::string& s) __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
+    t_string operator + (const char* ps) const __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
+    t_string operator + (const std::string& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
 
     t_string& append (const wchar_t* ps, _s_ll n) __bmdx_noex { _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); return *this; }
     t_string& operator += (const wchar_t* ps) __bmdx_noex {  _set_res_u(_append_wcs(ps, -1)); return *this; }
     t_string& operator += (const std::wstring& s) __bmdx_noex { _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
     t_string& operator = (const wchar_t* ps) __bmdx_noex { resize(0); _set_res_u(_append_wcs(ps, -1)); return *this; }
     t_string& operator = (const std::wstring& s) __bmdx_noex { resize(0); _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
-    t_string operator + (const wchar_t* ps) __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
-    t_string operator + (const std::wstring& s) __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
+    t_string operator + (const wchar_t* ps) const __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
+    t_string operator + (const std::wstring& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
 
     template<_s_long nmax2> t_string& operator += (const flstr_t<nmax2>& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
-    template<_s_long nmax2> t_string operator + (const flstr_t<nmax2>& s) __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
+    template<_s_long nmax2> t_string operator + (const flstr_t<nmax2>& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
     template<_s_long nmax2> t_string& operator = (const flstr_t<nmax2>& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
 
   private:
@@ -1291,13 +1291,13 @@ namespace bmdx
 
 
     void move(t_a& src) __bmdx_noex { if (this == &src) { return; } this->~carray_r_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; src._nrsv = 0; }
-    void swap(t_a& src) __bmdx_noex { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
+    void swap(t_a& src) __bmdx_noex { if (this == &src) { return; } bmdx_str::words::swap_bytes(*this, src); }
     void clear() __bmdx_noex { this->resize(0, false, true); } // deallocate the array (nrsv() becomes 0)
       // NOTE On assignment, if old reserve is enough to hold values, no memory reallocation occurs.
       //    Otherwise, new nrsv() == x.n(). Exact behavior: see also resize() with b_minimize_rsv true.
     bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } return true; }
 
-    std::basic_string<t_value> str() const { const T z = T(); return std::basic_string<T>(this->_data ? this->_data : &z, _t_size(this->_n)); }
+    std::basic_string<t_value> str() const { if (this->_data) { return std::basic_string<T>(this->_data, _t_size(bmdx_minmax::myllmax(0, this->_n))); } return std::basic_string<T>(); }
 
       // Resize to n2.
       //  b_copy (acts only if the array is reallocated):
@@ -1781,7 +1781,7 @@ namespace bmdx
   //== struct cppringbuf1_t
 
     // Single-channel ringbuffer (fixed-size queue) for objects with non-trivial construction, destruction and copying.
-    //  Data supplier and consumer may run as pair of threads and use it concurrently, without any blocking.
+    //  Data supplier and consumer may run as pair of threads and use it concurrently, without any blocking and locks.
     //  The container allows for efficient random access to existing elements (O(1)).
     //  push*() and pop*() do NOT move the existing elements.
     //  The container is suitable for passing across binary modules of one process,
@@ -2030,14 +2030,14 @@ namespace bmdx
     //  Comparison with STL containers.
     //      1. Efficiency:
     //        Access, push, pop efficiency: average of STL vector, list, queue.
-    //        Elements are not moved since construction, as in std::list.
+    //        Elements are not moved since construction, similar to std::list.
     //        Random access speed with small m() (column size) is O(N) as in std::list.
     //        Random access speed with considerably large m() is O(1) as in std::vector.
     //      2. Storage:
     //        by dflt., memory consumption is ~= that of std::list.
     //        Large excessive place, e.g. as in vector, can be reserved with explicit call (set_rsv()).
     //      3. Advanced features:
-    //        1) non-blocking push/pop,
+    //        1) non-blocking, lockless push/pop,
     //        2) same container object can be safely manipulated in different binary modules of the process,
     //        3) controllable automatic reserve management, according to the specified min./max. limits.
     //

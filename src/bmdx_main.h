@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-07-17
+// rev. 2020-07-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -778,7 +778,7 @@ namespace bmdx
   template<class I> struct o_iptr_t
   {
     typedef I __I; typedef o_proxy<__I, __vecm_tu_selector> __Proxy;
-    struct exc_null_ptr {};
+    struct exc_null_ptr : std::exception { _fls75 msg; exc_null_ptr() { msg = msg + "o_iptr_t<"+ typeid(I).name() + ">::exc_null_ptr"; } const char* what() const __bmdx_noex { return msg.c_str(); } };
 
 
 
@@ -1346,6 +1346,7 @@ namespace bmdx
       template<class _> struct trivconv_t<std::string, _> { typedef std::wstring t_target; static inline t_target F(const std::string& x) { return bsToWs(x); } static inline std::string Fback(const t_target& x) { return wsToBs(x); } };
       template<class _> struct trivconv_t<char*, _> { typedef std::wstring t_target; static inline t_target F(const char* x) { return bsToWs(x); } static inline _wr_cstring Fback(const t_target& x) { return wsToBs(x); } };
       template<class _> struct trivconv_t<char[], _> { typedef std::wstring t_target; static inline t_target F(const char x[]) { return bsToWs(x); } static inline _wr_cstring Fback(const t_target& x) { return wsToBs(x); } };
+      template<class _> struct trivconv_t<carray_r_t<char>, _> { typedef std::wstring t_target; static inline t_target F(const carray_r_t<char>& x) { if (x.pd()) { return bsToWs(x.pd(), x.n()); } return t_target(); } static inline carray_r_t<char> Fback(const t_target& x) { return carray_r_t<char>(wsToBs(x)); } };
 
       template<class _> struct trivconv_t<wchar_t*, _> { typedef std::wstring t_target; static inline t_target F(const wchar_t* x) { return x; } static inline const _wr_wstring Fback(const t_target& x) { return x; } };
       template<class _> struct trivconv_t<wchar_t[], _> { typedef std::wstring t_target; static inline t_target F(const wchar_t x[]) { return x; } static inline const _wr_wstring Fback(const t_target& x) { return x; } };
@@ -3796,7 +3797,7 @@ namespace bmdx
 
     template<class T> typename T::PF __call() const
     {
-      struct exc_call : std::exception {  _fls75 msg; exc_call() { msg += "o_proxy_base __call "; msg += typeid(I).name(); msg += ' '; msg += typeid(T).name(); } const char* what() const __bmdx_noex { return msg.c_str(); } };
+      struct exc_call : std::exception {  _fls75 msg; exc_call() { msg = msg + "o_proxy_base __call " + typeid(I).name() + ' ' + typeid(T).name(); } const char* what() const __bmdx_noex { return msg.c_str(); } };
       typedef typename T::PF t_f;
       t_f f = (t_f)__psm(unity_common::find_type<T, typename __Proxy::__Methods>::ind);
       if (!f) { throw exc_call(); }
