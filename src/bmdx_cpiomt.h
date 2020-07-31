@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-07-20
+// rev. 2020-07-30
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3593,7 +3593,7 @@ namespace bmdx
     }
 
       // Dynamically creates a thread context object of the specified type,
-      //    starts thread with it's _thread_proc().
+      //    starts thread with context's _thread_proc().
       //    Passes a copy of d as additional data member,
       //    accessible via ctx_base::pdata<Data>().
       //  Ctx must:
@@ -5008,7 +5008,7 @@ namespace bmdx
       //    The client must be aware of storage mode (use_hst, use_delete, use_release, custom handler),
       //    and ensure releasing the object correctly.
       //    For example, take into account that the object may be kept together with internal cref_t data (use_hst),
-      //    in which case it's memory is freed automatically when the last reference is destroyed.
+      //    in which case its memory is freed automatically when the last reference is destroyed.
     void _detach_u() __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph) { _ph->cnt |= _f1; } _reset(); }
 
 
