@@ -1,4 +1,4 @@
-// rev. 2020-07-30
+// rev. 2020-09-01
 =======================================================================================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 =======================================================================================================================
@@ -70,6 +70,21 @@ Common notes (important!).
   Otherwise frequently leads to program crash.
   This problem is independent on compiler type and version matching.
 
+3. For most of POSIX platforms, few compiler switches are highly recommended for complete BMDX builds.
+  The recommendation is expressed in self-explanatory qmake language:
+
+  !*win32*:*g++*|*clang* {
+    !*bsd* { LIBS += -ldl }
+    *linux*:equals(TEMPLATE,app) { QMAKE_LFLAGS += -Wl,-E } # for executables
+    *linux*|*bsd* { QMAKE_LFLAGS += -Wl,-Bsymbolic }
+    *linux*|*bsd*:equals(TEMPLATE,lib) { QMAKE_CXXFLAGS += -fPIC } # for shared libraries
+  }
+
+  NOTE If the main executable does not use cross-module features of BMDX
+    (does not load shared libraries that also use BMDX),
+    the following switches may be omitted:
+    -Wl,-E
+    -Wl,-Bsymbolic
 
 ==================================
 Linux Ubuntu 18.04
@@ -118,7 +133,7 @@ g++ -static-libgcc -static-libstdc++ -Wl,-E -m64 -Wl,-Bsymbolic -O2 -o test1 tes
 g++                                  -Wl,-E -m64 -Wl,-Bsymbolic -O0 -o test1 test1.cpp bmdx_main.cpp -ldl -lpthread
 g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O2 -o test1.so test1.cpp bmdx_main.cpp -ldl -lpthread
 g++                                  -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -ldl -lpthread
-
+For 32-bit executable: use -m32 instead of -m64
 
 ==================================
 macOS 10.12.4
@@ -304,11 +319,12 @@ Android
 
   -----------------------------------------------------
   Android Studio 3.0.1.
-  Android clang version 3.8.275480  (based on LLVM 3.8.275480), i686-none-linux-android, armv7-none-linux-android
-
-  Specific options (in app/build.gradle):
-cppFlags "-std=c++11 -frtti -fexceptions -O2"
-  NOTE Optimization levels tested: -O0, -O2.
+  Target architectures: x86, arm64-v8a
+  Specific options, additional libraries (in app/build.gradle):
+    minSdkVersion 21
+    cppFlags "-std=c++11 -frtti -fexceptions -O0"
+  CMakeLists.txt (example line for building native library): target_link_libraries( native-lib ${log-lib} -latomic )
+  Optimization levels tested: -O0, -O2.
 
 ==================================
 Solaris 11.1
@@ -390,6 +406,19 @@ g++ -Wl,-E                                               -m64 -Wl,-Bsymbolic -O0
 g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O1 -o test1.so test1.cpp bmdx_main.cpp -lpthread
 g++ -shared -fPIC -Wall                                  -m64 -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -lpthread
 
+==================================
+Raspberry Pi 4 / Arch Linux ARM
+
+All above considerations for Ubuntu 18.04 are also valid here.
+
+  -----------------------------------------------------
+  gcc version 9.3.0 (GCC)
+  gcc version 10.1.0 (GCC)
+
+g++ -static-libgcc -static-libstdc++ -Wl,-E -Wl,-Bsymbolic -O2 -o test1 test1.cpp bmdx_main.cpp -ldl -lpthread
+g++                                  -Wl,-E -Wl,-Bsymbolic -O0 -o test1 test1.cpp bmdx_main.cpp -ldl -lpthread
+g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -Wl,-Bsymbolic -O2 -o test1.so test1.cpp bmdx_main.cpp -ldl -lpthread
+g++                                  -shared -fPIC -Wall -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -ldl -lpthread
 
 
 

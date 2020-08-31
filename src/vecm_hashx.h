@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2020-07-30
+// rev. 2020-09-01
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -83,13 +83,21 @@
   #define __vecm_noargv1
 #endif
 #ifndef __bmdx_noex
-#if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201406)
-  #define __bmdx_noex noexcept
-  #define __bmdx_exs(a)
-#else
-  #define __bmdx_noex throw()
-  #define __bmdx_exs(a) throw(a)
+  #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201406)
+    #define __bmdx_noex noexcept
+    #define __bmdx_exs(a)
+  #else
+    #define __bmdx_noex throw()
+    #define __bmdx_exs(a) throw(a)
+  #endif
 #endif
+#ifndef __bmdx_use_cptr_cast
+  #if defined(__linux__) && defined(__i386__)
+    #define __bmdx_use_cptr_cast 1
+  #endif
+#endif
+#ifndef __bmdx_null_pchar
+  #define __bmdx_null_pchar ((char*)1 - 1)
 #endif
 
 namespace yk_c
@@ -417,9 +425,6 @@ struct bytes
     //    will have pcd_o non-0 (for storage recovery).
   template<class TA, class Aux = meta::nothing> struct config_cd_t { enum { enable = false }; };
 
-  #undef __vecm_hashx_null_pchar
-  #define __vecm_hashx_null_pchar ((char*)1 - 1)
-
     // Type-ignorant moving memory blocks.
     //    n specifies the number of bytes.
     //    May be specialized for trivial types like char, short etc., but this is not recommended.
@@ -438,8 +443,13 @@ struct bytes
       char* d = (char*)dest_;
       if (s > d)
       {
-        t_pdiff als = (s - __vecm_hashx_null_pchar) & 7;
-        t_pdiff ald = (d - __vecm_hashx_null_pchar) & 7;
+        #if __bmdx_use_cptr_cast
+          t_pdiff als = (t_pdiff)s & 7;
+          t_pdiff ald = (t_pdiff)d & 7;
+        #else
+          t_pdiff als = (s - __bmdx_null_pchar) & 7;
+          t_pdiff ald = (d - __bmdx_null_pchar) & 7;
+        #endif
         char* const d3 = d + n;
         if (als == ald)
         {
@@ -470,8 +480,13 @@ struct bytes
       else
       {
         char* const d0 = d; d += n; s += n;
-        t_pdiff als = (s - __vecm_hashx_null_pchar) & 7;
-        t_pdiff ald = (d - __vecm_hashx_null_pchar) & 7;
+        #if __bmdx_use_cptr_cast
+          t_pdiff als = (t_pdiff)s & 7;
+          t_pdiff ald = (t_pdiff)d & 7;
+        #else
+          t_pdiff als = (s - __bmdx_null_pchar) & 7;
+          t_pdiff ald = (d - __bmdx_null_pchar) & 7;
+        #endif
         if (als == ald)
         {
           typedef s_ll word; enum { shift = 3 };
@@ -3436,7 +3451,20 @@ struct hashx_common
     template<class T> struct _hashf_t<T, 5> { _vecm_hashx_hdfd s_long F(const void* p) { return _hashf_t<T, 7>().F(reinterpret_cast<const char*>(p)-static_cast<const char*>(0)); } };
 
     template<class T> struct _hashf_t<T, 8> { _vecm_hashx_hdfd s_long F(float key) { return _hashf_t<T, 1>().F(key); } };
-    template<class T> struct _hashf_t<T, 9> { _vecm_hashx_hdfd s_long F(long double key) { if (key == 0. || !(key == key)) { return 0; } int order = 0; int sign = key > 0 ? 1 : -1; if (sign < 0) { key = -key; } const long double d1 = 1.e150; while (key < d1 / 1.e50) { key *= d1; order -= 25; } while (key > 1.e200) { key /= d1; order += 25; } const int d2 = 1000000; while (key > 1000000000) { key /= d2; ++order; } return _hashf_t<T, 1>().F(double(int(key + 0.5)) * 0.097) ^ _hashf_t<T, 2>().F(order * 4 + (sign + 1)); } };
+    template<class T> struct _hashf_t<T, 9> { _vecm_hashx_hdfd s_long F(long double key) {
+      #if defined(__ANDROID__)
+        // arm64-v8a compiler bug workaround.
+        volatile long double ld_0 = 0.; if (key == ld_0 || !(key == key)) { return 0; }
+      #else
+        if (key == 0. || !(key == key)) { return 0; }
+      #endif
+      int order = 0; int sign = key > 0 ? 1 : -1; if (sign < 0) { key = -key; } const long double d1 = 1.e150;
+      while (key < d1 / 1.e50) { key *= d1; order -= 25; }
+      while (key > 1.e200) { key /= d1; order += 25; }
+      const int d2 = 1000000;
+      while (key > 1000000000) { key /= d2; ++order; }
+      return _hashf_t<T, 1>().F(double(int(key + 0.5)) * 0.097) ^ _hashf_t<T, 2>().F(order * 4 + (sign + 1));
+    } };
     template<class T> struct _hashf_t<T, 10> { _vecm_hashx_hdfd s_long F(bool key) { return key ? 37 : 0; } };
 
   public:

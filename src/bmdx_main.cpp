@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-07-30
+// rev. 2020-09-01
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -37,6 +37,34 @@
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
   #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #endif
+
+
+#ifndef __bmdx_use_link_h
+  #if defined(__linux__) || defined(__SUNPRO_CC) || defined(__sun)
+    #define __bmdx_use_link_h 1
+
+    #if defined(__SUNPRO_CC) || defined(__sun)
+      #include <sys/link.h>
+    #endif
+    #include <link.h>
+
+    #define __bmdx_Elf_Dyn ElfW(Dyn)
+
+    #if defined(__ANDROID__) || defined(__SUNPRO_CC) || defined(__sun)
+      extern __bmdx_Elf_Dyn _DYNAMIC[];
+    #endif
+
+    static inline __bmdx_Elf_Dyn* __bmdx_DYNAMIC() { return _DYNAMIC; }
+  #elif defined(__FreeBSD__)
+    #define __bmdx_use_link_h 2
+    #include <link.h>
+  #elif (__APPLE__ && __MACH__)
+    #define __bmdx_use_link_h 3
+  #else
+    #define __bmdx_use_link_h 0
+  #endif
+#endif
+
 
 namespace bmdx_main_intl_lib
 {
@@ -121,7 +149,17 @@ template<class AuxData, class _bs = bmdx_meta::nothing>
 struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender side
 {
   typedef arrayref_t<char> t_stringref;
-  struct _rso { AuxData auxd; bmdx_shm::rfifo_nbl11 ringbuf; };
+  struct _rso
+  {
+    char __pad1[sizeof(AuxData) > 0 ? (sizeof(AuxData) + 7) / 8 * 8 : 8];
+    AuxData& auxd() { return *(AuxData*)this; }
+    bmdx_shm::rfifo_nbl11 ringbuf;
+    _rso()
+    {
+      for (size_t i = 0; i < sizeof(__pad1); ++i) { __pad1[i] = 0; }
+      new (this) AuxData();
+    }
+  };
   typedef bmdx_shm::shmobj2s_t<_rso> t_so;
 
   const bmdx_shm::t_name_shm qname;
@@ -289,7 +327,7 @@ template<class AuxData, class _bs = bmdx_meta::nothing>
 struct shmqueue_ms_receiver_t // shared memory queue for multiple senders - single receiver side
 {
   typedef arrayref_t<char> t_stringref;
-  struct _rso { AuxData auxd; bmdx_shm::rfifo_nbl11 ringbuf; };
+  typedef typename shmqueue_ms_sender_t<AuxData, _bs>::_rso _rso;
 
   const bmdx_shm::t_name_shm qname;
   bmdx_shm::shmobj2s_t<_rso> so;
@@ -325,7 +363,7 @@ struct shmqueue_ms_receiver_t // shared memory queue for multiple senders - sing
       s_long res2 = so.f_constructed();
         if (res2 == 1) { if (b_close_if_unchecked) { so.close(); return -4; } return 1; }
       so.p()->ringbuf.init_ref(so.nb() - s_ll(sizeof(_rso) - bmdx_shm::rfifo_nbl11::n0));
-      std::memcpy(&so.p()->auxd, &auxd_init, sizeof(AuxData));
+      std::memcpy(&so.p()->auxd(), &auxd_init, sizeof(AuxData));
       so.set_f_constructed(1);
       return 2;
     }
@@ -401,8 +439,9 @@ private:
 #define __lm_slot_controller_reinit_short_dtms 50
 #define __lm_slot_controller_reinit_long_dtms 400
 #define __lm_slot_controller_peer_reinit_dtms 50
+#define __lm_slot_controller_sleep_halfen_dtms 40 // should be <= 0.25 * __lm_slot_controller_qum_send_avl_wait_toms
 
-#define __lm_slot_controller_qum_send_avl_wait_toms (4 * 40)
+#define __lm_slot_controller_qum_send_avl_wait_toms 400
 #define __lm_slot_controller_qum_send_avl_chk_dtms 5
 #define __lm_slot_controller_peer_prc_hang_toms 3000 // should be much longer than single LMSC det_periodic() call on high load
 #define __lm_slot_controller_thread_hang_toms 3000 // -"-
@@ -975,9 +1014,9 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
     _name_prf(make_fixed_utf8_name(name_pr)),
     _qinfo_rcv(make_name_onef(_name_prf), limit_nbqueue(nb_qinfo_, __lm_slot_controller_nb_rqinfo_min, __lm_slot_controller_nb_rqinfo_max, __lm_slot_controller_nb_rqinfo_dflt))
   {
-    _state = 0; _tms_next_init = 0; _qinfo_rcv_idd0 = 0;
+    _state = 0; _tms_next_init = 0; _b_qinfo_rcv_valid = false; _qinfo_rcv_idd0 = 0;
     _hnew_name_peerf.hashx_setf_can_shrink(0);
-    _qinfo_rcv.auxd_init.disp_ses_state = -2;
+    _qinfo_rcv.auxd_init.disp_ses_state(-2);
   }
   ~lm_slot_controller() __bmdx_noex { _x_close(); }
 
@@ -985,9 +1024,15 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
 private:
   struct _r_prc_uid
   {
-    volatile s_ll sig, pid, pid_deriv, livecnt, disp_ses_state, prc_inst_id; // NOTE prc_inst_id must be the last in sequence
+    volatile s_ll _sig, _pid, _pid_deriv, _livecnt, _disp_ses_state, _prc_inst_id; // NOTE prc_inst_id must be the last in sequence
+    s_ll sig() volatile const { return bmdx_str::words::atomrdal64(&_sig); } void sig(s_ll x) volatile { bmdx_str::words::atomwral64(&_sig, x); }
+    s_ll pid() volatile const { return bmdx_str::words::atomrdal64(&_pid); } void pid(s_ll x) volatile { bmdx_str::words::atomwral64(&_pid, x); }
+    s_ll pid_deriv() volatile const { return bmdx_str::words::atomrdal64(&_pid_deriv); } void pid_deriv(s_ll x) volatile { bmdx_str::words::atomwral64(&_pid_deriv, x); }
+    s_ll livecnt() volatile const { return bmdx_str::words::atomrdal64(&_livecnt); } void livecnt(s_ll x) volatile { bmdx_str::words::atomwral64(&_livecnt, x); }
+    s_ll disp_ses_state() volatile const { return bmdx_str::words::atomrdal64(&_disp_ses_state); } void disp_ses_state(s_ll x) volatile { bmdx_str::words::atomwral64(&_disp_ses_state, x); }
+    s_ll prc_inst_id() volatile const { return bmdx_str::words::atomrdal64(&_prc_inst_id); } void prc_inst_id(s_ll x) volatile { bmdx_str::words::atomwral64(&_prc_inst_id, x); }
 
-    _r_prc_uid() __bmdx_noex { sig = Fsig(); pid = pid_deriv = livecnt = 0; disp_ses_state = -2; prc_inst_id = 0; }
+    _r_prc_uid() __bmdx_noex { sig(Fsig()); pid(0); pid_deriv(0); livecnt(0); disp_ses_state(-2); prc_inst_id(0); }
 
     static inline s_long Fsig() { return yk_c::bytes::cmti_base_t<_r_prc_uid, 2020, 2, 28, 23>::ind() + 1; }
 
@@ -996,22 +1041,22 @@ private:
     {
       s_ll idinst0;
       do {
-        idinst0 = src.prc_inst_id;
-        sig = src.sig; pid = src.pid; pid_deriv = src.pid_deriv;
-        if (b_copy_livecnt) { livecnt = src.livecnt; }
-        prc_inst_id = src.prc_inst_id;
-      } while (prc_inst_id != idinst0);
+        idinst0 = src.prc_inst_id();
+        sig(src.sig()); pid(src.pid()); pid_deriv(src.pid_deriv());
+        if (b_copy_livecnt) { livecnt(src.livecnt()); }
+        prc_inst_id(src.prc_inst_id());
+      } while (prc_inst_id() != idinst0);
     }
     void cp_ids_to_volatile(const _r_prc_uid& src, bool b_copy_livecnt)
     {
-      s_ll idinst_temp = -1; if (idinst_temp == src.prc_inst_id) { idinst_temp = -2; }
-      prc_inst_id = idinst_temp;
-      sig = src.sig; pid = src.pid; pid_deriv = src.pid_deriv;
-      if (b_copy_livecnt) { livecnt = src.livecnt; }
-      prc_inst_id = src.prc_inst_id;
+      s_ll idinst_temp = -1; if (idinst_temp == src.prc_inst_id()) { idinst_temp = -2; }
+      prc_inst_id(idinst_temp);
+      sig(src.sig()); pid(src.pid()); pid_deriv(src.pid_deriv());
+      if (b_copy_livecnt) { livecnt(src.livecnt()); }
+      prc_inst_id(src.prc_inst_id());
     }
 
-    bool b_same_inst(const _r_prc_uid& src) const { return src.pid == pid && src.pid_deriv == pid_deriv && src.prc_inst_id == prc_inst_id; }
+    bool b_same_inst(const _r_prc_uid& src) const { return src.pid() == pid() && src.pid_deriv() == pid_deriv() && src.prc_inst_id() == prc_inst_id(); }
 
   };
   static s_ll pid_deriv_v1(s_ll pid) { return pid; }
@@ -1109,6 +1154,7 @@ public:
   inline s_long det_state() const __bmdx_noex { return _state; }
   inline void det_init() __bmdx_noex;
   inline void det_periodic(i_callback& cb, bool& b_active) __bmdx_noex;
+  inline s_long det_check_qinfo() __bmdx_noex;
   inline void det_close() __bmdx_noex { _x_close(); }
 
     // 3. Client API (exclusively for dispatcher_mt).
@@ -1142,6 +1188,7 @@ private:
   critsec_t<lm_slot_controller>::csdata lkd_qinfo_rcv_state;
   shmqueue_ms_receiver_t<_r_prc_uid> _qinfo_rcv;
 
+  bool _b_qinfo_rcv_valid; // becomes true when shared queue is ensured to be initialized and compatible
   s_long _qinfo_rcv_idd0; // index in _qinfo_rcv.dd, marks that all entries with index < _qinfo_rcv_idd0 are already processed; locking: none (LMSC thread use only)
   hashx<bmdx_shm::t_name_shm, s_long> _hnew_name_peerf; // { shared queue name, 0 }; names for queues to create as requested by peer processes via _qinfo_rcv; locking: none (LMSC thread use only)
 
@@ -1150,6 +1197,7 @@ private:
 
   inline bool _x_qinfo_rcv_init() __bmdx_noex;
   inline void _x_qinfo_rcv_update_ses_state() __bmdx_noex;
+  inline void _x_qinfo_rcv_mark_process_closed() __bmdx_noex;
   inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate);
   inline void _x_close() __bmdx_noex;
 
@@ -1200,7 +1248,7 @@ lm_slot_controller::peer_tracker::peer_tracker(const bmdx_shm::t_name_shm& name_
   _state = 0;
   _b_clt_mdsend_wait_once = true;
 
-  _qinfo_ids.livecnt = -1; _qinfo_livecnt_tm = clock_ms();
+  _qinfo_ids.livecnt(-1); _qinfo_livecnt_tm = clock_ms();
   _qinfo_peer_conn_techmsg_sent = false;
 
   mtrk_qipush_send.set_cap_hints(-1, -2);
@@ -1260,12 +1308,16 @@ s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_
     bool bres = false;
     while (clock_ms() - t0 < __lm_slot_controller_qum_send_avl_wait_toms)
     {
-      critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+      if (1)
+      {
+        critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
+        if (_qum_send_avl) { bres = true; break; } // may have been set by _cltpt_ensure_comm, called from e.g. LMSC thread with b_wait == false
+        if (3 == _qum_send.bufstate(0)) { bres = true; break; }
+      }
       const s_ll tsleep_mcs = 100;
-      if (!_qum_send_avl && 3 == _qum_send.bufstate(0)) { bres = true; break; }
       sleep_mcs(tsleep_mcs);
     }
-    _qum_send_avl = bres;
+    if (bres) { _qum_send_avl = true; }
     return bres ? 1 : -1;
   }
   else // non-blocking waiting (check only)
@@ -1329,19 +1381,19 @@ s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
     { return -3; }
 
   const double t = clock_ms();
-  _r_prc_uid vids; vids.cp_ids_from_volatile(_qinfo_send.so->auxd, true);
+  _r_prc_uid vids; vids.cp_ids_from_volatile(_qinfo_send.so->auxd(), true);
 
   if (this->b_self) // self-connected (means: the peer is always available).
     { _qinfo_ids.cp_ids_from_volatile(vids, true); _qinfo_livecnt_tm = t; return 0; }
 
-  if (vids.sig != _r_prc_uid::Fsig()) // incompatible shared object
+  if (vids.sig() != _r_prc_uid::Fsig()) // incompatible shared object
     { _qinfo_send.so.close(); return -2; }
 
   if (!_qinfo_ids.b_same_inst(vids)) // one of: a) just started new peer process (init. not complete yet), b) peer's LMSC exited
   {
-    if (vids.prc_inst_id == 0) { return -1; }
+    if (vids.prc_inst_id() == 0) { return -1; }
 
-    if (vids.prc_inst_id == -1)
+    if (vids.prc_inst_id() == -1)
     {
       s_ll ipush1 = 0, ipop1 = 0;
       s_long res1 = _qum_rcv.bufstate(1, &ipush1, &ipop1);
@@ -1351,18 +1403,18 @@ s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
       //  reporting hanged status is delayed (until LMSC pops all available messages).
       if (res2 == 1 || (res1 == 3 && !(ipop1 < ipush1)))
       {
-        if (vids.livecnt != _qinfo_ids.livecnt) { _qinfo_ids.livecnt = vids.livecnt; _qinfo_livecnt_tm = t; return 0; }
+        if (vids.livecnt() != _qinfo_ids.livecnt()) { _qinfo_ids.livecnt(vids.livecnt()); _qinfo_livecnt_tm = t; return 0; }
           else if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) { return 0; }
       }
       return -1;
     }
 
       // New peer process instance detected. Checking pid_deriv (i.e. if communication with such process is allowed).
-    if (vids.pid == 0 || pid_deriv_v1(vids.pid) != vids.pid_deriv) { return -2; }
+    if (vids.pid() == 0 || pid_deriv_v1(vids.pid()) != vids.pid_deriv()) { return -2; }
     _qinfo_ids.cp_ids_from_volatile(vids, true); _qinfo_livecnt_tm = t;
     return 1;
   }
-  if (vids.livecnt != _qinfo_ids.livecnt) { _qinfo_ids.livecnt = vids.livecnt; _qinfo_livecnt_tm = t; return 0; }
+  if (vids.livecnt() != _qinfo_ids.livecnt()) { _qinfo_ids.livecnt(vids.livecnt()); _qinfo_livecnt_tm = t; return 0; }
     else if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) { return 0; }
   return -1; // timeout (the peer is hanged or terminated)
 }
@@ -1707,6 +1759,22 @@ lCont2:;
     }
   }
 }
+  // Returns:
+  //  1 - _qinfo_rcv has already received any data from a process.
+  //  0 - _qinfo_rcv is valid, but not received any data from any process yet.
+  //  -1 - _qinfo_rcv is not initialized.
+  //  -2 - _qinfo_rcv initialization has failed because the shared object already exists and is not compatible.
+s_long lm_slot_controller::det_check_qinfo() __bmdx_noex
+{
+  critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
+  if (_qinfo_rcv.so.f_constructed() == 1)
+  {
+    if (!_b_qinfo_rcv_valid) { return -2; }
+    try { return _qinfo_rcv.so->ringbuf.ipush() > 0 ? 1 : 0; }
+      catch (...) { return -2; } // should not occur
+  }
+  return -1;
+}
   // NOTE _x_qinfo_rcv_init depends on _tms_next_init.
   //  After failure, it does real init. attempt only when pre-calculated _tms_next_init is reached.
 bool lm_slot_controller::_x_qinfo_rcv_init() __bmdx_noex
@@ -1714,37 +1782,37 @@ bool lm_slot_controller::_x_qinfo_rcv_init() __bmdx_noex
   const double t = clock_ms();
     if (t < _tms_next_init) { return false; }
 
-  if (_qinfo_rcv.so.f_constructed() != 1) // ensure initializing the shared part of _qinfo_rcv
+  if (!_b_qinfo_rcv_valid) // ensure initializing the shared part of _qinfo_rcv
   {
     critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
-    s_long res = _qinfo_rcv.attempt_init(); // NOTE If init. successful, res == 1, and, below queue aux data init. will be done
-    if (res < 1) { _tms_next_init = t + __lm_slot_controller_reinit_short_dtms; return false; } // will try again later
-
-    _r_prc_uid& qids_shared = _qinfo_rcv.so->auxd;
-    if (qids_shared.sig != _r_prc_uid::Fsig()) // the queue is just created; check signature; update process and session info
+    if (_qinfo_rcv.so.f_constructed() != 1)
     {
-      _qinfo_rcv.so.close();
+      s_long res = _qinfo_rcv.attempt_init(); // NOTE If init. successful, res == 1, and, below queue aux data init. will be done
+      if (res < 1) { _tms_next_init = t + __lm_slot_controller_reinit_short_dtms; return false; } // will try again later
+    }
+
+    _r_prc_uid& qids_shared = _qinfo_rcv.so->auxd();
+    if (qids_shared.sig() != _r_prc_uid::Fsig()) // the queue is just created; check signature; update process and session info
+    {
+      _qinfo_rcv.close_shm();
       _tms_next_init = t + __lm_slot_controller_reinit_long_dtms;
       return false;
     }
+    _b_qinfo_rcv_valid = true;
     qids_shared.cp_ids_to_volatile(_qinfo_rcv.auxd_init, false);
   }
 
   if (1) // here: f_constructed() == 1
   {
-    _r_prc_uid& qids_shared = _qinfo_rcv.so->auxd;
+    _r_prc_uid& qids_shared = _qinfo_rcv.so->auxd();
 
-    if (_qinfo_rcv.auxd_init.disp_ses_state != qids_shared.disp_ses_state)
-    {
-      critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
-      _x_qinfo_rcv_update_ses_state();
-    }
+    if (_qinfo_rcv.auxd_init.disp_ses_state() != qids_shared.disp_ses_state()) { _x_qinfo_rcv_update_ses_state(); }
 
     cpparray_t<netmsg_header::md_entry> __mdee2;
     netmsg_header::md_entry __mdee1[nmdemax];
 
       // Update livecnt.
-    if (1) { s_ll cnt = qids_shared.livecnt; ++cnt; qids_shared.livecnt = cnt; }
+    if (1) { s_ll cnt = qids_shared.livecnt(); ++cnt; qids_shared.livecnt(cnt); }
       // Pop and process all available tech. msgs.
     if (_qinfo_rcv.dd.n() == 0)
     {
@@ -1809,17 +1877,17 @@ void lm_slot_controller::det_init() __bmdx_noex
   if (_state == 0)
   {
     _r_prc_uid& qids_init = _qinfo_rcv.auxd_init;
-    qids_init.pid = (bmdx_meta::u_ll)processctl::ff_mc().pid_self();
-    qids_init.pid_deriv = pid_deriv_v1(qids_init.pid);
+    qids_init.pid((bmdx_meta::u_ll)processctl::ff_mc().pid_self());
+    qids_init.pid_deriv(pid_deriv_v1(qids_init.pid()));
     if (1)
     {
       static s_ll n0 = 0; ++n0;
       union { s_ll n; double t; };
-      n = 0; t = clock_ms(); n += n0; n ^= qids_init.pid;
+      n = 0; t = clock_ms(); n += n0; n ^= qids_init.pid();
       if (n == 0 || n == -1) { n = n0; }
-      qids_init.prc_inst_id = n;
+      qids_init.prc_inst_id(n);
     }
-    qids_init.livecnt = 0;
+    qids_init.livecnt(0);
   }
   if (!_x_qinfo_rcv_init()) { _state = -2; return; }
 
@@ -1838,12 +1906,24 @@ void lm_slot_controller::clt_setparam_chsbin(bool b_enable) { s_long f = fpt_md 
 void lm_slot_controller::clt_set_ses_state(s_long st)
 {
   critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
-  _qinfo_rcv.auxd_init.disp_ses_state = st;
+  _qinfo_rcv.auxd_init.disp_ses_state(st);
   _x_qinfo_rcv_update_ses_state();
 }
 void lm_slot_controller::_x_qinfo_rcv_update_ses_state() __bmdx_noex
 {
-  if (_qinfo_rcv.so.f_constructed() == 1) { _qinfo_rcv.so->auxd.disp_ses_state = _qinfo_rcv.auxd_init.disp_ses_state; }
+  if (_b_qinfo_rcv_valid)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
+    try { _qinfo_rcv.so->auxd().disp_ses_state(_qinfo_rcv.auxd_init.disp_ses_state()); } catch (...) {}
+  }
+}
+void lm_slot_controller::_x_qinfo_rcv_mark_process_closed() __bmdx_noex
+{
+  if (_b_qinfo_rcv_valid)
+  {
+    critsec_t<lm_slot_controller> __lock(10, -1, &lkd_qinfo_rcv_state); if (sizeof(__lock)) {}
+    try { _qinfo_rcv.so->auxd().prc_inst_id(-1); } catch (...) {}
+  }
 }
 
   // Ensures creating peer_tracker and establishing the communication with that peer, as specified by comm_mode.
@@ -1911,7 +1991,7 @@ s_long lm_slot_controller::clt_msend(s_ll mtrk_id_msg, s_ll id_msg_cmd_sender, u
   {
     critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
     try {
-      s_ll st = pt->_qinfo_send.so->auxd.disp_ses_state;
+      s_ll st = pt->_qinfo_send.so->auxd().disp_ses_state();
       if (st == 1) {}
       else if (st == 0)
       {
@@ -1961,7 +2041,7 @@ s_long lm_slot_controller::clt_mdsend(s_ll mtrk_id, arrayref_t<wchar_t> name_pee
   if (1)
   {
     critsec_t<lm_slot_controller> __lock(10, -1, &pt->lkd_pt_access); if (sizeof(__lock)) {}
-    try { s_ll st = pt->_qinfo_send.so->auxd.disp_ses_state; if (!(st == 1 || st == -1)) { return -2; } } catch (...) {}
+    try { s_ll st = pt->_qinfo_send.so->auxd().disp_ses_state(); if (!(st == 1 || st == -1)) { return -2; } } catch (...) {}
     _mtrk_fn_handler ha(pt._rnonc(), mtrk_id, rhtrprx);
     if (!ha.mtrk_prep()) { return -2; }
     s_ll ipush_lq = -1;
@@ -2068,7 +2148,7 @@ void lm_slot_controller::_x_close() __bmdx_noex
     if (_hpt.n() <= 0) { break; }
     sleep_mcs(1000);
   }
-  try { if (_qinfo_rcv.so.f_constructed() == 1) { _qinfo_rcv.so->auxd.prc_inst_id = -1; } } catch (...) {}
+  _x_qinfo_rcv_mark_process_closed();
   _state = -4;
 }
   // Converts any wchar_t to a char of subset of programmatic identifier: [a-zA-Z0-9_].
@@ -2236,7 +2316,7 @@ namespace bmdx
           #define __bmdx_use_wcrtomb_l 0
         #endif
       #elif defined(__ANDROID__)
-        #define __bmdx_char_case_tables 0
+        #define __bmdx_char_case_tables 1
         #define __bmdx_use_locale_t 0
         #define __bmdx_use_wcrtomb_l 0
       #elif defined(__SUNPRO_CC) || defined(__sun)
@@ -4386,7 +4466,7 @@ bool _static_conv::conv_String_Date0(const std::wstring& x, _unitydate& retval, 
     const std::string sep2(":-");
     const std::string sep3(".");
     std::string s;
-    bool is_signed(false); bool b(false); s_long sign(1), y(0), m(0), d(0), h(0), mt(0), sec(0); bool is_frac(false); double frac(0.);
+    bool b_signed(false); bool b(false); s_long sign(1), y(0), m(0), d(0), h(0), mt(0), sec(0); bool is_frac(false); double frac(0.);
     do // once
     {
         // leading spaces
@@ -4394,9 +4474,9 @@ bool _static_conv::conv_String_Date0(const std::wstring& x, _unitydate& retval, 
 
         // year sign, year, month, day
       s = trim_n(s0, pos, pm, 1); pos += s.size();
-        if (s.size() > 0) { is_signed = true; sign = s[0] == '+' ? 1 : -1; }
+        if (s.size() > 0) { b_signed = true; sign = s[0] == '+' ? 1 : -1; }
       s = trim_n(s0, pos, digit, 9); pos += s.size();
-        if (!(s.size() >= 4 || (is_signed && s.size() >= 1))) { break; }
+        if (!(s.size() >= 4 || (b_signed && s.size() >= 1))) { break; }
           y = s_long(atol(s.c_str())) * sign; if (s.size() > 4 && y == 0) { break; }
       s = trim_n(s0, pos, sep1, 1); pos += s.size(); if (s.size() != 1) { break; }
       s = trim_n(s0, pos, digit, 2); pos += s.size();
@@ -8009,10 +8089,10 @@ bool o_type_info::b_tstat() const { return !!_tstat; }
 bool o_type_info::b_tdyn() const { return !!_tdyn; }
 bool o_type_info::b_t_ind() const { return !!_t_ind; }
 bool o_type_info::b_t_size() const { return _t_ind >= 0; }
-bool o_type_info::b_same_tstat_cm(const std::type_info& ti) const { return _tstat && (strcmp(_tstat, ti.name()) == 0); }
-bool o_type_info::b_same_tdyn_cm(const std::type_info& ti) const { return _tdyn && (strcmp(_tdyn, ti.name()) == 0); }
-bool o_type_info::b_same_tstat(const std::type_info& ti) const { return _tstat && b_local() && (strcmp(_tstat, ti.name()) == 0); }
-bool o_type_info::b_same_tdyn(const std::type_info& ti) const { return _tdyn && b_local() && (strcmp(_tdyn, ti.name()) == 0); }
+bool o_type_info::b_same_tstat_cm(const std::type_info& ti) const { return _tstat && (std::strcmp(_tstat, ti.name()) == 0); }
+bool o_type_info::b_same_tdyn_cm(const std::type_info& ti) const { return _tdyn && (std::strcmp(_tdyn, ti.name()) == 0); }
+bool o_type_info::b_same_tstat(const std::type_info& ti) const { return _tstat && b_local() && (std::strcmp(_tstat, ti.name()) == 0); }
+bool o_type_info::b_same_tdyn(const std::type_info& ti) const { return _tdyn && b_local() && (std::strcmp(_tdyn, ti.name()) == 0); }
 bool o_type_info::operator==(const std::type_info& ti) const { return b_same_tdyn(ti) || b_same_tstat(ti); }
 bool o_type_info::operator!=(const std::type_info& ti) const { return !operator==(ti); }
 
@@ -10427,6 +10507,14 @@ bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath==".
 // Binary module handle.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if bmdx_part_dllmgmt || bmdx_expose_ls_modsm
+  extern "C" __BMDX_DLLEXPORT bmdx::unity_common::__Psm __bmdx_ls_modsm() { return bmdx::unity_common::ls_modsm; }
+#endif
+
+#if bmdx_part_dllmgmt && __bmdx_use_link_h == 3 // MACH
+  #include <mach-o/dyld.h>
+#endif
+
 namespace bmdx
 {
 
@@ -10536,7 +10624,8 @@ s_long unity::sig_struct() __bmdx_noex
           if (!f.b_au) { mode |= RTLD_NODELETE; }
         #endif
         void* h = 0;
-        if (*name == '\0')
+        bool b_trg_is_exe = *name == '\0';
+        if (b_trg_is_exe)
         {
           #ifdef RTLD_MAIN_ONLY
             h = RTLD_MAIN_ONLY;
@@ -10559,6 +10648,52 @@ s_long unity::sig_struct() __bmdx_noex
 
         prq = (prequest)sym("bmdx_mod_request");
         pgms = (pget_modsm)sym("__bmdx_ls_modsm");
+        if (!pgms && b_trg_is_exe)
+        {
+          // NOTE The below setting pgms = <value> means that the current module has detected h being its own handle,
+          //    so that __bmdx_ls_modsm may be addressed directly.
+          //    In case of main executable, this eliminates "-Wl,-E" linker arg. requirement for use of PCOS
+          //    (except for systems where link.h is not available).
+          #if __bmdx_use_link_h == 1 // Linux
+            for (__bmdx_Elf_Dyn* dyn = __bmdx_DYNAMIC(); dyn->d_tag != DT_NULL; ++dyn)
+            {
+              if (dyn->d_tag != DT_DEBUG) { continue; }
+              struct r_debug* prd = ((struct r_debug*)dyn->d_un.d_ptr);
+                if (!prd) { continue; }
+              struct link_map* plm = prd->r_map;
+              while (plm)
+              {
+                if ((void*)plm->l_ld == (void*)__bmdx_DYNAMIC())
+                {
+                  pgms = (pget_modsm)&__bmdx_ls_modsm;
+                  break;
+                }
+                plm = plm->l_next;
+              }
+              break;
+            }
+          #elif __bmdx_use_link_h == 2 // FreeBSD
+            struct link_map* plm_h = 0; dlinfo(h, RTLD_DI_LINKMAP, &plm_h);
+            struct link_map* plm_self = 0; dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &plm_self);
+            if (plm_h && plm_self && plm_h->l_addr == plm_self->l_addr)
+            {
+              pgms = &__bmdx_ls_modsm;
+            }
+          #elif __bmdx_use_link_h == 3 // MACH
+            Dl_info x; std::memset(&x, 0, sizeof(x));
+            int res = dladdr((void*)&__bmdx_ls_modsm, &x);
+            if (res)
+            {
+              uint32_t sz = 2048;
+              char buf[2048] = { 0 };
+              res = _NSGetExecutablePath(buf, &sz);
+              if (res == 0 && 0 == std::strcmp(buf, x.dli_fname))
+              {
+                pgms = &__bmdx_ls_modsm;
+              }
+            }
+          #endif
+        }
         return 1;
       }
       void mod_unload() __bmdx_noex
@@ -10716,14 +10851,6 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
   return h;
 }
 
-}
-
-#if bmdx_part_dllmgmt || bmdx_expose_ls_modsm
-  extern "C" __BMDX_DLLEXPORT bmdx::unity_common::__Psm __bmdx_ls_modsm() { return bmdx::unity_common::ls_modsm; }
-#endif
-
-namespace bmdx
-{
 #if bmdx_part_dllmgmt
   unity::mod_handle unity::mod(const char* name, bool b_au, s_long flags) __bmdx_noex
   {
@@ -12183,7 +12310,7 @@ void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
   const s_ll sleep_short = 50; // 50 mcs (until idle_toms passes in inactivity, then switches to sleep_total_long)
   const s_ll sleep1_long = 5000; // 5 ms (by this value, until sleep_total_long is accumulated)
   const s_ll sleep_total_long = 20000; // 20 ms
-  const s_ll sleep_total_half_enabled = __lm_slot_controller_qum_send_avl_wait_toms / 4; // until LMSC is enabled in full (rses.__thm_lmsc_enable_full()) - usually, on 1st incoming connection or outgoing message
+  const s_ll sleep_total_half_enabled = __lm_slot_controller_sleep_halfen_dtms; // until LMSC is enabled in full (rses.__thm_lmsc_enable_full()) - usually, on 1st incoming connection or outgoing message
 
   cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return; } cch_session& rses = *_r_ths._pnonc_u();
   cref_t<lm_slot_controller> lmsc = rses.lmsc; if (!lmsc) { return; }
@@ -12211,8 +12338,13 @@ void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
     while (true)
     {
       if (b_stop() || rses.ses_state == 0 || rses.nprx <= 0) { goto lExit; }
+      if (b_halfen)
+      {
+        if (!(rses.__thm_lmsc < 2)) { break; }
+        if (lmsc->det_check_qinfo() >= 1) { rses.__thm_lmsc_enable_full(); break; }
+      }
       const s_ll dtmcs = bmdx_minmax::myllmin(sleep1, sleep_total - s_ll(1000 * (clock_ms() - t0)));
-      if (dtmcs < 0 || (b_halfen && !(rses.__thm_lmsc < 2))) { break; }
+        if (dtmcs < 0) { break; }
       sleep_mcs(dtmcs);
     }
   }

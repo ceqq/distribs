@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-07-30
+// rev. 2020-09-01
 // See bmdx_main.h for details.
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -172,6 +172,21 @@ namespace yk_c
       template<class K2> inline s_long hash(const K2& x) const { return this->_fls_hash(x); }
       template<class K2> inline bool is_eq(const t_k& x1, const K2& x2) const { return this->_fls_is_eq(x1, x2); }
       inline bool is_eq(const t_k& x1, const char* x2) const { if (!x2) { return false; } for (s_long i = 0; i < x1.n(); ++i) { char c = *x2++; if (!c || c != x1[i]) { return false; } } return !*x2; }
+    };
+
+    template<class _> struct hashx_common::kf_basic<bmdx::carray_r_t<char>, _>
+    {
+      typedef bmdx::carray_r_t<char> t_k; typedef bmdx::arrayref_t<char> t_arf;
+      void cnew(t_k* p, t_arf x) const { new (p) t_k(x.pd(), x.n()); }
+      s_long hash(t_arf x) const { return hashx_common::_skf_pchars<char>().Fhash(x.pd(), x.n()); }
+      bool is_eq(const t_k& x1, t_arf x2) const { return t_arf(x1).is_eq(x2); }
+    };
+    template<class _> struct hashx_common::kf_basic<bmdx::carray_r_t<wchar_t>, _>
+    {
+      typedef bmdx::carray_r_t<wchar_t> t_k;typedef bmdx::arrayref_t<wchar_t> t_arf;
+      void cnew(t_k* p, t_arf x) const { new (p) t_k(x.pd(), x.n()); }
+      s_long hash(t_arf x) const { return hashx_common::_skf_pchars<wchar_t>().Fhash(x.pd(), x.n()); }
+      bool is_eq(const t_k& x1, t_arf x2) const { return t_arf(x1).is_eq(x2); }
     };
   }
 #endif
