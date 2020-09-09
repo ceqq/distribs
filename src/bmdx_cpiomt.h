@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-09-01
+// rev. 2020-09-05
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -2912,7 +2912,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   {
     if (!p) { return 0; }
     DWORD c(0); GetExitCodeThread(p->th, &c);
-    return c == STILL_ACTIVE ? 2 : 1;
+    return (c == STILL_ACTIVE && p->in_thread) ? 2 : 1;
   }
     // ret. 1, 0
   static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) __bmdx_noex
@@ -3882,13 +3882,13 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_release(_threadctl_ctx_data* p, _s_lon
   {
     if (!p->in_thread) { return 1; }
     critsec_t<_threadctl_ctx_data> __lock(10, -1, &p->csd); if (sizeof(__lock)) {}
-    p->in_thread = 0; if (p->in_ctl <= 0) { res = 2; }
+    res = 1; p->in_thread = 0; if (p->in_ctl <= 0) { res = 2; }
   }
   else if (what == 2)
   {
     if (p->in_ctl <= 0) { return 1; }
     critsec_t<_threadctl_ctx_data> __lock(10, -1, &p->csd); if (sizeof(__lock)) {}
-    --p->in_ctl; if (!p->in_thread && p->in_ctl == 0) { res = 2; }
+    res = 1; --p->in_ctl; if (!p->in_thread && p->in_ctl == 0) { res = 2; }
   }
   if (res == 2)
   {
@@ -4078,28 +4078,6 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
 
     private:
       HANDLE _hp, _ht; DWORD _pid; bool _exited;
-    };
-
-
-    struct console_io
-    {
-        // b_enabled_ == false makes all in console_io a no-op.
-      console_io(bool b_enabled_ = true) { _b_enabled = b_enabled_; }
-
-      unsigned int ugetch(unsigned int no_char = 0) __bmdx_noex
-      {
-        if (!b_enabled()) { return no_char; }
-        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
-        #if defined(__BORLANDC__)
-          return kbhit() ? getch() : no_char;
-        #else
-          return _kbhit() ? _getch() : no_char;
-        #endif
-      }
-
-      bool b_enabled() const { return _b_enabled; }
-    private:
-      bool _b_enabled;
     };
 
 
@@ -4353,68 +4331,6 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
     private:
       long _pid;
-    };
-
-
-    struct console_io
-    {
-        // b_enabled_ == false makes all in console_io a no-op.
-        //  NOTE Using console_io in the program running as co-process, detached from console input,
-        //    may be unsafe, regardless of all internal checks.
-        //    It's recommended to disable console_io in co-processes.
-      console_io(bool b_enabled_ = true) __bmdx_noex { static termios t; static _s_long n(0); __pt = &t; __pnr = &n; _b_en = b_enabled_; _set_unbuf(true); }
-      ~console_io() __bmdx_noex { _set_unbuf(false); }
-
-      unsigned int ugetch(unsigned int no_char = 0) __bmdx_noex
-      {
-        if (!b_enabled()) { return no_char; }
-        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
-        int f0 = fcntl(STDIN_FILENO, F_GETFL, 0);
-        fcntl(STDIN_FILENO, F_SETFL, f0 | O_NONBLOCK);
-          int ch = std::getchar();
-        fcntl(STDIN_FILENO, F_SETFL, f0);
-        if (ch != EOF) { return ch; } else { return no_char; }
-      }
-
-        // Returns true if console input is enabled and valid (working).
-      bool b_enabled() const { return _b_en && *__pnr > 0; }
-
-    private:
-      termios* __pt; _s_long* __pnr; bool _b_en;
-      void _set_unbuf(bool b_on) __bmdx_noex
-      {
-        if (!_b_en) { return; }
-        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
-        termios& t0 = *__pt; _s_long n = *__pnr;
-          if (n < 0) { return; }
-        bool b_valid = getpgrp() == tcgetpgrp(STDIN_FILENO);
-        if (!b_valid) { *__pnr = n = -1; _b_en = false; }
-          if (n < 0) { return; }
-        if (b_on)
-        {
-          int res = 0;
-          n += 1;
-          if (n == 1)
-          {
-            res = tcgetattr(STDIN_FILENO, &t0);
-            termios t1 = t0;
-            if (res == 0)
-            {
-              t1.c_lflag &= ~(ICANON | ECHO);
-              t1.c_cc[VMIN] = 1; t1.c_cc[VTIME] = 0;
-              res = tcsetattr(STDIN_FILENO, TCSANOW, &t1);
-            }
-          }
-          if (res == 0) { *__pnr = n; }
-            else { _b_en = false; }
-        }
-        else
-        {
-          n -= 1;
-          if (n == 0) { tcsetattr(STDIN_FILENO, TCSANOW, &t0); }
-          *__pnr = n;
-        }
-      }
     };
 
 
@@ -6086,6 +6002,135 @@ namespace bmdx
     multithread(const multithread&); void operator=(const multithread&);
   };
 
+
+
+
+  struct _console_io_qin
+  {
+    typedef cref_t<vnnqueue_t<unsigned int> > t_cref_qin;
+
+      // For custom keypress suppliers only: ref. to queue of characters.
+      // Intended use: simulating direct keyboard input, in applications that are console-less (e.g. GUI-only)
+      //  or not using real console input in order to preserve std. input stream, etc.
+      // NOTE 1. Pushing into qin() may require protecting with
+      //    t_cref_qin::t_lock(qin()) only in case if there are several keypress suppliers in the program.
+      //  2. Except pushing, any operations on the queue from client side (possible though not expected)
+      //    must be protected with t_cref_qin::t_lock(qin()),
+      //    as described for vnnqueue_t consumer/supplier.
+      //  3. Popping from qin() should be avoided by clients, because this operation is done by console_io::ugetch.
+      // b_autocreate:
+      //    true: create the queue if still not exists. Return a reference to the queue.
+      //      (NOTE Theoretically may return an empty reference in case of bad_alloc on creation.)
+      //    false: return the queue reference if it exists, or empty reference otherwise.
+    static t_cref_qin qin(bool b_autocreate) __bmdx_noex { return _rqin(b_autocreate); }
+
+      // For any client: the number of currently existing console_io objects.
+    static _s_ll qin_ncons() __bmdx_noex { return bmdx_str::words::atomrdal64(&_rncons()); }
+
+    private:
+      friend struct console_io;
+      _console_io_qin() { bmdx_str::words::atomadd64(&_rncons(), 1); }
+      ~_console_io_qin() { bmdx_str::words::atomadd64(&_rncons(), -1); }
+      static t_cref_qin& _rqin(bool b_autocr) {  static t_cref_qin x; if (b_autocr && !x) { t_cref_qin::t_lock __lock(x); if (sizeof(__lock)) {} if (!x) { x.cm_create0(0, 0, 1); if (x) { x->set_m(100); x->set_cap_hints(-1, -2); } } } return x; }
+      static _s_ll& _rncons() { static _s_ll x = 0; return x; }
+  };
+
+  struct console_io : _console_io_qin
+  {
+    #ifdef _bmdxpl_Wnds
+        // b_enabled_ == false makes all in console_io a no-op.
+      console_io(bool b_enabled_ = true) { _b_enabled = b_enabled_; }
+
+        // ugetch() returns (in the order of preference):
+        //   a) if exists, a character from head of custom queue (qin()).
+        //   b) if exists, a character input from real console or terminal window.
+        //   c) no_char.
+      unsigned int ugetch(unsigned int no_char = 0) __bmdx_noex
+      {
+        if (!b_enabled()) { return no_char; }
+        t_cref_qin& q = _rqin(0);
+        if (q) { t_cref_qin::t_lock __lock(q); if (sizeof(__lock)) {} if (q->navl() > 0) { unsigned int x = q->front(); q->pop_1(); return x; } }
+        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
+        #if defined(__BORLANDC__)
+          return kbhit() ? getch() : no_char;
+        #else
+          return _kbhit() ? _getch() : no_char;
+        #endif
+      }
+
+      bool b_enabled() const { return _b_enabled; }
+    private:
+      bool _b_enabled;
+    #endif
+    #ifdef _bmdxpl_Psx
+        // b_enabled_ == false makes all in console_io a no-op.
+        //  NOTE Using console_io in the program running as co-process, detached from console input,
+        //    may be unsafe, regardless of all internal checks.
+        //    It's recommended to disable console_io in co-processes.
+      console_io(bool b_enabled_ = true) __bmdx_noex { static termios t; static _s_long n(0); __pt = &t; __pnr = &n; _b_en0 = _b_en = b_enabled_; _set_unbuf(true); }
+      ~console_io() __bmdx_noex { _set_unbuf(false); }
+
+        // ugetch() returns (in the order of preference):
+        //   a) if exists, a character from head of custom queue (qin()).
+        //   b) if exists, a character input from real console or terminal window.
+        //   c) no_char.
+      unsigned int ugetch(unsigned int no_char = 0) __bmdx_noex
+      {
+        if (_b_en0)
+        {
+          t_cref_qin& q = _rqin(0);
+          if (q) { t_cref_qin::t_lock __lock(q); if (sizeof(__lock)) {} if (q->navl() > 0) { unsigned int x = q->front(); q->pop_1(); return x; } }
+        }
+        if (!b_enabled()) { return no_char; }
+        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
+        int f0 = fcntl(STDIN_FILENO, F_GETFL, 0);
+        fcntl(STDIN_FILENO, F_SETFL, f0 | O_NONBLOCK);
+          int ch = std::getchar();
+        fcntl(STDIN_FILENO, F_SETFL, f0);
+        if (ch != EOF) { return ch; } else { return no_char; }
+      }
+
+        // Returns true if console input is enabled and valid (working).
+      bool b_enabled() const { return _b_en && *__pnr > 0; }
+
+    private:
+      termios* __pt; _s_long* __pnr; bool _b_en0; bool _b_en;
+      void _set_unbuf(bool b_on) __bmdx_noex
+      {
+        if (!_b_en) { return; }
+        critsec_t<console_io> __lock(50,-1); if (sizeof(__lock)) {}
+        termios& t0 = *__pt; _s_long n = *__pnr;
+          if (n < 0) { return; }
+        bool b_valid = getpgrp() == tcgetpgrp(STDIN_FILENO);
+        if (!b_valid) { *__pnr = n = -1; _b_en = false; }
+          if (n < 0) { return; }
+        if (b_on)
+        {
+          int res = 0;
+          n += 1;
+          if (n == 1)
+          {
+            res = tcgetattr(STDIN_FILENO, &t0);
+            termios t1 = t0;
+            if (res == 0)
+            {
+              t1.c_lflag &= ~(ICANON | ECHO);
+              t1.c_cc[VMIN] = 1; t1.c_cc[VTIME] = 0;
+              res = tcsetattr(STDIN_FILENO, TCSANOW, &t1);
+            }
+          }
+          if (res == 0) { *__pnr = n; }
+            else { _b_en = false; }
+        }
+        else
+        {
+          n -= 1;
+          if (n == 0) { tcsetattr(STDIN_FILENO, TCSANOW, &t0); }
+          *__pnr = n;
+        }
+      }
+    #endif
+  };
 
 
   struct file_io

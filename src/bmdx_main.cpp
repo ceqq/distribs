@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-09-01
+// rev. 2020-09-05
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
