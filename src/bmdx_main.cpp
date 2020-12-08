@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-09-05
+// rev. 2020-12-07
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -1002,7 +1002,7 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
       // Find command slots for the given list of msg. ids. Set command slot state according to associated delivery state.
       // Returns: 1 - success, -2 - failure.
     virtual s_long cslph_update(vec2_t<tracking_info>& vtii) = 0;
-    virtual ~i_callback() {}
+    virtual ~i_callback() __bmdx_exany {}
   };
 
     // name_pr: process_name arg. of dispatcher_mt ctor.
@@ -2485,18 +2485,18 @@ namespace { struct __init_char_case_tables1 { __init_char_case_tables1() { __bmd
 #endif
 
 namespace {
-  static int __wcsncasecmp_curr(const wchar_t* s1, const wchar_t* s2, size_t n)
+  static int __wcsncasecmp_curr(const wchar_t* s1, const wchar_t* s2, s_ll n)
   {
-    if (n == 0) { return 0; }
+    if (n <= 0) { return 0; }
     wchar_t c1, c2;
     for (; *s1; s1++, s2++) { c1 = towlower(*s1); c2 = towlower(*s2); if (c1 != c2) { return (int)c1 - c2; } if (--n == 0) { return 0; } }
     return -*s2;
   }
   #if __bmdx_char_case_tables
-    static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n, s_long loc_type)
+    static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long loc_type)
     {
       if (loc_type == 0) { return __wcsncasecmp_curr(s1, s2, n); }
-      if (n == 0) { return 0; }
+      if (n <= 0) { return 0; }
       wchar_t c1, c2;
       if (loc_type == 1) { for (; *s1; s1++, s2++) { c1 = __bmdx_towlower_sys(*s1); c2 = __bmdx_towlower_sys(*s2); if (c1 != c2) { return (int)c1 - c2; } if (--n == 0) { return 0; } } }
         else if (loc_type == 2) { for (; *s1; s1++, s2++) { c1 = __bmdx_towlower_c(*s1); c2 = __bmdx_towlower_c(*s2); if (c1 != c2) { return (int)c1 - c2; } if (--n == 0) { return 0; } } }
@@ -2504,20 +2504,20 @@ namespace {
     }
   #elif __bmdx_use_locale_t
     #ifdef _bmdxpl_Psx
-      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n, s_long loc_type)
+      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long loc_type)
       {
         if (loc_type == 0) { return __wcsncasecmp_curr(s1, s2, n); }
         if (!(loc_type >= 1 && loc_type <= 2 && phloc(loc_type)->b_valid())) { return 0; } // NOTE the caller must not pass wrong loc_type
-        return wcsncasecmp_l(s1, s2, n, phloc(loc_type)->h);
+        return wcsncasecmp_l(s1, s2, (size_t)n, phloc(loc_type)->h);
       }
     #endif
   #else
     #ifdef _bmdxpl_Psx
         // Android-specific.
-      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, size_t n, s_long)
+      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long)
       {
         wchar_t c1, c2;
-        if (n == 0) { return 0; }
+        if (n <= 0) { return 0; }
         for (; *s1; s1++, s2++)
         {
           c1 = wchar_t(towlower(*s1)); c2 = wchar_t(towlower(*s2));
@@ -2691,30 +2691,15 @@ namespace bmdx
   }
 
     // Find s_what in s.
-    // pos: starting position in s.
     // Returns:
     //    a) if found -- the position in s.
     //    b) if not found -- s.n().
-  s_ll _find_str(arrayref_t<wchar_t> s, arrayref_t<wchar_t> s_what, s_ll pos)
+  s_ll _find_str_linear(arrayref_t<wchar_t> s, arrayref_t<wchar_t> s_what, s_ll pos)
   {
-    if (s_what.n() <= 0 || pos >= s.n()) { return s.n(); }
-    if (pos < 0) { pos = 0; }
-    const wchar_t* p = s.pd() + pos;
-    const wchar_t* const p2 = s.pd() + (s.n() + 1) - s_what.n();
-    const wchar_t c0 = s_what[0];
-    while (p < p2)
-    {
-      if (*p == c0)
-      {
-        const wchar_t* a = p;
-        const wchar_t* b = s_what.pd();
-        s_ll i = 1;
-        for (; i < s_what.n(); ++i) { if (*++a != *++b) { break; } }
-        if (i >= s_what.n()) { return p - s.pd(); }
-      }
-      ++p;
-    }
-    return s.n();
+    arrayref_t<wchar_t> x = s.range_intersect(pos);
+    s_ll pos2 = x.find_str(s_what);
+    if (pos2 < 0) { return s.n(); }
+    return pos + pos2;
   }
 
     // Find (in s) pos. of first character which does not occur in chars.
@@ -5953,6 +5938,7 @@ unity* unity::_path_u(const std::wstring& keylist, bool forced) __bmdx_noex
 unity::unity()        { ut = utEmpty; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; }
 unity::unity(const unity& x)        { ut = utEmpty; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; *this = x; }
 unity::unity(const std::wstring& x)        { ut = utEmpty; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; *this = x; }
+unity::unity(const arrayref_t<wchar_t>& x)        { ut = utEmpty; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; *this = x; }
 unity::unity(const meta::s_ll& x)        { ut = utInt; pmsm = unity_common::ls_modsm; _data.p2 = 0; *_drf_c_i<utInt>() = x; }
 unity::unity(const double& x)        { ut = utFloat; pmsm = unity_common::ls_modsm; _data.p2 = 0; *_drf_c_i<utFloat>() = x; }
 unity::unity(const _unitychar& x)        { ut = utChar; pmsm = unity_common::ls_modsm; _data.p1 = 0; _data.p2 = 0; *_drf_c_i<utChar>() = x; }
@@ -7349,19 +7335,19 @@ std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem); // platform-d
 std::string _wsToBsLsb(const wchar_t* ps, meta::s_ll n);
 
 std::string wsToBs(const wchar_t* x, meta::s_ll n){ return _wsToBs(x, n, false); }
-std::string wsToBs(const std::wstring& x) { return _wsToBs(x.c_str(), x.length(), false); }
+std::string wsToBs(arrayref_t<wchar_t> x) { return _wsToBs(x.pd(), x.n(), false); }
 std::string wsToBsOem(const wchar_t* x, meta::s_ll n){ return _wsToBs(x, n, true); }
-std::string wsToBsOem(const std::wstring& x) { return _wsToBs(x.c_str(), x.length(), true); }
+std::string wsToBsOem(arrayref_t<wchar_t> x) { return _wsToBs(x.pd(), x.n(), true); }
 std::string wsToBsLsb(const wchar_t* x, meta::s_ll n) { return _wsToBsLsb(x, n); }
-std::string wsToBsLsb(const std::wstring& x) { return _wsToBsLsb(x.c_str(), x.length()); }
+std::string wsToBsLsb(arrayref_t<wchar_t> x) { return _wsToBsLsb(x.pd(), x.n()); }
 
 std::wstring _bsToWs(const char* ps, meta::s_ll n); // platform-dependent
 std::wstring _bsLsbToWs(const char* ps, meta::s_ll n);
 
 std::wstring bsToWs(const char* x, meta::s_ll n){ return _bsToWs(x, n); }
-std::wstring bsToWs(const std::string& x){ return _bsToWs(x.c_str(), x.length()); }
+std::wstring bsToWs(arrayref_t<char> x){ return _bsToWs(x.pd(), x.n()); }
 std::wstring bsLsbToWs(const char* x, meta::s_ll n) { return _bsLsbToWs(x, n); }
-std::wstring bsLsbToWs(const std::string& x) { return _bsLsbToWs(x.c_str(), x.length()); }
+std::wstring bsLsbToWs(arrayref_t<char> x) { return _bsLsbToWs(x.pd(), x.n()); }
 
 
 std::string _wsToBsLsb(const wchar_t* ps, meta::s_ll n)
@@ -7487,311 +7473,6 @@ std::wstring replace(const std::wstring& s, const std::wstring& from, const std:
     return dest;
   }
   else return s;
-}
-
-
-bool wstring_like(const std::wstring& str, const std::wstring& pattern)
-{
-  std::vector<std::wstring> ptnParts;
-    //- ptnParts[i] having appropriate isPtnRange[i] == true is a wildcard (ptnParts[i].size() == 1 i.e. single character)
-    //  or one or more ranges of characters (ptnParts[i].size() is a multiple of 2, each odd-even characters specify
-    //  one range of characters, inclusive).
-  std::vector<bool> isPtnRange;
-  std::wstring sFixed;
-  bool isUnclosedBracket = false;
-  _t_wz ptnPos = 0;
-  while (ptnPos < pattern.length())
-  {
-    switch (pattern[ptnPos])
-    {
-    case L'*':
-      if (sFixed.size() > 0)
-      {
-        ptnParts.push_back(sFixed);
-        isPtnRange.push_back(false);
-        sFixed.clear();
-      }
-      if (ptnParts.size() == 0 || ptnParts.back() != L"*")
-      {
-        ptnParts.push_back(L"*");
-        isPtnRange.push_back(true);
-        ++ptnPos;
-      }
-      break;
-    case L'?':
-    case L'#':
-      if (sFixed.size() > 0)
-      {
-        ptnParts.push_back(sFixed);
-        isPtnRange.push_back(false);
-        sFixed.clear();
-      }
-      ptnParts.push_back(pattern.substr(ptnPos, 1)); // either ? or #
-      isPtnRange.push_back(true);
-      ++ptnPos;
-      break;
-    case L'[':
-      if (isUnclosedBracket)
-      {
-        sFixed += pattern[ptnPos]; // added '[' a fixed character
-        ++ptnPos;
-      }
-      else
-      {
-        _t_wz pos2 = pattern.find(L']', ptnPos+1);
-        if (pos2 == nposw) // means: there is the first unclosed bracket found at pos
-        {
-          isUnclosedBracket = true;
-          sFixed += pattern[ptnPos]; // added '[' a fixed character
-          ++ptnPos;
-        }
-        else
-        {
-          // extract character ranges specified between closed brackets
-          if (pos2 - ptnPos > 1)
-          {
-            std::wstring sRanges;
-            _t_wz pos3 = ptnPos + 1;
-
-            if (pattern[pos3] == L'!')
-            {
-              if (pos2 > pos3 + 1) { sRanges += L'!'; } else { sRanges += L" !!"; }
-              ++pos3;
-            }
-            else
-            {
-              sRanges += L' ';
-            }
-            while (pos3 < pos2)
-            {
-              if (pos3 + 2 < pos2 && pattern[pos3+1] == L'-')
-              {
-                // a range of characters specified by 3-character sequence like "a-z"
-                sRanges += pattern[pos3];
-                sRanges += pattern[pos3+2];
-                pos3 += 3;
-              }
-              else
-              {
-                // range containing only one character
-                sRanges += pattern[pos3];
-                sRanges += pattern[pos3];
-                ++pos3;
-              }
-            }
-
-            if (sRanges.size() == 3 && sRanges[0] == L' ' && sRanges[1] == sRanges[2])
-            {
-              sFixed += sRanges[1];
-            }
-            else
-            {
-              if (sFixed.size() > 0)
-              {
-                ptnParts.push_back(sFixed);
-                isPtnRange.push_back(false);
-                sFixed.clear();
-              }
-
-              ptnParts.push_back(sRanges);
-              isPtnRange.push_back(true);
-            }
-
-            ptnPos = pos2 + 1; // go to position next after the closing bracket
-          }
-          else
-          {
-            ptnPos = pos2 + 1; // skip empty brackets
-          }
-        }
-      }
-      break;
-    default:
-      sFixed += pattern[ptnPos]; // a fixed character
-      ++ptnPos;
-      break;
-    }
-  }
-  if (sFixed.size() > 0) // care for tail of pattern possibly left in sFixed
-  {
-    ptnParts.push_back(sFixed);
-    isPtnRange.push_back(false);
-    sFixed.clear();
-  }
-
-  std::vector<_t_wz> strPosStack; // string positions tried to match against *
-  std::vector<_t_wz> indPtnStack; // the index of *-s that are matched
-
-  _t_wz strPos = 0;
-  _t_wz indPtnPart = 0;
-
-  while (true)
-  {
-    if (strPos >= str.size()) // case: str is gone, i.e. nothing is left to compare, should return already
-    {
-      if (indPtnPart >= ptnParts.size())
-      {
-        // cases:
-        // a) both str and pattern are empty, i.e. they match
-        // b) both str and pattern are gone at the same time, i.e. they match
-        goto lProcessMatch;
-      }
-      else
-      {
-        if (indPtnPart == ptnParts.size() - 1 && isPtnRange[indPtnPart] && ptnParts[indPtnPart] == L"*")
-        {
-          // case: in pattern, only * is left, here this matches with the end of string, i.e. with ""
-          goto lProcessMatch;
-        }
-      }
-      goto lProcessMismatch;
-    }
-    else // case: comparing the current pos in the string with the current pattern
-    {
-      if (indPtnPart >= ptnParts.size())
-      {
-        // case: pattern has gone, but string had not gone yet, i.e. mismatch
-        goto lProcessMismatch;
-      }
-      if (isPtnRange[indPtnPart])
-      {
-        if (ptnParts[indPtnPart].size() == 1) // a wildcard character should be processed
-        {
-          if (ptnParts[indPtnPart] == L"?")
-          {
-            // matched successfully (any character matches),
-            // move to next position in the string and process the next pattern
-            strPos += 1;
-            indPtnPart += 1;
-          }
-          else if (ptnParts[indPtnPart] == L"#")
-          {
-            if (isdigit(str[strPos]))
-            {
-              // matched a digit,
-              // move to next position in the string and process the next pattern
-              strPos += 1;
-              indPtnPart += 1;
-            }
-            else // don't match
-            {
-              goto lProcessMismatch;
-            }
-          }
-          else if (ptnParts[indPtnPart] == L"*")
-          {
-            goto lProcessAsterisk;
-          }
-          else // bad branch, assuming don't match
-          {
-            goto lProcessMismatch;
-          }
-        }
-        else // the current str character should be matched against one or more character ranges
-        {
-          bool isInRangeTest = ptnParts[indPtnPart][0] != L'!';
-          bool isMatch = false;
-          for (unsigned int i = 1; i < ptnParts[indPtnPart].size(); i += 2)
-          {
-            if (str[strPos] >= ptnParts[indPtnPart][i] && str[strPos] <= ptnParts[indPtnPart][i + 1])
-            {
-              // found a range that matches to the current str character
-              isMatch = true;
-              break;
-            }
-          }
-          if (isMatch == isInRangeTest)
-          {
-            // matched successfully,
-            // move to next position in the string and process the next pattern
-            strPos += 1;
-            indPtnPart += 1;
-          }
-          else // don't match
-          {
-            goto lProcessMismatch;
-          }
-        }
-      }
-      else // the str characters at the current position should be matched against some fixed string
-      {
-        if (str.substr(strPos, ptnParts[indPtnPart].size()) == ptnParts[indPtnPart])
-        {
-          // matched successfully,
-          // move to next position in the string and process the next pattern
-          strPos += ptnParts[indPtnPart].size();
-          indPtnPart += 1;
-        }
-        else // don't match
-        {
-          goto lProcessMismatch;
-        }
-      }
-    }
-    continue;
-lProcessAsterisk: // position at some * wildcard somewhere in str
-    // Needs to calculate next guess for strPos, if any exists at all, store it into the stack,
-    // and then match the current strPos against the rest of patterns list.
-    // cases:
-    // a) * is the last pattern, i.e. total match
-    // b) * is followed by a fixed string
-    // c) * is followed by a range (the worst case, i.e. need processing str char by char)
-    if (indPtnPart == ptnParts.size() - 1) // a)
-    {
-      goto lProcessMatch;
-    }
-    else if (!isPtnRange[indPtnPart+1]) // b)
-    {
-      // next guess
-      _t_wz pos4 = str.find(ptnParts[indPtnPart+1], strPos);
-      if (pos4 == nposw)
-      {
-        // Failed to find a fixed part of the pattern.
-        //  Our matching is not greedy, and processes shorter guesses first,
-        //  so here the whole pattern appears longer than str.
-        //  This means final mismatch.
-        return false;
-      }
-      else // the fixed part of the pattern matches with the current str position or greater position
-      {
-        // prepare possibly one more guess, and store it to stack, then process the current match
-        _t_wz pos5 = pos4 + 1;
-        if (pos5 < str.size())
-        {
-          strPosStack.push_back(pos5);
-          indPtnStack.push_back(indPtnPart);
-        }
-
-        // continue matching in the current guess, having skipped the current fixed part of the pattern
-        strPos += pos4 + ptnParts[indPtnPart+1].size();
-        indPtnPart += 2;
-      }
-    }
-    else // c)
-    {
-      // next guess
-      _t_wz pos4 = strPos + 1;
-
-      // store next guess
-      strPosStack.push_back(pos4);
-      indPtnStack.push_back(indPtnPart);
-
-      indPtnPart += 1; // continue matching in the current guess, from the next pattern, which is guaranteed to be a range, anything except *
-    }
-    continue;
-lProcessMismatch:
-    if (strPosStack.size() == 0)
-    {
-      return false;
-    }
-    strPos = strPosStack.back();
-      strPosStack.pop_back();
-    indPtnPart = indPtnStack.back();
-      indPtnStack.pop_back();
-    goto lProcessAsterisk;
-lProcessMatch:
-    return true;
-  }
 }
 
 unity split(const std::wstring& s, const std::wstring& delim, meta::s_ll nmax)
@@ -8571,7 +8252,7 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags
     unity stack, last_path; if (b_braces) { last_path.u_clear(utUnityArray); stack.ua_append(last_path); }
     while (pos < ssrc.n())
     {
-      s_ll pos2 = _find_str(ssrc, pterm2, pos);
+      s_ll pos2 = _find_str_linear(ssrc, pterm2, pos);
       if (pos2 > pos)
       {
         bool b_skip = false;
@@ -9265,33 +8946,33 @@ namespace bmdx
 
 
     // 1: s1 > s2, 0: s1 == s2, -1: s1 < s2.
-  s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type)
+  s_long wscompare(arrayref_t<wchar_t> s1, arrayref_t<wchar_t> s2, bool ignore_case, s_long loc_type)
   {
     if (!(loc_type >= 0 && loc_type <= 2)) { throw XUExec("wscompare.1");  }
+    s_ll minlen = s1.n(); if (s2.n() < minlen) { minlen = s2.n(); }
     if (ignore_case)
     {
       if (loc_type == 0)
       {
-        _t_wz minlen= s1.length(); if (s2.length() < minlen) { minlen = s2.length(); }
-        int cmp1 = __wcsncasecmp_curr(s1.c_str(), s2.c_str(), minlen);
+        int cmp1 = __wcsncasecmp_curr(s1.pd(), s2.pd(), minlen);
         if (cmp1 != 0) { return cmp1 > 0 ? 1 : -1; }
         if (s1.size() != s2.size()) { return s1.size() < s2.size() ? -1 : 1; }
         return 0;
       }
       else if (loc_type == 1) // "user" loc. (system setting)
       {
-        s_long n = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE|SORT_STRINGSORT, s1.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s1.length())), s2.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s2.length())));
+        s_long n = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE|SORT_STRINGSORT, s1.pd(), int(bmdx_minmax::myllmin(std::numeric_limits<int>::max(), s1.length())), s2.pd(), int(bmdx_minmax::myllmin(std::numeric_limits<int>::max(), s2.length())));
         if (n == 0) { throw XUExec("wscompare.2"); }
         return n - 2;
       }
       else // loc_type == 2, C loc.
       {
-        s_long n = CompareStringW(LOCALE_NEUTRAL, NORM_IGNORECASE|SORT_STRINGSORT, s1.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s1.length())), s2.c_str(), int(std::min(_t_wz(std::numeric_limits<int>::max()), s2.length())));
+        s_long n = CompareStringW(LOCALE_NEUTRAL, NORM_IGNORECASE|SORT_STRINGSORT, s1.pd(), int(bmdx_minmax::myllmin(std::numeric_limits<int>::max(), s1.length())), s2.pd(), int(bmdx_minmax::myllmin(std::numeric_limits<int>::max(), s2.length())));
         if (n == 0) { throw XUExec("wscompare.3"); }
         return n - 2;
       }
     }
-    else { int cmp1 = s1.compare(s2); return cmp1 == 0 ? 0 : (cmp1 > 0 ? 1 : -1); }
+    else { int res = wcsncmp(s1.pd(), s2.pd(), size_t(minlen)); if (res != 0) { return res > 0 ? 1 : -1; } if (s1.n() == s2.n()) { return 0; } return s1.n() < s2.n() ? -1 : 1; }
   }
 
     _unitydate d_now(bool allow_fracsec) { SYSTEMTIME t; GetLocalTime(&t); _unitydate x(t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond); if (allow_fracsec) { x.add_seconds(t.wMilliseconds / 1000.); } return x; }
@@ -9527,19 +9208,19 @@ static char __buf_argv[65000] = "_\0\0";
 
 
 #if __bmdx_use_wcrtomb_l
-  static int __wctomb(char* ps, wchar_t c) { return int(wcrtomb_l(ps, c, 0, phloc(1)->h)); } // NOTE the caller must have ensure_loc(1) == true
-  static int __mbtowc(wchar_t* pc, const char* ps, size_t n) { return int(mbrtowc_l(pc, ps, n, 0, phloc(1)->h)); } // -"-
+  static int __wctomb(char* ps, wchar_t c, mbstate_t* q) { return int(wcrtomb_l(ps, c, q, phloc(1)->h)); } // NOTE the caller must have ensure_loc(1) == true
+  static int __mbtowc(wchar_t* pc, const char* ps, size_t n, mbstate_t* q) { return int(mbrtowc_l(pc, ps, n, q, phloc(1)->h)); } // -"-
 #else
-  static int __wctomb(char* ps, wchar_t c) { return int(wcrtomb(ps, c, 0)); }
-  static int __mbtowc(wchar_t* pc, const char* ps, size_t n) { return int(mbrtowc(pc, ps, n, 0)); }
+  static int __wctomb(char* ps, wchar_t c, mbstate_t* q) { return int(wcrtomb(ps, c, q)); }
+  static int __mbtowc(wchar_t* pc, const char* ps, size_t n, mbstate_t* q) { return int(mbrtowc(pc, ps, n, q)); }
 #endif
 
 namespace bmdx
 {
     namespace
     {
-      static bool _test_mbrtowc() { char cc[MB_LEN_MAX+1]; size_t res; wchar_t c; cc[0] = 'A'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'A') { return false; } cc[0] = '1'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L'1') { return false; } cc[0] = ';'; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L';') { return false; } cc[0] = ' '; res = mbrtowc(&c, cc, 1, 0); if (res != 1 || c != L' ') { return false; } return true; }
-      static bool _test_wcrtomb() { char cc[MB_LEN_MAX+1]; size_t res; res = wcrtomb(cc, L'A', 0); if (res != 1 || cc[0] != 'A') { return false; } res = wcrtomb(cc, L'1', 0); if (res != 1 || cc[0] != '1') { return false; } res = wcrtomb(cc, L';', 0); if (res != 1 || cc[0] != ';') { return false; } res = wcrtomb(cc, L' ', 0); if (res != 1 || cc[0] != ' ') { return false; } return true; }
+      static bool _test_mbrtowc() { mbstate_t q; memset(&q, 0, sizeof(q)); char cc[MB_LEN_MAX+1]; size_t res; wchar_t c; cc[0] = 'A'; res = mbrtowc(&c, cc, 1, &q); if (res != 1 || c != L'A') { return false; } cc[0] = '1'; res = mbrtowc(&c, cc, 1, &q); if (res != 1 || c != L'1') { return false; } cc[0] = ';'; res = mbrtowc(&c, cc, 1, &q); if (res != 1 || c != L';') { return false; } cc[0] = ' '; res = mbrtowc(&c, cc, 1, &q); if (res != 1 || c != L' ') { return false; } return true; }
+      static bool _test_wcrtomb() { mbstate_t q; memset(&q, 0, sizeof(q)); char cc[MB_LEN_MAX+1]; size_t res; res = wcrtomb(cc, L'A', &q); if (res != 1 || cc[0] != 'A') { return false; } res = wcrtomb(cc, L'1', &q); if (res != 1 || cc[0] != '1') { return false; } res = wcrtomb(cc, L';', &q); if (res != 1 || cc[0] != ';') { return false; } res = wcrtomb(cc, L' ', &q); if (res != 1 || cc[0] != ' ') { return false; } return true; }
     }
     std::string _wsToBs(const wchar_t* ps, meta::s_ll n, bool is_oem) // n < 0: autodetect length based on null char.
     {
@@ -9556,10 +9237,12 @@ namespace bmdx
           if (!ensure_loc(1)) { throw XUExec("_wsToBs.4"); }
         #endif
 
+        mbstate_t q; memset(&q, 0, sizeof(q));
+
         if (!_mb) // this check is done once
         {
           t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
-          if (__wctomb(0, 0)) {}
+          if (__wctomb(0, 0, &q)) {}
           _mb = 2 + (int)_test_wcrtomb();
         }
         if (_mb == 2) { return wsToBsUtf8(ps, n); }
@@ -9580,11 +9263,11 @@ namespace bmdx
 
         t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
         char cc[MB_LEN_MAX+1];
-        if (__wctomb(0, 0)) {}
+        if (__wctomb(0, 0, &q)) {}
         for(; pos < n; ++pos)
         {
           if (ps[pos] == L'\0') { s += '\0'; }
-            else { int cnt = __wctomb(cc, ps[pos]); if (cnt <= -1) { s += '?'; } else { cc[cnt] = 0; s += cc; } }
+            else { int cnt = __wctomb(cc, ps[pos], &q); if (cnt <= -1) { s += '?'; } else { cc[cnt] = 0; s += cc; } }
           if ((pos & 0xfff) == 0) { meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
         }
         return s;
@@ -9609,10 +9292,12 @@ namespace bmdx
           if (!ensure_loc(1)) { throw XUExec("_bsToWs.4"); }
         #endif
 
+        mbstate_t q; memset(&q, 0, sizeof(q));
+
         if (!_mb) // this check is done once
         {
           t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
-          if (__mbtowc(0, 0, 0)) {}
+          if (__mbtowc(0, 0, 0, &q)) {}
           _mb = 2 + (int)_test_mbrtowc();
         }
         if (_mb == 2) { return bsUtf8ToWs(ps, n); }
@@ -9634,14 +9319,14 @@ namespace bmdx
 
         t_lock_locale __lock(LC_CTYPE, __bmdx_setlocale_name, wsbs_lk_dt()); if (sizeof(__lock)) {}
         meta::s_ll rsvpos(0);
-        if (__mbtowc(0, 0, 0)) {}
+        if (__mbtowc(0, 0, 0, &q)) {}
         while (pos < n)
         {
           if (pos - rsvpos > 0xfff) { rsvpos = pos; meta::s_ll n2 = meta::s_ll(s.length()); if (n2 - nrsv > -200) { if (n2 > nrsv) { nrsv = n2; } nrsv += nrsv >> 2; s.reserve(_t_sz(nrsv)); } }
           if (ps[pos] == '\0') { s += L'\0'; pos += 1; }
           else
           {
-            wchar_t c; int cnt = __mbtowc(&c, &ps[pos], size_t(n - pos));
+            wchar_t c; int cnt = __mbtowc(&c, &ps[pos], size_t(n - pos), &q);
             if (cnt <= -1) { s += L'?'; pos += 1; }
               else if (cnt > 0) { s += c; pos += cnt; }
               else { s += L'\0'; pos += 1; }
@@ -9655,26 +9340,26 @@ namespace bmdx
     }
 
       // wide character string comparison
-    s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type)
+    s_long wscompare(arrayref_t<wchar_t> s1, arrayref_t<wchar_t> s2, bool ignore_case, s_long loc_type)
     {
-        if (ignore_case)
+      s_ll minlen = s1.n(); if (s2.n() < minlen) { minlen = s2.n(); }
+      if (ignore_case)
+      {
+        int cmp1;
+        if (loc_type == 0) { cmp1 = __wcsncasecmp_curr(s1.pd(), s2.pd(), minlen); }
+        else
         {
-            _t_wz minlen= s1.length(); if (s2.length() < minlen) { minlen = s2.length(); }
-            int cmp1;
-            if (loc_type == 0) { cmp1 = __wcsncasecmp_curr(s1.c_str(), s2.c_str(), minlen); }
-            else
-            {
-              #if __bmdx_char_case_tables
-              #elif __bmdx_use_locale_t
-                if (!ensure_loc(loc_type)) { throw XUExec("wscompare.1");  }
-              #endif
-              cmp1 = __wcsncasecmp(s1.c_str(), s2.c_str(), minlen, loc_type);
-            }
-            if (cmp1 != 0) { return cmp1 > 0 ? 1 : -1; }
-            if (s1.size() != s2.size()) { return s1.size() < s2.size() ? -1 : 1; }
-            return 0;
+          #if __bmdx_char_case_tables
+          #elif __bmdx_use_locale_t
+            if (!ensure_loc(loc_type)) { throw XUExec("wscompare.1");  }
+          #endif
+          cmp1 = __wcsncasecmp(s1.pd(), s2.pd(), minlen, loc_type);
         }
-        else { int cmp1 = s1.compare(s2); return cmp1 == 0 ? 0 : (cmp1 > 0 ? 1 : -1); }
+        if (cmp1 != 0) { return cmp1 > 0 ? 1 : -1; }
+        if (s1.n() != s2.n()) { return s1.n() < s2.n() ? -1 : 1; }
+        return 0;
+      }
+      else { int res = wcsncmp(s1.pd(), s2.pd(), size_t(minlen)); if (res != 0) { return res > 0 ? 1 : -1; } if (s1.n() == s2.n()) { return 0; } return s1.n() < s2.n() ? -1 : 1; }
     }
 
     _unitydate d_now(bool allow_fracsec)
@@ -12548,7 +12233,7 @@ s_long dispatcher_mt::thread_proxy::address::set_addr(const unity& x) __bmdx_noe
     unity _a; const unity* pa(0); if (x.isString()) { paramline().decode1v(x.vstr(), _a); pa = &_a; } else { pa = &x; }
     if (!(pa->isArray() && pa->arrsz() >= 2)) { return -1; }
     s_long nb = pa->arrlb();
-    _fls75 k1; if (pa->utype() == utStringArray) { k1= pa->vstr(1); } else { k1 = (*pa)[nb + 0].vflstr(); }
+    _fls75 k1; if (pa->utype() == utStringArray) { k1 = pa->vstr(1); } else { k1 = (*pa)[nb + 0].vflstr(); }
     const s_long npmin = _sln_ind0(k1);
     if (npmin < 2 || pa->arrsz() < npmin) { return -1; }
     unity aprep; aprep.arr_init<utUnity>(1);
@@ -12633,7 +12318,7 @@ _fls75 dispatcher_mt::thread_proxy::address::slt() const __bmdx_noex
   try {
     s_long ind = sln_ind(); if (ind < 1) { return _fls75(); }
     _fls75 sln1 = _addr.ref<utUnity>(ind).vflstr();
-    return sln1.substr(0, sln1.find('_'));
+    return sln1.substr(0, sln1.find1('_'));
   } catch (...) {}
   return _fls75();
 }
@@ -14182,8 +13867,15 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
   cch_session& rses = *_r_ths._pnonc_u();
   critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_s_qs_deliver); if (sizeof(__lock)) {}
   try {
-    vec2_t<std::wstring> sl_th1_thn; vec2_t<cref_t<cch_slot> > sl_th1; // used on (flags & 1)
-    vec2_t<std::wstring> sl_disp_sln, sl_disp_thn; vec2_t<cref_t<cch_slot> > sl_disp; // used on (flags & 2)
+
+      // used on (flags & 1)
+    vec2_t<std::wstring> sl_th1_thn;
+      vec2_t<cref_t<cch_slot> > sl_th1;
+
+      // used on (flags & 2)
+    vec2_t<std::wstring> sl_disp_sln, sl_disp_thn;
+      vec2_t<cref_t<cch_slot> > sl_disp;
+
     if (1)
     {
       mst_semaphore ms_th1(rses, _name_th);

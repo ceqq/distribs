@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2020-09-05
+// rev. 2020-12-07
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -89,6 +89,11 @@
   #else
     #define __bmdx_noex throw()
     #define __bmdx_exs(a) throw(a)
+  #endif
+  #if __APPLE__ && __MACH__ && __cplusplus >= 201103
+    #define __bmdx_exany noexcept(false)
+  #else
+    #define __bmdx_exany
   #endif
 #endif
 #ifndef __bmdx_use_cptr_cast
@@ -3320,6 +3325,14 @@ namespace
   };
 }
 
+#if _MSC_VER >= 1920
+    // NOTE VS 2019 compiler bug workaround.
+  template<class TA> const vecm::type_descriptor& __yk_c_typer_def() __bmdx_noex { return typer<TA>(); }
+  template<class TA, class _bs> const vecm::type_descriptor& __yk_c_typer_def() __bmdx_noex { return typer<TA, _bs>(); }
+#else
+  #define __yk_c_typer_def typer
+#endif
+
 template<class _> s_long vecm::_ff_mc2_impl<_>::_find_cm(s_long ind_t, s_long ind_ta, bool is_ta_first, const type_descriptor** ret_p)
   { return _vecm_tu_cmreg().find_cm(ind_t, ind_ta, is_ta_first, ret_p, _pg_cmd()); }
 template<class _> const vecm::type_descriptor* vecm::_ff_mc2_impl<_>::_get_compat(const type_descriptor* p, bool allow_t, bool allow_ta)
@@ -4387,16 +4400,22 @@ namespace _yk_c2
 
       // Iterator for struct vec2_t.
     template<class T, bool is_const, class _bs = meta::nothing>
-    class iterator_t : public yk_c::vecm::link1_t<T, is_const, _bs>, public std::iterator<std::random_access_iterator_tag, T>
+    class iterator_t
+      : public yk_c::vecm::link1_t<T, is_const, _bs>
+      #if defined(__SUNPRO_CC)
+        , public std::iterator<std::random_access_iterator_tag, T>
+      #endif
     {
     public:
       typedef yk_c::s_long s_long; typedef yk_c::vecm vecm;
       typedef T t_value; typedef t_value value_type;
-      typedef typename yk_c::meta::if_t<is_const, const t_value*, t_value*>::result  pointer;
+      typedef typename yk_c::meta::if_t<is_const, const t_value*, t_value*>::result pointer;
       typedef typename yk_c::meta::if_t<is_const, const t_value&, t_value&>::result reference;
       typedef yk_c::vecm::link1_t<t_value, is_const, _bs> t_link;
       typedef typename t_link::t_ctnr t_ctnr;
-      typedef std::random_access_iterator_tag iterator_category; typedef iterator_t iterator_type; typedef meta::t_pdiff difference_type;
+      typedef meta::t_pdiff difference_type;
+      typedef std::random_access_iterator_tag iterator_category;
+      typedef iterator_t iterator_type;
 
       inline iterator_t() __bmdx_noex {}
       inline iterator_t(t_ctnr& v) __bmdx_noex : t_link(v) {} // end pos.
@@ -4572,26 +4591,26 @@ namespace _yk_c2
       // partial replication of std vector
       //==section 1==============================================
 
-      inline vec2_t(__vecm_noarg1) __bmdx_noex : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) {}
+      inline vec2_t(__vecm_noarg1) __bmdx_noex : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) {}
 
         // NOTE vec2_t(const vec2_t&) and operator= set all destination flags to dflt., not that of x.
         // NOTE If operator= fails (gen. exception), the container is left with 0 size and default flags.
-      inline vec2_t(const vec2_t& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t&)"); }
-        template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
+      inline vec2_t(const vec2_t& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t&)"); }
+        template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
       inline vec2_t& operator=(const vec2_t& x) __bmdx_exs(exc_vec2_t  __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
 
         // Copying between vectors with same elem. type but different TA arg.
-      template<class TA2> inline vec2_t(const vec2_t<TA2, _bs>& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0)
+      template<class TA2> inline vec2_t(const vec2_t<TA2, _bs>& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0)
       {
         enum { __check = meta::assert<meta::same_t<typename vecm::specf<TA2>::t_value, t_value>::result>::result };
         if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA>&)");
       }
       template<class TA2> inline vec2_t& operator=(const vec2_t<TA2, _bs>& x) __bmdx_exs(exc_vec2_t __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
 
-      inline explicit vec2_t(size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c T& x)"); }
-      inline explicit vec2_t(s_long base, size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c T& x)"); }
-      template<class F> inline explicit vec2_t(size_type m, const F& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, 0) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c F& x)"); }
-      template<class F> inline explicit vec2_t(s_long base, size_type m, const F& x __vecm_noarg) : vecm(yk_c::typer<_v2ta_a<ta_value>, _bs>, base) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c F& x)"); }
+      inline explicit vec2_t(size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c T& x)"); }
+      inline explicit vec2_t(s_long base, size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, base) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c T& x)"); }
+      template<class F> inline explicit vec2_t(size_type m, const F& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c F& x)"); }
+      template<class F> inline explicit vec2_t(s_long base, size_type m, const F& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, base) { enum { __check = _fcheck<F>::result }; if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c F& x)"); }
 
       ~vec2_t() __bmdx_exs(__vecm_noargt1) { if (!(this && _t_ind && _ptd && *_ptd->psig == *__psig_i<>::F())) { return; } if (f_perm()) { _ptd2()->_p_tr_notify(this, 0, 0x1); } }
 
@@ -4767,8 +4786,8 @@ namespace _yk_c2
           res = res == 1 ? 1 : 2;
         }
         else { if (!perm) { return 0; } }
-        if (perm) { _ptd = sync ? &yk_c::typer<_v2ta_b<ta_value, vec2_t, true>, _bs>() : &yk_c::typer<_v2ta_b<ta_value, vec2_t, false>, _bs>(); }
-          else { _ptd = &yk_c::typer<_v2ta_a<ta_value>, _bs>(); }
+        if (perm) { _ptd = sync ? &yk_c::__yk_c_typer_def<_v2ta_b<ta_value, vec2_t, true>, _bs>() : &yk_c::__yk_c_typer_def<_v2ta_b<ta_value, vec2_t, false>, _bs>(); }
+          else { _ptd = &yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>(); }
         return res;
       }
 
@@ -4825,7 +4844,7 @@ namespace _yk_c2
         if ((res >= 0 || (res == -1 && (mode & 0x1) == 0)) && p->_t_ind == _t_ind)
         {
           if (mode & 0x2) { const type_descriptor* ptd1 = _ptd; this->vecm::~vecm(); bytes::memmove_t<Q>::F(this, p, _nq); _ptd = ptd1; }
-            else { this->~Q(); bytes::memmove_t<Q>::F(this, p, _nq); _ptd = &yk_c::typer<_v2ta_a<ta_value>, _bs>(); }
+            else { this->~Q(); bytes::memmove_t<Q>::F(this, p, _nq); _ptd = &yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>(); }
           return res >= 0 ? 1 : -1;
         }
         p->vecm::~vecm(); if (mode & 0x1) { return 0; }

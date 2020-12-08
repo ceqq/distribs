@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-09-05
+// rev. 2020-12-07
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -91,6 +91,11 @@
     #define __bmdx_noex throw()
     #define __bmdx_exs(a) throw(a)
   #endif
+  #if __APPLE__ && __MACH__ && __cplusplus >= 201103
+    #define __bmdx_exany noexcept(false)
+  #else
+    #define __bmdx_exany
+  #endif
 #endif
 #ifndef __bmdx_use_cptr_cast
   #if defined(__linux__) && defined(__i386__)
@@ -100,7 +105,6 @@
 #ifndef __bmdx_null_pchar
   #define __bmdx_null_pchar ((char*)1 - 1)
 #endif
-
 
 
 
@@ -118,6 +122,7 @@ namespace bmdx_meta
 
     // 16, 32, 64-bit integers.
   typedef bmdx_meta::find_size_n<2, signed int, signed short, wchar_t>::result s_short;
+  typedef bmdx_meta::find_size_n<2, unsigned int, unsigned short>::result u_short;
   typedef bmdx_meta::find_size_n<4, signed long int, signed int, signed short>::result s_long;
   typedef bmdx_meta::find_size_n<4, unsigned long int, unsigned int, unsigned short>::result u_long;
   typedef bmdx_meta::find_size_n<8, signed long long int, signed long int, signed int>::result s_ll;
@@ -125,6 +130,10 @@ namespace bmdx_meta
 
     // Signed integer, large enough to hold linear pointers difference.
   typedef if_t<(sizeof(void*) > 4), s_ll, s_long>::result t_pdiff;
+
+  template<class T, int __s = 0> struct nonc_t { typedef T t; }; template<class T> struct nonc_t<const T, 0> { typedef T t; }; template<class T> struct nonc_t<const T*, 0> { typedef T* t; }; template<class T> struct nonc_t<const T[], 0> { typedef T* t; }; template<class T, int __s> struct nonc_t<const T[__s], 0> { typedef T* t; }; template<class T, int __s> struct nonc_t<T[__s], 0> { typedef T* t; }; template<class T> struct nonc_t<const T&, 0> { typedef T& t; };
+  template<class T, int __s = 0> struct nonv_t { typedef T t; }; template<class T> struct nonv_t<volatile T, 0> { typedef T t; }; template<class T> struct nonv_t<volatile T*, 0> { typedef T* t; }; template<class T> struct nonv_t<volatile T[], 0> { typedef T* t; }; template<class T, int __s> struct nonv_t<volatile T[__s], 0> { typedef T* t; }; template<class T, int __s> struct nonv_t<T[__s], 0> { typedef T* t; }; template<class T> struct nonv_t<volatile T&, 0> { typedef T& t; };
+  template<class T, int __s = 0> struct noncv_t { typedef typename nonv_t<typename nonc_t<T, __s>::t, __s>::t t; };
 }
 
 #undef _s_long
@@ -178,7 +187,7 @@ namespace bmdx_meta
   #include <direct.h>
   #include <conio.h>
 #endif
-#if (__cplusplus >= 201103L || defined(__ICC) || defined(__INTEL_COMPILER)) && !defined(__BORLANDC__)
+#if (__cplusplus >= 201103L || defined(__ICC) || defined(__INTEL_COMPILER)) && !defined(__BORLANDC__) && !(defined(_MSC_VER) && _MSC_VER >= 1920)
   #define __bmdx_atomic_use_std 1
 #elif defined(_bmdxpl_Wnds) && !defined(__MINGW32_MAJOR_VERSION)
   #define __bmdx_atomic_use_interlocked 1
@@ -193,6 +202,162 @@ namespace bmdx_meta
 #if __bmdx_atomic_use_cc_atomic_h
   #include <sys/atomic.h>
 #endif
+
+
+namespace bmdx
+{
+    // Forward declarations for arrayref_t.
+    //
+  template<class T, bool no_exc_asg> struct carray_t;
+  template<class T, bool no_exc_asg, class _bs> struct cpparray_t;
+  template<class T, bool no_exc_asg> struct carray_r_t;
+    //
+    // This may be specialized to enable arrayref_t construction from arbitrary storage with contiguous elements.
+  template<class Q, class _ = yk_c::__vecm_tu_selector>
+  struct _arrayref_adapter_t { static void* Fp(const Q& x) { if (sizeof(x)) {} return 0; } static _s_ll Fn(const Q& x) { if (sizeof(x)) {} return 0; } };
+
+  //== struct arrayref_t
+
+    // Simplistic weak reference to an array of elements in memory.
+    //    Contains a pointer to the first element, and the number of elements.
+    // The object may be automatically constructed
+    //    from std strings, C strings, BMDX arrays (carray_t, cpparray_t, carray_r_t).
+  template<class T>
+  struct arrayref_t
+  {
+    typedef T t_value;
+    typedef size_t t_size;
+    typedef arrayref_t t_a;
+
+    inline _s_ll n() const __bmdx_noex    { return _n; }
+    inline _s_ll size() const __bmdx_noex    { return _n; }
+    inline _s_ll length() const __bmdx_noex    { return _n; }
+
+    inline const t_value* pd() const __bmdx_noex { return _data; }
+    inline t_value* pd() __bmdx_noex { return _data; }
+
+    inline const t_value& operator[] (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
+    inline t_value& operator[] (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
+
+          // Same as operator[].
+        inline const t_value& opsub (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
+        inline t_value& opsub (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
+
+
+      // True if *this correctly references a) an empty string, b) non-empty string.
+    inline bool is_valid() const __bmdx_noex { return (_data && _n >= 0) || (!_data && _n == 0); }
+
+      // True if *this is not valid, or references an empty string.
+    inline bool is_empty() const __bmdx_noex { return !_data || _n <= 0; }
+
+      // True if *this is valid, and references non-empty string.
+    inline bool is_nonempty() const __bmdx_noex { return _data && _n > 0; }
+
+      // True is *this and x are equal element-by-element.
+    inline bool is_eq(const arrayref_t<t_value>& x __bmdx_noarg) const;
+
+      // True is *this and x point to same memory location, with same number of elements (n()).
+    bool is_eq_pn(const arrayref_t<t_value>& x __bmdx_noarg)        const { return x._data == this->_data && x._n == this->_n; }
+
+      // NOTE operator==, operator!= do comparison by value. See also is_eq, is_eq_pn.
+    inline bool operator==(const arrayref_t<t_value>& x) const { return this->is_eq(x); }
+    inline bool operator!=(const arrayref_t<t_value>& x) const { return !this->is_eq(x); }
+
+
+    arrayref_t() __bmdx_noex { __pad1 = 0; unlink(); }
+    ~arrayref_t() __bmdx_noex { unlink(); }
+
+    bool link(const t_value* px, _s_ll n) __bmdx_noex { _n = n; if (_n < 0 || (_n > 0 && !px)) { _n = 0; _data = 0; return false; } _data = const_cast<T*>(px); return true; }
+    void _link_u(const t_value* px, _s_ll n) __bmdx_noex { _n = n; _data = const_cast<T*>(px); }
+    void unlink() __bmdx_noex { _n = 0;_data = 0; }
+    void clear() __bmdx_noex { unlink(); }
+
+    arrayref_t(const t_value* px) __bmdx_noex { __pad1 = 0; link(px, 0); if (px) { while (*px++ != T()) { ++_n; } } }
+    arrayref_t(const t_value* px, _s_ll n) __bmdx_noex { __pad1 = 0; link(px, n); }
+    arrayref_t(const arrayref_t& x) __bmdx_noex : _n(x._n) { __pad1 = 0; _data = x._data; }
+    template<bool _ne> arrayref_t(const carray_t<t_value, _ne>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<bool _ne, class _bs> arrayref_t(const cpparray_t<t_value, _ne, _bs>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<bool _ne> arrayref_t(const carray_r_t<t_value, _ne>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
+    template<class Tr, class A> arrayref_t(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { __pad1 = 0; *this = x; }
+    template<class Q> explicit arrayref_t(const Q& x __bmdx_noarg) { __pad1 = 0; _data = (T*)_arrayref_adapter_t<T>::Fp(x); _n = _arrayref_adapter_t<T>::Fn(x); }
+
+    arrayref_t& operator=(const arrayref_t& x) __bmdx_noex { _data = x._data; _n = x._n; return *this; }
+    template<bool _ne> arrayref_t& operator=(const carray_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<bool _ne, class _bs> arrayref_t& operator=(const cpparray_t<t_value, _ne, _bs>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<bool _ne> arrayref_t& operator=(const carray_r_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
+    template<class Tr, class A> arrayref_t& operator=(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; } _data = const_cast<T*>(&x[0]); return *this; }
+
+      // Returns:
+      //  a) if *this is not valid, returns -1.
+      //  b) *this is valid, but x is not found, returns n().
+      //  c) 0-based position of x in (*this)[begin .. end), where
+      //    begin = (i0 in [0..n()-1] ? i0 : n()),
+      //    end = (i2 in [0..n()-1] ? i2 : n()).
+    inline _s_ll find1(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1 __bmdx_noarg) const __bmdx_noex;
+
+      // Returns
+      //  a) if *this is not valid, an empty arrayref (pd() == 0, n() == 0).
+      //  b) if *this is valid, but intersection is empty,
+      //    an empty arrayref (pd() == (this->pd() ? this->pd() + begin : 0), n() == 0).
+      //  c) intersection of [begin .. end) with (*this)[0..n()), where
+      //      begin = (i0 >= 0 ? i0 : n()),
+      //      end = (i2 >= 0 ? i2 : n()).
+    inline arrayref_t range_intersect(_s_ll i0 = 0, _s_ll i2 = -1 __bmdx_noarg) const __bmdx_noex;
+
+      // Find s in (*this)[0 .. n()).
+      // Returns:
+      //    a) if s found, 0-based position of the occurrence, relative to this->pd().
+      //    b) -1 if s is not found, or s or *this are not valid.
+    inline _s_ll find_str(const arrayref_t& s __bmdx_noarg) const __bmdx_noex;
+      //
+      // Match whole (*this)[0 .. n()) with the given pattern.
+      //
+      //  Special symbols in pattern:
+      //
+      //    ? - any character
+      //    # - digit
+      //    * - any number of any characters
+      //
+      //    [<spec>] - range or ranges of characters, e.g.:
+      //
+      //      [abcd] - any of a, b, c, d
+      //      [1a-c2x-z3] - any of a..c, x..z, 1, 2, 3
+      //      [!abcd] - any character except for a, b, c, d
+      //      [!1a-c2x-z3] - any character except for a..c, x..z, 1, 2, 3
+      //
+      //      [!] - literal ! (same as ! alone)
+      //      [[] - literal [
+      //      ] (without matching '[' behorehand) - literal ]
+      //      [-abc] - any of -, a, b, c
+      //      [--a] - any character with code between that of '-' .. 'a', and also b, c
+      //      [a-] - any of -, a
+      //      [ab-] - any of -, a, b
+      //      [abc-] - any of -, a, b, c
+      //
+      //      [] - empty range (matching returns false)
+      //      [a--] - empty range, because 'a' > '-' (matching returns false)
+      //      [ab--] - a only
+      //      [abc-] - any of a, b
+      //
+      // Returns:
+      //    a) true if both s and pattern are valid, and s is matching with the pattern.
+      //    b) false otherwise.
+      // NOTE Matching does no dynamic allocations.
+    inline bool string_like(const arrayref_t& pattern __bmdx_noarg) const __bmdx_noex;
+
+      // Set all existing (or [i0..i2) cut to [0..n()) elements to x, using operator=.
+      //  Returns: 1 - all set successfully, 0 - all assignments failed, -1 - part of assignments failed.
+      //    (If operator= always succeeds, the function will also succeed and return 1.)
+    inline int set(const t_value& x __bmdx_noarg) __bmdx_noex;
+    inline int set(const t_value& x, _s_ll i0, _s_ll i2 __bmdx_noarg) __bmdx_noex;
+
+    inline void swap(arrayref_t& src __bmdx_noarg) __bmdx_noex;
+
+  private:
+    _s_ll _n; union { T* _data; _s_ll __pad1; };
+  };
+}
+
 
 namespace bmdx_str
 {
@@ -391,7 +556,7 @@ namespace bmdx_str
     };
 
      template<class T> static inline void swap_bytes(T& a, T& b) { enum { n = sizeof(T)  }; if (!n || &a == &b) { return; } _s_ll c[(n + 7) / 8]; memmove_t<char>::sf_memcpy(&c[0], &a, n); memmove_t<char>::sf_memcpy(&a, &b, n); memmove_t<char>::sf_memcpy(&b, &c[0], n); }
- }
+  }
 
   namespace conv
   {
@@ -399,7 +564,15 @@ namespace bmdx_str
     struct exc_str2f : std::exception { const char* what() const __bmdx_noex { return "bmdx_str::str2f"; } };
     struct exc_conv_ws : std::exception { enum { nmax = 80 }; char msg[nmax ]; const char* what() const __bmdx_noex { return msg; } exc_conv_ws(const char* s1, const char* s2 = 0) { _s_long n = nmax - 1; char* p = msg; if (s1) { while (*s1 && n > 0) { *p++ = *s1++; } } if (s2) { while (*s2 && n > 0) { *p++ = *s2++; } } *p = '\0'; } };
 
-    template<class _ = yk_c::__vecm_tu_selector>
+    static inline bool is_finite(double x) { return __bmdx_isfinite(x); }
+  }
+
+  namespace _bmdx_str
+  {
+    using namespace conv;
+    using yk_c::__vecm_tu_selector;
+
+    template<class _ = __vecm_tu_selector>
     struct _bmdx_str_impl
     {
       static _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) __bmdx_noex;
@@ -411,9 +584,6 @@ namespace bmdx_str
       static std::string _wsbs_utf8(const wchar_t* ps, _s_ll n);
       static std::wstring _bsws_utf8(const char* ps, _s_ll n);
     };
-
-    static inline bool is_finite(double x)
-      { return __bmdx_isfinite(x); }
 
     template<class _>
     _s_long _bmdx_str_impl<_>::str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed) __bmdx_noex
@@ -437,7 +607,7 @@ namespace bmdx_str
     {
       if (!(buf && nchars >= 0)) { return -1; }
       if (nchars == 0) { return 0; }
-      const bool b_fin = is_finite(x);
+      const bool b_fin = __bmdx_isfinite(x);
       if (!b_fin)
       {
         if (!b_nans) { return -1; }
@@ -715,7 +885,504 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       catch (const std::exception& e) { throw exc_conv_ws("_bsws_utf8.1", e.what()); }
       catch (...) { throw exc_conv_ws("_bsws_utf8.2"); }
     }
+
+
+
+    template<class C, class _ = __vecm_tu_selector>
+    struct ptn_normal_t
+    {
+      ptn_normal_t(const C* p_start_, size_t p_size_) : _p_start(p_start_), _p_current(p_start_), _p_size(p_size_) {}
+
+        // number of positions in pattern, same as length of any matching string;
+        //  length of pattern itself may be different from npatpos()
+      size_t npatpos() const { return _p_size; }
+
+        // rewind pattern position to beginning
+      void rewind() { _p_current = _p_start; }
+
+        // select next position in pattern, may be done up to npatpos() times after rewind()
+      void next_pos() { ++_p_current; }
+
+        // find character in [s, s + n_s) that matches the current pattern position
+      const C* find_match1_at_current(const C* s, size_t n_s) const
+      {
+        C c = *_p_current;
+        const C* const s2 = s + n_s;
+        while (s != s2) { if (*s == c) { return s; } ++s; }
+        return 0;
+      }
+
+        // match [s, s + n_s) with pattern; n_s must be <= npatpos();
+        //  this operation does not use or modify the current pattern position
+      bool is_match_prefix(const C* s, size_t n_s) const
+      {
+        for (size_t j = 0; j < n_s; ++j)
+        {
+          if (*s != _p_start[j]) { return false; }
+          ++s;
+        }
+        return true;
+      }
+
+    private:
+      const C *_p_start, *_p_current;
+      size_t _p_size;
+    };
+
+    template<class C, class _ = __vecm_tu_selector>
+    struct ptn_likeness_t
+    {
+      ptn_likeness_t(const C* pat_start_, size_t pat_size_)
+        : _p_start(pat_start_), _p_end(0), _p_current(pat_start_), _m(0), _b_normal_str(true)
+      {
+        if (!pat_start_) { _p_end = 0; return; }
+        _p_end = _p_start + pat_size_;
+        const C* s = pat_start_;
+        while (s < _p_end)
+        {
+          size_t nc_elem = pat_elem_length_u(s, _p_end);
+          if (nc_elem == 0) { break; }
+          if (!is_normal_char_pat0(*s)) { _b_normal_str = false; }
+          ++_m;
+          s += nc_elem;
+        }
+      }
+
+        // number of positions in pattern, same as length of any matching string;
+        //  length of pattern itself may be different from npatpos()
+      inline size_t npatpos() const { return _m; }
+
+        // rewind pattern position to beginning
+      inline void rewind() { _p_current = _p_start; }
+
+        // select next position in pattern, may be done up to npatpos() times after rewind()
+      inline void next_pos() { _p_current += pat_elem_length_u(_p_current, _p_end); }
+
+        // find character in [s, s + n_s) that matches the current pattern position
+      inline const C* find_match1_at_current(const C* s, size_t n_s) const
+      {
+        if (_p_current >= _p_end) { return 0; }
+        const C* const s2 = s + n_s;
+
+        C cpat0 = *_p_current;
+        if (is_normal_char_pat0(cpat0))
+        {
+          while (s != s2) { if (*s == cpat0) { return s; } ++s; }
+          return 0;
+        }
+
+        while (s != s2) { if (is_match1(*s)) { return s; } ++s; }
+        return 0;
+      }
+
+        // match [s, s + n_s) with pattern; n_s must be <= npatpos();
+        //  this operation does not use or modify the current pattern position
+      inline bool is_match_prefix_u(const C* s, size_t n_s) const
+      {
+        const C* _p_store = _p_current;
+        ((ptn_likeness_t*)this)->rewind();
+        bool b_match = true;
+        for (size_t j = 0; j < n_s; ++j)
+        {
+          if (!is_match1(*s)) { b_match = false; break; }
+          ++s;
+          ((ptn_likeness_t*)this)->next_pos();
+        }
+        ((ptn_likeness_t*)this)->_p_current = _p_store;
+        return b_match;
+      }
+      inline bool is_match_prefix(const C* s, size_t n_s) const
+      {
+        if (!(s && _p_start && n_s <= _m)) { return false; }
+        if (this->is_normal_string())
+        {
+          for (size_t i = 0; i < n_s; ++i) { if (s[i] != _p_start[i]) { return false; } }
+          return true;
+        }
+        return is_match_prefix_u(s, n_s);
+      }
+
+      //  ======== ======== ======== ========
+
+        // If is_normal_string() == true, the pattern contains only normal characters,
+        //  so it's correct and more efficient to search with ptn_normal_t.
+      bool is_normal_string() const { return _b_normal_str; }
+
+      ptn_normal_t<C> ptn_normal() const { return ptn_normal_t<C>(_p_start, _p_end - _p_start); }
+
+      static inline bool is_normal_char_pat0(C c)
+      {
+        return c != (C)'?' && c != (C)'#' && c != (C)'[';
+      }
+
+        // find c in [s, s + n) by direct comparison; must have: s != 0
+      static inline const C* find_c_u(C c, const C* s, size_t n)
+      {
+        const C* s2 = s + n;
+        while (s != s2) { if (*s == c) { return s; } ++s; }
+        return 0;
+      }
+
+      //  ======== ======== ======== ========
+
+        // true if c matches with the current pattern position
+      inline bool is_match1(C c) const
+      {
+        C cpat0 = *_p_current;
+
+          //  Original version (slower)
+
+    //    if (cpat0 == (C)'?') { return true; }
+    //    if (cpat0 == (C)'#') { return c >= (C)'0' && c <= (C)'9'; }
+    //    if (cpat0 != (C)'[') { return c == cpat0; }
+
+          //  Optimized version
+
+        if (cpat0 == c)
+        {
+          if (cpat0 == (C)'#') { return false; }
+          if (cpat0 != (C)'[') { return true; }
+        }
+        else
+        {
+          if (cpat0 == (C)'?') { return true; }
+          if (cpat0 == (C)'#') { return c >= (C)'0' && c <= (C)'9'; }
+          if (cpat0 != (C)'[') { return false; }
+        }
+
+        size_t nc_elem = pat_elem_length_u(_p_current, _p_end);
+          if (nc_elem < 3) { return false; }
+
+        nc_elem -= 2;
+        const C* p = _p_current + 1;
+          if (nc_elem == 1) { return c == *p; }
+
+        bool b_negative = *p == (C)'!';
+        bool b_match = false;
+        if (b_negative) { ++p; --nc_elem; }
+        while (nc_elem)
+        {
+          if (nc_elem >= 3 && p[1] == (C)'-')
+          {
+            if (c >= p[0] && c <= p[2]) { b_match = true; break; }
+            nc_elem -= 3;
+            p += 3;
+            continue;
+          }
+          if (c == *p) { b_match = true; break; }
+          --nc_elem;
+          ++p;
+        }
+
+        return b_match != b_negative;
+      }
+
+        // must have: p_elem != 0, end_pat != 0
+      static inline size_t pat_elem_length_u(const C* p_elem, const C* end_pat)
+      {
+        if (*p_elem == (C)'[')
+        {
+          ++p_elem;
+          if (p_elem >= end_pat) { return 0; }
+          const C* end = find_c_u((C)']', p_elem, end_pat - p_elem);
+          if (!end) { return 0; }
+          return end - p_elem + 2;
+        }
+        if (p_elem >= end_pat) { return 0; }
+        return 1;
+      }
+
+    private:
+      const C *_p_start, *_p_end, *_p_current;
+      size_t _m; bool _b_normal_str;
+    };
+
+    struct res_simple
+    {
+      size_t pos;
+      size_t n_results;
+      res_simple() { pos = 0; n_results = 0; }
+      void push_back(size_t pos_) { pos = pos_; ++n_results; }
+      size_t size() const { return n_results; }
+    };
+
+    template<class C, class Ptn, class Res>
+    inline void find_inchworm_t(const C* src, size_t n_s, Ptn& pattern, Res& res, size_t nres_max __bmdx_noarg)
+    {
+      if (!src) { return; }
+      size_t m = pattern.npatpos();
+      if (m == 0) { res.push_back(0); if (res.size() >= nres_max) { return; } }
+
+      const C* const s0 = src;
+      const C* const s2 = s0 + n_s;
+      if (m > 1)
+      {
+        const C* const s_end_search = s2 - m + 1;
+        const C* s = s0;
+        while (s < s_end_search)
+        {
+          const C* p = s;
+          pattern.rewind();
+          for (size_t j = 0; j < m; ++j)
+          {
+            p = pattern.find_match1_at_current(p, s2 - p);
+            if (!p) { return; }
+            ++p;
+            pattern.next_pos();
+          }
+          size_t m2 = p - s;
+          s = p - m;
+          if (m2 == m)
+          {
+            res.push_back(s - s0); if (res.size() >= nres_max) { return; }
+          }
+          else // m2 > m
+          {
+            if (pattern.is_match_prefix(s, m))
+            {
+              res.push_back(s - s0); if (res.size() >= nres_max) { return; }
+            }
+          }
+          ++s;
+        }
+      }
+      else
+      {
+        pattern.rewind();
+        const C* s = s0;
+        while (s < s2)
+        {
+          const C* p = pattern.find_match1_at_current(s, s2 - s);
+          if (!p) { return; }
+          res.push_back(p - s0); if (res.size() >= nres_max) { return; }
+          s = p + 1;
+        }
+      }
+    }
+
+      // Pattern parser for matching (* ? # [abcA-Z] [!abcA-Z]).
+    template<class C, class _ = __vecm_tu_selector>
+    struct parser_likeness_t
+    {
+      enum ESubpatType { stNone, stFixedLength, stVariableLength };
+
+      parser_likeness_t(const C* pat_start_, size_t pat_size_)
+        : _p_start(pat_start_), _p_end(0), _p_current(pat_start_), _curr_type(stNone), _curr_len(0), _curr_min_len(0)
+      {
+        if (!pat_start_) { _p_end = 0; return; }
+        _p_end = _p_start + pat_size_;
+      }
+
+        // ESubpatType
+      unsigned char curr_type() const { return _curr_type; }
+      const C* p_curr() const { return _p_current; }
+      const C* p_start() const { return _p_start; }
+      const C* p_end() const { return _p_end; }
+      size_t curr_size() const { return _curr_len; }
+      size_t curr_size_min() const { return _curr_min_len; }
+      size_t pat_size() const { return _p_end - _p_start; }
+
+      void rewind() { _p_current = _p_start; _curr_type = stNone; _curr_len = 0; _curr_min_len = 0; }
+
+        // Moves to next subpattern, detects its size and type.
+        // true: success, false: no more subpatterns left.
+      bool move_next()
+      {
+        if (!_p_current) { return false; }
+        const C* p0 = _p_current + _curr_len; // the subpattern at p0 is the one which will become "current" if move_next() succeeds
+        const C* p = p0;
+        size_t nc_min = 0;
+
+        if (p >= _p_end) { return false; }
+
+        bool b_search_fixed = _curr_type == stVariableLength;
+        if (_curr_type == stNone)
+        {
+          // Search for "[!?*]", also counting for '?' to find out minimal-matching-length.
+          bool b_vl = false;
+          do {
+            if (p >= _p_end) { break; }
+            C c = *p;
+            if (c == (C)'*') { b_vl = true; }
+              else if (c == (C)'?') { ++nc_min; }
+              else { break; }
+            ++p;
+          } while (1);
+          if (b_vl)
+          {
+            _curr_type = stVariableLength; _p_current = p0; _curr_len = p - p0; _curr_min_len = nc_min;
+            return true;
+          }
+          b_search_fixed = true;
+        }
+
+        if (b_search_fixed)
+        {
+          // Assume the p0 subpattern be for matching with fixed-length strings.
+          //  Reach its end, by searching for char == '*',
+          //  but keep track of nc_min = last pos of "[!*?]" + length of subpattern token at that pos.
+          while (1)
+          {
+            const size_t ncpat = p - p0; // length of subpattern at the current point
+            if (p >= _p_end)
+            {
+              if (ncpat == 0) { return false; }
+              _curr_type = stFixedLength; _p_current = p0; _curr_len = ncpat; _curr_min_len = ncpat;
+              return true;
+            }
+
+            size_t nc_tok = ptn_likeness_t<C>::pat_elem_length_u(p, _p_end);
+            if (nc_tok == 0)
+            {
+              if (ncpat == 0) { return false; }
+              _curr_type = stFixedLength; _p_current = p0; _curr_len = ncpat; _curr_min_len = ncpat;
+              return true;
+            }
+
+            if (nc_tok == 1)
+            {
+              C c = *p;
+
+              if (c == (C)'*')
+              {
+                if (nc_min > 0)
+                {
+                  // Non-empty fixed-length pattern exists at p0, and it is terminated
+                  //  by (ncpat-nc_min) '?' and then '*'.
+                  _curr_type = stFixedLength; _p_current = p0; _curr_len = nc_min; _curr_min_len = nc_min;
+                  return true;
+                }
+                else
+                {
+                  // Continue analyzing the p0 subpattern as variable-length.
+                  //  All ncpat characters, found before this place, are '?',
+                  //  and now they will be counted for minimal-matching-length.
+                  nc_min = ncpat;
+                  p += nc_tok;
+                  break;
+                }
+                // unreachable place
+              }
+
+                // If the current character matches "[!*?]", it's anyway part of fixed pattern,
+                //  and counted in nc_min.
+                // If the current character is '?', by default it is regarded as part of the p0 subpattern,
+                //  but not counted in nc_min, because if the p0 subpattern is teminated with '*',
+                //  all p0's traling '?' will be included into the next subpatten (at the next call to move_next()).
+              if (c != (C)'?') { nc_min = ncpat + nc_tok; }
+            }
+            else { nc_min = ncpat + nc_tok; } // the current token is range ([a-z] or like)
+            p += nc_tok;
+          }
+        }
+
+        // Search for "[!?*]", also counting for '?' to find out minimal-matching-length.
+        bool b_vl = false;
+        do {
+          if (p >= _p_end) { break; }
+          C c = *p;
+          if (c == (C)'*') { b_vl = true; }
+            else if (c == (C)'?') { ++nc_min; }
+            else { break; }
+          ++p;
+        } while (1);
+        if (p > p0)
+        {
+          if (b_vl) { _curr_type = stVariableLength; _p_current = p0; _curr_len = p - p0; _curr_min_len = nc_min; }
+            else { _curr_type = stFixedLength; _p_current = p0; _curr_len = p - p0; _curr_min_len = p - p0; }
+          return true;
+        }
+        return false;
+      }
+
+    private:
+      const C *_p_start, *_p_end, *_p_current;
+      unsigned char _curr_type; size_t _curr_len, _curr_min_len;
+    };
+
+      // The main matching procedure.
+      // Returns:
+      //  true - whole s is like pattern (pat), provided that s and pat are valid objects.
+      //  false - otherwise.
+      // Notes:
+      //  1. Pattern position is modified during search.
+      //  2. If s == 0 or pat == 0, is_matching() returns false.
+      //  3. The function does not allocate any resources or make any costly preparation for search.
+      //  4. Matching complexity is O(n_s * m) in worst case,
+      //    where m is length of the largest fixed-length subpattern (that which doesn't contain asterisk).
+      //    Any leading or trailing any-char elements ('?') around '*' are not included into fixed-length subpatterns.
+    template<class C>
+    inline bool string_like(const C* s, size_t n_s, const C* pat, size_t n_pat __bmdx_noarg)
+    {
+      if (!(s && pat)) { return false; }
+      typedef parser_likeness_t<C> t_parser;
+      t_parser pattern(pat, n_pat);
+      if (pattern.pat_size() == 0) { return n_s == 0; }
+      pattern.rewind();
+      size_t pos = 0;
+      bool b_first = true;
+      bool b_has_variable = false;
+      while (pattern.move_next())
+      {
+        size_t nc_max = n_s - pos;
+        if (pattern.curr_type() == t_parser::stVariableLength)
+        {
+          b_has_variable = true;
+          if (nc_max < pattern.curr_size_min()) { return false; }
+            // Variable-length matching is not greedy, until the last variable-length subpattern.
+          pos += pattern.curr_size_min();
+          nc_max -= pattern.curr_size_min();
+          if (!pattern.move_next())
+          {
+            if (pattern.p_curr() + pattern.curr_size() != pattern.p_end()) { return false; } // invalid fixed pattern (probably the last '[' does not have matching ']')
+            return true;
+          }
+          b_first = false;
+        }
+
+        ptn_likeness_t<C> subpat(pattern.p_curr(), pattern.curr_size());
+        if (b_first)
+        {
+          size_t nc_prefix = nc_max;
+          if (nc_prefix > subpat.npatpos()) { nc_prefix = subpat.npatpos(); }
+            else if (nc_prefix < subpat.npatpos()) { return false; }
+          if (!subpat.is_match_prefix(s + pos, nc_prefix))
+            { return false; }
+          pos += nc_prefix;
+        }
+        else
+        {
+          res_simple res;
+          find_inchworm_t(s + pos, nc_max, subpat, res, 1);
+          if (res.size() == 0) { return false; }
+          pos = pos + res.pos + subpat.npatpos();
+          if (pos < n_s && pattern.p_curr() + pattern.curr_size() >= pattern.p_end()) { pos = n_s - subpat.npatpos(); break; }
+
+        }
+
+        b_first = false;
+      }
+      if (pos >= n_s) { return true; }
+        // pattern.curr_type(): here, this is the type of the last valid subpattern (and this subpattern is currently selected)
+      if (pattern.curr_type() == t_parser::stVariableLength) { return true; }
+      if (pattern.curr_type() == t_parser::stNone) { return false; }
+      if (!b_has_variable) { return false; }
+
+      // for successful result, not-the-first fixed-length subpattern must match with the end of s
+      ptn_likeness_t<C> subpat(pattern.p_curr(), pattern.curr_size());
+      if (n_s - pos < subpat.npatpos()) { return false; }
+      const bool b_match = subpat.is_match_prefix(s + n_s - subpat.npatpos(), subpat.npatpos());
+      return b_match;
+    }
+
   }
+
+
+
+
+
+
+
 
 
 
@@ -733,14 +1400,17 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
 
       // res(): 1: success; 0: only part is added; -1: length() == nmax() already.
     flstr_t(const char* ps, _s_ll n = -1) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(ps, n >= 0 ? n : -1)); }
-    flstr_t(const std::string& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
+    flstr_t(const bmdx::arrayref_t<char>& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.pd(), s.n())); }
+    flstr_t(const std::string& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), _s_ll(s.size()))); }
+
     flstr_t(const wchar_t* ps, _s_ll n = -1) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); }
-    flstr_t(const std::wstring& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(s.c_str(), s.length())); }
+    flstr_t(const bmdx::arrayref_t<wchar_t>& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(s.pd(), s.n())); }
+    flstr_t(const std::wstring& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_wcs(s.c_str(), _s_ll(s.size()))); }
 
     template<_s_long nmax2> flstr_t(const flstr_t<nmax2>& s) __bmdx_noex { _nr = 0; _x[0] = 0; _set_res_u(_append_s(s.c_str(), s.length())); }
 
-    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) __bmdx_noex { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
-    flstr_t(_s_ll x, bool b_signed) __bmdx_noex { _nr = 0; _s_long n = conv::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(double x, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) __bmdx_noex { _nr = 0; _s_long n = _bmdx_str::_bmdx_str_impl<>::str_from_double(x, _x, nmax(), ndmmax, nfracmax, b_nans); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 ? 1 : (n >= 0 ? 0 : -1)); }
+    flstr_t(_s_ll x, bool b_signed) __bmdx_noex { _nr = 0; _s_long n = _bmdx_str::_bmdx_str_impl<>::str_from_s_ll(x, _x, nmax(), b_signed); _set_end_u(n >= 0 ? n : 0); _set_res_u(n >= 2 || (n == 1 && _x[0] != '-' && _x[0] != '+') ? 1 : (n >= 0 ? 0 : -1)); }
 
     flstr_t(signed short x) __bmdx_noex { new (this) flstr_t(_s_ll(x), true); }
     flstr_t(signed int x) __bmdx_noex { new (this) flstr_t(_s_ll(x), true); }
@@ -767,11 +1437,15 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       // If n >= 0, chars [pos0..min(pos0+n, length())) are returned.
       //  If n < 0, chars [pos0..length()) are returned.
     t_string substr(_s_long pos0, _s_long n) const __bmdx_noex { _s_long n0 = length(); if (n <= 0) { if (n == 0) { return t_string(); } n = n0; } if (n > n0) { n = n0; } if (pos0 < 0) { pos0 = 0; } else if (pos0 > n0) { pos0 = n0; } if (pos0 + n > n0) { n = n0 - pos0; } return t_string(_x + pos0, n); }
-      // Starts searching from pos0.
+
+      // Starts searching c or any of pcc, from pos0.
       //  (find_any) n_pcc >= 0 specifies num of chars. in pcc.
-      // Returns [0..length()), or -1 if not found.
-    _s_long find(char c, _s_long pos0 = 0) const __bmdx_noex { _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } while (pos0 < pos2) { if (_x[pos0] == c) { return pos0; } ++pos0; } return -1; }
-    _s_long find_any(const char* pcc, _s_long pos0 = 0, _s_long n_pcc = -1) const __bmdx_noex { if (!pcc) { return -1; } _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } if (pos0 >= pos2) { return -1; } if (n_pcc < 0) { n_pcc = 0; const char* p = pcc; while (*p++) { ++n_pcc; } } while (pos0 < pos2) { char c = _x[pos0]; for (_s_long i = 0; i < n_pcc; ++i) { if (c == pcc[i]) { return pos0; } } ++pos0; } return -1; }
+      // Returns
+      //  a) position of c in *this: [0..n()), or
+      //  b) n() if not found.
+      //  NOTE n() is always >= 0, even if the object is broken.
+    _s_long find1(char c, _s_long pos0 = 0) const __bmdx_noex { _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } while (pos0 < pos2) { if (_x[pos0] == c) { return pos0; } ++pos0; } return n(); }
+    _s_long find1_any(const char* pcc, _s_long pos0 = 0, _s_long n_pcc = -1) const __bmdx_noex { if (!pcc) { return n(); } _s_long pos2 = length(); if (pos0 < 0) { pos0 = 0; } if (pos0 >= pos2) { return n(); } if (n_pcc < 0) { n_pcc = 0; const char* p = pcc; while (*p++) { ++n_pcc; } } while (pos0 < pos2) { char c = _x[pos0]; for (_s_long i = 0; i < n_pcc; ++i) { if (c == pcc[i]) { return pos0; } } ++pos0; } return n(); }
 
     #ifdef _MSC_VER
       inline operator std::string() const { return std::string(&_x[0], length()); }
@@ -780,6 +1454,8 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       inline operator std::string() const __bmdx_exs(std::exception) { return std::string(&_x[0], length()); }
       inline operator std::wstring() const __bmdx_exs(std::exception) { return wstr(); }
     #endif
+    inline operator bmdx::arrayref_t<char>() const __bmdx_noex { return bmdx::arrayref_t<char>(&_x[0], length()); }
+
     inline std::string str(__bmdx_noarg1) const { return std::string(&_x[0], length()); }
     std::wstring wstr(__bmdx_noarg1) const // UTF-8 --> UTF-16
     {
@@ -805,6 +1481,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       }
       return s;
     }
+    bmdx::arrayref_t<char> arrayref() const __bmdx_noex { return bmdx::arrayref_t<char>(&_x[0], length()); }
 
       // Modify the last result (res()) value. Before setting, x is limited by res_min..res_max.
     void set_res(_s_long x) __bmdx_noex { if (x < res_min) { x = res_min; } else if (x > res_max) { x = res_max; } _set_res_u(x); }
@@ -826,9 +1503,9 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     bool operator > (const t_string& s) const __bmdx_noex    { return !operator<(s); }
     bool operator >= (const t_string& s) const __bmdx_noex    { return !operator<=(s); }
 
-    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const __bmdx_noex    { const _s_long n = length(); if (n != s.length()) { return false; } for (_s_long i = 0; i < n; ++i) { if (_x[i] != s._x[i]) { return false; } } return true; }
-    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
-    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s._x, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    template<_s_long n2> bool operator == (const flstr_t<n2>& s) const __bmdx_noex    { const _s_long n = length(); if (n != s.length()) { return false; } const char* q = s.pd(); for (_s_long i = 0; i < n; ++i) { if (_x[i] != q[i]) { return false; } } return true; }
+    template<_s_long n2> bool operator < (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } const char* q = s.pd(); int res = std::memcmp(_x, q, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } const char* q = s.pd(); int res = std::memcmp(_x, q, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
     template<_s_long n2> bool operator != (const flstr_t<n2>& s) const __bmdx_noex    { return !operator==(s); }
     template<_s_long n2> bool operator > (const flstr_t<n2>& s) const __bmdx_noex    { return !operator<(s); }
     template<_s_long n2> bool operator >= (const flstr_t<n2>& s) const __bmdx_noex    { return !operator<=(s); }
@@ -868,18 +1545,24 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       // res(): 1: success; 0: only part is added; -1: length() == nmax() already; -2: ps == 0.
     t_string& append (const char* ps, _s_ll n) __bmdx_noex { _set_res_u(_append_s(ps, n >= 0 ? n : -1)); return *this; }
     t_string& operator += (const char* ps) __bmdx_noex { _set_res_u(_append_s(ps, -1)); return *this; }
-    t_string& operator += (const std::string& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
     t_string& operator = (const char* ps) __bmdx_noex { resize(0); _set_res_u(_append_s(ps, -1)); return *this; }
-    t_string& operator = (const std::string& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
     t_string operator + (const char* ps) const __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
+    t_string& operator += (const bmdx::arrayref_t<char>& s) __bmdx_noex { _set_res_u(_append_s(s.pd(), s.n())); return *this; }
+    t_string& operator = (const bmdx::arrayref_t<char>& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.pd(), s.n())); return *this; }
+    t_string operator + (const bmdx::arrayref_t<char>& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
+    t_string& operator += (const std::string& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), _s_ll(s.size()))); return *this; }
+    t_string& operator = (const std::string& s) __bmdx_noex { resize(0); _set_res_u(_append_s(s.c_str(), _s_ll(s.size()))); return *this; }
     t_string operator + (const std::string& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
 
     t_string& append (const wchar_t* ps, _s_ll n) __bmdx_noex { _set_res_u(_append_wcs(ps, n >= 0 ? n : -1)); return *this; }
-    t_string& operator += (const wchar_t* ps) __bmdx_noex {  _set_res_u(_append_wcs(ps, -1)); return *this; }
-    t_string& operator += (const std::wstring& s) __bmdx_noex { _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
+    t_string& operator += (const wchar_t* ps) __bmdx_noex { _set_res_u(_append_wcs(ps, -1)); return *this; }
     t_string& operator = (const wchar_t* ps) __bmdx_noex { resize(0); _set_res_u(_append_wcs(ps, -1)); return *this; }
-    t_string& operator = (const std::wstring& s) __bmdx_noex { resize(0); _set_res_u(_append_wcs(s.c_str(), s.length())); return *this; }
     t_string operator + (const wchar_t* ps) const __bmdx_noex { t_string s2(*this); s2 += ps; return s2; }
+    t_string& operator += (const bmdx::arrayref_t<wchar_t>& s) __bmdx_noex { _set_res_u(_append_wcs(s.pd(), s.n())); return *this; }
+    t_string& operator = (const bmdx::arrayref_t<wchar_t>& s) __bmdx_noex { resize(0); _set_res_u(_append_wcs(s.pd(), s.n())); return *this; }
+    t_string operator + (const bmdx::arrayref_t<wchar_t>& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
+    t_string& operator += (const std::wstring& s) __bmdx_noex { _set_res_u(_append_wcs(s.c_str(), _s_ll(s.size()))); return *this; }
+    t_string& operator = (const std::wstring& s) __bmdx_noex { resize(0); _set_res_u(_append_wcs(s.c_str(), _s_ll(s.size()))); return *this; }
     t_string operator + (const std::wstring& s) const __bmdx_noex { t_string s2(*this); s2 += s; return s2; }
 
     template<_s_long nmax2> t_string& operator += (const flstr_t<nmax2>& s) __bmdx_noex { _set_res_u(_append_s(s.c_str(), s.length())); return *this; }
@@ -940,11 +1623,8 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     }
   };
 
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const char* ps, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const std::string& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
-
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const wchar_t* ps, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(ps); s3 += s2; return s3; }
-  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const std::wstring& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
+  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
+  template<_s_long nmax_> inline flstr_t<nmax_> operator + (const bmdx::arrayref_t<wchar_t>& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
 
   template<_s_long nmax_> inline std::ostream& operator << (std::ostream& stm, const flstr_t<nmax_>& s2) __bmdx_noex { stm << s2.str(); return stm; }
 
@@ -969,7 +1649,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       //        c) x < 0: '-'.
       //    0 - nchars == 0.
       //    -1 - invalid input parameter (buf == 0, nchars < 0).
-    static inline _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed = true) __bmdx_noex { return _bmdx_str_impl<>::str_from_s_ll(x, buf, nchars, b_signed); }
+    static inline _s_long str_from_s_ll(_s_ll x, char* buf, _s_long nchars, bool b_signed = true) __bmdx_noex { return _bmdx_str::_bmdx_str_impl<>::str_from_s_ll(x, buf, nchars, b_signed); }
 
       // ndmmax (max. num. of digits in mantissa) is limited to 1..14.
       //    Max number of output characters == limited ndmmax + 7 (0..1 sign, 1 point, 0..1 "e", 0..4 order).
@@ -982,32 +1662,32 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       //    1 - string representation is longer than nchars, so only sign is extracted: buf[0] == '+', '0', or '-'.
       //    0 - nchars == 0.
       //    -1 - invalid input parameter (buf == 0, nchars < 0, x is not finite with b_nans == false).
-    static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) __bmdx_noex { return _bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax, b_nans); }
+    static inline _s_long str_from_double(double x, char* buf, _s_long nchars, _s_long ndmmax = 6, _s_long nfracmax = 12, bool b_nans = true) __bmdx_noex { return _bmdx_str::_bmdx_str_impl<>::str_from_double(x, buf, nchars, ndmmax, nfracmax, b_nans); }
 
       // Converts string to number. On failure, returns dflt, or (if no_exc == false) generates exc_str2i.
       //  For char* and wchar_t* versions, xlen == -1 means that x is 0-terminated.
-    static inline _s_ll str2i(const std::wstring& x, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str_impl<>::str2i(x.c_str(), _s_ll(x.length()), dflt, no_exc); }
-    static inline _s_ll strn2i(const wchar_t* x, _s_ll xlen, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str_impl<>::str2i(x, xlen, dflt, no_exc); }
-    static inline _s_ll str2i(const std::string& x, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str_impl<>::str2i(x.c_str(), _s_ll(x.length()), dflt, no_exc); }
-    static inline _s_ll strn2i(const char* x, _s_ll xlen, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str_impl<>::str2i(x, xlen, dflt, no_exc); }
+    static inline _s_ll str2i(const bmdx::arrayref_t<wchar_t>& x, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str::_bmdx_str_impl<>::str2i(x.pd(), x.n(), dflt, no_exc); }
+    static inline _s_ll str2i(const bmdx::arrayref_t<char>& x, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str::_bmdx_str_impl<>::str2i(x.pd(), x.n(), dflt, no_exc); }
+    static inline _s_ll strn2i(const wchar_t* x, _s_ll xlen, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str::_bmdx_str_impl<>::str2i(x, xlen, dflt, no_exc); }
+    static inline _s_ll strn2i(const char* x, _s_ll xlen, _s_ll dflt = 0, bool no_exc = true) { return _bmdx_str::_bmdx_str_impl<>::str2i(x, xlen, dflt, no_exc); }
 
       // Converts string to number. On failure, returns dflt, or (if no_exc == false) generates exc_str2f.
       //  For char* and wchar_t* versions, xlen == -1 means that x is 0-terminated.
       //  b_nans true accepts nan, +inf, -inf; by default they are not recognized.
-    static inline double str2f(const std::wstring& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc, b_nans); }
-    static inline double strn2f(const wchar_t* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
-    static inline double str2f(const std::string& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x.c_str(), _s_ll(x.length()), dflt, no_exc, b_nans); }
-    static inline double strn2f(const char* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
+    static inline double str2f(const bmdx::arrayref_t<wchar_t>& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str::_bmdx_str_impl<>::str2f(x.pd(), x.n(), dflt, no_exc, b_nans); }
+    static inline double str2f(const bmdx::arrayref_t<char>& x, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str::_bmdx_str_impl<>::str2f(x.pd(), x.n(), dflt, no_exc, b_nans); }
+    static inline double strn2f(const wchar_t* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str::_bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
+    static inline double strn2f(const char* x, _s_ll xlen, double dflt = 0., bool no_exc = true, bool b_nans = true) { return _bmdx_str::_bmdx_str_impl<>::str2f(x, xlen, dflt, no_exc, b_nans); }
 
       // Converts UTF-16 string to UTF-8 string.
       //  n < 0: autodetect x length based on null char.
-    static inline std::string wsbs_utf8(const std::wstring& x) { return bmdx_str::conv::_bmdx_str_impl<>::_wsbs_utf8(x.c_str(), x.length()); }
-    static inline std::string wsbs_utf8(const wchar_t* x, _s_ll n = -1 ) { return bmdx_str::conv::_bmdx_str_impl<>::_wsbs_utf8(x, n); }
+    static inline std::string wsbs_utf8(const bmdx::arrayref_t<wchar_t>& x) { return bmdx_str::_bmdx_str::_bmdx_str_impl<>::_wsbs_utf8(x.pd(), x.n()); }
+    static inline std::string wsbs_utf8(const wchar_t* x, _s_ll n) { return bmdx_str::_bmdx_str::_bmdx_str_impl<>::_wsbs_utf8(x, n); }
 
       // Converts UTF-8 string to UTF-16 string.
       //  n < 0: autodetect x length based on null char.
-    static inline std::wstring bsws_utf8(const std::string& x) { return bmdx_str::conv::_bmdx_str_impl<>::_bsws_utf8(x.c_str(), x.length()); }
-    static inline std::wstring bsws_utf8(const char* x, _s_ll n = -1) { return bmdx_str::conv::_bmdx_str_impl<>::_bsws_utf8(x, n); }
+    static inline std::wstring bsws_utf8(const bmdx::arrayref_t<char>& x) { return bmdx_str::_bmdx_str::_bmdx_str_impl<>::_bsws_utf8(x.pd(), x.n()); }
+    static inline std::wstring bsws_utf8(const char* x, _s_ll n) { return bmdx_str::_bmdx_str::_bmdx_str_impl<>::_bsws_utf8(x, n); }
   } }
 }
 
@@ -1065,15 +1745,11 @@ namespace bmdx
     // Internal exceptions, do not reach the client.
   struct __exc_carr_asg : std::exception { const char* what() const __bmdx_noex { return "_carr_asgx_t::try_asg"; } };
   struct __exc_carr_cc : std::exception { const char* what() const __bmdx_noex { return "_carr_asgx_t:try_cc"; } };
-  template<class T, bool no_exc_asg> struct carray_t;
-  template<class T, bool no_exc_asg, class _bs> struct cpparray_t;
-  template<class T, bool no_exc_asg> struct carray_r_t;
-  template<class T> struct arrayref_t;
   template<class A, class Ax, class _ = __vecm_tu_selector> struct _carr_aux1_t { static inline void try_asg(A& dest, const A& src) { (Ax&)dest = (const Ax&)src; if (dest.n() != src.n()) { throw __exc_carr_asg(); } } static inline void try_cc(void* pdest, const A& src) { new (pdest) Ax((const Ax&)src); if (((A*)pdest)->n() != src.n()) { throw __exc_carr_cc(); } } };
-    // _carr_asgx_t provides assignment and placement copy construction (try_asg, try_cc)
+    // This provides assignment and placement copy construction (try_asg, try_cc)
     //    with forced exceptions on error for all carray_t and cpparray_t variants.
     //    (Easier error processing for deeply nested structures.)
-  template<class A, class Aux = bmdx_meta::nothing, class _ = __vecm_tu_selector> struct _carr_asgx_t { enum { is_carr_any = 0, is_cpparray = 0 }; typedef A t_ax; static inline void try_asg(A& dest, const A& src) { dest = src; } static inline void try_cc(void* pdest, const A& src) { new (pdest) A(src); } };
+  template<class A, class Aux = bmdx_meta::nothing, class _ = yk_c::__vecm_tu_selector> struct _carr_asgx_t { enum { is_carr_any = 0, is_cpparray = 0 }; typedef A t_ax; static inline void try_asg(A& dest, const A& src) { dest = src; } static inline void try_cc(void* pdest, const A& src) { new (pdest) A(src); } };
   template<class T, class _> struct _carr_asgx_t<carray_t<T, true>, bmdx_meta::nothing, _> : _carr_aux1_t<carray_t<T, true>, carray_t<T, false>, _> { enum { is_carr_any = 1, is_cpparray = 0 }; typedef carray_t<T, false> t_ax; static inline void check_exc_alloc() { } };
   template<class T, class _, class _bs> struct _carr_asgx_t<cpparray_t<T, true, _bs>, bmdx_meta::nothing, _> : _carr_aux1_t<cpparray_t<T, true, _bs>, cpparray_t<T, false, _bs>, _> { enum { is_carr_any = 1, is_cpparray = 1 }; typedef cpparray_t<T, false, _bs> t_ax; static inline void check_exc_alloc() { } };
   template<class T, class _> struct _carr_asgx_t<carray_t<T, false>, bmdx_meta::nothing, _> : _carr_asgx_t<carray_t<T, false>, int, _> { enum { is_carr_any = 1, is_cpparray = 0 }; static inline void check_exc_alloc() { throw exc_carr_alloc_asg(); } };
@@ -1212,6 +1888,8 @@ namespace bmdx
       //  May be used carefully to reserve/unreserve place.
     void _set_n_u(_s_ll n) { _n = n >= 0 ? n : 0; }
 
+    arrayref_t<T> arrayref() const __bmdx_noex { return arrayref_t<T>(this->_data, this->_n); }
+
   protected:
     _s_ll _n; T* _data; void* _psf1; union { void** _pff; _s_ll __pad1; };
     ~_carray_base_t() __bmdx_noex { if (_data) { _free(_data); _data = 0; } _n = 0; }
@@ -1283,6 +1961,8 @@ namespace bmdx
     template<bool _ne, class _bs> inline bool operator!=(const cpparray_t<t_value, _ne, _bs>& x) const { return !this->is_eq(x); }
     template<bool _ne> inline bool operator==(const carray_r_t<t_value, _ne>& x) const { return this->is_eq(x._base()); }
     template<bool _ne> inline bool operator!=(const carray_r_t<t_value, _ne>& x) const { return !this->is_eq(x._base()); }
+
+    std::basic_string<t_value> str() const { if (this->_data) { return std::basic_string<T>(this->_data, _t_size(bmdx_minmax::myllmax(0, this->_n))); } return std::basic_string<T>(); }
   };
 
 
@@ -1345,6 +2025,86 @@ namespace bmdx
 
 
 
+  //== struct arrayref_t impl. part.
+
+  template<class T>
+  bool arrayref_t<T>::is_eq(const arrayref_t<t_value>& x __bmdx_noargt)            const
+  {
+    if (this->_n != x._n) { return false; }
+    if (this->_data == x._data) { return true; }
+    if ((!this->_data || !x._data) && this->_n > 0) { return false; }
+    for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x._data[i])) { return false; } }
+    return true;
+  }
+
+  template<class T>
+  _s_ll arrayref_t<T>::find1(const t_value& x, _s_ll i0, _s_ll i2  __bmdx_noargt) const __bmdx_noex
+  {
+    if (!is_valid()) { return -1; }
+    _yk_reg _s_ll ibegin = i0 >= 0 && i0 < _n ? i0 : _n;
+    _yk_reg _s_ll iend = i2 >= 0 && i2 < _n ? i2 : _n;
+    while (ibegin < iend) { if (_data[ibegin] == x) { return ibegin; } ++ibegin; }
+    return _n;
+  }
+
+  template<class T>
+  arrayref_t<T> arrayref_t<T>::range_intersect(_s_ll i0, _s_ll i2  __bmdx_noargt) const __bmdx_noex
+  {
+    if (!this->is_valid()) { return arrayref_t(); }
+    _s_ll ibegin = i0 >= 0 ? i0 : _n;
+    _s_ll iend = i2 >= 0 ? i2 : _n;
+    if (ibegin > _n) { ibegin = _n; }
+    if (iend > _n) { iend = _n; }
+    if (iend <= ibegin) { return arrayref_t(_data ? _data + ibegin : 0, 0); }
+    return arrayref_t(_data + ibegin, iend - ibegin);
+  }
+
+  template<class T>
+  _s_ll arrayref_t<T>::find_str(const arrayref_t& s __bmdx_noargt) const __bmdx_noex
+  {
+    if (!(this->is_valid() && s.is_valid())) { return -1; }
+    if (s._data == 0) { return 0; }
+    if (this->_data == 0) { return s._n > 0 ? -1 : 0; }
+    bmdx_str::_bmdx_str::ptn_normal_t<T> pat(s._data, size_t(s._n));
+    bmdx_str::_bmdx_str::res_simple res;
+    bmdx_str::_bmdx_str::find_inchworm_t(this->_data, size_t(this->_n), pat, res, 1);
+    if (res.n_results < 1) { return -1; }
+    return _s_ll(res.pos);
+  }
+
+  template<class T>
+  bool arrayref_t<T>::string_like(const arrayref_t<T>& pat __bmdx_noargt) const __bmdx_noex
+  {
+    if (!(this->is_valid() && pat.is_valid())) { return false; }
+    T z = T();
+    return bmdx_str::_bmdx_str::string_like(this->_data ? this->_data : &z, size_t(this->_n), pat._data ? pat._data : &z, size_t(pat._n));
+  }
+
+  template<class T> int arrayref_t<T>::set(const t_value& x __bmdx_noargt) __bmdx_noex
+  {
+    t_size i0 = 0; t_size nf(0); while (i0 < t_size(_n)) { try { for (; i0 < t_size(_n); ++i0) { _carr_asgx_t<T>::try_asg(_data[i0], x); } } catch (...) { ++i0; ++nf; } }
+    return nf ? (nf == t_size(_n) ? 0 : -1) : 1;
+  }
+  template<class T> int arrayref_t<T>::set(const t_value& x, _s_ll i0, _s_ll i2 __bmdx_noargt) __bmdx_noex
+  {
+    if (i0 < 0) { i0 = 0; } if (i2 > _n) { i2 = _n; }
+    t_size _i0 = t_size(i0); const t_size _i2 = t_size(i2); if (!(_s_ll(_i0) == i0 && _s_ll(_i2) == i2)) { return 0; }
+    if (_i0 >= _i2) { return 1; }
+    const t_size nset = _i2 - _i0;
+    t_size nf(0); while (_i0 < _i2) { try { for (; _i0 < _i2; ++_i0) { _carr_asgx_t<T>::try_asg(_data[_i0], x); } } catch (...) { ++_i0; ++nf; } }
+    return nf ? (nf == nset ? 0 : -1) : 1;
+  }
+
+  template<class T> void arrayref_t<T>::swap(arrayref_t& src __bmdx_noargt) __bmdx_noex
+  {
+    if (this == &src) { return; }
+    _s_ll x[sizeof(t_a) / 8 + 1];
+    bmdx_str::words::memmove_t<t_value>::sf_memcpy(x, &src, sizeof(t_a));
+    bmdx_str::words::memmove_t<t_value>::sf_memcpy(&src, this, sizeof(t_a));
+    bmdx_str::words::memmove_t<t_value>::sf_memcpy(this, x, sizeof(t_a));
+  }
+
+
   //== struct carray_r_t
 
     // Simple string class.
@@ -1395,6 +2155,7 @@ namespace bmdx
     bool operator=(const carray_r_t& x) { if (this == &x) { return true; } if (!this->resize(x.n(), false, true)) { _carr_asgx_t<t_a0>::check_exc_alloc(); return false; } if (x.n()) { bmdx_str::words::memmove_t<T>::sf_memcpy(this->_data, x._data, _t_size(x.n()) * sizeof(T)); } return true; }
 
     std::basic_string<t_value> str() const { if (this->_data) { return std::basic_string<T>(this->_data, _t_size(bmdx_minmax::myllmax(0, this->_n))); } return std::basic_string<T>(); }
+    arrayref_t<T> arrayref() const __bmdx_noex { return arrayref_t<T>(this->_data, this->_n); }
 
       // Resize to n2.
       //  b_copy (acts only if the array is reallocated):
@@ -1555,123 +2316,8 @@ namespace bmdx
 
 
 
-    // This may be specialized to enable arrayref_t construction from arbitrary storage with contiguous elements.
-  template<class Q, class _ = __vecm_tu_selector>
-  struct _arrayref_adapter_t
-    { static void* Fp(const Q& x) { if (sizeof(x)) {} return 0; } static _s_ll Fn(const Q& x) { if (sizeof(x)) {} return 0; } };
 
 
-
-
-  //== struct arrayref_t
-
-    // Simplistic weak reference to an array of elements in memory.
-    //    Contains a pointer to the first element, and the number of elements.
-    // The object may be automatically constructed
-    //    from std strings, C strings, BMDX arrays (carray_t, cpparray_t, carray_r_t).
-  template<class T>
-  struct arrayref_t
-  {
-    typedef T t_value;
-    typedef size_t t_size;
-    typedef arrayref_t t_a;
-
-    inline _s_ll n() const __bmdx_noex    { return _n; }
-    inline _s_ll size() const __bmdx_noex    { return _n; }
-    inline _s_ll length() const __bmdx_noex    { return _n; }
-
-    inline const t_value* pd() const __bmdx_noex { return _data; }
-    inline t_value* pd() __bmdx_noex { return _data; }
-
-    inline const t_value& operator[] (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
-    inline t_value& operator[] (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
-
-          // Same as operator[].
-        inline const t_value& opsub (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
-        inline t_value& opsub (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
-
-
-      // True if *this correctly references a) an empty string, b) non-empty string.
-    inline bool is_valid() const __bmdx_noex { return (_data && _n >= 0) || (!_data && _n == 0); }
-
-      // True if *this is not valid, or references an empty string.
-    inline bool is_empty() const __bmdx_noex { return !_data || _n <= 0; }
-
-      // True if *this is valid, and references non-empty string.
-    inline bool is_nonempty() const __bmdx_noex { return _data && _n > 0; }
-
-      // True is *this and x are equal element-by-element.
-    bool is_eq(const arrayref_t<t_value>& x)            const { if (this->_n != x._n) { return false; } if (this->_data == x._data) { return true; } for (_s_ll i = 0; i < this->_n; ++i) { if (!(this->_data[i] == x[i])) { return false; } } return true; }
-
-      // True is *this and x point to same memory location, with same number of elements (n()).
-    bool is_eq_pn(const arrayref_t<t_value>& x)        const { return x.pd() == this->pd() && x.n() == this->n(); }
-
-      // NOTE operator==, operator!= do comparison by value. See also is_eq, is_eq_pn.
-    inline bool operator==(const arrayref_t<t_value>& x) const { return this->is_eq(x); }
-    inline bool operator!=(const arrayref_t<t_value>& x) const { return !this->is_eq(x); }
-
-
-    arrayref_t() __bmdx_noex { __pad1 = 0; unlink(); }
-    ~arrayref_t() __bmdx_noex { unlink(); }
-
-    bool link(const t_value* px, _s_ll n) __bmdx_noex { _n = n; if (_n < 0 || (_n > 0 && !px)) { _n = 0; _data = 0; return false; } _data = const_cast<T*>(px); return true; }
-    void _link_u(const t_value* px, _s_ll n) __bmdx_noex { _n = n; _data = const_cast<T*>(px); }
-    void unlink() __bmdx_noex { _n = 0;_data = 0; }
-    void clear() __bmdx_noex { unlink(); }
-
-    arrayref_t(const t_value* px) __bmdx_noex { __pad1 = 0; link(px, 0); if (px) { while (*px++ != T()) { ++_n; } } }
-    arrayref_t(const t_value* px, _s_ll n) __bmdx_noex { __pad1 = 0; link(px, n); }
-    arrayref_t(const arrayref_t& x) __bmdx_noex : _n(x._n) { __pad1 = 0; _data = x._data; }
-    template<bool _ne> arrayref_t(const carray_t<t_value, _ne>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<bool _ne, class _bs> arrayref_t(const cpparray_t<t_value, _ne, _bs>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<bool _ne> arrayref_t(const carray_r_t<t_value, _ne>& x) __bmdx_noex : _n(x.n()) { __pad1 = 0; _data = const_cast<T*>(x.pd()); }
-    template<class Tr, class A> arrayref_t(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { __pad1 = 0; *this = x; }
-    template<class Q> explicit arrayref_t(const Q& x __bmdx_noarg) { __pad1 = 0; _data = (T*)_arrayref_adapter_t<T>::Fp(x); _n = _arrayref_adapter_t<T>::Fn(x); }
-
-    arrayref_t& operator=(const arrayref_t& x) __bmdx_noex { _data = x._data; _n = x._n; return *this; }
-    template<bool _ne> arrayref_t& operator=(const carray_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<bool _ne, class _bs> arrayref_t& operator=(const cpparray_t<t_value, _ne, _bs>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<bool _ne> arrayref_t& operator=(const carray_r_t<t_value, _ne>& x) __bmdx_noex { _data = const_cast<T*>(x.pd()); _n = x.n(); return *this; }
-    template<class Tr, class A> arrayref_t& operator=(const std::basic_string<t_value, Tr, A>& x) __bmdx_noex { _n = _s_ll(x.size()); if (_n <= 0) { _n = 0; } _data = const_cast<T*>(&x[0]); return *this; }
-
-      // Returns:
-      //  a) 0-based position of x in *this,
-      //    with search starting from (i0 in [0..n()-1] ? i0 : n())
-      //    and until, not including, (i2 in [0..n()-1] ? i2 : n()).
-      //  b) If not found or *this is not valid, returns n().
-    _s_ll find1(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1) { if (!is_valid()) { return _n; } _yk_reg _s_ll i = i0 >= 0 && i2 < _n ? i0 : _n; _yk_reg _s_ll iend = i2 >= 0 && i2 < _n ? i2 : _n; while (i < iend) { if (_data[i] == x) { return i; } ++i; } return _n; }
-
-      // Returns:
-      //  a) substring in range [j0..j2), where
-      //    j0 = i0 in [0..n()-1] ? i0 : n(),
-      //    j2 = i2 in [0..n()-1] ? i2 : n().
-      //    If the range is empty, the returned substring's pd() will point to this->pd() + j0.
-      // b) If *this is not valid, returns default (empty) arrayref_t.
-    arrayref_t range(_s_ll i0, _s_ll i2 = -1) const { if (!is_valid()) { return arrayref_t(); } if (i0 < 0) { i0 = _n; } else if (i0 > _n) { i0 = _n; } if (i2 < 0) { i2 = _n; } else if (i2 > _n) { i2 = _n; } if (i2 < i0) { i2 = i0; } return arrayref_t(_data + i0, i2 - i0); }
-
-      // Set all existing (or [i0..i2) cut to [0..n()) elements to x, using operator=.
-      //  Returns: 1 - all set successfully, 0 - all assignments failed, -1 - part of assignments failed.
-      //    (If operator= always succeeds, the function will also succeed and return 1.)
-    inline int set(const t_value& x) __bmdx_noex
-    {
-      t_size i0 = 0; t_size nf(0); while (i0 < t_size(_n)) { try { for (; i0 < t_size(_n); ++i0) { _carr_asgx_t<T>::try_asg(_data[i0], x); } } catch (...) { ++i0; ++nf; } }
-      return nf ? (nf == t_size(_n) ? 0 : -1) : 1;
-    }
-    inline int set(const t_value& x, _s_ll i0, _s_ll i2) __bmdx_noex
-    {
-      if (i0 < 0) { i0 = 0; } if (i2 > _n) { i2 = _n; }
-      t_size _i0 = t_size(i0); const t_size _i2 = t_size(i2); if (!(_s_ll(_i0) == i0 && _s_ll(_i2) == i2)) { return 0; }
-      if (_i0 >= _i2) { return 1; }
-      const t_size nset = _i2 - _i0;
-      t_size nf(0); while (_i0 < _i2) { try { for (; _i0 < _i2; ++_i0) { _carr_asgx_t<T>::try_asg(_data[_i0], x); } } catch (...) { ++_i0; ++nf; } }
-      return nf ? (nf == nset ? 0 : -1) : 1;
-    }
-
-    inline void swap(arrayref_t& src) __bmdx_noex { if (this == &src) { return; } _s_ll x[sizeof(t_a) / 8 + 1]; bmdx_str::words::memmove_t<t_value>::sf_memcpy(x, &src, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(&src, this, sizeof(t_a)); bmdx_str::words::memmove_t<t_value>::sf_memcpy(this, x, sizeof(t_a)); }
-
-  private:
-    _s_ll _n; union { T* _data; _s_ll __pad1; };
-  };
 
 
 
@@ -2178,14 +2824,19 @@ namespace bmdx
       // Concurrency:
       //    on concurrent access, iterator_t may be used by Consumer ONLY.
     template<bool is_const>
-    class iterator_t : public std::iterator<std::random_access_iterator_tag, T>
+    class iterator_t
+      #if defined(__SUNPRO_CC)
+        : public std::iterator<std::random_access_iterator_tag, T>
+      #endif
     {
       vnnqueue_t* _ct; column* _c; _s_ll _i, _ic, _ipop, _ipush; // _ipop, _ipush == const during iterator lifetime
     public:
       typedef T value_type; typedef T t_value;
       typedef typename bmdx_meta::if_t<is_const, const t_value*, t_value*>::result  pointer;
       typedef typename bmdx_meta::if_t<is_const, const t_value&, t_value&>::result reference;
-      typedef std::random_access_iterator_tag iterator_category; typedef iterator_t iterator_type; typedef _s_ll difference_type;
+      typedef _s_ll difference_type;
+      typedef std::random_access_iterator_tag iterator_category;
+      typedef iterator_t iterator_type;
 
         // The default iterator is not bound to any container, thus not practically useful.
       inline iterator_t() __bmdx_noex { _ct = 0; _c = 0; _i = _ic = _ipop = _ipush = 0; }
@@ -2201,7 +2852,7 @@ namespace bmdx
       _s_ll navl() const __bmdx_noex { return _ipush - _ipop; }
         // (Constant)
         // Number of elements in a column (single contiguous storage).
-      _s_ll m() const __bmdx_noex { return _m; }
+      _s_ll m() const __bmdx_noex { return _ct ? _ct->_m : 1; }
         // (Constant)
         // Absolute indices to the beginning and the end of sequence.
         //  Fixed at the moment when the iterator is created by parent container.
@@ -2467,8 +3118,8 @@ namespace bmdx
       //    4. On popping, ncapp() will decrease unless the container shrinking is disabled. See also set_cap_hints (nmin arg.).
       // Concurrency:
       //    the returned value is reliable for Consumer only.
-      //    (For Supplier, the guaranteed capacity is max(0, min(ncapp(), ncapmin())).
-      //      Use pre-set reserve and cap. hints to ensure enough place.)
+      //    For Supplier, the guaranteed capacity is ( ncapmin() < 0 ? ncapp() : min(ncapp(), ncapmin()) ).
+      //      Use pre-set reserve and cap. hints to ensure enough place.
     _s_ll ncapp() const __bmdx_noex { _s_ll n = bmdx_str::words::atomrdal64(&_cap_push); n += bmdx_str::words::atomrdal64(&_cap_pop); n -= 1; n *= _m; if (n < 0) { n = 0; } return n; }
 
       // The exact effective value of the current container capacity:
@@ -2478,8 +3129,8 @@ namespace bmdx
       //    min(  [ncapp() .. ncapp() + m() - 1], (ncapmax() >= 0 ? ncapmax() : infinity)  ).
       // Concurrency:
       //    the returned value is reliable for Consumer only.
-      //    (For Supplier, the capacity may decrease at any time between ncapeff() and value pushing.
-      //      Use pre-set reserve and cap. hints to ensure enough place.)
+      //    For Supplier, the capacity may decrease at any time between ncapeff() and value pushing.
+      //      Use pre-set reserve and cap. hints to ensure enough place.
     _s_ll ncapeff() const __bmdx_noex { _s_ll n = ncapp(); if (n == 0) { return 0; } n = n + _m - 1 - bmdx_str::words::atomrdal64(&_ipop) % _m; if (_capmax >= 0) { n = bmdx_minmax::myllmin(n, _capmax); } return n; }
 
       // Absolute indices to the beginning and the end of sequence.
@@ -3566,7 +4217,7 @@ namespace bmdx
       void _set_b_own(char x) { __dat.b_own = x; } // should be set only if calling threadctl::start directly
       void _set_pthdata(void* p) { __dat.pthdata = p; } // should be set only if calling threadctl::start directly
 
-      virtual ~ctx_base() {}
+      virtual ~ctx_base() __bmdx_exany {}
       ctx_base() { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); }
       ctx_base(const ctx_base&) { _threadctl_tu_static_t<>::th_ctx_init(&__dat, this, 0); } // NOTE the new context does not copy anything from the source object
       _threadctl_ctx_data& _dat() { return __dat; }
@@ -4197,7 +4848,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
               pos = pos2 + 1;
             }
             std::string s;
-            pos = 0, pos2 = 0, end = std::string::npos;
+            pos = 0; pos2 = 0; end = std::string::npos;
             while (pos < fnp_process.length())
             {
               pos2 = fnp_process.find_first_of("' ", pos);
@@ -4790,6 +5441,8 @@ namespace bmdx
       // Type of the referenced value.
     typedef T
       t_value;
+    typedef typename bmdx_meta::noncv_t<T>::t
+      t_value_ncv;
 
 
       // Smart lock, used by cref_t for ref. counting. _cref_lock_t must not be redefined by client.
@@ -4892,8 +5545,8 @@ namespace bmdx
       // NOTE Original meaning of cref_t is "reference to constant object".
       //   Treating constant as variable is an agreement and may be unsafe.
       //   Only the client is responsible for logically correct and synchronized modifications.
-    T* _pnonc_u() const volatile __bmdx_noex    { return const_cast<T*>(_p); }
-    T& _rnonc() const volatile { T* p = const_cast<T*>(_p); if (!p) { throw exc_ref(); } return *p; }
+    t_value_ncv* _pnonc_u() const volatile __bmdx_noex    { return const_cast<t_value_ncv*>(_p); }
+    t_value_ncv& _rnonc() const volatile { t_value_ncv* p = const_cast<t_value_ncv*>(_p); if (!p) { throw exc_ref(); } return *p; }
 
 
 
@@ -5656,7 +6309,7 @@ namespace bmdx
       {
         --_ph->cnt;
         try { struct f : iref2_flags {}; if (_ph->b_v2() && (_ph->flags & f::gen_nrefs)) { _cref_handle2* ph = _s_ph2(_ph); F_ev_handler_iref2 peh = (F_ev_handler_iref2)_ph->f_handler; peh(f::ev_nrefs, _ph->flags, _ph->cnt & _m, -1, ph->pcsd, ph->pobj, (void*)_p, !!(_ph->flags & f::use_aux) ? _s_paux(ph) : 0); } } catch (...) {}
-        _del_onrc0(_ph, const_cast<T*>(_p));
+        _del_onrc0(_ph, const_cast<t_value_ncv*>(_p));
         if ((_ph->cnt & _m) == 0) { _del_ph(_ph); }
         _ph = 0;
       }
@@ -5708,9 +6361,9 @@ namespace bmdx
         const bool b_hst = !!(ph->flags & f::use_hst); const bool b_del = !!(ph->flags & f::use_delete); const bool b_rel = !!(ph->flags & f::use_release); const bool b_aux = !!(ph->flags & f::use_aux);
         _cref_handle2* ph2 = _s_ph2(ph); F_ev_handler_iref2 peh = (F_ev_handler_iref2)ph->f_handler;
         try {
-          if (b_del) { peh(f::ev_delete, ph->flags, 0, 0, ph2->pcsd, ph2->pobj, p, b_aux ? _s_paux(ph2) : 0); return; }
-          if (b_hst && b_des) { peh(f::ev_des, ph->flags, 0, 0,  ph2->pcsd, ph2->pobj, p, b_aux ? _s_paux(ph2) : 0); return; }
-          if (b_rel) { peh(f::ev_release, ph->flags, 0, 0,  ph2->pcsd, ph2->pobj, p, b_aux ? _s_paux(ph2) : 0); return; }
+          if (b_del) { peh(f::ev_delete, ph->flags, 0, 0, ph2->pcsd, ph2->pobj, const_cast<t_value_ncv*>(p), b_aux ? _s_paux(ph2) : 0); return; }
+          if (b_hst && b_des) { peh(f::ev_des, ph->flags, 0, 0,  ph2->pcsd, ph2->pobj, const_cast<t_value_ncv*>(p), b_aux ? _s_paux(ph2) : 0); return; }
+          if (b_rel) { peh(f::ev_release, ph->flags, 0, 0,  ph2->pcsd, ph2->pobj, const_cast<t_value_ncv*>(p), b_aux ? _s_paux(ph2) : 0); return; }
         } catch (...) {}
         return;
       }
@@ -5971,12 +6624,12 @@ namespace bmdx
       virtual void cb_proc(t_ictx* pctx, _s_long ith, _s_long msgtype, _s_ll msg) = 0;
 
 
-      virtual ~icb() {}
+      virtual ~icb() __bmdx_exany {}
     };
 
   private:
     void (*_pdestr)(multithread* p); static void _destr(multithread* p) { p->_clear(); }
-    struct _starter_base { virtual ictx* pc() = 0; virtual _s_long pr() const = 0; virtual ictx* start(threadctl& tc, _s_long ith) = 0; virtual ~_starter_base() {} };
+    struct _starter_base { virtual ictx* pc() = 0; virtual _s_long pr() const = 0; virtual ictx* start(threadctl& tc, _s_long ith) = 0; virtual ~_starter_base() __bmdx_exany {} };
     template<class C> struct _starter_t : _starter_base
     {
       C c;

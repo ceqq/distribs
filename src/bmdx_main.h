@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-09-05
+// rev. 2020-12-07
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -509,25 +509,25 @@ namespace bmdx
     // Converting wide character string to 1-byte character string, based on system-default locale (equiv. to std::setlocale(..., "")).
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  std::string wsToBs(const std::wstring& x);
+  std::string wsToBs(arrayref_t<wchar_t> x);
   std::string wsToBs(const wchar_t* x, meta::s_ll n = -1);
     //
     // Converting wide character string to OEM char string - Windows-specific (can be used for text output to console)
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  std::string wsToBsOem(const std::wstring& x);
+  std::string wsToBsOem(arrayref_t<wchar_t> x);
   std::string wsToBsOem(const wchar_t* x, meta::s_ll n = -1);
     //
     // Converting wide character string to UTF-8 string.
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  inline std::string wsToBsUtf8(const std::wstring& x __bmdx_noarg) { return bmdx_str::conv::wsbs_utf8(x); }
+  inline std::string wsToBsUtf8(arrayref_t<wchar_t> x __bmdx_noarg) { return bmdx_str::conv::wsbs_utf8(x); }
   inline std::string wsToBsUtf8(const wchar_t* x, meta::s_ll n = -1 __bmdx_noarg) { return bmdx_str::conv::wsbs_utf8(x, n); }
     //
     // Direct converting low byte (8 bits) of each wide char value to char.
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  std::string wsToBsLsb(const std::wstring& x);
+  std::string wsToBsLsb(arrayref_t<wchar_t> x);
   std::string wsToBsLsb(const wchar_t* x, meta::s_ll n = -1);
     //
     //
@@ -535,19 +535,19 @@ namespace bmdx
     // Converting a string to wide character string, based on system-default locale (equiv. to std::setlocale(..., "")).
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  std::wstring bsToWs(const std::string& x);
+  std::wstring bsToWs(arrayref_t<char> x);
   std::wstring bsToWs(const char* x, meta::s_ll n = -1);
     //
     // Converting UTF-8 string to UTF-16 string.
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  inline std::wstring bsUtf8ToWs(const std::string& x __bmdx_noarg) { return bmdx_str::conv::bsws_utf8(x); }
+  inline std::wstring bsUtf8ToWs(arrayref_t<char> x __bmdx_noarg) { return bmdx_str::conv::bsws_utf8(x); }
   inline std::wstring bsUtf8ToWs(const char* x, meta::s_ll n = -1 __bmdx_noarg) { return bmdx_str::conv::bsws_utf8(x, n); }
     //
     // Direct converting input char values, treated as unsigned char in range 0..255, to numerically equal wide char values.
     //    n >= 0: specifies length of the string x.
     //    n < 0: autodetect x length based on null char.
-  std::wstring bsLsbToWs(const std::string& x);
+  std::wstring bsLsbToWs(arrayref_t<char> x);
   std::wstring bsLsbToWs(const char* x, meta::s_ll n = -1);
 
 
@@ -1546,6 +1546,7 @@ namespace bmdx
     unity();
     unity(const unity& x);
     unity(const std::wstring& x);
+    unity(const arrayref_t<wchar_t>& x);
     unity(const meta::s_ll& x);
     unity(const double& x);
     unity(const _unitychar& x);
@@ -1756,6 +1757,7 @@ namespace bmdx
       //    b) on successful conversion, returns a reference to the value.
       //    c) if conversion has failed, XUConvFailed is generated. *this is not changed.
       //    d) if ind is out of range, XUExec is generated.
+      // NOTE rx(), conv(), val() internally use common conversion function, always yielding same results for same original value.
       // NOTE Conversion removes the object name.
       // NOTE Array, created to replace non-array,  is 1-based by default.
     template<int utt> inline typename valtype_t<utt>::t&
@@ -1785,6 +1787,7 @@ namespace bmdx
       //      a) is converted to the given type with all data,
       //      b) on allocation error, initialized by default for the given type (the data is lost),
       //      c) cleared (utEmpty).
+      // NOTE rx(), conv(), val() internally use common conversion function, always yielding same results for same original value.
       // NOTE Conversion removes the object name.
       // NOTE Array, created to replace non-array,  is 1-based by default.
     template<int utt> inline bool
@@ -1813,6 +1816,7 @@ namespace bmdx
       //      a) returns a copy of the internal value.
       //      b) on allocation error, returns the default value of the given type,
       //      c) on alloc. error even on the default value, generates XUConvFailed.
+      // NOTE rx(), conv(), val() internally use common conversion function, always yielding same results for same original value.
     template<int utt> inline typename _valtype2_t<utt>::t
       val(EConvStrength cs = csNormal, meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>()) const
         {
@@ -4042,7 +4046,7 @@ namespace
     //    1: use system-default locale (equiv. to std::setlocale(..., "")) to compare strings.
     //    2: use C locale (equiv. to std::setlocale(..., "C")) to compare strings.
     //    any other value: return an empty string.
-  s_long wscompare(const std::wstring& s1, const std::wstring& s2, bool ignore_case, s_long loc_type = 1);
+  s_long wscompare(arrayref_t<wchar_t> s1, arrayref_t<wchar_t> s2, bool ignore_case, s_long loc_type = 1);
     //
     // (locale-aware)
     // Wide character string replacement.
@@ -4068,8 +4072,10 @@ namespace
     //
     // (locale-independent)
     // true if str matches the given pattern.
+    //  See arrayref_t :: string_like.
     //  Recognizes constructs similar to: [a-zA-Z], *, ?, # (i.e. digit)
-  bool wstring_like(const std::wstring& str, const std::wstring& ptn0);
+  inline bool wstring_like(const arrayref_t<wchar_t>& str, const arrayref_t<wchar_t>& pattern __bmdx_noarg)
+    { return str.string_like(pattern); }
     //
     // (locale-independent)
     // Trim all 'swat' string occurrences in the beginning and end of the string 's'
@@ -4224,6 +4230,7 @@ namespace
       //  2. If no path specified (or "" key's value is not an array), k[i], v[i] are merged into the root (mh itself).
       //  3. Path element type: string, number, empty, or any other type, normally supported by paramline::decode() for array elements.
       // flags:
+      //  NOTE For good default in parsing manually written text, use flags = 0x5a.
       //  0x1 - for mh and branches, use map as target container type instead of hashlist.
       //  0x2 - overwrite value in a branch if met duplicate path.
       //      (Branch by value, value by branch, value by value. Branches having same path are always merged).
