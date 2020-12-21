@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-12-07
+// rev. 2020-12-20
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -11995,7 +11995,7 @@ void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
   const s_ll sleep_short = 50; // 50 mcs (until idle_toms passes in inactivity, then switches to sleep_total_long)
   const s_ll sleep1_long = 5000; // 5 ms (by this value, until sleep_total_long is accumulated)
   const s_ll sleep_total_long = 20000; // 20 ms
-  const s_ll sleep_total_half_enabled = __lm_slot_controller_sleep_halfen_dtms; // until LMSC is enabled in full (rses.__thm_lmsc_enable_full()) - usually, on 1st incoming connection or outgoing message
+  const s_ll sleep_total_half_enabled = __lm_slot_controller_sleep_halfen_dtms * 1000; // until LMSC is enabled in full (rses.__thm_lmsc_enable_full()) - usually, on 1st incoming connection or outgoing message
 
   cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return; } cch_session& rses = *_r_ths._pnonc_u();
   cref_t<lm_slot_controller> lmsc = rses.lmsc; if (!lmsc) { return; }

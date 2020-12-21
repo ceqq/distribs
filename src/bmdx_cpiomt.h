@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-12-07
+// rev. 2020-12-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -387,6 +387,7 @@ namespace bmdx_str
       else
       {
         #if __bmdx_atomic_use_std
+          enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
           return ((std::atomic<_s_ll>*)pint64)->load();
         #elif __bmdx_atomic_use_interlocked
           return InterlockedOr64((LONG64*)pint64, 0);
@@ -405,6 +406,7 @@ namespace bmdx_str
       else
       {
         #if __bmdx_atomic_use_std
+          enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
           ((std::atomic<_s_ll>*)pint64)->store(x);
         #elif __bmdx_atomic_use_interlocked
           InterlockedExchange64((volatile LONG64*)pint64, x);
@@ -420,6 +422,7 @@ namespace bmdx_str
     static inline _s_ll atomadd64(volatile void* pint64, _s_ll x) // atomic addition to value; returns the result
     {
       #if __bmdx_atomic_use_std
+        enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
         return ((std::atomic<_s_ll>*)pint64)->fetch_add(x) + x;
       #elif __bmdx_atomic_use_interlocked
         #ifdef InterlockedAdd64

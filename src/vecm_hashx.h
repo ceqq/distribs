@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2020-12-07
+// rev. 2020-12-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -186,7 +186,7 @@ struct meta
     //
     // NOTE Custom constructors.
     //  Any custom structure my_ctor may be defined/used same as construct_f.
-    //    If must 1) supply t, f, (but no need to supply aux or be template),
+    //    It must 1) supply t, f, (but no need to supply aux or be template),
     //    2) specialize meta::type_equi<my_ctor, meta::tag_construct> { typedef meta::tag_construct t_3; };
     //    3) specialize meta::type_equi<my_ctor, meta::tag_functor> { typedef meta::tag_functor t_3; };
     //    4) (optional, recommended) in my_ctor, define

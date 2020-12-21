@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-12-07
+// rev. 2020-12-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -1462,15 +1462,30 @@ namespace bmdx
     inline bool isDate() const __bmdx_noex { return this && utype() == utDate; }
     inline bool isString() const __bmdx_noex { return this && utype() == utString; }
     inline bool isChar() const __bmdx_noex { return this && utype() == utChar; }
-
     inline bool isMap() const __bmdx_noex { return this && utype() == utMap; }
     inline bool isHash() const __bmdx_noex { return this && utype() == utHash; }
-
+      //
+      // More complex type tests.
+      //
+      // Char may be treated as boolean.
     inline bool isBool() const __bmdx_noex { return this && utype() == utChar; }
     bool isBoolTrue() const __bmdx_noex; // true if *this contains char != 0
     bool isBoolFalse() const __bmdx_noex; // true if *this contains char == 0
-
-    inline bool isIntOrFloat() const __bmdx_noex { return this && utype() == utInt && utype() == utFloat; }
+      //
+      // IntOrFloat -- "wide-range numeric value, not in string form"
+      // IntOrChar -- "boolean-like value, not in string form"
+    inline bool isIntOrFloat() const __bmdx_noex { return this && (utype() == utInt || utype() == utFloat); }
+    inline bool isIntOrChar() const __bmdx_noex { return this && (utype() == utInt || utype() == utChar); }
+      //
+      // *OrEmpty - "optional value of particular type"
+    inline bool isIntOrEmpty() const __bmdx_noex { return this && (utype() == utInt || utype() == utEmpty); }
+    inline bool isFloatOrEmpty() const __bmdx_noex { return this && (utype() == utFloat || utype() == utEmpty); }
+    inline bool isDateOrEmpty() const __bmdx_noex { return this && (utype() == utDate || utype() == utEmpty); }
+    inline bool isStringOrEmpty() const __bmdx_noex { return this && (utype() == utString || utype() == utEmpty); }
+    inline bool isCharOrEmpty() const __bmdx_noex { return this && (utype() == utChar || utype() == utEmpty); }
+    inline bool isMapOrEmpty() const __bmdx_noex { return this && (utype() == utMap || utype() == utEmpty); }
+    inline bool isHashOrEmpty() const __bmdx_noex { return this && (utype() == utHash || utype() == utEmpty); }
+    inline bool isBoolOrEmpty() const __bmdx_noex { return this && (utype() == utChar || utype() == utEmpty); }
 
     // Other tests.
 
