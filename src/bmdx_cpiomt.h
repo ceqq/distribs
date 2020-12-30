@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-12-20
+// rev. 2020-12-21
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -4138,8 +4138,8 @@ namespace bmdx
       //    < 0: the constructor exits immediately w/o any attempt of locking (use it to allow/disable locking with a condition).
       // timeout_ms: max. period of sleeping, during which the constructor tries to set a lock.
       //    >= 1: the constructor will sleep until the lock is set or timeout occurs.
-      //    0:  the constructor tries to lock once, and exits anyway. b_locked() reflects the result (true if the lock has been acquired).
-      //    any < 0:  wait until the lock is acquired. This may block for indefinite time, but when the constructor exits, b_locked() == true anyway.
+      //    0:  the constructor tries to lock once, and exits anyway. is_locked() reflects the result (true if the lock has been acquired).
+      //    any < 0:  wait until the lock is acquired. This may block for indefinite time, but when the constructor exits, is_locked() == true anyway.
       // pdata: csdata object or correctly initialized _critsec_data0_t.
       //    Allows for creating individual crit. sec. independent on T and default lock associated with T.
       //    NOTE pdata is weak-referenced, i.e. the crit. sec. must be valid until the last lock on it is destroyed.

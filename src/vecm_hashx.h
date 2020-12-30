@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2020-12-20
+// rev. 2020-12-21
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3232,8 +3232,13 @@ template<class _> s_long vecm::_psig_tu_stg_t<_>::sig0[11] = { 0,0,0,0,0,0,0,0,0
 namespace
 {
     // Used to specify vecm element type, e.g. vecm v(typer<int>,0).
+    // NOTE VC 2019: there's an issue with constructor vecm(typer<T>, ...)
+    //    when given a function from anonymous namespace.
+    //  Specify fully qualified name (yk_c::typer),
+    //  or use __yk_c_typer_def for workaround.
   template<class TA> const vecm::type_descriptor& typer() __bmdx_noex
         { struct _vecm_x : vecm { static const type_descriptor& rtd() { return _ff_mc1_p<TA, __vecm_tu_selector>()->rtd(); } }; return _vecm_x::rtd(); }
+
     // _bs (binding selector) = __vecm_tu_selector returns type descriptor related to the current translation unit.
     // _bs = meta::nothing returns type descriptor related to translation unit selected by compiler (most frequently, one chosen unit in the current binary module).
   template<class TA, class _bs> const vecm::type_descriptor& typer() __bmdx_noex
