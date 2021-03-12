@@ -1,12 +1,12 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2020-12-21
+// rev. 2021-02-05
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 //
-// Copyright 2004-2020 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2021 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -1622,6 +1622,10 @@ namespace bmdx
       // See also recreate().
     unity& recreate_as(const unity& modsrc) __bmdx_noex;
 
+      // Returns non-constant reference to self.
+      //  (Useful for modifying rvalues.)
+    unity& _rnonc_self() const __bmdx_noex;
+
       // NOTE all assignments are transactional (on failure, the target object is not modified).
       // NOTE if src is utObject, operator=(const unity& src) copies a reference to that object, not its value.
       // NOTE operator=(const unity& src) copies src object name.
@@ -2246,8 +2250,18 @@ namespace bmdx
 
     //-- map, hashlist, array elem. access, [ ], path
 
-      // u_has returns true if the inner value is the container of one of the specified types
-      //    (tt is a combination of flags: 1 <=> utUnityArray, 2 <=> utMap, 4 <=> utHash, 8: allow forwarding to the contained unity object.)
+      // u_has returns true if the *this is of one of the types, specified by tt,
+      //  AND it contains key or index ki.
+      //  tt should contain ORed flags, meaning:
+      //      1: utUnityArray,
+      //      2: utMap,
+      //      4: utHash,
+      //      8: allow forwarding to contained object in case of utObject / unity.
+      //  ki is expected to be
+      //      a) an array index: utInt or value of other type, convertible to integer.
+      //      b) an associative array key: any kind of value.
+      //  If (*this)[ki] won't return valid (const unity&) for any reason,
+      //    u_has returns false, and does not generate exceptions.
     bool u_has(const unity& ki, s_long tt) const;
 
       // operator[] returns, if found type/key/array index match, one of the following:
@@ -4496,47 +4510,55 @@ namespace
 
 
       // Loads whole file into wide-character string.
-      // Returns:
-      //    On success: string with the loaded characters (but see also ret_s).
-      //    On failure or wrong args.: utEmpty.
-      // format_string should contain
+      //  format_string should contain
       //    1) one of "binary" or "text".
       //      For "binary", the input data is treated as plain array of bytes,
       //        which should be converted into string according to the specified or guessed encoding.
       //      "text" is different in:
       //        1.1) auto-converts input's single \r and \n into \r\n,
-      //        1.2) takes into account BOM (0xfeff tag in UTF-16),
-      //          but does not insert it into ret_s.
-      //    2) one or more encodings to try: "local8bit", "utf16le", "utf16be", "lsb8bit".
-      //    NOTE local8bit (meaning system-default locale, see also bsToWs()),
-      //      if allowed and all others do not match, is used as the default encoding.
-      //    NOTE lsb8bit (read raw bytes as lower byte of wchar_t) suppresses local8bit.
-      //    NOTE Any unknown parts of format_string are ignored.
-      // ret_s: if unity object is passed into ret_s, it is assigned the loaded string,
+      //        1.2) recognizes UTF encoding by BOM at the beginning of file, and does not insert BOM into ret_s:
+      //          UTF-8 - EF BB BF
+      //          UTF-16LE - FE FF
+      //          UTF-16BE - FF FE
+      //    2) one or more encodings to try:
+      //      "local8bit", "lsb8bit", "utf8", "utf16le", "utf16be".
+      //      local8bit: uses system-default locale to convert file read as byte string, into wide string (see also bsToWs()).
+      //        If it is specified in format_string, it is used the default encoding in case if others do not match.
+      //      lsb8bit: read raw bytes and sets each as lower byte of wchar_t.
+      //        If it is specified in format_string, it suppresses local8bit.
+      //      Encodings are checked in the order of format_string,
+      //        and the first matching encoding wins.
+      //      Any unknown parts of format_string are ignored.
+      //  ret_s: if non-default value is passed into ret_s, it is assigned the loaded string,
       //    and load_text itself returns boolean value (success/failure).
-      // pd: see complete_path.
-      // NOTE To load UTF-8 string, use couple: file_io::load_bytes, bsUtf8ToWs.
+      //  pd: see complete_path.
+      // Returns:
+      //    On success: string with the loaded characters (but see also ret_s).
+      //    On failure or wrong args.: utEmpty.
     unity load_text(const std::string& format_string, const std::wstring& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
     unity load_text(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
 
       // Saves characters of wide-character string str to the specified file.
-      // format_string should contain
+      //  format_string should contain
       //    1) one of "binary" or "text".
       //      For "binary", characters from str are 1:1 converted to output, according to selected encoding,
       //        without additional operations.
       //      "text" is different in:
       //        1.1) auto-converts input's single \r and \n into \r\n,
-      //        1.2) on saving UTF-16, when writing from the beginning of file (file is empty or truncated),
-      //          auto-prepends BOM (0xfeff character).
-      //    2) target encoding: "local8bit", "utf16le", "utf16be", "lsb8bit".
-      //    3) mode: "truncate" or "append".
+      //        1.2) auto-prepends BOM when writing from the beginning of file (file is empty or truncated):
+      //          UTF-8 - EF BB BF
+      //          UTF-16LE - FE FF
+      //          UTF-16BE - FF FE
+      //    2) target encoding:
+      //      "local8bit", "lsb8bit", "utf8", "utf16le", "utf16be".
+      //    3) mode:
+      //      "truncate" or "append".
       //    For example: "text append utf16le".
       //    NOTE Any unknown parts of format_string are ignored.
-      // pd: see complete_path.
+      //  pd: see complete_path.
       // Returns:
       //    On success: true.
       //    On failure or wrong args.: false.
-      // NOTE To save UTF-8 string, use couple: wsToBsUtf8, file_io::save_bytes.
     bool save_text(const std::string& format_string, const std::wstring& str, const std::wstring& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
     bool save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
 

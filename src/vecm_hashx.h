@@ -1,12 +1,12 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2020-12-21
+// rev. 2021-02-05
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 //
-// Copyright 2004-2020 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2021 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -3192,7 +3192,12 @@ template<class _> struct vecm::_cmreg_tu_stg_t
 template<class _> vecm::_cmreg_data0* vecm::_ff_mc2_impl<_>::_pg_cmd() { return &_cmreg_tu_stg_t<>::dat0; }
 template<class _> s_long* vecm::_ff_mc2_impl<_>::__psig()
 {
-  s_long* p = _psig_tu_stg_t<>::sig0;
+    // NOTE VS 2019 32-bit compiler bug workaround.
+  #if _MSC_VER >= 1920 && !defined(_WIN64)
+    s_long* p = _psig_tu_stg_t<void>::sig0;
+  #else
+    s_long* p = _psig_tu_stg_t<>::sig0;
+  #endif
   if (p[0]) { return p; }
 
   struct { s_long x(void* po1, void* pm1, void* po2, void* pm2) { s_long n1 = s_long(reinterpret_cast<char*>(pm1) - reinterpret_cast<char*>(po1)); s_long n2 = s_long(reinterpret_cast<char*>(pm2) - reinterpret_cast<char*>(po2)); enum { _bytes_tu = 255 * 255 - 1 }; if (n1 > _bytes_tu) { n1 = _bytes_tu; } if (n2 > _bytes_tu) { n2 = _bytes_tu; } return (n1 % 255 + 1) << 24 | (n1 / 255 + 1) << 16 | (n2 % 255 + 1) << 8 | (n2 / 255 + 1); } }
@@ -5053,7 +5058,7 @@ namespace _yk_c2
       }
 
         // Same as hashx::remove_all.
-      inline s_long remove_all(__vecm_noarg1) __bmdx_noex { s_long m = _d.remove_all(); if (m < 0) { return m; } _inds.vecm_clear(); return m; }
+      inline s_long remove_all(__vecm_noarg1) __bmdx_noex { s_long m = _d.remove_all(); if (m < 0) { return m; } _inds.el_remove_all(); return m; }
 
         // Finds/inserts an entry with key k. Returns a reference to value.
         //    O(1) if the entry exists. O(N^0.5) if it is inserted.
@@ -5107,6 +5112,9 @@ namespace _yk_c2
       void ordhs_clear(__vecm_noarg1) __bmdx_noex { _d.hashx_clear(); _inds.vecm_clear(); }
 
       inline void ordhs_set0_nexc(__vecm_noarg1) const __bmdx_noex { _d.hashx_set0_nexc(); }
+
+      inline bool can_shrink(__vecm_noarg1) const __bmdx_noex { return _d.can_shrink(); }
+      inline void ordhs_setf_can_shrink(bool x __vecm_noarg) __bmdx_noex { _d.hashx_setf_can_shrink(x); _inds.vecm_setf_can_shrink(x); }
 
         // Links for iterating entries in hash order, analogous to that of hashx.
       inline vecm::link1_t<entry, true, _bs> link1_cbegin(__vecm_noarg1) const __bmdx_noex { return _d.link1_cbegin(); }

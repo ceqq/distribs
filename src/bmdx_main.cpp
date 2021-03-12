@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2020-12-21
+// rev. 2021-02-05
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -5984,6 +5984,7 @@ void unity::swap(unity& x) __bmdx_noex
 bool unity::unity_delete() __bmdx_noex { return _Ldelete_this() > 0; }
 unity& unity::recreate() __bmdx_noex { this->~unity(); new (this) unity(); return *this; }
 unity& unity::recreate_as(const unity& modsrc) __bmdx_noex { this->~unity(); new (this) unity(); this->pmsm = modsrc.pmsm; return *this; }
+unity& unity::_rnonc_self() const __bmdx_noex { return const_cast<unity&>(*this); }
 
 s_long unity::arrlb() const { if (isArray()) { return cv_ff::cv_array::Llb_u(this); } throw XUTypeMismatch("arrlb", _tname0(utype()), "array"); }
 s_long unity::arrub() const { if (isArray()) { return cv_ff::cv_array::Lub_u(this); } throw XUTypeMismatch("arrub", _tname0(utype()), "array"); }
@@ -6078,7 +6079,7 @@ _fls75 unity::vflstr() const __bmdx_noex
         meta::s_ll n = cv_ff::cv_wstring::Ln(pmsm, p);
         const void* p0 = cv_ff::cv_wstring::Lp0(pmsm, p);
         s_long wcsx = cv_ff::cv_wstring::Lwcs(pmsm);
-        s.resize(s_long(n)); n = s.length();
+        if (n > s.nmax()) { n = s.nmax(); }
         const char* pc = reinterpret_cast<const char*>(p0);
         if (wcsx == 1) { for (meta::s_ll i = 0; i < n; ++i) { s += wchar_t(*pc); pc += 1; } }
           else if (wcsx == 2) { for (meta::s_ll i = 0; i < n; ++i) { s += wchar_t(s_long(pc[0]) + (s_long(pc[1]) << 8)); pc += 2; } }
@@ -9362,8 +9363,11 @@ namespace bmdx
       else { int res = wcsncmp(s1.pd(), s2.pd(), size_t(minlen)); if (res != 0) { return res > 0 ? 1 : -1; } if (s1.n() == s2.n()) { return 0; } return s1.n() < s2.n() ? -1 : 1; }
     }
 
+    struct _d_now_lks {};
+
     _unitydate d_now(bool allow_fracsec)
     {
+      critsec_t<_d_now_lks> __lock(10, -1); if (sizeof(__lock)) {}
       static s_long init(0); static s_long hdelta(0);
       if (init == 0)
       {
@@ -9377,15 +9381,21 @@ namespace bmdx
     }
     _unitydate d_nowutc(bool allow_fracsec)
     {
-      static s_long init(0); static meta::s_ll sec0(0); static meta::s_ll ms0(0);
-      meta::s_ll ms1 = meta::s_ll(std::clock()) * 1000 / CLOCKS_PER_SEC;
+      static s_long init(0);
+      static meta::s_ll sec0(0);
+      static double ms0(0);
       meta::s_ll sec1 = meta::s_ll(std::time(0));
-      if (init != 0) { if ((ms1 - ms0) - (sec1 - sec0) * 1000 < -1000) { init = 0; } }
+      double ms1 = clock_ms();
+      critsec_t<_d_now_lks> __lock(10, -1); if (sizeof(__lock)) {}
+      if (init != 0) { const double d = (ms1 - ms0) - (double(sec1 - sec0) * 1000); if (d > 1000 || d < -1000) { init = 0; } }
       if (init == 0) { sec0 = sec1; ms0 = ms1; init = 1; }
-      sec1 = sec0 + (ms1 - ms0) / 1000;
-      s_long n = s_long((((sec1 + 43200) / (86400 >> 1)) + (2440587 << 1) + 1) >> 1); s_long h = (sec1 / 3600) % 24; s_long m = (sec1 / 60) % 60; s_long s = sec1 % 60;
+      sec1 = sec0 + s_ll((ms1 - ms0) / 1000);
+      s_long n = s_long((((sec1 + 43200) / (86400 >> 1)) + (2440587 << 1) + 1) >> 1);
+      s_long h = (sec1 / 3600) % 24;
+      s_long m = (sec1 / 60) % 60;
+      s_long s = sec1 % 60;
       _unitydate x(double(_jds_nhms(n, h, m, s)));
-      if (allow_fracsec) { x.add_seconds(double((ms1 - ms0) % 1000) / 1000.); }
+      if (allow_fracsec) { x.add_seconds(double(s_ll((ms1 - ms0) * 1000) % 1000000) * 1.e-6); }
       return x;
     }
       // single path separator
@@ -9959,8 +9969,8 @@ unity file_utils::load_text(const std::string& format_string, const std::wstring
   typedef unsigned char u_char;
 
   const int ReadBufSize = 2048;
-  enum EEncodings { local8bit, lsb8bit, utf16le, utf16be };
-  bool is_binary(false); bool is_text(false); bool is_local8bit(false); bool is_utf16le(false); bool is_utf16be(false); bool is_lsb8bit(false);
+  enum EEncodings { local8bit, lsb8bit, utf8, utf16le, utf16be };
+  bool is_binary(false); bool is_text(false); bool is_local8bit(false); bool is_lsb8bit(false); bool is_utf8(false); bool is_utf16le(false); bool is_utf16be(false);
   std::vector<int> encs;
   std::vector<std::string> args = splitToVector(format_string, " ");
   for (unsigned int i = 0; i < args.size(); ++i)
@@ -9968,9 +9978,10 @@ unity file_utils::load_text(const std::string& format_string, const std::wstring
     if (!is_binary && args[i] == "binary") is_binary = true;
     if (!is_text && args[i] == "text") is_text = true;
     if (!is_local8bit && args[i] == "local8bit") { is_local8bit = true; encs.push_back(local8bit); }
+    if (!is_lsb8bit && args[i] == "lsb8bit") { is_lsb8bit = true; encs.push_back(lsb8bit); }
+    if (!is_utf8 && args[i] == "utf8") { is_utf8 = true; encs.push_back(utf8); }
     if (!is_utf16le && args[i] == "utf16le") { is_utf16le = true; encs.push_back(utf16le); }
     if (!is_utf16be && args[i] == "utf16be") { is_utf16be = true; encs.push_back(utf16be); }
-    if (!is_lsb8bit && args[i] == "lsb8bit") { is_lsb8bit = true; encs.push_back(lsb8bit); }
   }
   bool is_successful = false; std::wstring s0;
 
@@ -9997,6 +10008,7 @@ unity file_utils::load_text(const std::string& format_string, const std::wstring
       {
           // local8bit, if allowed and all others do not match, is used as the default encoding
         case local8bit: { ind_enc_local8bit = i;  continue; }
+        case utf8: { if (s.size() >= 3 && u_char(s[0]) == 0xef && u_char(s[1]) == 0xbb && u_char(s[2]) == 0xbf) { if (is_text) { pos = 3; } ind_enc = i; goto lExitFor1; } break; }
         case utf16le: { if (s.size() >= 2 && u_char(s[0]) == 0xff && u_char(s[1]) == 0xfe) { if (is_text) { pos = 2; } ind_enc = i; goto lExitFor1; } break; }
         case utf16be: { if (s.size() >= 2 && u_char(s[0]) == 0xfe && u_char(s[1]) == 0xff) { if (is_text) { pos = 2; } ind_enc = i; goto lExitFor1; } break; }
         case lsb8bit: { ind_enc = i; goto lExitFor1; break; }
@@ -10024,6 +10036,11 @@ lExitFor1:
         }
         s0 = bsToWs(s2);
       }
+      is_successful = true;
+      break;
+
+    case utf8:
+      s0 = bsUtf8ToWs(&s[pos], s_ll(s.size() - pos));
       is_successful = true;
       break;
 
@@ -10093,6 +10110,7 @@ bool file_utils::save_text(const std::string& format_string, const std::wstring&
     bool is_append(false);
     bool is_local8bit(false);
     bool is_lsb8bit(false);
+    bool is_utf8(false);
     bool is_utf16le(false);
     bool is_utf16be(false);
 
@@ -10104,14 +10122,15 @@ bool file_utils::save_text(const std::string& format_string, const std::wstring&
       if (!is_truncate && args[i] == "truncate") is_truncate = true;
       if (!is_append && args[i] == "append") is_append = true;
       if (!is_local8bit && args[i] == "local8bit") is_local8bit = true;
+      if (!is_lsb8bit && args[i] == "lsb8bit") is_lsb8bit = true;
+      if (!is_utf8 && args[i] == "utf8") is_utf8 = true;
       if (!is_utf16le && args[i] == "utf16le") is_utf16le = true;
       if (!is_utf16be && args[i] == "utf16be") is_utf16be = true;
-      if (!is_lsb8bit && args[i] == "lsb8bit") is_lsb8bit = true;
     }
 
     if (is_binary == is_text) return false;
     if (is_truncate == is_append) return false;
-    if (int(is_local8bit) + int(is_lsb8bit) + int(is_utf16le) + int(is_utf16be) != 1) return false;
+    if (int(is_local8bit) + int(is_lsb8bit)  + int(is_utf8) + int(is_utf16le) + int(is_utf16be) != 1) return false;
 
     const std::wstring* ps2 = &s0;
 
@@ -10150,6 +10169,13 @@ bool file_utils::save_text(const std::string& format_string, const std::wstring&
           else if (is_text && wc == L'\r') { f << '\r' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
           else { f << char(wc); }
       }
+    }
+    else if (is_utf8)
+    {
+      enum { nbchunk = 200000 };
+      f << "\xef\xbb\xbf";
+      for (_t_sz i = 0; i < ps2->size(); i += nbchunk)
+        { f << wsToBsUtf8(&ps2->at(i), bmdx_minmax::myllmin(ps2->size() - i, nbchunk)); }
     }
     else // local8bit
     {

@@ -1,12 +1,12 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2020-12-21
+// rev. 2021-02-05
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 //
-// Copyright 2004-2020 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2021 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -106,6 +106,16 @@
   #define __bmdx_null_pchar ((char*)1 - 1)
 #endif
 
+  // NOTE This constant is IPC message delivery thread priority on POSIX systems.
+  //  The original value 5 (boosted priority) works well for most of systems,
+  //    resulting in fast (>6 GB/s) data transfer.
+  //  In case of problems with IPC and/or overall system performance,
+  //    pre-define the constant to 4 (normal priority).
+  // NOTE In Windows, IPC message delivery works perfectly on default (normal)
+  //    thread priority, so the priority is not modified.
+#ifndef __bmdx_cfg_ipc_th_delivery_prio_psx
+  #define __bmdx_cfg_ipc_th_delivery_prio_psx 5
+#endif
 
 
 namespace yk_c { namespace { struct __vecm_tu_selector; } }
@@ -754,6 +764,7 @@ namespace bmdx_str
           c = x[pos];
             if (c == L'e' || c == L'E')
             {
+              if (nq1 == 0 && nq2 == 0) { bf = true; break; }
               ++pos;
               c = x[pos]; if (c == L'+') { ++pos; } else if (c == L'-') { b_neg3 = true; ++pos; }
                   if (pos >= xlen) { bf = true; break; }
@@ -814,7 +825,7 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2i();
     {
 if (!x) { if (no_exc) { return dflt; } throw exc_str2f(); } if (xlen == -1) { xlen = _s_ll(std::strlen(x)); } if (xlen <= 0) { if (no_exc) { return dflt; } throw exc_str2f(); } bool bf = false; _s_ll pos = 0; char c = ' '; _s_ll q1(0), q2(0), q3(0); _s_long nq1(0), nq2(0), nq3(0); bool b_sign1(false), b_neg1(false), b_neg3(false);
 do { while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { bf = true; break; } if (b_nans && xlen - pos >= 3 && 0 == std::strncmp("nan", x + pos, 3)) { pos += 3; while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } return std::numeric_limits<double>::quiet_NaN(); } c = x[pos]; if (c == '+') { b_sign1 = true; ++pos; } else if (c == L'-') { b_sign1 = true; b_neg1 = true; ++pos; } if (pos >= xlen) { bf = true; break; } if (b_nans && b_sign1 && xlen - pos >= 3 && 0 == std::strncmp("inf", x + pos, 3)) { pos += 3; while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } return b_neg1 ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity(); } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q1 = q1 * 10 + int(c - '0'); ++nq1; ++pos; if (nq1 > 19) { bf = true; break; } } else { break; } } if (bf) { break; } if (pos >= xlen) { bf = nq1 == 0; break; }
-c = x[pos]; if (c == '.') { ++pos; while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q2 = q2 * 10 + int(c - '0'); ++nq2; ++pos; if (nq2 == 18) { break; } } else { break; } } } if (pos >= xlen) { bf = nq1 == 0 && nq2 == 0; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { break; } c = x[pos]; if (c == 'e' || c == 'E') { ++pos; c = x[pos]; if (c == '+') { ++pos; } else if (c == '-') { b_neg3 = true; ++pos; } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q3 = q3 * 10 + int(c - '0'); ++nq3; ++pos; if (nq3 > 3) { bf = true; break; } } else { break; } } if (bf) { break; } if (nq3 == 0) { bf = true; break; } } else { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } } while (false);
+c = x[pos]; if (c == '.') { ++pos; while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q2 = q2 * 10 + int(c - '0'); ++nq2; ++pos; if (nq2 == 18) { break; } } else { break; } } } if (pos >= xlen) { bf = nq1 == 0 && nq2 == 0; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos >= xlen) { break; } c = x[pos]; if (c == 'e' || c == 'E') { if (nq1 == 0 && nq2 == 0) { bf = true; break; } ++pos; c = x[pos]; if (c == '+') { ++pos; } else if (c == '-') { b_neg3 = true; ++pos; } if (pos >= xlen) { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c >= '0' && c <= '9') { q3 = q3 * 10 + int(c - '0'); ++nq3; ++pos; if (nq3 > 3) { bf = true; break; } } else { break; } } if (bf) { break; } if (nq3 == 0) { bf = true; break; } } else { bf = true; break; } while (pos < xlen) { c = x[pos]; if (c == ' ' || c == '\t') { ++pos; } else { break; } } if (pos < xlen) { bf = true; break; } } while (false);
 double z(0.); do { if (bf) { break; } if (nq1 > 0) { if (nq2 > 0) { const _s_ll nprec = 15; _s_ll m(1); for (_s_ll i = 0; i < nq2; ++i) { m *= 10; } _s_ll nd = nq1 + nq2; if (nd >= nprec) { z = (q1 * m + q2 + 0.0) / m; } else { _s_ll m2 = 1; for (_s_ll i = nd; i < nprec; ++i) { m2 *= 10; } z = ((q1 * m + q2) * m2 + 0.1) / (m * m2); } } else { z = double(q1); } } if (b_neg1) { z = -z; } if (q3) { if (b_neg3) { q3 = -q3; } if (q3 >= 280) { z *= 1.e280; q3 -= 280; if (q3 > 50) { bf = true; break; } } else if (q3 >= -280) { } else { z *= 1.e-280; q3 += 280; if (q3 < -50) { z = 0.; break; } } z *= std::pow(10., int(q3)); } } while (false);
 if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     }
@@ -1506,6 +1517,27 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
     bool operator > (const t_string& s) const __bmdx_noex    { return !operator<(s); }
     bool operator >= (const t_string& s) const __bmdx_noex    { return !operator<=(s); }
 
+    bool operator == (const bmdx::arrayref_t<char>& s) const __bmdx_noex    { const _s_long nb = n(); if (nb != s.n()) { return false; } for (_s_long i = 0; i < nb; ++i) { if (_x[i] != s[i]) { return false; } } return true; }
+    bool operator < (const bmdx::arrayref_t<char>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s.pd(), size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
+    bool operator <= (const bmdx::arrayref_t<char>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } int res = std::memcmp(_x, s.pd(), size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
+    bool operator != (const bmdx::arrayref_t<char>& s) const __bmdx_noex    { return !operator==(s); }
+    bool operator > (const bmdx::arrayref_t<char>& s) const __bmdx_noex    { return !operator<(s); }
+    bool operator >= (const bmdx::arrayref_t<char>& s) const __bmdx_noex    { return !operator<=(s); }
+
+    bool operator == (const std::string& s) const __bmdx_noex    { return *this == bmdx::arrayref_t<char>(s); }
+    bool operator < (const std::string& s) const __bmdx_noex    { return *this < bmdx::arrayref_t<char>(s); }
+    bool operator <= (const std::string& s) const __bmdx_noex    { return *this <= bmdx::arrayref_t<char>(s); }
+    bool operator != (const std::string& s) const __bmdx_noex    { return *this != bmdx::arrayref_t<char>(s); }
+    bool operator > (const std::string& s) const __bmdx_noex    { return *this > bmdx::arrayref_t<char>(s); }
+    bool operator >= (const std::string& s) const __bmdx_noex    { return *this >= bmdx::arrayref_t<char>(s); }
+
+    bool operator == (const char* s) const __bmdx_noex    { return *this == bmdx::arrayref_t<char>(s); }
+    bool operator < (const char* s) const __bmdx_noex    { return *this < bmdx::arrayref_t<char>(s); }
+    bool operator <= (const char* s) const __bmdx_noex    { return *this <= bmdx::arrayref_t<char>(s); }
+    bool operator != (const char* s) const __bmdx_noex    { return *this != bmdx::arrayref_t<char>(s); }
+    bool operator > (const char* s) const __bmdx_noex    { return *this > bmdx::arrayref_t<char>(s); }
+    bool operator >= (const char* s) const __bmdx_noex    { return *this >= bmdx::arrayref_t<char>(s); }
+
     template<_s_long n2> bool operator == (const flstr_t<n2>& s) const __bmdx_noex    { const _s_long n = length(); if (n != s.length()) { return false; } const char* q = s.pd(); for (_s_long i = 0; i < n; ++i) { if (_x[i] != q[i]) { return false; } } return true; }
     template<_s_long n2> bool operator < (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } const char* q = s.pd(); int res = std::memcmp(_x, q, size_t(nb)); return res < 0 || (res == 0 && n() < s.n()); }
     template<_s_long n2> bool operator <= (const flstr_t<n2>& s) const __bmdx_noex    { _s_long nb = n(); if (nb > s.n()) { nb = s.n(); } const char* q = s.pd(); int res = std::memcmp(_x, q, size_t(nb)); return res < 0 || (res == 0 && n() <= s.n()); }
@@ -1625,6 +1657,13 @@ if (!bf) { return z; } if (no_exc) { return dflt; } throw exc_str2f();
       return 1;
     }
   };
+
+  template<_s_long nmax_> inline bool operator == (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { return s2 == s; }
+  template<_s_long nmax_> inline bool operator != (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { return s2 != s; }
+  template<_s_long nmax_> inline bool operator < (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { return s2 > s; }
+  template<_s_long nmax_> inline bool operator <= (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { return s2 >= s; }
+  template<_s_long nmax_> inline bool operator > (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { return s2 < s; }
+  template<_s_long nmax_> inline bool operator >= (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { return s2 <= s; }
 
   template<_s_long nmax_> inline flstr_t<nmax_> operator + (const bmdx::arrayref_t<char>& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
   template<_s_long nmax_> inline flstr_t<nmax_> operator + (const bmdx::arrayref_t<wchar_t>& s, const flstr_t<nmax_>& s2) __bmdx_noex { flstr_t<nmax_> s3(s); s3 += s2; return s3; }
@@ -3731,9 +3770,22 @@ namespace bmdx
         #else
           static const clockid_t t_timer = CLOCK_MONOTONIC;
         #endif
-        static bool bfall(false); if (bfall) { return std::clock() * (1000. / CLOCKS_PER_SEC); }
-        timespec t; if (clock_gettime(t_timer, &t) !=0) { bfall = true; return clock_ms(); }
-        return double(t.tv_sec) * 1000. + double(t.tv_nsec) * 1.e-6;
+        timespec t;
+
+        if (clock_gettime(t_timer, &t) == 0) // this is expected to succeed on most of systems
+          { return double(t.tv_sec) * 1.e3 + double(t.tv_nsec) * 1.e-6; }
+
+        clock_gettime(CLOCK_REALTIME, &t); // fallback to non-monotonic func.; this is expected to be faultless
+        double n = double(t.tv_sec) * 1.e3 + double(t.tv_nsec) * 1.e-6;
+        static double nprv = 0, corr = 0;
+        static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_lock(&m);
+          double d = n - nprv; if (d < 0) { corr -= d; }
+          nprv = n;
+          n += corr;
+        pthread_mutex_unlock(&m);
+        return n;
+
       #endif
     }
   #endif
@@ -4026,8 +4078,8 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     switch (prio)
     {
       case 4: { pl = SCHED_OTHER; lev = 3; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 5: { pl = SCHED_RR; lev = 2; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 6: { pl = SCHED_RR; lev = 3; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 5: { pl = SCHED_RR; lev = 1; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 6: { pl = SCHED_RR; lev = 2; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
       case 7: { pl = SCHED_FIFO; lev = 3; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
       case 1: { pl = pl_low; lev = 0; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
       case 2: { pl = SCHED_OTHER; lev = 1; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
@@ -4108,7 +4160,7 @@ template<class T, class _> _critsec_data1_t<T> _critsec_tu_static_t<T, _>::dat =
 
 #ifndef __bmdx__clock_ms
   #define __bmdx__clock_ms
-  static double clock_ms() { return std::clock() * (1000. / CLOCKS_PER_SEC); }
+  static double clock_ms(); // system-dependent impl.
 #endif
 
 
@@ -4133,16 +4185,28 @@ namespace bmdx
   template<class T> struct critsec_t
   {
       // check_period_mcs:
-      //    >= 1: thread sleep duration between two lock tries. The number of lock tries is roughly (timeout_ms * 1000 / check_period_mcs).
-      //    0: lock tries are made between sleep_mcs(0) (i.e. the thread only yields execution between lock tries, but does not sleep).
-      //    < 0: the constructor exits immediately w/o any attempt of locking (use it to allow/disable locking with a condition).
+      //    >= 1: thread sleep duration between two lock tries.
+      //      The number of lock tries is roughly (timeout_ms * 1000 / check_period_mcs).
+      //    0: lock tries are made between sleep_mcs(0)
+      //      (i.e. the thread only yields execution between lock tries,
+      //      but does not sleep).
+      //    < 0: the constructor exits immediately w/o any attempt of locking
+      //      (use it to allow/disable locking with a condition).
+      //      In this case: timeout_ms is ignored, is_locked() will return false.
       // timeout_ms: max. period of sleeping, during which the constructor tries to set a lock.
+      //    This parameter is used only if check_period_mcs >= 0.
       //    >= 1: the constructor will sleep until the lock is set or timeout occurs.
-      //    0:  the constructor tries to lock once, and exits anyway. is_locked() reflects the result (true if the lock has been acquired).
-      //    any < 0:  wait until the lock is acquired. This may block for indefinite time, but when the constructor exits, is_locked() == true anyway.
+      //    0:  the constructor tries to lock once, and exits anyway.
+      //      is_locked() reflects the result
+      //      (true if the lock has been acquired, false is not).
+      //    < 0:  wait until the lock is acquired.
+      //      This may block for indefinite time,
+      //      but when the constructor exits, is_locked() == true.
       // pdata: csdata object or correctly initialized _critsec_data0_t.
-      //    Allows for creating individual crit. sec. independent on T and default lock associated with T.
-      //    NOTE pdata is weak-referenced, i.e. the crit. sec. must be valid until the last lock on it is destroyed.
+      //    Allows for creating individual crit. sec., independent on T
+      //    and on default lock associated with T.
+      //    NOTE pdata is weak-referenced, i.e. the crit. sec. must be valid
+      //      until the last lock on it is destroyed.
     critsec_t(_s_ll check_period_mcs, _s_long timeout_ms, _critsec_data0_t<T>* pdata = 0 __bmdx_noarg) __bmdx_noex
     {
       _p = pdata ? pdata : ff_mc().pdefcsd();
@@ -4173,7 +4237,11 @@ namespace bmdx
     };
 
 
-      // Return value: a) true, b) false - lock tries were timed out (may occur ONLY on constructor timeout_ms >= 0).
+      // Return value:
+      //  a) true - loking done,
+      //  b) false - lock tries were timed out - may occur ONLY if constructor's
+      //    (check_period_mcs >= 0 && timeout_ms >= 0),
+      //  c) false - locking is disabled by check_period_mcs < 0.
     inline bool is_locked() const __bmdx_noex { return !!_flags._bl; }
     inline operator bool() const __bmdx_noex { return !!_flags._bl; }
 
@@ -9599,7 +9667,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
           {
             objstate = 2;
             #ifdef _bmdxpl_Psx
-              x->tc.set_priority(5);
+              x->tc.set_priority(__bmdx_cfg_ipc_th_delivery_prio_psx);
             #endif
           }
         }
