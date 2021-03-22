@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2021-02-05
+// rev. 2021-03-22
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -116,6 +116,16 @@ struct meta
   template<class T, class _ = __vecm_tu_selector> struct noarg_tu_t {};
   template<int i, class _ = __vecm_tu_selector> struct noargi_tu_t {};
   typedef noarg_tu_t<nothing> t_noarg;
+  #if __APPLE__ && __MACH__
+    template<class T, class _ = __vecm_tu_selector>
+    struct arg_tu_t
+    {
+      const T& x; bool b_des;
+      arg_tu_t(const T& x_) : x(x_), b_des(0) {}
+      template<class T2> arg_tu_t(const T2& x_) : x(*new T(x_)), b_des(1) {}
+      ~arg_tu_t() { if (b_des) { delete const_cast<T*>(&x); } }
+    };
+  #endif
 
     // Static assertion.
   template<bool cond, class _ = nothing> struct assert { typedef bool t_false; };  template<class _> struct assert<true, _> { enum { result = true }; typedef bool t_true; };
@@ -3834,7 +3844,11 @@ struct hashx : protected vecm
     //  Returns:
     //      a) a reference to the value, corresponding to the newly inserted or existing key.
     //      b) throws hoxOpFailed when failed to insert (e.g. memory allocation / object construction error).
-  inline t_v& operator[](const t_k& k) __bmdx_exs(hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
+  #if __APPLE__ && __MACH__
+    inline t_v& operator[](yk_c::meta::arg_tu_t<t_k> k) __bmdx_exs(hashx_common::EHashOpExc) { return opsub(k.x); }
+  #else
+    inline t_v& operator[](const t_k& k) __bmdx_exs(hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
+  #endif
   inline t_v& opsub(const t_k& k __vecm_noarg) __bmdx_exs(hashx_common::EHashOpExc) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
 
     // Same as operator[] and opsub(), but does not insert new key and value if k is not found (instead, hoxKeyNotFound is generated).
@@ -5062,7 +5076,11 @@ namespace _yk_c2
 
         // Finds/inserts an entry with key k. Returns a reference to value.
         //    O(1) if the entry exists. O(N^0.5) if it is inserted.
-      inline t_v& operator[](const t_k& k) __bmdx_exs(hashx_common::EHashOpExc  __vecm_noargt) { return opsub(k); }
+      #if __APPLE__ && __MACH__
+        inline t_v& operator[](yk_c::meta::arg_tu_t<t_k> k) __bmdx_exs(hashx_common::EHashOpExc) { return opsub(k.x); }
+      #else
+        inline t_v& operator[](const t_k& k) __bmdx_exs(hashx_common::EHashOpExc  __vecm_noargt) { return opsub(k); }
+      #endif
       inline t_v& opsub(const t_k& k __vecm_noarg) __bmdx_exs(hashx_common::EHashOpExc)
       {
         do
