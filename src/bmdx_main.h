@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2021-03-22
+// rev. 2021-03-23
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -772,6 +772,9 @@ namespace bmdx
     void __set_pp(unity_common::__Psm psm, I* pi) __bmdx_noex { __psm = psm; __pi = pi; }
   };
 
+  #if __bmdx_use_arg_tu
+    namespace { template<class I, class _ = __vecm_tu_selector> struct _o_iptr_des_t; }
+  #endif
 
     // NOTE o_iptr_t is only for in-module use. Its structure for different I may be different.
     //  Pass the original unity object between binary modules if necessary.
@@ -818,16 +821,23 @@ namespace bmdx
 
 
 
-    void clear(__bmdx_noarg1)        __bmdx_noex { this->~o_iptr_t(); new (this) o_iptr_t(); }
+    void clear(__bmdx_noarg1)        __bmdx_noex { *this = o_iptr_t(); }
 
-    o_iptr_t(__bmdx_noarg1)        __bmdx_noex : _p(0), _f(0) {}
-    ~o_iptr_t()        __bmdx_exs(__bmdx_noargt1) { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
+    o_iptr_t(__bmdx_noarg1)        __bmdx_noex : _p(0), _f(0)
+    {
+      #if __bmdx_use_arg_tu
+        _p_des = &_o_iptr_des_t<I>::f_des;
+      #endif
+    }
 
       // NOTE Construction does not generate exceptions.
-      //    If no proxy defined by the client, or the client-defined __Proxy() fails (this is not normal),
+      //    If no proxy defined by the client, or the client-defined __Proxy() fails (this is normally not expected),
       //    o_iptr_t will be null (== false).
     o_iptr_t(__I* pi, unity_common::__Psm pmsm __bmdx_noarg)        __bmdx_noex : _p(0), _f(0)
     {
+      #if __bmdx_use_arg_tu
+        _p_des = &_o_iptr_des_t<I>::f_des;
+      #endif
       if (pmsm == unity_common::pls_modsm()) { _p = pi; return; }
         if (!(pi && pmsm)) { return; }
       unity_common::__Pipsm f_get_ism = (unity_common::__Pipsm)pmsm(unity_common::msm_obj_ipsm);
@@ -841,22 +851,56 @@ namespace bmdx
       //    If copying fails, ptr_u() == 0.
       //    If copying succeeds, bool(ptr_u()) == bool(x.ptr_u()).
       //    If the client-defined __Proxy copy constructor does not fail anyway, copying always succeeds as well.
-    o_iptr_t(const o_iptr_t& x __bmdx_noarg)         __bmdx_noex : _p(x._p), _f(0) { if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} } }
+    o_iptr_t(const o_iptr_t& x __bmdx_noarg)         __bmdx_noex : _p(x._p), _f(0)
+    {
+      #if __bmdx_use_arg_tu
+        _p_des = &_o_iptr_des_t<I>::f_des;
+      #endif
+      if (x.b_nonlocal()) { try { new (&prx()) __Proxy(x.prx()); _f = 1; } catch (...) {} }
+    }
 
       // NOTE Assignment does not generate exceptions.
       //    If assignment fails, ptr_u() == 0.
       //    If assignment succeeds, bool(ptr_u()) == bool(x.ptr_u()).
       //    If the client-defined __Proxy copy constructor does not fail anyway, assignment always succeeds as well.
-    o_iptr_t& operator=(const o_iptr_t& x)        __bmdx_exs(__bmdx_noargt1) { this->~o_iptr_t(); new (this) o_iptr_t(x); return *this; }
+
+    ~o_iptr_t()        __bmdx_exs(__bmdx_noargt1)
+    {
+      #if __bmdx_use_arg_tu
+        _p_des(*this);
+      #else
+        _des();
+      #endif
+    }
+
+  #if __bmdx_use_arg_tu
+    o_iptr_t& operator=(const yk_c::meta::arg_tu_t<o_iptr_t>& x2)        __bmdx_exs(__bmdx_noargt1)
+      { const o_iptr_t& x = x2.x; _p_des(*this); new (this) o_iptr_t(x); return *this; }
+  #else
+    o_iptr_t& operator=(const o_iptr_t& x)        __bmdx_exs(__bmdx_noargt1)
+      { _des(); new (this) o_iptr_t(x); return *this; }
+  #endif
 
 
 
-  private: __I* _p; char _sprx[sizeof(__Proxy)]; s_long _f;
+  private:
+    __I* _p; char _sprx[sizeof(__Proxy)]; s_long _f;
+    #if __bmdx_use_arg_tu
+      typedef void (*f_des)(o_iptr_t&);
+      f_des _p_des;
+      friend struct _o_iptr_des_t<I>;
+    #endif
+    inline void _des(__bmdx_noarg1)        __bmdx_exs(__bmdx_noargt1) { _p = 0; if (_f) { try { prx().~__Proxy(); } catch (...) {} _f = 0; } }
     inline __I* _p_checked(__bmdx_noarg1) const { if (_p) { return _p; } else if (_f && prx().__pci()) { return prx().__pci(); } throw exc_null_ptr(); }
     inline __I* _p_u(__bmdx_noarg1) const { if (_p) { return _p; } else if (_f) { return prx().__pci(); } return 0; }
     inline __I* _psi_u(__bmdx_noarg1) const { if (_p) { return _p; } else if (_f) { return prx().__psi(); } return 0; }
     __Proxy& prx(__bmdx_noarg1) const { return *(__Proxy*)&_sprx[0]; }
   };
+
+  #if __bmdx_use_arg_tu
+    namespace { template<class I, class _> struct _o_iptr_des_t { typedef o_iptr_t<I> t; static void f_des(t& x) { x._des(); } }; }
+  #endif
+
   struct o_itfset_base
   {
     _o_itfslist* __pidyn;
@@ -3877,7 +3921,7 @@ namespace bmdx
 
 
     s_long n() const __bmdx_noex;
-    unity& operator[] (const unity& k) __bmdx_exs(exc_subscript);
+    unity& opsub(const unity& k __bmdx_noarg) __bmdx_exs(exc_subscript);
     const entry* operator() (s_long ind) const __bmdx_noex;
     const entry* find(const unity& k, s_long* ret_pind = 0) const __bmdx_noex;
     s_long insert(const unity& k, const entry** ret_pentry = 0, s_long* ret_pind = 0, s_long ind_before = hashx_common::no_elem) __bmdx_noex;

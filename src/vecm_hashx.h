@@ -1,7 +1,7 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2021-03-22
+// rev. 2021-03-23
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -54,6 +54,8 @@
 #ifdef _MSC_VER
   #pragma warning(disable:4290)
   #pragma warning(disable:4100)
+  #pragma warning(disable:4616)
+  #pragma warning(disable:4355)
 #endif
 #undef _yk_reg
 #if __cplusplus > 199711L
@@ -90,6 +92,9 @@
     #define __bmdx_noex throw()
     #define __bmdx_exs(a) throw(a)
   #endif
+  #if __APPLE__ && __MACH__
+    #define __bmdx_use_arg_tu 1
+  #endif
   #if __APPLE__ && __MACH__ && __cplusplus >= 201103
     #define __bmdx_exany noexcept(false)
   #else
@@ -116,14 +121,17 @@ struct meta
   template<class T, class _ = __vecm_tu_selector> struct noarg_tu_t {};
   template<int i, class _ = __vecm_tu_selector> struct noargi_tu_t {};
   typedef noarg_tu_t<nothing> t_noarg;
-  #if __APPLE__ && __MACH__
+  #if __bmdx_use_arg_tu
     template<class T, class _ = __vecm_tu_selector>
     struct arg_tu_t
     {
-      const T& x; bool b_des;
-      arg_tu_t(const T& x_) : x(x_), b_des(0) {}
-      template<class T2> arg_tu_t(const T2& x_) : x(*new T(x_)), b_des(1) {}
-      ~arg_tu_t() { if (b_des) { delete const_cast<T*>(&x); } }
+      union t_stg { long long _v1; char _v2[sizeof(T)]; };
+      t_stg stg;
+      const T& x;
+      arg_tu_t(const T& x_) : x(x_) {}
+      template<class T2> arg_tu_t(const T2& x_) : x(reinterpret_cast<T&>(*this)) { new (this) T(x_); }
+      ~arg_tu_t() { if ((void*)&x == this) { reinterpret_cast<T&>(*this).~T(); } }
+    private: arg_tu_t(const arg_tu_t&); void operator=(const arg_tu_t&);
     };
   #endif
 
@@ -3844,8 +3852,8 @@ struct hashx : protected vecm
     //  Returns:
     //      a) a reference to the value, corresponding to the newly inserted or existing key.
     //      b) throws hoxOpFailed when failed to insert (e.g. memory allocation / object construction error).
-  #if __APPLE__ && __MACH__
-    inline t_v& operator[](yk_c::meta::arg_tu_t<t_k> k) __bmdx_exs(hashx_common::EHashOpExc) { return opsub(k.x); }
+  #if __bmdx_use_arg_tu
+    inline t_v& operator[](const yk_c::meta::arg_tu_t<t_k>& k) __bmdx_exs(hashx_common::EHashOpExc) { return opsub(k.x); }
   #else
     inline t_v& operator[](const t_k& k) __bmdx_exs(hashx_common::EHashOpExc __vecm_noargt) { if (!_pz) { if (!_d_reinit()) { throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); } } entry* e; s_long ind; try { _insert(k, _pz->_kf.hash(k), _pz->_kf, e, ind); } catch (...) { e = 0; } if (e) { return e->v; } throw hashx_common::EHashOpExc(hashx_common::hoxOpFailed); }
   #endif
@@ -4621,7 +4629,11 @@ namespace _yk_c2
         // NOTE If operator= fails (gen. exception), the container is left with 0 size and default flags.
       inline vec2_t(const vec2_t& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t&)"); }
         template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
-      inline vec2_t& operator=(const vec2_t& x) __bmdx_exs(exc_vec2_t  __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
+      inline vec2_t& operator=(const vec2_t& x) __bmdx_exs(exc_vec2_t  __vecm_noargt)
+      {
+          // NOTE actual copying is done in the binary module of *this.
+        if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator=");
+      }
 
         // Copying between vectors with same elem. type but different TA arg.
       template<class TA2> inline vec2_t(const vec2_t<TA2, _bs>& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0)
@@ -4629,7 +4641,10 @@ namespace _yk_c2
         enum { __check = meta::assert<meta::same_t<typename vecm::specf<TA2>::t_value, t_value>::result>::result };
         if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA>&)");
       }
-      template<class TA2> inline vec2_t& operator=(const vec2_t<TA2, _bs>& x) __bmdx_exs(exc_vec2_t __vecm_noargt) { if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator="); }
+      template<class TA2> inline vec2_t& assign2(const vec2_t<TA2, _bs>& x __vecm_noarg) __bmdx_exs(exc_vec2_t __vecm_noargt)
+      {
+        if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator=");
+      }
 
       inline explicit vec2_t(size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(m, c T& x)"); }
       inline explicit vec2_t(s_long base, size_type m, const value_type& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, base) { if (this->vecm::el_append_m(m, x) >= 0) { return; } throw exc_vec2_t("vec2_t(base, m, c T& x)"); }
@@ -4882,46 +4897,57 @@ namespace _yk_c2
     };
 
 
-
       // NOTE Comparisons ignore nbase().
-    template<class TA, class _bs1, class _bs2> inline bool operator==(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
-    {
-      struct exc_vec2_t : _vec2_t_exceptions::exc_vec2_t { exc_vec2_t(const char* pmsg) __bmdx_noex : _vec2_t_exceptions::exc_vec2_t(pmsg) {} };
-      typedef typename vec2_t<TA>::t_value T;
-      if (a.n() != b.n()) { return false; }
-      if (a.n() == 0) { return true; }
-      vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
-      do {
-        const T* x1 = la.pval(); const T* x2 = lb.pval();
-        if (!(x1 && x2)) { throw exc_vec2_t("operator==(const vec2_t&, const vec2_t&)"); }
-        if (!(*x1 == *x2)) { return false; }
-        la.incr();
-      } while (lb.incr());
-      return true;
-    }
-    template<class TA, class _bs1, class _bs2> inline bool operator<(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
-    {
-      struct exc_vec2_t : _vec2_t_exceptions::exc_vec2_t { exc_vec2_t(const char* pmsg) __bmdx_noex : _vec2_t_exceptions::exc_vec2_t(pmsg) {} };
-      typedef typename vec2_t<TA>::t_value T;
-      if (a.n() == 0) { return b.n() > 0; } if (b.n() == 0) { return false; }
-      vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
-      do {
-        _yk_reg const T* p1 = la.pval(); _yk_reg const T* p2 = lb.pval();
-        if (!p1) { if (la.is_valid_pos()) { throw exc_vec2_t("operator<(const vec2_t&, const vec2_t&):a"); } return bool(p2); }
-        if (!p2) { if (lb.is_valid_pos()) { throw exc_vec2_t("operator<(const vec2_t&, const vec2_t&):b"); } return false; }
-        if (*p1 < *p2) { return true; }
-        if (*p2 < *p1) { return false; }
-        la.incr(); lb.incr();
-      } while (true);
-    }
-    template<class TA, class _bs1, class _bs2> inline bool operator!=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
-      { return !(a == b); }
-    template<class TA, class _bs1, class _bs2> inline bool operator>(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
-      { return b < a; }
-    template<class TA, class _bs1, class _bs2> inline bool operator<=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
-      { return !(b < a); }
-    template<class TA, class _bs1, class _bs2> inline bool operator>=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
-      { return !(a < b); }
+    #if __bmdx_use_arg_tu
+      namespace _vec2_comparison { namespace {
+    #endif
+        template<class TA, class _bs1, class _bs2> inline bool operator==(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
+        {
+          struct exc_vec2_t : _vec2_t_exceptions::exc_vec2_t { exc_vec2_t(const char* pmsg) __bmdx_noex : _vec2_t_exceptions::exc_vec2_t(pmsg) {} };
+          typedef typename vec2_t<TA>::t_value T;
+          if (a.n() != b.n()) { return false; }
+          if (a.n() == 0) { return true; }
+          vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
+          do {
+            const T* x1 = la.pval(); const T* x2 = lb.pval();
+            if (!(x1 && x2)) { throw exc_vec2_t("operator==(const vec2_t&, const vec2_t&)"); }
+            if (!(*x1 == *x2)) { return false; }
+            la.incr();
+          } while (lb.incr());
+          return true;
+        }
+        template<class TA, class _bs1, class _bs2> inline bool operator<(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
+        {
+          struct exc_vec2_t : _vec2_t_exceptions::exc_vec2_t { exc_vec2_t(const char* pmsg) __bmdx_noex : _vec2_t_exceptions::exc_vec2_t(pmsg) {} };
+          typedef typename vec2_t<TA>::t_value T;
+          if (a.n() == 0) { return b.n() > 0; } if (b.n() == 0) { return false; }
+          vecm::link1_t<T, true, _bs1> la(a.link1_cbegin()); vecm::link1_t<T, true, _bs2> lb(b.link1_cbegin());
+          do {
+            _yk_reg const T* p1 = la.pval(); _yk_reg const T* p2 = lb.pval();
+            if (!p1) { if (la.is_valid_pos()) { throw exc_vec2_t("operator<(const vec2_t&, const vec2_t&):a"); } return !!p2; }
+            if (!p2) { if (lb.is_valid_pos()) { throw exc_vec2_t("operator<(const vec2_t&, const vec2_t&):b"); } return false; }
+            if (*p1 < *p2) { return true; }
+            if (*p2 < *p1) { return false; }
+            la.incr(); lb.incr();
+          } while (true);
+        }
+        template<class TA, class _bs1, class _bs2> inline bool operator!=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
+          { return !(a == b); }
+        template<class TA, class _bs1, class _bs2> inline bool operator>(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
+          { return b < a; }
+        template<class TA, class _bs1, class _bs2> inline bool operator<=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
+          { return !(b < a); }
+        template<class TA, class _bs1, class _bs2> inline bool operator>=(const vec2_t<TA, _bs1>& a, const vec2_t<TA, _bs2>& b) __bmdx_exs(std::exception __vecm_noargt)
+          { return !(a < b); }
+    #if __bmdx_use_arg_tu
+      } } // end anon. namespace
+      using _vec2_comparison::operator==;
+      using _vec2_comparison::operator!=;
+      using _vec2_comparison::operator>=;
+      using _vec2_comparison::operator<=;
+      using _vec2_comparison::operator>;
+      using _vec2_comparison::operator<;
+    #endif
 
   }
   template<class V, class _> struct _safemove_vec2_impl_t { static inline void F(V* pdest, V* psrc) __bmdx_noex { bytes::memmove_t<V>::F(pdest, psrc, sizeof(V)); } };
@@ -5076,8 +5102,8 @@ namespace _yk_c2
 
         // Finds/inserts an entry with key k. Returns a reference to value.
         //    O(1) if the entry exists. O(N^0.5) if it is inserted.
-      #if __APPLE__ && __MACH__
-        inline t_v& operator[](yk_c::meta::arg_tu_t<t_k> k) __bmdx_exs(hashx_common::EHashOpExc) { return opsub(k.x); }
+      #if __bmdx_use_arg_tu
+        inline t_v& operator[](const yk_c::meta::arg_tu_t<t_k>& k) __bmdx_exs(hashx_common::EHashOpExc) { return opsub(k.x); }
       #else
         inline t_v& operator[](const t_k& k) __bmdx_exs(hashx_common::EHashOpExc  __vecm_noargt) { return opsub(k); }
       #endif
@@ -5116,14 +5142,21 @@ namespace _yk_c2
       ordhs_t(const ordhs_t& x __vecm_noarg) __bmdx_noex : _d(x._d), _inds(x._inds) { if (_d.n() != _inds.n()) { _d.hashx_clear(); _inds.vecm_clear(); } }
 
         // Constructs a copy of x.
-        //    On success, nexc() is set to 0.
-        //    On failure nexc() is set to non-0, *this is not changed, no exceptions generated.
-      ordhs_t& operator=(const ordhs_t& x) __bmdx_exs( __vecm_noargt1)
+        //  Returns:
+        //    1 on success. (Also if this == &x.)
+        //        nexc() is set to 0.
+        //    0 the operation has failed, changes are canceled.
+        //        nexc() is set to non-0, *this is not changed, no exceptions generated.
+        //    -2 the function is called for a null pointer.
+      s_long ordhs_copy(const ordhs_t& x __vecm_noarg) __bmdx_noex
       {
-        if (this == &x) { return *this; } typedef ordhs_t Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
+        if (!this) { return -2; }
+        if (this == &x) { return 1; }
+        typedef ordhs_t Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
         meta::s_ll _st[_nst]; Q* p = reinterpret_cast<Q*>(_st); new (p) Q(x);
-        if (p->nexc()) { _set_nexc(p->nexc()); p->~Q(); return *this; }
-        this->~Q(); bytes::memmove_t<Q>::F(this, p, _nq); return *this;
+        if (p->nexc()) { _set_nexc(p->nexc()); p->~Q(); return 0; }
+        this->~Q(); bytes::memmove_t<Q>::F(this, p, _nq);
+        return 1;
       }
 
         // Removes all elements, sets everything to default value.
@@ -5166,6 +5199,8 @@ namespace _yk_c2
       inline _Vx& __inds() __bmdx_noex  { return *static_cast<_Vx*>(&_inds); }
       inline const _Vx& __inds() const __bmdx_noex  { return *static_cast<const _Vx*>(&_inds); }
       inline const _Vx& __s_crvx(const vecm& v) const __bmdx_noex { return *static_cast<const _Vx*>(&v); }
+
+      ordhs_t& operator=(const ordhs_t& x);
     };
   }
 }

@@ -1,6 +1,6 @@
 // BMDX library 1.4 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-03-22
+// rev. 2021-03-23
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -4628,14 +4628,12 @@ void _static_conv::conv_Unity_CharVector(s_long fc, const unity& x, std::vector<
 void _static_conv::conv_Map_Map(s_long fc, const unity::t_map& x, unity::t_map_tu& retval)
 {
   retval.ordhs_set0_nexc();
-  typedef const unity::t_map_tu Ttu;
-  retval = (Ttu&)x;
-  if (retval.nexc() == 0) { return; }
+  if (retval.ordhs_copy((const unity::t_map_tu&)x) == 1) { return; }
   if ((fc & cs_mask) != csLazy) { throw XUConvFailed("conv_Map_Map"); }
   retval.ordhs_clear();
 }
 void _static_conv::conv_Map_Hash(s_long fc, const unity::t_map& x, unity::t_hash& retval)
-  { retval.hl_clear(true); bool b = retval.hl_set_kf(*x.pkf()); if (b) { try { for (s_long i = 0; i < x.n(); ++i) { const unity::t_map::entry* e = x(i); retval[e->k] = e->v; } } catch (...) { b = false; } } if (b) { return; } if ((fc & cs_mask) != csLazy) { throw XUConvFailed("conv_Map_Hash"); } retval.hl_clear(true); }
+  { retval.hl_clear(true); bool b = retval.hl_set_kf(*x.pkf()); if (b) { try { for (s_long i = 0; i < x.n(); ++i) { const unity::t_map::entry* e = x(i); retval.opsub(e->k) = e->v; } } catch (...) { b = false; } } if (b) { return; } if ((fc & cs_mask) != csLazy) { throw XUConvFailed("conv_Map_Hash"); } retval.hl_clear(true); }
 void _static_conv::conv_Map_Unity(s_long fc, const unity::t_map& x, unity& retval)
   {
     retval.clear(); unity::_stg_u st;
@@ -6878,7 +6876,7 @@ bool unity::kf_unity::less21(const unity& x1, const unity& x2) const { return x1
 unity::_hl_i::_hl_i() { pmsm = unity_common::ls_modsm; }
 unity::_hl_i::_hl_i(const _hl_i& x) : pmsm(0) { if (x.compatibility() < 1) { throw exc_consistency(); } pmsm = x.pmsm; }
 s_long unity::_hl_i::n() const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->n(); }
-unity& unity::_hl_i::operator[] (const unity& k) __bmdx_exs(exc_subscript) { return static_cast<_unity_hl_impl*>(this)->operator[](k); }
+unity& unity::_hl_i::opsub(const unity& k __bmdx_noargt) __bmdx_exs(exc_subscript) { return static_cast<_unity_hl_impl*>(this)->operator[](k); }
 const unity::_hl_i::entry* unity::_hl_i::operator() (s_long ind) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->operator()(ind); }
 const unity::_hl_i::entry* unity::_hl_i::find(const unity& k, s_long* ret_pind) const __bmdx_noex { return static_cast<const _unity_hl_impl*>(this)->find(k, ret_pind); }
 s_long unity::_hl_i::insert(const unity& k, const entry** ret_pentry, s_long* ret_pind, s_long ind_before) __bmdx_noex { return static_cast<_unity_hl_impl*>(this)->insert(k, ret_pentry, ret_pind, ind_before); }
@@ -7011,7 +7009,7 @@ void unity::hashFlags_set(s_long fk_reset, s_long fk_set)
   if (((fk0 ^ fk) & ~fkcmpRevOrder) == 0 || _h()->n() == 0) { _h()->pkf()->_set_flags(fk); return; }
   unity z0; z0.pmsm = pmsm; z0._ensure_h(); t_hash& rh2 = *z0._h(); rh2.pkf()->_set_flags(fk);
   t_hash& rh = *_h(); s_long pos = rh.qi_next(rh.qi_noel());
-  while (pos != rh.qi_noel()) { const t_hash::entry* e = rh.h(pos); rh2[e->k] = e->v; pos = rh.qi_next(pos); }
+  while (pos != rh.qi_noel()) { const t_hash::entry* e = rh.h(pos); rh2.opsub(e->k) = e->v; pos = rh.qi_next(pos); }
   _xu_move_p1(z0);
 }
 
@@ -7022,7 +7020,7 @@ bool unity::hash_locate(const unity& k, bool insert)
   if (insert) { s_long res = _h()->insert(k); if (res >= 0) { return res > 0; } throw XUExec("hash_locate.1"); }
   return !!_h()->find(k);
 }
-unity& unity::hash(const unity& k)        { _ensure_h(); return (*_h())[k]; }
+unity& unity::hash(const unity& k)        { _ensure_h(); return _h()->opsub(k); }
 bool unity::hash_set(const unity& k, const unity& v, bool keep_first, s_long pos_before)
 {
   _ensure_h();
