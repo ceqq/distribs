@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2021-11-20
+// rev. 2021-11-21
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -10099,11 +10099,23 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
 
   struct deinit_handler { _s_long& s; deinit_handler(_s_long& s_) : s(s_) {} ~deinit_handler() { critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {} s = 1; } };
 
-  static bool _th_enable()
+    // NOTE b_on = false only for call during static deinitialization (as bugfix).
+  static bool _th_enable(bool b_on = true)
   {
-    static _s_long fl_deinit(0); static deinit_handler __local_dh(fl_deinit); if (sizeof(__local_dh)) {}
+    static _s_long fl_deinit(0);
+    static deinit_handler __local_dh(fl_deinit); if (sizeof(__local_dh)) {}
     static cref_t<th_handler> x;
     static volatile _s_long objstate(0);
+    if (!b_on)
+    {
+      if (1)
+      {
+        critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+        fl_deinit = 1;
+      }
+      x.clear();
+      return false;
+    }
     if (objstate < 2 && !fl_deinit)
     {
       critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
@@ -10142,6 +10154,14 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
     return x;
   }
 };
+#ifdef __BORLANDC__
+  struct _shmqueue_ctxx_th_des
+  {
+    _shmqueue_ctxx_th_des() {}
+    ~_shmqueue_ctxx_th_des() { _shmqueue_ctxx_impl::_th_enable(false); }
+  };
+  namespace { _shmqueue_ctxx_th_des _inst_th_des; }
+#endif
 
 
 
