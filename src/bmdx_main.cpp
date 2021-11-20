@@ -1,6 +1,6 @@
-// BMDX library 1.4 RELEASE for desktop & mobile platforms
+// BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-03-23
+// rev. 2021-11-20
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -166,7 +166,7 @@ struct shmqueue_ms_sender_t // shared memory queue for multiple senders - sender
   bmdx_shm::shmobj2s_t<_rso> so;
   vnnqueue_t<cref_t<t_stringref> > lq;
 
-  shmqueue_ms_sender_t(const bmdx_shm::t_name_shm& name_)
+  shmqueue_ms_sender_t(const bmdx_shm::t_name_shm& name_ __bmdx_noarg)
     : qname(name_), so(name_.n() ? name_.c_str() : "_", false, __shmqueue_ms_nbytes_min , __shmqueue_ms_buf_uid)
   { lq.set_cap_hints(-1, -2); }
 
@@ -331,12 +331,12 @@ struct shmqueue_ms_receiver_t // shared memory queue for multiple senders - sing
 
   const bmdx_shm::t_name_shm qname;
   bmdx_shm::shmobj2s_t<_rso> so;
-  vec2_t<cref_t<t_stringref> > dd;
+  vec2_t<cref_t<t_stringref>, _bs> vdd;
   AuxData auxd_init; // used to init _rso::auxd when shared memory becomes available
 
-  shmqueue_ms_receiver_t(const bmdx_shm::t_name_shm& name_, const s_ll nbdflt_ = -1, const AuxData& auxd_init_ = AuxData())
+  shmqueue_ms_receiver_t(const bmdx_shm::t_name_shm& name_, const s_ll nbdflt_ = -1, const AuxData& auxd_init_ = AuxData() __bmdx_noarg)
     : qname(name_), so(name_.n() ? name_.c_str() : "_", true, bmdx_minmax::myllmax(__shmqueue_ms_nbytes_min, nbdflt_), __shmqueue_ms_buf_uid)
-  { std::memcpy(&auxd_init, &auxd_init_, sizeof(AuxData)); dd.vec2_setf_can_shrink(false); }
+  { std::memcpy(&auxd_init, &auxd_init_, sizeof(AuxData)); vdd.vec2_setf_can_shrink(false); }
 
     // Attempts to connect to shared memory,
     //    permanently lock the shared object, and initialize it if not yet.
@@ -383,17 +383,17 @@ struct shmqueue_ms_receiver_t // shared memory queue for multiple senders - sing
     //    -4 - the shared queue exists, but not accessible yet - try again later.
   s_long mpop_1()
   {
-    dd.clear();
+    vdd.clear();
     s_long res = attempt_init(true); if (res < 1) { return res; }
     res = _pop_next();
     return res;
   }
   s_long mpop_avl()
   {
-    dd.clear();
+    vdd.clear();
     s_long res = attempt_init(true); if (res < 1) { return res; }
     while (true) { res = _pop_next(); if (res < 1) { break; } }
-    if (dd.n() > 0) { return 1; }
+    if (vdd.n() > 0) { return 1; }
     return res;
   }
 private:
@@ -413,13 +413,13 @@ private:
       if (!(header.length >= 0 && header.lhash == _shmqms_hash_len(header.length) && ipo + header.length <= ipu)) { rb._rcv_set_ipop(ipu); return -2; } // recovery: completely ignore all existing input, try to start later from the next input
       const s_long nbdata = header.length - __shmqueue_ms_nbytes_overhead;
       cref_t<t_stringref> rdata = bmdx_shm::shmqueue_s::make_rba_z(nbdata, 1); if (!rdata) { return -2; }
-      if (!dd.el_append(rdata)) { return -2; }
+      if (!vdd.el_append(rdata)) { return -2; }
       rb._rcv_set_ipop(ipo + 8);
       char* pd = rdata->pd();
       s_long checksum = 0, checksum2 = 0;
       if (nbdata > 0) { rb.pop(pd, nbdata, true, &checksum); }
       rb.pop((char*)&checksum2, 4, true); checksum2 = bmdx_str::words::be4(&checksum2, 0);
-      if (checksum2 != checksum) { dd.el_remove_last(); return -2; }
+      if (checksum2 != checksum) { vdd.el_remove_last(); return -2; }
       return 1;
     } catch (...) {}
     return -2;
@@ -472,8 +472,10 @@ struct t_mtrk_sender_info
 };
 struct t_mtrk_sender_info_id_list
 {
+  t_mtrk_sender_info_id_list(__bmdx_noarg1) {}
   t_mtrk_sender_info si;
-  vec2_t<i_dispatcher_mt::tracking_info> tii;
+  typedef i_dispatcher_mt::tracking_info tracking_info;
+  vec2_t<tracking_info> _vti;
 };
 struct t_mtrk_qipush_entry
 {
@@ -490,6 +492,8 @@ namespace yk_c
   template<> struct vecm::spec<bmdx_main_intl_lib::t_mtrk_qipush_entry> { typedef bmdx_main_intl_lib::t_mtrk_qipush_entry t; typedef config_t<t, 1, 4, 1> config; };
 }
 namespace bmdx_main_intl_lib
+{
+namespace
 {
 
   // Creates the given name's representation, suitable for global objects (UTF-8-encoded, limited to bmdx_shm::t_name_shm capacity).
@@ -1001,7 +1005,7 @@ struct lm_slot_controller // IPC controller for dispatcher_mt
 
       // Find command slots for the given list of msg. ids. Set command slot state according to associated delivery state.
       // Returns: 1 - success, -2 - failure.
-    virtual s_long cslph_update(vec2_t<tracking_info>& vtii) = 0;
+    virtual s_long cslph_update(vec2_t<tracking_info>& tii) = 0;
     virtual ~i_callback() __bmdx_exany {}
   };
 
@@ -1067,7 +1071,7 @@ public:
   struct peer_tracker
   {
     inline peer_tracker(const bmdx_shm::t_name_shm& name_prf_, const bmdx_shm::t_name_shm& name_peerf_, s_ll nb_qum_) __bmdx_noex;
-    inline ~peer_tracker() __bmdx_noex { _cltpt_close(); }
+    inline ~peer_tracker() __bmdx_noex { _cltpt_close(true); }
     inline s_long state() const __bmdx_noex { return _state; }
     inline s_ll id_peer() const __bmdx_noex { return _id_peer; } // for local process use only
 
@@ -1084,7 +1088,7 @@ public:
     volatile s_long _state; // 1 ready; 0 not initialized yet; -2 init. failed, will be tried again later; -3 closing; -4 already closed
     volatile bool _b_clt_mdsend_wait_once;
     //================================
-    shmqueue_ms_sender_t<_r_prc_uid> _qinfo_send; // shared queue for sending informational messages to peer process
+    shmqueue_ms_sender_t<_r_prc_uid, __vecm_tu_selector> _qinfo_send; // shared queue for sending informational messages to peer process
     bmdx_shm::shmqueue_s _qum_rcv; // shared queue for input user messages from peer process; serviced in LMSC det_periodic()
     bmdx_shm::shmqueue_s _qum_send; // shared queue for sending user messages to peer process; external client (dispatcher_mt) may only push messages in b_state() 1; locking: lkd_pt_access
     //================================
@@ -1130,7 +1134,7 @@ public:
       // normally called from both lm_slot_controller and peer_tracker
     inline double _cltpt_tm_last_init_ms() { return _tm_lastinit; }
     inline s_long _cltpt_ensure_comm(bool b_wait, bool b_force_check) __bmdx_noex;
-    inline bool _cltpt_close() __bmdx_noex;
+    inline bool _cltpt_close(bool b_final) __bmdx_noex;
     inline void _cltpt_qum_conf_reset(bool b_rcv, bool b_forced) __bmdx_noex;
 
       // purely private (peer_tracker use only)
@@ -1186,7 +1190,7 @@ private:
     //    except for clt_set_ses_state(),
     //    which is called by dispatcher_mt, to immediately "publish" its session state changes.
   critsec_t<lm_slot_controller>::csdata lkd_qinfo_rcv_state;
-  shmqueue_ms_receiver_t<_r_prc_uid> _qinfo_rcv;
+  shmqueue_ms_receiver_t<_r_prc_uid, __vecm_tu_selector> _qinfo_rcv;
 
   bool _b_qinfo_rcv_valid; // becomes true when shared queue is ensured to be initialized and compatible
   s_long _qinfo_rcv_idd0; // index in _qinfo_rcv.dd, marks that all entries with index < _qinfo_rcv_idd0 are already processed; locking: none (LMSC thread use only)
@@ -1198,7 +1202,7 @@ private:
   inline bool _x_qinfo_rcv_init() __bmdx_noex;
   inline void _x_qinfo_rcv_update_ses_state() __bmdx_noex;
   inline void _x_qinfo_rcv_mark_process_closed() __bmdx_noex;
-  inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate);
+  inline cref_t<peer_tracker> _x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate) __bmdx_noex;
   inline void _x_close() __bmdx_noex;
 
   struct _mtrk_fn_handler
@@ -1334,8 +1338,8 @@ s_long lm_slot_controller::peer_tracker::_cltpt_ensure_comm(bool b_wait, bool b_
 }
   // For calling from lm_slot_controller many times.
   //  1st call initiates closing, next calls are only checking if all done.
-  //  Returns true is all done, false - not yet.
-bool lm_slot_controller::peer_tracker::_cltpt_close() __bmdx_noex
+  //  Returns true if all done, false - not yet.
+bool lm_slot_controller::peer_tracker::_cltpt_close(bool b_final) __bmdx_noex
 {
   if (_state == -4) { return true; }
   critsec_t<lm_slot_controller> __lock(10, -1, &lkd_pt_access); if (sizeof(__lock)) {}
@@ -1350,17 +1354,38 @@ bool lm_slot_controller::peer_tracker::_cltpt_close() __bmdx_noex
     _cltpt_qum_conf_reset(true, false); // reset receiver queue conf., only if it was modified
     _cltpt_qum_conf_reset(false, false); // reset sender queue conf., only if it was modified
     _x_close_state = 1;
+    _state = -3;
   }
 
-  _state = -3;
-  if (_x_close_ipush != -1)
+  if (_x_close_state == 1)
   {
-    s_ll ipop = -1;
-    _qum_send.lqstate(false, 0, &ipop);
-    if (ipop != -1 && ipop - _x_close_ipush < 0) { return false; }
+    if (_x_close_ipush != -1)
+    {
+      s_ll ipop = -1;
+      _qum_send.lqstate(false, 0, &ipop);
+      if (ipop != -1 && ipop - _x_close_ipush < 0)
+      {
+        if (!b_final) { return false; }
+      }
+    }
+    _qum_send.bufstate(8);
+    _qum_rcv.bufstate(9);
+    _x_close_state = 2;
   }
+
+  if (_x_close_state == 2)
+  {
+    bool b1 = _qum_send.b_rq();
+      if (b1) { s_long res = _qum_send.bufstate(0); if (res < 0) { _qum_send.clear_rq(); b1 = false; } }
+    bool b2 = _qum_rcv.b_rq();
+      if (b2) { s_long res = _qum_rcv.bufstate(1); if (res < 0) { _qum_rcv.clear_rq(); b2 = false; } }
+    if (b1 || b2)
+      { return false; }
+//printf("DISP SHM CLOSED   PT=%p __ %s --> %s \n", this, this->_name_prf.c_str(), this->_name_peerf.c_str());
+    _x_close_state = 3;
+  }
+
   _state = -4;
-  _x_close_state = 2;
 
   return true;
 }
@@ -1439,6 +1464,7 @@ void lm_slot_controller::peer_tracker::_x_init() __bmdx_noex
   s_long res2 = _qinfo_send.attempt_open();
   s_long res3 = _qum_rcv.bufstate(3);
   s_long res4 = _qum_send.bufstate(2);
+//printf("   DISP SHM RES PT=%p  %d %d %d __ %s --> %s \n", this, res2, res3, res4, this->_name_prf.c_str(), this->_name_peerf.c_str());
   if (!(res2 >= 1 && res3 == 3 && res4 >= 0 && res4 != 4)) { _state = -2; return; }
 
   if (this->b_self) { _qinfo_peer_conn_techmsg_sent = true; } // self has already created all its structures and thus does not need any dialog with itself
@@ -1478,7 +1504,7 @@ void lm_slot_controller::det_periodic(i_callback& cb, bool& b_active) __bmdx_noe
         if (_hpt.find(k)) { _hnew_name_peerf.remove(k); continue; }
         cref_t<peer_tracker> pt = _x_pt_getcr(k, true, true);
           if (!pt) { break; } // will retry on the next det_periodic() call
-          try { bmdx_str::words::swap_bytes(_hpt[k], pt); } catch (...) { break; } // will retry on the next det_periodic() call
+          try { bmdx_str::words::swap_bytes(_hpt.opsub(k), pt); } catch (...) { break; } // will retry on the next det_periodic() call
         _hnew_name_peerf.remove(k); // removal does not fail (both k, v are movable)
       }
       if (hpt2.hashx_copy(_hpt, false) < 1) { goto lBreak2; }
@@ -1648,9 +1674,10 @@ lCont2:;
         if (pt._lq_send_tr.navl() > 0 || pt._lq_recv_tr.navl() > 0)
         {
           b_active = true;
-          hashx<t_htracking_proxy*, t_mtrk_sender_info_id_list> htrk2; // for user tracking_info updates; filled from pt.mtrk_htrk_send
+            // htrk2: for user tracking_info updates; filled from pt.mtrk_htrk_send
+          hashx<t_htracking_proxy*, t_mtrk_sender_info_id_list, hashx_common::kf_basic<t_htracking_proxy*>, __vecm_tu_selector> htrk2;
           vec2_t<tracking_info> vtrkcsl; // for command slot phase updates; filled from pt.mtrk_htrk_send
-          hashx<s_ll, int> hstop_trk; // set of msg. ids for which all types of tracking should be finished
+          hashx<s_ll, s_long> hstop_trk; // set of msg. ids for which all types of tracking should be finished
           bool b_failed = false;
           if (1)
           {
@@ -1676,7 +1703,7 @@ lCont2:;
                     try {
                       t_mtrk_sender_info_id_list& silst = htrk2.opsub(si.rhtrprx.pwk);
                       if (!silst.si.rhtrprx.pwk) { silst.si = si; }
-                      silst.tii.push_back(ti.ti);
+                      silst._vti.push_back(ti.ti);
                     } catch (...) { b_failed = true; break; }
                   }
                 }
@@ -1698,7 +1725,7 @@ lCont2:;
                     const hashx<s_ll, t_mtrk_sender_info>::entry* e = pt.mtrk_htrk_send.find(e_q.id_msg);
                       if (!e) { pt.mtrk_qipush_send.pop_1(); continue; }
                     const t_mtrk_sender_info& si = e->v;
-                    try { t_mtrk_sender_info_id_list& silst = htrk2.opsub(si.rhtrprx.pwk); if (!silst.si.rhtrprx.pwk) { silst.si = si; } silst.tii.push_back(tracking_info(e_q.id_msg, -12)); hstop_trk.opsub(e_q.id_msg); } catch (...) { b_failed = true; break; }
+                    try { t_mtrk_sender_info_id_list& silst = htrk2.opsub(si.rhtrprx.pwk); if (!silst.si.rhtrprx.pwk) { silst.si = si; } silst._vti.push_back(tracking_info(e_q.id_msg, -12)); hstop_trk.opsub(e_q.id_msg); } catch (...) { b_failed = true; break; }
                   }
                   pt.mtrk_qipush_send.pop_1();
                 }
@@ -1720,9 +1747,9 @@ lCont2:;
                 weakref_t<t_htracking_proxy>::t_lock __lock(silst.si.rhtrprx); if (sizeof(__lock)) {}
                 if (silst.si.rhtrprx.b_valid())
                 {
-                  for (s_long i = 0; i < silst.tii.n(); ++i)
+                  for (s_long i = 0; i < silst._vti.n(); ++i)
                   {
-                    const tracking_info& ti = silst.tii[i];
+                    const tracking_info& ti = silst._vti[i];
                     const t_htracking_proxy::entry* e = silst.si.rhtrprx.pwk->find(ti.id);
                     if (e && e->v)
                     {
@@ -1814,16 +1841,16 @@ bool lm_slot_controller::_x_qinfo_rcv_init() __bmdx_noex
       // Update livecnt.
     if (1) { s_ll cnt = qids_shared.livecnt(); ++cnt; qids_shared.livecnt(cnt); }
       // Pop and process all available tech. msgs.
-    if (_qinfo_rcv.dd.n() == 0)
+    if (_qinfo_rcv.vdd.n() == 0)
     {
       _qinfo_rcv_idd0 = 0;
       _qinfo_rcv.mpop_avl(); // NOTE this call is not under lock, because it internally will not do queue initialization, because f_constructed() == 1 already (ensured above)
     }
-    if (_qinfo_rcv_idd0 < _qinfo_rcv.dd.n())
+    if (_qinfo_rcv_idd0 < _qinfo_rcv.vdd.n())
     {
-      for (s_long i = _qinfo_rcv_idd0; i < _qinfo_rcv.dd.n(); ++i)
+      for (s_long i = _qinfo_rcv_idd0; i < _qinfo_rcv.vdd.n(); ++i)
       {
-        netmsg_header hdr; t_stringref orig = _qinfo_rcv.dd[i]._rnonc();
+        netmsg_header hdr; t_stringref orig = _qinfo_rcv.vdd[i]._rnonc();
         if (hdr.fields_decode(orig, fpt_md))
         {
           arrayref_t<netmsg_header::md_entry> mdee(__mdee1, hdr.get_mde(arrayref_t<netmsg_header::md_entry>(__mdee1, nmdemax), true));
@@ -1843,12 +1870,12 @@ bool lm_slot_controller::_x_qinfo_rcv_init() __bmdx_noex
       }
 lBreak1:;
     }
-    if (_qinfo_rcv_idd0 >= _qinfo_rcv.dd.n()) { if (_qinfo_rcv.dd.n() > 0) { _qinfo_rcv.dd.clear(); } _qinfo_rcv_idd0 = 0; }
+    if (_qinfo_rcv_idd0 >= _qinfo_rcv.vdd.n()) { if (_qinfo_rcv.vdd.n() > 0) { _qinfo_rcv.vdd.clear(); } _qinfo_rcv_idd0 = 0; }
   }
   return true;
 }
   // WARNING _x_pt_getcr uses lkd_peer_hpt. It may not be called when any lkd_pt_access is set.
-cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate)
+cref_t<lm_slot_controller::peer_tracker> lm_slot_controller::_x_pt_getcr(const bmdx_shm::t_name_shm& name_peerf, bool b_comm_once, bool b_autocreate) __bmdx_noex
 {
   if (name_peerf.n() > 0)
   {
@@ -2138,12 +2165,13 @@ void lm_slot_controller::_x_close() __bmdx_noex
     critsec_t<lm_slot_controller> __lock(10, -1, &lkd_peer_hpt); if (sizeof(__lock)) {}
     if (b_1st)
     {
-      for (s_long i = _hpt.n() - 1; i >= 0; --i) { cref_t<peer_tracker>& pt = _hpt(i)->v; pt->_cltpt_close(); } // initiates each peer tracker closing (fast)
+      for (s_long i = _hpt.n() - 1; i >= 0; --i) { cref_t<peer_tracker>& pt = _hpt(i)->v; pt->_cltpt_close(false); } // initiates each peer tracker closing (fast)
       b_1st = false;
     }
     if (_hpt.n() > 0) { for (s_long i = _hpt.n() - 1; i >= 0; --i) {
       cref_t<peer_tracker>& pt = _hpt(i)->v;
-      if ((pt->_cltpt_close() || t1 - t0 > (__bmdx_disp_lq_cleanup_dtms + 200))  && pt.n_refs() <= 1) { _hpt.remove_i(i); }
+      bool b_tmo = t1 - t0 > (__bmdx_disp_lq_cleanup_dtms + 200);
+      if ((pt->_cltpt_close(b_tmo) || b_tmo)  && pt.n_refs() <= 1) { _hpt.remove_i(i); }
     } }
     if (_hpt.n() <= 0) { break; }
     sleep_mcs(1000);
@@ -2210,6 +2238,7 @@ bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> n
 }
 
 #endif // bmdx_part_dispatcher_mt
+}
 } // namespace bmdx_main_intl_lib
 
 #if defined(__clang__)
@@ -2541,99 +2570,127 @@ namespace bmdx
 
     // NOTE This cannot trim \0 char, but more efficient since does not create additional string argument.
   template<class Char>
-  static std::basic_string<Char> _trim(const std::basic_string<Char>& s, const Char* pwhat, bool b_left = true, bool b_right = true)
+  static arrayref_t<Char> _trim_arrayref(const arrayref_t<Char>& s_, const Char* pwhat, bool b_left = true, bool b_right = true)
   {
-    if (!pwhat) { return s; }
-    meta::s_ll lw = 0; const Char* p = pwhat; while (*p++) { ++lw; }
-    meta::s_ll ls = meta::s_ll(s.length());
-    if (ls == 0 || ls < lw) { return s; }
-    meta::s_ll pos1(0); meta::s_ll pos2(ls);
-    if (b_left) { while (pos1 <= ls - lw) { if (0 == std::memcmp(s.c_str() + pos1, pwhat, size_t(lw) * sizeof(Char))) { pos1 += lw; } else { break; } } }
-    if (b_right) { while (pos2 > pos1 + lw) { if (0 == std::memcmp(s.c_str() + pos2 - lw, pwhat, size_t(lw) * sizeof(Char))) { pos2 -= lw; } else { break; } } }
-    if (pos2 - pos1 == meta::s_ll(s.length())) { return s; }
-    if (pos2 <= pos1) { return std::basic_string<Char>(); }
-    return s.substr(_t_sz(pos1), _t_sz(pos2 - pos1));
+    arrayref_t<Char> s_empty(s_.pd(), 0);
+    if (s_.is_empty() || !pwhat) { return s_empty; }
+    s_ll lw = 0;
+      const Char* p = pwhat; while (*p++) { ++lw; }
+    const s_ll ls = s_ll(s_.n());
+      if (ls < lw) { return s_; }
+    s_ll pos1(0); s_ll pos2(ls);
+    if (b_left) { while (pos1 <= ls - lw) { if (0 == std::memcmp(&s_[pos1], pwhat, size_t(lw) * sizeof(Char))) { pos1 += lw; } else { break; } } }
+    if (b_right) { while (pos2 > pos1 + lw) { if (0 == std::memcmp(&s_[pos2 - lw], pwhat, size_t(lw) * sizeof(Char))) { pos2 -= lw; } else { break; } } }
+    if (pos2 - pos1 == s_.n()) { return s_; }
+    if (pos2 <= pos1) { return s_empty; }
+    return s_.range_intersect(pos1, pos2);
   }
+  template<class Char>
+  static std::basic_string<Char> _trim(const arrayref_t<Char>& s_, const Char* pwhat, bool b_left = true, bool b_right = true)
+    { return _trim_arrayref(s_, pwhat, b_left, b_right).str(); }
+
     // NOTE This is able to trim \0 char.
   template<class Char>
-  static std::basic_string<Char> _trim_s(const std::basic_string<Char>& s, const std::basic_string<Char>& what, bool b_left = true, bool b_right = true)
+  static arrayref_t<Char> _trim_arrayref_s(const arrayref_t<Char>& s_, const arrayref_t<Char>& what_, bool b_left = true, bool b_right = true)
   {
-    meta::s_ll lw = meta::s_ll(what.length()); if (!lw) { return s; }
-    meta::s_ll ls = meta::s_ll(s.length());
-    if (ls == 0 || ls < lw) { return s; }
-    meta::s_ll pos1(0); meta::s_ll pos2(ls);
-    if (b_left) { while (pos1 <= ls - lw) { if (0 == std::memcmp(s.c_str() + pos1, what.c_str(), size_t(lw) * sizeof(Char))) { pos1 += lw; } else { break; } } }
-    if (b_right) { while (pos2 > pos1 + lw) { if (0 == std::memcmp(s.c_str() + pos2 - lw, what.c_str(), size_t(lw) * sizeof(Char))) { pos2 -= lw; } else { break; } } }
-    if (pos2 - pos1 == meta::s_ll(s.length())) { return s; }
-    if (pos2 <= pos1) { return std::basic_string<Char>(); }
-    return s.substr(_t_sz(pos1), _t_sz(pos2 - pos1));
+    arrayref_t<Char> s_empty(s_.pd(), 0);
+    if (s_.is_empty() || what_.is_empty()) { return s_empty; }
+    const s_ll lw = what_.n();
+    const s_ll ls = s_.n();
+      if (ls < lw) { return s_; }
+    s_ll pos1(0); s_ll pos2(ls);
+    if (b_left) { while (pos1 <= ls - lw) { if (0 == std::memcmp(&s_[pos1], what_.pd(), size_t(lw) * sizeof(Char))) { pos1 += lw; } else { break; } } }
+    if (b_right) { while (pos2 > pos1 + lw) { if (0 == std::memcmp(&s_[pos2 - lw], what_.pd(), size_t(lw) * sizeof(Char))) { pos2 -= lw; } else { break; } } }
+    if (pos2 - pos1 == s_.n()) { return s_; }
+    if (pos2 <= pos1) { return s_empty; }
+    return s_.range_intersect(pos1, pos2);
   }
-  std::wstring trim(const std::wstring& s, const std::wstring& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
-  std::string trim(const std::string& s, const std::string& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
+  template<class Char>
+  static std::basic_string<Char> _trim_s(const arrayref_t<Char>& s_, const arrayref_t<Char>& what_, bool b_left = true, bool b_right = true)
+    { return _trim_arrayref_s(s_, what_, b_left, b_right).str(); }
 
-  std::string lcase_c(const std::string& s)
+  std::wstring trim(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
+  std::string trim(const arrayref_t<char>& s, const arrayref_t<char>& swhat, bool b_left, bool b_right) { return _trim_s(s, swhat, b_left, b_right); }
+
+  std::string lcase_c(const arrayref_t<char>& s_)
   {
-    std::string s2; s2.reserve(s.size());
-    for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(__bmdx_tolower_c(s[pos])); }
+    std::string s2;
+    if (s_.is_empty()) { return s2; }
+    s2.reserve(size_t(s_.n()));
+    for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += char(__bmdx_tolower_c(s_[pos])); }
     return s2;
   }
-  std::string ucase_c(const std::string& s)
+  std::string ucase_c(const arrayref_t<char>& s_)
   {
-    std::string s2; s2.reserve(s.size());
-    for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += char(__bmdx_toupper_c(s[pos])); }
+    std::string s2;
+    if (s_.is_empty()) { return s2; }
+    s2.reserve(size_t(s_.n()));
+    for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += char(__bmdx_toupper_c(s_[pos])); }
     return s2;
   }
   #if __bmdx_char_case_tables
-    std::wstring lcase_la(const std::wstring& s, s_long loc_type)
+    std::wstring lcase_la(const arrayref_t<wchar_t>& s_, s_long loc_type)
     {
-      std::wstring s2; s2.reserve(s.size());
-      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(towlower(s[pos])); } }
-        else if (loc_type == 1) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towlower_sys(s[pos]); } }
-        else if (loc_type == 2) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towlower_c(s[pos]); } }
+      std::wstring s2;
+      if (s_.is_empty()) { return s2; }
+      s2.reserve(size_t(s_.n()));
+      if (loc_type == 0) { for (s_ll pos = 0; pos < s_.n(); ++pos)  {  s2 += wchar_t(towlower(s_[pos])); } }
+        else if (loc_type == 1) { for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += __bmdx_towlower_sys(s_[pos]); } }
+        else if (loc_type == 2) { for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += __bmdx_towlower_c(s_[pos]); } }
       return s2;
     }
-    std::wstring ucase_la(const std::wstring& s, s_long loc_type)
+    std::wstring ucase_la(const arrayref_t<wchar_t>& s_, s_long loc_type)
     {
-      std::wstring s2; s2.reserve(s.size());
-      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(towupper(s[pos])); } }
-        else if (loc_type == 1) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towupper_sys(s[pos]); } }
-        else if (loc_type == 2) { for(_t_sz pos=0; pos < s.length(); ++pos) { s2 += __bmdx_towupper_c(s[pos]); } }
+      std::wstring s2;
+      if (s_.is_empty()) { return s2; }
+      s2.reserve(size_t(s_.n()));
+      if (loc_type == 0) { for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += wchar_t(towupper(s_[pos])); } }
+        else if (loc_type == 1) { for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += __bmdx_towupper_sys(s_[pos]); } }
+        else if (loc_type == 2) { for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += __bmdx_towupper_c(s_[pos]); } }
       return s2;
     }
   #elif __bmdx_use_locale_t
-    std::wstring lcase_la(const std::wstring& s, s_long loc_type)
+    std::wstring lcase_la(const arrayref_t<wchar_t>& s_, s_long loc_type)
     {
-      std::wstring s2; s2.reserve(s.size());
-      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(towlower(s[pos])); } }
+      std::wstring s2;
+      if (s_.is_empty()) { return s2; }
+      s2.reserve(size_t(s_.n()));
+      if (loc_type == 0) { for (s_ll pos = 0; pos < s_.n(); ++pos) {  s2 += wchar_t(towlower(s_[pos])); } }
       else
       {
         if (!ensure_loc(loc_type)) { throw XUExec("lcase_la.w.1"); }
-        for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(__bmdx_towlower_l(s[pos], phloc(loc_type)->h)); }
+        for (s_ll pos = 0; pos < s_.n(); ++pos) {  s2 += wchar_t(__bmdx_towlower_l(s_[pos], phloc(loc_type)->h)); }
       }
       return s2;
     }
-    std::wstring ucase_la(const std::wstring& s, s_long loc_type)
+    std::wstring ucase_la(const arrayref_t<wchar_t>& s_, s_long loc_type)
     {
-      std::wstring s2; s2.reserve(s.size());
-      if (loc_type == 0) { for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(towupper(s[pos])); } }
+      std::wstring s2;
+      if (s_.is_empty()) { return s2; }
+      s2.reserve(size_t(s_.n()));
+      if (loc_type == 0) { for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += wchar_t(towupper(s_[pos])); } }
       else
       {
         if (!ensure_loc(loc_type)) { throw XUExec("ucase_la.w.1"); }
-        for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(__bmdx_towupper_l(s[pos], phloc(loc_type)->h)); }
+        for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += wchar_t(__bmdx_towupper_l(s_[pos], phloc(loc_type)->h)); }
       }
       return s2;
     }
   #else
-    std::wstring lcase_la(const std::wstring& s, s_long loc_type)
+    std::wstring lcase_la(const arrayref_t<wchar_t>& s_, s_long loc_type)
     {
-      std::wstring s2; s2.reserve(s.size());
-      for(_t_wz pos=0; pos < s.length(); ++pos)  {  s2 += wchar_t(towlower(s[pos])); }
+      std::wstring s2;
+      if (s_.is_empty()) { return s2; }
+      s2.reserve(size_t(s_.n()));
+      for (s_ll pos = 0; pos < s_.n(); ++pos)  {  s2 += wchar_t(towlower(s_[pos])); }
       return s2;
     }
-    std::wstring ucase_la(const std::wstring& s, s_long loc_type)
+    std::wstring ucase_la(const arrayref_t<wchar_t>& s_, s_long loc_type)
     {
-      std::wstring s2; s2.reserve(s.size());
-      for(_t_wz pos=0; pos < s.length(); ++pos) { s2 += wchar_t(towupper(s[pos])); }
+      std::wstring s2;
+      if (s_.is_empty()) { return s2; }
+      s2.reserve(size_t(s_.n()));
+      for (s_ll pos = 0; pos < s_.n(); ++pos) { s2 += wchar_t(towupper(s_[pos])); }
       return s2;
     }
   #endif
@@ -2690,16 +2747,71 @@ namespace bmdx
     return q;
   }
 
-    // Find s_what in s.
-    // Returns:
-    //    a) if found -- the position in s.
-    //    b) if not found -- s.n().
-  s_ll _find_str_linear(arrayref_t<wchar_t> s, arrayref_t<wchar_t> s_what, s_ll pos)
+  namespace
   {
-    arrayref_t<wchar_t> x = s.range_intersect(pos);
-    s_ll pos2 = x.find_str(s_what);
-    if (pos2 < 0) { return s.n(); }
-    return pos + pos2;
+      // Explicit conversion from arrayref_t to std::basic_string.
+    template<class C> void _arrayref2str(const arrayref_t<C>& s, std::basic_string<C>& dest)
+    {
+      typedef std::basic_string<C> t;
+      if (s.is_empty()) { dest.clear(); return; }
+      dest.swap(t(s.pd(), size_t(s.n())));
+    }
+
+      // Find s_what in s.
+      // Returns:
+      //    a) if found -- the position in s.
+      //    b) if not found -- s.n().
+    template<class C>
+    s_ll _find_str_linear(arrayref_t<C> s, arrayref_t<C> s_what, s_ll pos)
+    {
+      arrayref_t<C> x = s.range_intersect(pos);
+      s_ll pos2 = x.find_str(s_what);
+      if (pos2 < 0) { return s.n(); }
+      return pos + pos2;
+    }
+
+    template<class C> unity _split2unity_impl(const arrayref_t<C>& s, const arrayref_t<C>& delim, meta::s_ll nmax)
+    {
+      unity x; x.arr_init<utString>(0);
+        if (nmax == 0) { return x; }
+
+      if (s.is_empty()) {}
+      else if (delim.is_empty()) { x.arr_append(s); }
+      else
+      {
+        s_ll pos, pos2; pos = 0;
+        do
+        {
+          pos2 = _find_str_linear(s, delim, pos);
+          if (pos2 >= s.n() || (nmax > 0 && x.arrsz() + 1 >= nmax)) { pos2 = s.n(); x.arr_append(s.range_intersect(pos, pos2)); }
+            else { x.arr_append(s.range_intersect(pos, pos2)); pos2 += delim.n(); if (pos2 >= s.n()) x.arr_append(L""); }
+          pos = pos2;
+        } while (pos < s.n());
+      }
+
+      return x;
+    }
+    template<class C> std::vector<std::basic_string<C> > _split2vector_impl(const arrayref_t<C>& s, const arrayref_t<C>& delim, meta::s_ll nmax)
+    {
+      std::vector<std::basic_string<C> > x;
+        if (nmax == 0) { return x; }
+
+      if (s.is_empty()) {}
+      else if (delim.is_empty()) { x.push_back(s.str()); }
+      else
+      {
+        s_ll pos, pos2; pos = 0;
+        do
+        {
+          pos2 = _find_str_linear(s, delim, pos);
+          if (pos2 >= s.n() || (nmax > 0 && x.size() + 1 >= size_t(nmax))) { pos2 = s.n(); x.push_back(s.range_intersect(pos, pos2).str()); }
+            else { x.push_back(s.range_intersect(pos, pos2).str()); pos2 += delim.n(); if (pos2 >= s.n()) x.push_back(std::basic_string<C>()); }
+          pos = pos2;
+        } while (pos < s.n());
+      }
+
+      return x;
+    }
   }
 
     // Find (in s) pos. of first character which does not occur in chars.
@@ -3779,7 +3891,7 @@ unity_common::__Psm _ls_psm_find(const char* piname) __bmdx_noex
   svf_m_t<t_hipsm, unity_common>::L __lock; if (!__lock.b_valid()) { return 0; }
       svf_m_t<t_hipsm, unity_common> rsth; if (rsth.b_noinit()) { rsth.init0(1); }
       t_hipsm* phi = rsth.px(); if (!phi) { return 0; }
-  const hashx<std::string, unity_common::__Psm>::entry* e = phi->find(piname);
+  const t_hipsm::entry* e = phi->find(piname);
   unity_common::__Psm pf = e ? e->v : 0;
   return pf;
 }
@@ -3962,7 +4074,7 @@ struct _static_conv
   static void conv_Date_CharVector(s_long fc, const _unitydate& x, std::vector<_unitychar>& retval);
   static void conv_String_Int(s_long fc, const std::wstring& x, meta::s_ll& retval);
   static void conv_String_Float(s_long fc, const std::wstring& x, double& retval);
-    static bool conv_String_Date0(const std::wstring& x, _unitydate& retval, bool no_exc);
+    static bool conv_String_Date0(const arrayref_t<wchar_t>& x, _unitydate& retval, bool no_exc);
   static void conv_String_Date(s_long fc, const std::wstring& x, _unitydate& retval);
   static void conv_String_String(s_long fc, const std::wstring& x, std::wstring& retval);
   static void conv_String_Char(s_long fc, const std::wstring& x, _unitychar& retval);
@@ -4438,7 +4550,7 @@ void _static_conv::conv_String_Float(s_long fc, const std::wstring& x, double& r
   throw XUConvFailed("conv_String_Float.1", "", "", x);
 }
 
-bool _static_conv::conv_String_Date0(const std::wstring& x, _unitydate& retval, bool no_exc)
+bool _static_conv::conv_String_Date0(const arrayref_t<wchar_t>& x, _unitydate& retval, bool no_exc)
 {
   try
   {
@@ -5847,38 +5959,46 @@ s_long cv_ff::u_clear::Fu_clear(unity* p, s_long flags)
 
 
 
-unity* unity::_path_u(const std::wstring& keylist, bool forced) __bmdx_noex
+unity* unity::_path_u(const arrayref_t<wchar_t>& keylist, bool forced) __bmdx_noex
 {
   try {
     unity k;
     if (1)
     {
-      _t_wz possc = keylist.find(L';');
-      if (possc == nposw)
+      if (keylist.has1(L';'))
       {
-        _t_wz pos1 = keylist.find_first_not_of(L' ');
-        if (pos1 != nposw)
-        {
-          if (keylist[pos1] == '=')
-          {
-            _t_wz posv = keylist.find(L'|', pos1);
-            std::wstring s2 = keylist; s2[pos1] = posv == nposw ? L'|' : L' '; paramline().decode1v(s2, k);
-          }
-          else if (keylist[pos1] == '|') { paramline().decode1v(keylist, k); }
-          else
-          {
-            _t_wz posv = keylist.find(L'|', pos1);
-            if (posv == nposw) { paramline().decode1v(keylist, k); }
-            else if (pos1 > 0) { std::wstring s2 = keylist; s2[pos1 - 1] = L'|'; paramline().decode1v(s2, k); }
-            else { std::wstring s2 = L"|"; s2 += keylist; paramline().decode1v(s2, k); }
-          }
-        }
-        else { paramline().decode1v(keylist, k); }
+        std::wstring s3;
+          arrayref_t<wchar_t> z = _trim_arrayref(keylist, L" ", true, false);
+          if (z.is_empty()) { s3 = L"=|"; }
+            else if (z[0] == L'=') { s3.assign(z.pd(), z._end_u()); }
+            else if (z[0] == L'|') { s3 = L"="; s3.append(z.pd(), z._end_u()); }
+            else { s3 = L"=|"; s3.append(z.pd(), z._end_u()); }
+        k = paramline().decode(s3).hash(L"");
       }
       else
       {
-        std::wstring s2 = _trim(keylist, L" ", true, false); if (s2.length() == 0) { s2 = L"=|"; } else if (s2[0] == L'=') {} else if (s2[0] == L'|') { s2 = L"=" + keylist; } else { s2 = L"=|" + keylist; }
-        k = paramline().decode(s2, false).hash(L"");
+        s_ll pos1 = keylist.find1not(L' ');
+        if (pos1 >= 0 && pos1 < keylist.n())
+        {
+          if (keylist[pos1] == L'=')
+          {
+            bool b_v = keylist.has1(L'|', pos1);
+            std::wstring s2;
+              s2.assign(keylist.pd(), keylist._end_u());
+              s2[(size_t)pos1] = b_v ? L' ' : L'|';
+            paramline().decode1v(s2, k);
+          }
+          else if (keylist[pos1] == '|')
+            { paramline().decode1v(keylist, k); }
+          else
+          {
+            if (keylist.has1(L'|', pos1))
+              { std::wstring s2 = L"|"; s2.append(keylist.pd() + pos1, keylist._end_u()); paramline().decode1v(s2, k); }
+            else
+              { paramline().decode1v(keylist, k); }
+          }
+        }
+        // else { k.clear(); }
       }
     }
     if (!k.isArray())
@@ -6937,26 +7057,36 @@ s_long _unity_hl_impl::_prev_of(s_long ind) const __bmdx_noex { meta::s_ll* p = 
 s_long _unity_hl_impl::_next_of(s_long ind) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(ind); return p ? _inext(*p) : -1; }
 void _unity_hl_impl::_setv(s_long ind, meta::s_ll x) const __bmdx_noex { meta::s_ll* p = _list.pval<meta::s_ll>(ind); if (p) { *p = x; } }
 
-void unity::_ensure_m() { if (!isMap()) { u_clear(utMap); } if (!(_m()->pkf() && _compat_chk())) { throw XUExec("_ensure_m"); } }
+void unity::_ensure_m() { if (!isMap()) { u_clear(utMap); } if (!(_compat_chk() && _m()->pkf())) { throw XUExec("_ensure_m"); } }
 void unity::_ensure_sc() { if (!isScalar()) { u_clear(utEmpty); } }
-void unity::_ensure_h() { if (!isHash()) { u_clear(utHash); } if (!(_h()->pkf() && _compat_chk())) { throw XUExec("_ensure_h"); } }
+void unity::_ensure_h() { if (!isHash()) { u_clear(utHash); } if (!(_compat_chk() && _h()->pkf())) { throw XUExec("_ensure_h"); } }
 
-unity::checked_ptr<const unity> unity::path(const std::wstring& keylist) const __bmdx_noex { return const_cast<unity*>(this)->_path_u(keylist, false); }
-unity::checked_ptr<const unity> unity::path(const wchar_t* keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(keylist, false); } catch (...) { return 0; } }
-unity::checked_ptr<const unity> unity::path(const std::string& keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
-unity::checked_ptr<const unity> unity::path(const char* keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
 unity::checked_ptr<const unity> unity::path(const unity& keylist) const __bmdx_noex { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), false); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), false); } return px->_path_u(keylist.vstr(), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const arrayref_t<wchar_t>& keylist) const __bmdx_noex { return const_cast<unity*>(this)->_path_u(keylist, false); }
+unity::checked_ptr<const unity> unity::path(const arrayref_t<char>& keylist) const __bmdx_noex { try { return const_cast<unity*>(this)->_path_u(bsToWs(keylist), false); } catch (...) { return 0; } }
+unity::checked_ptr<const unity> unity::path(const wchar_t* keylist) const __bmdx_noex { return path(arrayref_t<wchar_t>(keylist)); }
+unity::checked_ptr<const unity> unity::path(const char* keylist) const __bmdx_noex { return path(arrayref_t<char>(keylist)); }
+unity::checked_ptr<const unity> unity::path(const std::wstring& keylist) const __bmdx_noex { return path(arrayref_t<wchar_t>(keylist)); }
+unity::checked_ptr<const unity> unity::path(const std::string& keylist) const __bmdx_noex { return path(arrayref_t<char>(keylist)); }
 
-unity::checked_ptr<const unity> unity::path(const std::wstring& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const wchar_t* keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const std::string& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
-unity::checked_ptr<const unity> unity::path(const char* keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
 unity::checked_ptr<const unity> unity::path(const unity& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const arrayref_t<wchar_t>& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const arrayref_t<char>& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(keylist); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const wchar_t* keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(arrayref_t<wchar_t>(keylist)); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const char* keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(arrayref_t<char>(keylist)); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const std::wstring& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(arrayref_t<wchar_t>(keylist)); return p ? p : &x_dflt; }
+unity::checked_ptr<const unity> unity::path(const std::string& keylist, const unity& x_dflt) const __bmdx_noex { const unity* p = path(arrayref_t<char>(keylist)); return p ? p : &x_dflt; }
 
-unity* unity::_path_w(const std::wstring& keylist) __bmdx_noex { return _path_u(keylist, true); }
-unity* unity::_path_w(const wchar_t* keylist) __bmdx_noex { try { return _path_u(keylist, true); } catch (...) { return 0; } }
-unity* unity::_path_w(const std::string& keylist) __bmdx_noex { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
-unity* unity::_path_w(const char* keylist) __bmdx_noex { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
+unity::checked_ptr<unity> unity::path_w(const unity& keylist) __bmdx_noex { return _path_w(keylist); }
+unity::checked_ptr<unity> unity::path_w(const arrayref_t<wchar_t>& keylist) __bmdx_noex { return _path_w(keylist); }
+unity::checked_ptr<unity> unity::path_w(const arrayref_t<char>& keylist) __bmdx_noex { return _path_w(keylist); }
+unity::checked_ptr<unity> unity::path_w(const wchar_t* keylist) __bmdx_noex { return _path_w(arrayref_t<wchar_t>(keylist)); }
+unity::checked_ptr<unity> unity::path_w(const char* keylist) __bmdx_noex { return _path_w(arrayref_t<char>(keylist)); }
+unity::checked_ptr<unity> unity::path_w(const std::wstring& keylist) __bmdx_noex { return _path_w(arrayref_t<wchar_t>(keylist)); }
+unity::checked_ptr<unity> unity::path_w(const std::string& keylist) __bmdx_noex { return _path_w(arrayref_t<char>(keylist)); }
+
+unity* unity::_path_w(const arrayref_t<wchar_t>& keylist) __bmdx_noex { return _path_u(keylist, true); }
+unity* unity::_path_w(const arrayref_t<char>& keylist) __bmdx_noex { try { return _path_u(bsToWs(keylist), true); } catch (...) { return 0; } }
 unity* unity::_path_w(const unity& keylist) __bmdx_noex { try { unity* px = const_cast<unity*>(this); if (keylist.isString()) { return px->_path_u(keylist.rstr(), true); } if (keylist.isArray()) { return px->_path_u(paramline().encode1v(keylist), true); } return px->_path_u(keylist.vstr(), true); } catch (...) { return 0; } }
 
 
@@ -7147,7 +7277,12 @@ s_long unity::assocS_c() const
     else if (isMap()) { if (_compat_chk()) { return _m()->n(); } throw XUExec("assocS_c.2"); }
     else { throw XUExec("assocS_c.3"); }
 }
-
+s_long unity::assocFlags_c() const
+{
+  if (isHash()) { if (_compat_chk() && _h()->pkf()) { return _h()->pkf()->flags(); } throw XUExec("assocFlags_c.1"); }
+    else if (isMap()) { if (_compat_chk() && _m()->pkf()) { return _m()->pkf()->flags(); } throw XUExec("assocFlags_c.2"); }
+    else { throw XUExec("assocFlags_c.3"); }
+}
 
 
 
@@ -7382,197 +7517,159 @@ std::wstring _bsLsbToWs(const char* ps, meta::s_ll n)
 }
 
 
-std::string replace_c(const std::string& s, const std::string& from, const std::string& to, bool ignoreCase, s_ll nmax)
+std::string replace_c(const arrayref_t<char>& s_, const arrayref_t<char>& from_, const arrayref_t<char>& to_, bool ignoreCase, s_ll nmax)
 {
-  if (from.length() == 0 || nmax == 0) { return s; }
-  else if (s.length() > 0)
-  {
-    s_ll n = 0; if (nmax < 0) { nmax = s.length(); }
-    std::string dest;
-    _t_sz pos, pos2;
-    pos=0;
-    if (ignoreCase)
-    {
-      std::string s_l, from_l;
-      if (1)
-      {
-        s_l = lcase_c(s);
-        from_l = lcase_c(from);
-      }
-      do
-      {
-        if (n >= nmax) { break; }
-        pos2 = s_l.find(from_l, pos);
-        if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos); }
-          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
-        pos = pos2;
-      }
-      while(pos < s.length());
-      if (pos < s.length()) { dest += s.substr(pos); }
-    }
-    else
-    {
-      do
-      {
-        if (n >= nmax) { break; }
-        pos2 = s.find(from, pos);
-        if (pos2 == nposc) { pos2 = s.length(); dest += s.substr(pos); }
-          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
-        pos = pos2;
-      }
-      while(pos < s.length());
-      if (pos < s.length()) { dest += s.substr(pos); }
-    }
-    return dest;
-  }
-  else return s;
-}
+  typedef arrayref_t<char> t_ar;
+  if (s_.is_empty() || from_.is_empty() || nmax == 0) { return s_.str(); }
 
-std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool ignoreCase, s_ll nmax, s_long loc_type)
-{
-  if (from.length() == 0 || nmax == 0) { return s; }
-  else if (s.length() > 0)
-  {
-    s_ll n = 0; if (nmax < 0) { nmax = s.length(); }
-    std::wstring dest;
-    _t_wz pos, pos2;
-    pos=0;
-    if (ignoreCase)
-    {
-      std::wstring s_l, from_l;
-      if (1)
-      {
-        s_l = lcase_la(s, loc_type);
-        from_l = lcase_la(from, loc_type);
-      }
-      do
-      {
-        if (n >= nmax) { break; }
-        pos2 = s_l.find(from_l, pos);
-        if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos); }
-          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
-        pos = pos2;
-      }
-      while(pos < s.length());
-      if (pos < s.length()) { dest += s.substr(pos); }
-    }
-    else
-    {
-      do
-      {
-        if (n >= nmax) { break; }
-        pos2 = s.find(from, pos);
-        if (pos2 == nposw) { pos2 = s.length(); dest += s.substr(pos); }
-          else { dest += s.substr(pos, pos2 - pos); dest += to; ++n; pos2 += from.length(); }
-        pos = pos2;
-      }
-      while(pos < s.length());
-      if (pos < s.length()) { dest += s.substr(pos); }
-    }
-    return dest;
-  }
-  else return s;
-}
+  arrayref_t<char> to = ""; if (to_.is_nonempty()) { to = to_; }
 
-unity split(const std::wstring& s, const std::wstring& delim, meta::s_ll nmax)
-{
-  unity x; x.arr_init<utString>(0); if (nmax == 0) { return x; }
-  if (delim.length()==0) { x.arr_append(s); }
-  else if (s.length() > 0)
+  s_ll n = 0; if (nmax < 0) { nmax = s_.n(); }
+  std::string dest;
+  s_ll pos, pos2;
+  pos = 0;
+  if (ignoreCase)
   {
-    _t_wz pos, pos2; pos = 0;
+    std::string s_l_, from_l_;
+    t_ar s_l, from_l;
+    if (1)
+    {
+      s_l_ = lcase_c(s_); s_l = s_l_;
+      from_l_ = lcase_c(from_); from_l = from_l_;
+    }
     do
     {
-      pos2 = s.find(delim,pos);
-      if (pos2 == nposw  || (nmax > 0 && x.arrsz() + 1 >= nmax)) { pos2 = s.length(); x.arr_append(s.substr(pos, pos2 - pos)); }
-        else { x.arr_append(s.substr(pos, pos2 - pos)); pos2 += delim.length(); if (pos2 >= s.length()) x.arr_append(L""); }
+      if (n >= nmax) { break; }
+      pos2 = _find_str_linear(s_l, from_l, pos);
+      if (pos2 >= s_l.n()) { t_ar x = s_.range_intersect(pos); dest.append(x.pd(), x._end_u()); }
+        else { dest.append(&s_[pos], &s_[pos2]); dest.append(to.pd(), to._end_u()); ++n; pos2 += from_.n(); }
       pos = pos2;
-    } while (pos < s.length());
-  }
-  return x;
-}
-
-unity split(const std::string& s, const std::string& delim, meta::s_ll nmax)
-{
-  unity x;  x.arr_init<utString>(0); if (nmax == 0) { return x; }
-  if (delim.length()==0) { x.arr_append(s); }
-  else if (s.length() > 0)
-  {
-    _t_wz pos, pos2;  pos = 0;
-    do
-    {
-      pos2 = s.find(delim,pos);
-      if (pos2 == nposc || (nmax > 0 && x.arrsz() + 1 >= nmax)) { pos2 = s.length(); x.arr_append(s.substr(pos, pos2 - pos)); }
-        else { x.arr_append(s.substr(pos, pos2 - pos)); pos2 += delim.length(); if (pos2 >= s.length()) x.arr_append(""); }
-      pos = pos2;
-    } while (pos < s.length());
-  }
-  return x;
-}
-
-std::vector<std::string> splitToVector(const std::string& s, const std::string& delim, meta::s_ll nmax)
-{
-  std::vector<std::string> x; if (nmax == 0) { return x; }
-  if (delim.length() == 0) { x.push_back(s); }
-  else if (s.length() > 0)
-  {
-    _t_sz pos, pos2; pos = 0;
-    do
-    {
-      pos2 = s.find(delim,pos);
-      if (pos2 == nposc || (nmax > 0 && x.size() + 1 >= std::size_t(nmax))) { pos2 = s.length(); x.push_back(s.substr(pos, pos2 - pos)); }
-        else { x.push_back(s.substr(pos, pos2 - pos)); pos2+=delim.length(); if (pos2 >= s.length()) { x.push_back(""); } }
-      pos = pos2;
-    } while(pos < s.length());
-  }
-  return x;
-}
-
-std::vector<std::wstring> splitToVector(const std::wstring& s, const std::wstring& delim, meta::s_ll nmax)
-{
-  std::vector<std::wstring> x; if (nmax == 0) { return x; }
-  if (delim.length() == 0) { x.push_back(s); }
-  else if (s.length() > 0)
-  {
-    _t_wz pos, pos2; pos = 0;
-    do
-    {
-      pos2 = s.find(delim, pos);
-      if (pos2 == nposw || (nmax > 0 && x.size() + 1 >= std::size_t(nmax))) { pos2 = s.length(); x.push_back(s.substr(pos, pos2 - pos)); }
-        else { x.push_back(s.substr(pos, pos2 - pos)); pos2+=delim.length(); if (pos2 >= s.length()) { x.push_back(L""); } }
-      pos = pos2;
-    } while(pos < s.length());
-  }
-  return x;
-}
-
-std::string join(const unity& asrc, const std::string& delim)
-{
-    std::string s;
-    if (asrc.isArray())
-    {
-        for(s_long ind=asrc.arrlb(); ind<=asrc.arrub(); ++ind)
-        {
-            if (ind==asrc.arrlb()) s=asrc.vcstr(ind);
-            else (s+=delim)+=asrc.vcstr(ind);
-        }
     }
-    else { s = asrc.vcstr(); }
-    return s;
-}
-std::wstring join(const unity& asrc, const std::wstring& delim)
-{
-    std::wstring s;
-    if (asrc.isArray())
+    while(pos < s_.n());
+    if (pos < s_.n()) { dest.append(&s_[pos], &s_[s_.n()]); }
+  }
+  else
+  {
+    do
     {
-        for(s_long ind=asrc.arrlb(); ind<=asrc.arrub(); ++ind)
-        {
-            if (ind==asrc.arrlb()) s=asrc.vstr(ind);
-            else (s+=delim)+=asrc.vstr(ind);
-        }
+      if (n >= nmax) { break; }
+      pos2 = _find_str_linear(s_, from_, pos);
+      if (pos2 >= s_.n()) { dest.append(&s_[pos], &s_[s_.n()]); }
+        else { dest.append(&s_[pos], &s_[pos2]); dest.append(to.pd(), to._end_u()); ++n; pos2 += from_.n(); }
+      pos = pos2;
     }
-    else { s = asrc.vstr(); }
-    return s;
+    while(pos < s_.n());
+    if (pos < s_.n()) { dest.append(&s_[pos], &s_[s_.n()]); }
+  }
+  return dest;
+}
+
+std::wstring replace(const arrayref_t<wchar_t>& s_, const arrayref_t<wchar_t>& from_, const arrayref_t<wchar_t>& to_, bool ignoreCase, s_ll nmax, s_long loc_type)
+{
+  typedef arrayref_t<wchar_t> t_ar;
+  if (s_.is_empty() || from_.is_empty() || nmax == 0) { return s_.str(); }
+
+  arrayref_t<wchar_t> to = L""; if (to_.is_nonempty()) { to = to_; }
+
+  s_ll n = 0; if (nmax < 0) { nmax = s_.n(); }
+  std::wstring dest;
+  s_ll pos, pos2;
+  pos = 0;
+  if (ignoreCase)
+  {
+    std::wstring s_l_, from_l_;
+    t_ar s_l, from_l;
+    if (1)
+    {
+      s_l_ = lcase_la(s_, loc_type); s_l = s_l_;
+      from_l_ = lcase_la(from_, loc_type); from_l = from_l_;
+    }
+    do
+    {
+      if (n >= nmax) { break; }
+      pos2 = _find_str_linear(s_l, from_l, pos);
+      if (pos2 >= s_l.n()) { t_ar x = s_.range_intersect(pos); dest.append(x.pd(), x._end_u()); }
+        else { dest.append(&s_[pos], &s_[pos2]); dest.append(to.pd(), to._end_u()); ++n; pos2 += from_.n(); }
+      pos = pos2;
+    }
+    while(pos < s_.n());
+    if (pos < s_.n()) { dest.append(&s_[pos], &s_[s_.n()]); }
+  }
+  else
+  {
+    do
+    {
+      if (n >= nmax) { break; }
+      pos2 = _find_str_linear(s_, from_, pos);
+      if (pos2 >= s_.n()) { dest.append(&s_[pos], &s_[s_.n()]); }
+        else { dest.append(&s_[pos], &s_[pos2]); dest.append(to.pd(), to._end_u()); ++n; pos2 += from_.n(); }
+      pos = pos2;
+    }
+    while(pos < s_.n());
+    if (pos < s_.n()) { dest.append(&s_[pos], &s_[s_.n()]); }
+  }
+  return dest;
+}
+
+unity split(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& delim, meta::s_ll nmax)
+  { return _split2unity_impl(s, delim, nmax); }
+
+unity split(const arrayref_t<char>& s, const arrayref_t<char>& delim, meta::s_ll nmax)
+  { return _split2unity_impl(s, delim, nmax); }
+
+std::vector<std::wstring> splitToVector(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& delim, meta::s_ll nmax)
+  { return _split2vector_impl(s, delim, nmax); }
+
+std::vector<std::string> splitToVector(const arrayref_t<char>& s, const arrayref_t<char>& delim, meta::s_ll nmax)
+  { return _split2vector_impl(s, delim, nmax); }
+
+std::string join(const unity& asrc, const arrayref_t<char>& delim_)
+{
+  std::string s;
+  if (asrc.isArray())
+  {
+    for (s_long ind = asrc.arrlb(); ind <= asrc.arrub(); ++ind)
+    {
+      if (delim_.is_nonempty() && ind != asrc.arrlb()) { s.append(delim_.pd(), delim_._end_u()); }
+      s += asrc.vcstr(ind);
+    }
+  }
+  else { s = asrc.vcstr(); }
+  return s;
+}
+std::string joinVector(const std::vector<std::string>& asrc, const arrayref_t<char>& delim_)
+{
+  std::string s;
+  for (size_t ind = 0; ind < asrc.size(); ++ind)
+  {
+    if (delim_.is_nonempty() && ind != 0) { s.append(delim_.pd(), delim_._end_u()); }
+    s += asrc[ind];
+  }
+  return s;
+}
+std::wstring join(const unity& asrc, const arrayref_t<wchar_t>& delim_)
+{
+  std::wstring s;
+  if (asrc.isArray())
+  {
+    for (s_long ind = asrc.arrlb(); ind <= asrc.arrub(); ++ind)
+    {
+      if (delim_.is_nonempty() && ind != asrc.arrlb()) { s.append(delim_.pd(), delim_._end_u()); }
+      s += asrc.vstr(ind);
+    }
+  }
+  else { s = asrc.vstr(); }
+  return s;
+}
+std::wstring joinVector(const std::vector<std::wstring>& asrc, const arrayref_t<wchar_t>& delim_)
+{
+  std::wstring s;
+  for (size_t ind = 0; ind < asrc.size(); ++ind)
+  {
+    if (delim_.is_nonempty() && ind != 0) { s.append(delim_.pd(), delim_._end_u()); }
+    s += asrc[ind];
+  }
+  return s;
 }
 
 namespace
@@ -7604,7 +7701,11 @@ namespace
             _unitydate d = x.val<utDate>();
             std::ostringstream oss;
             oss << std::setw(4) << std::setfill('0') << std::right << d.d_year() << "-" << std::setw(2) <<d.d_month() << "-" << std::setw(2) <<d.d_day();
-            if (d.f() != std::floor(d.f())) { oss << " " << std::setw(2) << d.d_hour() << ":" << std::setw(2) << d.d_minute() << ":" << std::setw(2) << d.d_second(); }
+            s_long h, m, s;
+            h = d.d_hour();
+            m = d.d_minute();
+            s = d.d_second();
+            if (h || m || s) { oss << " " << std::setw(2) << h << ":" << std::setw(2) << m << ":" << std::setw(2) << s; }
             return bsToWs(oss.str());
           }
         default: { return L"?value/" + x.tname(); }
@@ -8130,35 +8231,541 @@ meta::s_ll unity::o_api::_itfslist_nrsv(meta::s_ll n) const __bmdx_noex
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const std::string paramline::cpterm = "; ";
+const std::string paramline::cpterm_short = ";";
 const std::string paramline::ceterm = " = ";
+const std::string paramline::ceterm_short = "=";
 const std::string paramline::cvterm = "|";
+const std::string paramline::cao_appseq = "++";
+const std::string paramline::cao_app1 = "+";
+const std::string paramline::cao_setseq = "..";
+const std::string paramline::cao_set1 = ".";
 
 const std::wstring paramline::wpterm = L"; ";
+const std::wstring paramline::wpterm_short = L";";
 const unity paramline::uwpterm(wpterm);
+const unity paramline::uwpterm_short(wpterm_short);
 const std::wstring paramline::weterm = L" = ";
+const std::wstring paramline::weterm_short = L"=";
 const std::wstring paramline::wvterm = L"|";
+const std::wstring paramline::wao_appseq = L"++";
+const std::wstring paramline::wao_app1 = L"+";
+const std::wstring paramline::wao_setseq = L"..";
+const std::wstring paramline::wao_set1 = L".";
 
 const unity& paramline::_0 = unity::_0;
+
+enum Eparamilne_replace_flags
+{
+  plrf_has_esc_seq = 1,
+  plrf_value_exists = 2,
+  plrf_allow_modify_all = 4,
+  plrf_use_path_array_modifiers = 8,
+  _plrf__nullflags = 0
+};
+
+enum Eparamilne_encdec_flags
+{
+  pled_use_map = 0x1,
+  pled_overwrite_dup_keys = 0x2,
+  pled_encdec1v_for_names = 0x100,
+  pled_enc_empty_key_as_bse = 0x200,
+  pled__enc_assoc_as_empty = 0x1000,
+  pled__ar_elem = 0x2000,
+  pled__use_array = 0x4000,
+  pled__get_strvals = 0x8000,
+  pled__enc1v_for_array_area = 0x10000,
+  _pled__nullflags = 0,
+  _pled__mask__decode = pled_use_map | pled_overwrite_dup_keys | pled_encdec1v_for_names,
+  _pled__mask__encode = pled_enc_empty_key_as_bse | pled_encdec1v_for_names
+};
+
+struct paramline::_opt_unity
+{
+  bool b_has_v;
+  unity v;
+  _opt_unity(__bmdx_noarg1) { b_has_v = false; }
+};
+
+  // Private utilities + { branch path; branch } structure.
+struct _paramline_branch
+{
+  unity usp; // branch path as utString; utEmpty means uninitialized
+  const unity* pv; // valid pointer to value; 0 means uninitialized
+
+  _paramline_branch(__bmdx_noarg1) { pv = 0; }
+  void swap(_paramline_branch& x) { if (this != &x) { swap_bytes(*this, x); } }
+
+    // Appends sk to curr_path via wvterm. If curr_path is empty, also prepends pathpfx.
+    //  Sets result into ret_spath.
+    // Returns: ret_spath.
+    // NOTE ret_spath may be safely the same object as any of arguments.
+  static arrayref_t<wchar_t> add_to_path(const arrayref_t<wchar_t>& pathpfx, const arrayref_t<wchar_t>& curr_path, const arrayref_t<wchar_t>& sk, std::wstring& ret_spath __bmdx_noarg)
+  {
+    std::wstring x;
+    x.assign(curr_path.pd(), curr_path._end_u());
+      if (x.empty()) { x.append(pathpfx.pd(), pathpfx._end_u()); }
+        x += paramline::wvterm;
+        x.append(sk.pd(), sk._end_u());
+    ret_spath.swap(x);
+    return ret_spath;
+  }
+    // Helper for x_encode_branch.
+    // Encodes k to string - with x_encode1v as array element, then appends to curr_path (see also add_to_path).
+    //  Sets result into ret_spath.
+    // Returns: ret_spath.
+    // NOTE ret_spath may be safely the same object as any of arguments.
+  static arrayref_t<wchar_t> _add_to_path_with_enc1v_ar(bool b_enc1v, bool b_bse, const arrayref_t<wchar_t>& pathpfx, const arrayref_t<wchar_t>& curr_path, const unity& k, hashx<const unity*, s_long>& hstopv, std::wstring& ret_spath __bmdx_noarg)
+  {
+    std::wstring s1;
+    if (b_enc1v)
+    {
+      if (k.isArray())
+        { s1 = _vstr_scalar(k); }
+      else
+        { paramline::x_encode1v(k, s1, pled__ar_elem, 0, &hstopv); }
+    }
+    else
+    {
+        // NOTE The following cases are same as in x_encode1n with unset pled_encdec1v_for_names.
+        //  This leads to key in path being always decoded (x_decode1v)
+        //  to string that is exactly equal to trivially decoded (unescaped)
+        //  string key from the upper text line,
+        //  where the addressed array is originally defined.
+        //  (Decoding keys in paths and terminal keys uses different rules,
+        //    but decoded key, in both cases, yields the same string,
+        //    i.e. points to the same array inside the tree.)
+      if (k.isEmpty()) { if (b_bse) { s1 = L"\\e"; } }
+        else if (k.isString()) { s1 = k.rstr(); }
+        else { s1 = _vstr_scalar(k); }
+      paramline::x_encode1v(unity(s1), s1, pled__ar_elem, 0, 0);
+    }
+    paramline::x_replace2a(s1, 1);
+    add_to_path(pathpfx, curr_path, s1, s1);
+    ret_spath.swap(s1);
+    return ret_spath;
+  }
+    // Recursively finds branches in array a (non-array is ignored) and all its subarrays.
+    //  Adds branches, together with their paths, into abr.
+    //  NOTE abr not cleared by collect_array_subbranches.
+    // curr_path:
+    //    specifies path of a itself, not including its \z<spec.> (added automatically if necessary)
+    // b_use_am_in_paths:
+    //    true - add \z<spec.> to path to address an array element.
+    //      Generated paths will contain sequences like |\z<spec.>|<index>.
+    //    false - do not add \z<spec.> to paths.
+    //      Generated paths will contain |<index> only to address an array element,
+    //      presuming that array itself is fully constructed in the line, describing upper-level assoc. array.
+    // NOTE If array element contains an object (utObject / unity), it is automatically recursively dereferenced.
+    // Returns: >= 0 - number of branches, added to abr.
+  static s_long collect_array_subbranches(const arrayref_t<wchar_t>& pathpfx, const arrayref_t<wchar_t>& curr_path, const unity& a, hashx<const unity*, s_long>& hstopv, vec2_t<_paramline_branch, __vecm_tu_selector>& abr, bool b_use_am_in_paths __bmdx_noarg)
+  {
+    if (a.utype() != utUnityArray) { return 0; }
+    s_long n = 0;
+    std::wstring curr_path_full; bool b_cpf = false;
+    unity _empty;
+    for (s_long i = a.arrlb(); i <= a.arrub(); ++i)
+    {
+      const unity& u = deref_pu_once(a.ref<utUnity>(i), _empty, &hstopv);
+      const bool b_subobj = u.isAssoc() || u.utype() == utUnityArray;
+      if (!b_subobj) { continue; }
+      if (!b_cpf)
+      {
+        if (b_use_am_in_paths)
+        {
+          add_to_path(pathpfx, curr_path, L"\\z", curr_path_full);
+          if (a.arrlb() != 1) { curr_path_full += L"b"; curr_path_full += itows(a.arrlb(), true); }
+        }
+        else
+        {
+          curr_path_full.assign(curr_path.pd(), curr_path._end_u());
+        }
+        b_cpf = true;
+      }
+      if (u.isAssoc())
+      {
+        _paramline_branch rb;
+        add_to_path(pathpfx, curr_path_full, itows(i, true), rb.usp.rx<utString>());
+        rb.pv = &u;
+        abr.push_back(_paramline_branch());
+        abr.back().swap(rb);
+        n += 1;
+      }
+      else if (u.utype() == utUnityArray)
+      {
+        std::wstring sp;
+          add_to_path(pathpfx, curr_path_full, itows(i, true), sp);
+        n += collect_array_subbranches(pathpfx, sp, u, hstopv, abr, b_use_am_in_paths);
+      }
+    }
+    return n;
+  }
+
+  static const unity& deref_pu_once(const unity& _x0, const unity& _empty, hashx<const unity*, s_long>* phstop __bmdx_noarg)
+  {
+    const unity* _px = &_x0;
+    if (_px->isObject())
+    {
+      while (1)
+      {
+        const unity* pv = _px->objPtr_c<unity>();
+        if (!pv) { break; }
+        if (phstop)
+        {
+          if (phstop->find(pv)) { _px = &_empty; break; }
+          phstop->opsub(pv);
+        }
+        _px = pv;
+      }
+    }
+    return *_px;
+  }
+
+};
+
+  // 1 - found >0 spaces.
+  //    ret_iend points to after-spaces part or string end.
+  // 0 - pos is out of string or points to string end.
+  //    ret_iend points to string end.
+  // -1 - found non-space character at pos.
+  //    ret_iend = pos.
+int paramline::_match_spaces(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend)
+{
+  if (s.is_empty() || !(pos >= 0 && pos < s.n())) { ret_iend = bmdx_minmax::myllmax(0, s.n()); return 0; }
+  s_ll pos2 = pos;
+  while (1)
+  {
+    if (pos2 >= s.n()) { ret_iend = s.n(); return pos2 > pos ? 1 : 0; }
+    if (s[pos2] != L' ') { ret_iend = pos2; return pos2 > pos ? 1 : -1; }
+    pos2 += 1;
+  }
+}
+
+  // 1 - s[pos] is any of cc.
+  // 0 - pos is exactly end of string.
+  // -1 - s[pos] is any character not in cc.
+  // -2 - pos is out of [0..s.n()], or s is not valid.
+int paramline::_match_character(arrayref_t<wchar_t> s, s_ll pos, arrayref_t<wchar_t> cc)
+{
+  if (!s.is_valid()) { return -2; }
+  if (pos == s.n()) { return 0; }
+  if (pos >= 0 && pos < s.n()) { s_ll i = cc.find1(s[pos]); return i >= 0 && i < cc.n() ? 1 : -1; }
+  return -2;
+}
+
+  // Acts similarly to _match_uint64, only for signed ints.
+  //  NOTE If sign character (+, -) is present, between sign and digits only space characters may appear.
+  //  NOTE If terms contain + or -, leading sign of the integer is interpreted as sign, not as term.
+int paramline::_match_int32(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_x, arrayref_t<wchar_t> terms)
+{
+  if (s.is_empty() || !(pos >= 0 && pos < s.n())) { ret_x = 0; ret_iend = bmdx_minmax::myllmax(0, s.n()); return 0; }
+
+  s_ll pos2 = pos;
+  wchar_t c = s[pos2];
+  bool b_sign_mark = false;
+  bool b_negative = false;
+    if (c == L'+' || c == L'-')
+    {
+      b_sign_mark = true;
+      b_negative = c == L'-';
+      pos2 += 1;
+    }
+  int res;
+  if (b_sign_mark)
+  {
+    res = _match_spaces(s, pos2, pos2);
+    if (pos2 >= s.n()) { ret_x = 0; ret_iend = pos; return -1; }
+  }
+  s_ll pos3 = pos2;
+  bmdx_meta::u_ll x64 = 0;
+  res = _match_uint64(s, pos3, pos3, x64, terms);
+  if (res == 1 || (res != 0 && pos3 > pos2))
+  {
+    ret_iend = pos3;
+    bool b_overflow = false;
+    if (b_negative && x64 > 0x80000000ull) { while (x64 > 0x80000000ull) { x64 /= 10; } b_overflow = true; }
+    if (!b_negative && x64 > 0x7fffffffull) { while (x64 > 0x7fffffffull) { x64 /= 10; } b_overflow = true; }
+    if (b_negative) { ret_x = s_long(-s_ll(x64)); }
+      else { ret_x = s_long(x64); }
+    if (res != 1 || b_overflow) { return -1; }
+    return 1;
+  }
+  ret_x = 0; ret_iend = pos3 > pos2 ? pos3 : pos;
+  return -1;
+}
+
+  // NOTE digits in terms are considered as terminating characters (not as digits).
+  // 1 - found an unsigned integer, followed by terminating character or string end.
+  //    ret_iend points to that character or string end.
+  // 0 - pos is out of string or points to string end.
+  //    ret_iend points to string end.
+  // -1 - found one of
+  //    a) non-terminating character
+  //    b) terminating character at once (without digits)
+  //    c) too large number
+  //    ret_iend points to first bad character, or to end of digits.
+int paramline::_match_uint64(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, bmdx_meta::u_ll& ret_x, arrayref_t<wchar_t> terms)
+{
+  if (s.is_empty() || !(pos >= 0 && pos < s.n())) { ret_x = 0; ret_iend = bmdx_minmax::myllmax(0, s.n()); return 0; }
+  s_ll pos2 = pos;
+  bmdx_meta::u_ll x = 0;
+  bool b_overflow = false;
+  while (1)
+  {
+    bool b_end = pos2 >= s.n();
+    const wchar_t c = b_end ? 0 : s[pos2];
+    bool b_term = false;
+      if (!b_end) { s_ll i = terms.find1(c); if (i >= 0 && i < terms.n()) { b_term = true; } }
+    bool b_digit = !b_end && !b_term && c >= L'0' && c <= L'9';
+    if (b_digit)
+    {
+      if (!b_overflow && x > (~0ull / 10)) { b_overflow = true; }
+      if (!b_overflow) { x *= 10; x += c - L'0'; }
+    }
+    if (b_end || b_term || !b_digit)
+    {
+      ret_x = x; ret_iend = pos2;
+      if (b_overflow) { return -1; }
+      if (pos2 > pos && (b_end || b_term)) { return 1; }
+      return -1;
+    }
+    pos2 += 1;
+  }
+}
+
+  // 2 - found <index>=(.*), ret_iend points to rvalue (right after equality sign).
+  // 1 - found <index>( *).
+  //    ret_iend points to string end.
+  // 0 - pos is exactly end of string, or all characters starting from pos are spaces.
+  //    ret_iend points to string end.
+  // -1 - pos points to something other than tested data type.
+  //    ret_iend = pos.
+  // -2 - pos is out of [0..s.n()], or s is not valid.
+  //    ret_iend points to string end.
+int paramline::_msp_op_index(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_i)
+{
+  ret_i = 0;
+  if (!s.is_valid() || !(pos >= 0 && pos <= s.n())) { ret_iend = bmdx_minmax::myllmax(0, s.n()); return -2; }
+  if (pos == s.n()) { ret_iend = s.n(); return 0; }
+  s_ll pos2 = pos;
+  int res = _match_spaces(s, pos2, pos2);
+    if (pos2 >= s.n()) { ret_iend = s.n(); return 0; }
+  s_ll pos3 = pos2; s_long x32 = 0;
+  res = _match_int32(s, pos3, pos3, x32, L" =");
+    if (res != 1) { ret_iend = pos; return -1; }
+  s_ll pos4 = pos3; res = _match_spaces(s, pos4, pos4);
+    if (pos4 < s.n())
+    {
+      if (s[pos4] != L'=') { ret_iend = pos; return -1; }
+      ret_i = x32; ret_iend = pos4 + 1;
+      return 2;
+    }
+  ret_i = x32; ret_iend = s.n();
+  return 1;
+}
+  // 2 - found +=(.*), ret_iend points to rvalue (right after equality sign).
+  // 0 - pos is exactly end of string, or all characters starting from pos are spaces.
+  //    ret_iend points to string end.
+  // -1 - pos points to something other than tested data type.
+  //    ret_iend = pos.
+  // -2 - pos is out of [0..s.n()], or s is not valid.
+  //    ret_iend points to string end.
+int paramline::_msp_op_pluseq(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend)
+{
+  if (!s.is_valid() || !(pos >= 0 && pos <= s.n())) { ret_iend = bmdx_minmax::myllmax(0, s.n()); return -2; }
+  if (pos == s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos2 = pos;
+  int res = _match_spaces(s, pos2, pos2);
+    if (pos2 >= s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos3 = pos2;
+  res = _match_character(s, pos3, L"+");
+    if (res != 1) { ret_iend = pos; return -1; }
+  pos3 += 1;
+
+  s_ll pos4 = pos3; res = _match_spaces(s, pos4, pos4);
+    if (pos4 >= s.n()) { ret_iend = pos; return -1; }
+    if (s[pos4] != L'=') { ret_iend = pos; return -1; }
+  ret_iend = pos4 + 1;
+  return 2;
+}
+  // Similar to _msp_op_plus, but looks for ++=(.*)
+int paramline::_msp_op_pluspluseq(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend)
+{
+  if (!s.is_valid() || !(pos >= 0 && pos <= s.n())) { ret_iend = bmdx_minmax::myllmax(0, s.n()); return -2; }
+  if (pos == s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos2 = pos;
+  int res = _match_spaces(s, pos2, pos2);
+    if (pos2 >= s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos3 = pos2;
+  res = _match_character(s, pos3, L"+");
+    if (res != 1) { ret_iend = pos; return -1; }
+  pos3 += 1;
+
+  res = _match_character(s, pos3, L"+");
+    if (res != 1) { ret_iend = pos; return -1; }
+  pos3 += 1;
+
+  s_ll pos4 = pos3; res = _match_spaces(s, pos4, pos4);
+    if (pos4 >= s.n()) { ret_iend = pos; return -1; }
+    if (s[pos4] != L'=') { ret_iend = pos; return -1; }
+  ret_iend = pos4 + 1;
+  return 2;
+}
+  // Similar to _msp_op_plus, but looks for b<integer>
+int paramline::_msp_b(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_b)
+{
+  ret_b = 0;
+  if (!s.is_valid() || !(pos >= 0 && pos <= s.n())) { ret_iend = bmdx_minmax::myllmax(0, s.n()); return -2; }
+  if (pos == s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos2 = pos;
+  int res = _match_spaces(s, pos2, pos2);
+    if (pos2 >= s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos3 = pos2;
+  res = _match_character(s, pos3, L"b");
+    if (res != 1) { ret_iend = pos; return -1; }
+  pos3 += 1;
+
+  s_long x32 = 0;
+  s_ll pos4 = pos3; res = _match_int32(s, pos4, pos4, x32, L" bn+-");
+    if (res != 1) { ret_iend = pos; return -1; }
+  ret_b = x32; ret_iend = pos4;
+  return 2;
+}
+  // Similar to _msp_op_plus, but looks for n<unsigned integer>
+int paramline::_msp_n(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_n)
+{
+  ret_n = 0;
+  if (!s.is_valid() || !(pos >= 0 && pos <= s.n())) { ret_iend = bmdx_minmax::myllmax(0, s.n()); return -2; }
+  if (pos == s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos2 = pos;
+  int res = _match_spaces(s, pos2, pos2);
+    if (pos2 >= s.n()) { ret_iend = s.n(); return 0; }
+
+  s_ll pos3 = pos2;
+  res = _match_character(s, pos3, L"n");
+    if (res != 1) { ret_iend = pos; return -1; }
+  pos3 += 1;
+
+  s_long x32 = 0;
+  s_ll pos4 = pos3; res = _match_int32(s, pos4, pos4, x32, L" bn+-");
+    if (res != 1) { ret_iend = pos; return -1; }
+    if (x32 < 0) { ret_iend = pos; return -1; }
+  ret_n = x32; ret_iend = pos4;
+  return 2;
+}
+
+
+struct _paramline_array_spec
+{
+  enum { _no_op = 0, op_append = 1, op_assign_at_index = 3, ibase_dflt = 1 };
+
+  bool b_has_base;
+    s_ll ibase;
+  bool b_has_n;
+    s_ll n_elem;
+  bool b_has_op() const { return op_type != _no_op; }
+    int op_type;
+    bool b_op_append_vec;
+    s_ll iassign;
+    arrayref_t<wchar_t> rvalue; // pos. of rvalue in _init_from_string spec arg.
+
+  _paramline_array_spec(__bmdx_noarg1) { clear(); }
+
+  void clear() { b_has_base = false; ibase = ibase_dflt; b_has_n = false; n_elem = 0; op_type = _no_op; b_op_append_vec = false; iassign = ibase_dflt; }
+
+  static bool sb_valid_int32(s_ll x __bmdx_noarg) { return x >= -0x80000000ll && x <= 0x7fffffffll; }
+  static bool sb_valid_size31(s_ll x __bmdx_noarg) { return x >= 0 && x <= 0x7fffffffll; }
+
+  bool b_valid_ibase32() const { return sb_valid_int32(ibase); }
+  bool b_valid_n_elem32() const { return sb_valid_size31(n_elem); }
+  bool b_valid_iassign32() const { return sb_valid_int32(iassign); }
+
+    // Decode array spec. (\z<spec>).
+    //  The function is meant to be called from x_decode1v,
+    //  so that input spec is already preprocessed with x_replace4 and _trim(, L" ").
+    // true if succeeded (all fields are correctly initialized).
+    // false if failed due to bad spec (fields are partially modified).
+  bool _init_from_string(arrayref_t<wchar_t> spec)
+  {
+    clear();
+
+    // Simplified spec. for parsing:
+    //  " *(+|-)? *\d+ *(|=.*)$" --> <integer index> <opt. rvalue>
+    //  " *+{1,2} *=.*$" --> <array simple ops.> <opt. rvalue>
+    //  " *b(+|-)? *\d+(.|$)" --> <base index>
+    //  " *n(+)? *\d+(.|$)" --> <size>
+
+    if (spec.is_empty()) { return true; }
+    s_ll pos2 = 0;
+    int res = 0; bool b_has_value = false;
+    while (1)
+    {
+      res = paramline::_match_spaces(spec, pos2, pos2);
+        if (res == 0 || pos2 == spec.n()) { return true; }
+      s_ll pos = pos2;
+      s_long x32 = 0;
+      res = paramline::_msp_b(spec, pos, pos2, x32);
+        if (res == 2) { b_has_base = true; ibase = x32; continue; }
+          else if (res != -1) { return false; }
+      res = paramline::_msp_n(spec, pos, pos2, x32);
+        if (res == 2) { b_has_n = true; n_elem = x32; continue; }
+          else if (res != -1) { return false; }
+      res = paramline::_msp_op_index(spec, pos, pos2, x32);
+        if (res == 2 || res == 1) { op_type = op_assign_at_index; iassign = x32; b_has_value = res == 2; break; }
+          else if (res != -1) { return false; }
+      res = paramline::_msp_op_pluseq(spec, pos, pos2);
+        if (res == 2) { op_type = op_append; iassign = x32; b_op_append_vec = false; b_has_value = true; break; }
+          else if (res != -1) { return false; }
+      res = paramline::_msp_op_pluspluseq(spec, pos, pos2);
+        if (res == 2) { op_type = op_append; iassign = x32; b_op_append_vec = true; b_has_value = true; break; }
+          else if (res != -1) { return false; }
+      return false;
+    }
+    if (b_has_value) { rvalue.link(&spec[pos2], spec.n() - pos2); }
+      else { rvalue.link(spec._end_u(), 0); }
+
+    return true;
+  }
+
+  bool _ensure_array_shape(unity& vdest) const __bmdx_noex
+  {
+    try {
+      if (vdest.utype() != utUnityArray)
+      {
+        vdest.arr_init<utUnity>(1);
+      }
+      if (b_has_base)
+      {
+        if (!b_valid_ibase32()) { return false; }
+        vdest.arrlb_(s_long(ibase & 0xffffffffll));
+      }
+      if (b_has_n)
+      {
+        if (!b_valid_n_elem32()) { return false; }
+        vdest.arrsz_(s_long(n_elem & 0x7fffffffll));
+      }
+      return true;
+    } catch (...) {}
+    return false;
+  }
+};
 
 unity& paramline::decode1v(arrayref_t<wchar_t> ssrc0, unity& dest)
 {
   dest.clear();
   try
   {
-    std::wstring s; s_long flags(0);
-    x_replace4(ssrc0, s, flags);
-    _t_wz pos0 = s.find(L";"); if (pos0 != nposw) { s.resize(pos0); }
-    if (dest.isLocal())
-    {
-      dest = _trim(s, L" ");
-      x_decode1v(dest, false, flags);
-    }
-    else
-    {
-      unity temp = _trim(s, L" ");
-      x_decode1v(temp, false, flags);
-      dest = temp;
-    }
+    std::wstring s; s_long replflags(0);
+    x_replace4(ssrc0, s, replflags);
+    _t_wz pos0 = s.find(wpterm_short); if (pos0 != nposw) { s.resize(pos0); }
+    arrayref_t<wchar_t> ssv = _trim_arrayref(arrayref_t<wchar_t>(s), L" ");
+    x_decode1v(ssv, false, replflags, dest);
   }
   catch(_XUBase&) { throw; }
   catch(std::exception& e) { throw XUExec("decode1v.1", e.what(), _fls75(ssrc0.pd(), ssrc0.n())); }
@@ -8166,63 +8773,165 @@ unity& paramline::decode1v(arrayref_t<wchar_t> ssrc0, unity& dest)
   return dest;
 }
 
-unity& paramline::decode(arrayref_t<wchar_t> ssrc0, unity& mh, bool useMap, arrayref_t<wchar_t> pterm_0)
+  // mha:
+  //  will be a) 0-based array (key, value, key, value...) if pled__use_array flag is given,
+  //    b) else map if pled_use_map flag is given,
+  //    c) else hashlist.
+  // pret_path:
+  //      a) if given:
+  //        1) must have pret_path->v.isLocal() == true.
+  //        2) values with implicit empty key ("=<value>") are considered branch paths,
+  //          and treated separately (decoded in special way and put into pret_path->v)
+  //          from regular values with explicit empty key "\e=<value>" (put into mha).
+  //      b) If pret_path == 0, all values with empty key are processed as usual,
+  //        according to pled_overwrite_dup_keys flag.
+  // pret_replflags: optional, receives flags, returned by x_replace4.
+  // pterm_0:
+  //    must be valid. If empty, wCRLF is assumed.
+  // ff_encdec:
+  //  pled__use_array, pled_use_map: see mha above.
+  //  pled_encdec1v_for_names
+  //  pled_overwrite_dup_keys
+  //  pled__get_strvals:
+  //    if set, the returned values will be
+  //      a) undecoded strings (result of applying x_replace4 on ssrc0 and splitting into key and value substrings).
+  //        The client should later call x_decode1v on them and supply *pret_replflags, returned by x_decode.
+  //      b) utEmpty, where no value assignment was specified (key only existed).
+  //    NOTE This flag should be used with pled__use_array only,
+  //      because direct overwriting string values in associative mha
+  //      might lose multipart array modifiers (multiple pairs "key = \z<spec.>")
+void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec, arrayref_t<wchar_t> pterm_0, _opt_unity* pret_path, s_long* pret_replflags)
 {
   if (!(ssrc0.is_valid() && pterm_0.is_valid())) { throw XUExec("decode.3"); }
-  std::wstring src;
+  const bool b_use_array = !!(ff_encdec & pled__use_array);
+  const bool b_strvals = !!(ff_encdec & pled__get_strvals);
+  const bool b_use_map = !b_use_array && !!(ff_encdec & pled_use_map);
+  const bool b_1v_for_names = !!(ff_encdec & pled_encdec1v_for_names);
+  const bool b_overwrite = !!(ff_encdec & pled_overwrite_dup_keys);
+  std::wstring src_;
   try
   {
-      std::wstring pterm = pterm_0.length() == 0 ? wCRLF : std::wstring(pterm_0.pd(), _t_wz(pterm_0.n()));
-      if (useMap) { mh.map_clear(false); } else { mh.hash_clear(false); }
+    if (pret_path) { pret_path->b_has_v = false; pret_path->v.clear(); }
 
-      std::wstring s, n; unity v;
-      s_long flags(0);
-      x_replace4(ssrc0, src, flags);
-      src = replace(src, L";", pterm);
-      _t_wz pos0(0), pos2(0), pos_eq(0);
-      while(pos0 < src.length())
+    arrayref_t<wchar_t> pterm = pterm_0.is_empty() ? wCRLF : pterm_0;
+    if (b_use_map) { mha.map_clear(false); }
+      else if (b_use_array) { mha.arr_init<utUnity>(0); }
+      else { mha.hash_clear(false); }
+
+    s_long replflags(0);
+    x_replace4(ssrc0, src_, replflags);
+      if (pret_replflags) { *pret_replflags = replflags; }
+    src_ = replace(src_, wpterm_short, pterm);
+    arrayref_t<wchar_t> src_ar = src_;
+    s_ll pos0(0), pos2(0);
+    while(pos0 < src_ar.n())
+    {
+      pos2 = _find_str_linear(src_ar, pterm, pos0);
+
+      arrayref_t<wchar_t> s_(&src_ar[pos0], pos2 - pos0);
+      s_ll pos_eq = _find_str_linear(s_, arrayref_t<wchar_t>(weterm_short), 0);
+      const bool b_has_asg = pos_eq < s_.n();
+
+      arrayref_t<wchar_t> rsk = _trim_arrayref(s_.range_intersect(0, pos_eq), L" ");
+      arrayref_t<wchar_t> ssv;
+        if (b_has_asg) { ssv = _trim_arrayref(s_.range_intersect(pos_eq + 1), L" "); }
+
+      pos0 = pos2 + pterm.n();
+        if (rsk.is_empty() && !b_has_asg) { continue; }
+
+        // Special case: values with implicit empty key ("=<value>") are considered branch paths.
+      const bool b_branch_path = rsk.is_empty();
+      if (b_branch_path && pret_path)
       {
-          pos2 = src.find(pterm, pos0);
-          if (pos2 == nposw) { pos2 = src.length(); }
-          s = src.substr(pos0, pos2 - pos0);
-
-          pos_eq = s.find(L"=");
-          if (pos_eq != nposw)
-          {
-              n = _trim(s.substr(0, pos_eq), L" ");
-              v = _trim(s.substr(pos_eq + 1), L" ");
-              x_replace2a(n, flags);
-              x_decode1v(v, false, flags);
-              if (v.objPtr<unity>()) { v.objPtr<unity>()->u_name_set(n); }
-              mh.assoc_set(n, v, true);
-          }
-          else
-          {
-              n = _trim(s, L" ");
-              if (n.length() > 0)
-              {
-                x_replace2a(n, flags);
-                mh.assoc_set(n, unity(), true);
-              }
-          }
-          pos0 = pos2 + pterm.length();
+        if (!pret_path->b_has_v || b_overwrite)
+        {
+          pret_path->v.clear();
+          x_decode1v(ssv, false, replflags | plrf_use_path_array_modifiers, pret_path->v);
+          pret_path->b_has_v = true;
+        }
+        continue;
       }
+
+      unity ku;
+        if (b_1v_for_names)
+        {
+          x_decode1v(rsk, false, replflags, ku);
+        }
+        else
+        {
+          ku.u_clear(utString);
+          std::wstring& ks = ku.rstr();
+          ks.append(rsk.pd(), rsk._end_u());
+          x_replace2a(ks, replflags);
+        }
+
+      if (b_use_array)
+      {
+        mha.arr_append(ku);
+        mha.arr_append(unity());
+        unity& v = mha.ua_last();
+        if (b_has_asg)
+        {
+          if (b_strvals)
+          {
+            std::wstring s; s.assign(ssv.pd(), ssv._end_u());
+            if (v.isLocal()) { v.rx<utString>().swap(s); }
+              else { v = s; }
+          }
+          else { x_decode1v(ssv, false, replflags, v); }
+        }
+        continue;
+      }
+
+      const bool b_v_ex = mha.u_has(ku, 6);
+      if (b_has_asg)
+      {
+        unity& v = mha(ku);
+        s_long f1 = b_v_ex ? plrf_value_exists : _plrf__nullflags;
+        s_long f2 = b_overwrite ? plrf_allow_modify_all : _plrf__nullflags;
+        if (b_strvals)
+        {
+          if (!(b_v_ex && !b_overwrite))
+          {
+            std::wstring s; s.assign(ssv.pd(), ssv._end_u());
+            if (v.isLocal()) { v.rx<utString>().swap(s); }
+              else { v = s; }
+          }
+        }
+        else
+        {
+          x_decode1v(ssv, false, replflags | f1 | f2, v);
+        }
+      }
+      else
+      {
+        if (!(b_v_ex && !b_overwrite)) { mha.assoc_set(ku, unity(), true); }
+      }
+    }
   }
   catch(_XUBase&) { throw; }
-  catch(std::exception& e) { throw XUExec("decode.1", e.what(), src); }
-  catch(...) { throw XUExec("decode.2", src); }
-  return mh;
+  catch(std::exception& e) { throw XUExec("decode.1", e.what(), src_); }
+  catch(...) { throw XUExec("decode.2", src_); }
 }
 
-unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags, arrayref_t<wchar_t> pterm_0)
+unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec, arrayref_t<wchar_t> pterm_0)
 {
   if (!(ssrc0.is_valid() && pterm_0.is_valid())) { throw XUExec("decode_tree.3"); }
   try {
     arrayref_t<wchar_t> pterm2 = pterm_0.length() == 0 ? wCRLF : pterm_0;
-    bool b_map = !!(flags & 0x1); bool b_clear = (flags & 0x4) == 0; bool b_keep = (flags & 0x2) == 0; bool b_skipslc = !!(flags & 0x8); bool b_convcr = !!(flags & 0x10); bool b_noinclpath = (flags & 0x20) == 0; bool b_braces = !!(flags & 0x40);
-      if (!b_clear && mh.isMap()) { b_map = true; }
-      if (b_map) { if (b_clear || !mh.isMap()) { mh.map_clear(true); } } else { if (b_clear || !mh.isHash()) { mh.hash_clear(true); } }
-    const unity k_empty_str = L"";
+    const bool b_1v_for_names = !!(ff_encdec & pled_encdec1v_for_names);
+    const bool b_overwrite = !!(ff_encdec & pled_overwrite_dup_keys);
+    const bool b_clear = (ff_encdec & 0x4) == 0;
+    bool b_map = !!(ff_encdec & 0x1);
+      if (!b_clear && mha.isMap()) { b_map = true; }
+    const bool b_skipslc = !!(ff_encdec & 0x8);
+    const bool b_convcr = !!(ff_encdec & 0x10);
+    const bool b_inclpath = !!(ff_encdec & 0x20) && !b_1v_for_names;
+    const bool b_braces = !!(ff_encdec & 0x40);
+
+    if (b_map) { if (b_clear || !mha.isMap()) { mha.map_clear(true); } }
+      else { if (b_clear || !mha.isHash()) { mha.hash_clear(true); } }
+    const s_long flags_assoc = mha.assocFlags_c();
 
     carray_r_t<wchar_t> s2;
     if (b_convcr)
@@ -8247,8 +8956,13 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags
       }
     }
 
+    const unity k_path(L"");
     s_ll pos(0); arrayref_t<wchar_t> ssrc(b_convcr ? s2 : ssrc0);
-    unity stack, last_path; if (b_braces) { last_path.u_clear(utUnityArray); stack.ua_append(last_path); }
+    unity stack, eff_path;
+      eff_path.arr_init<utUnityArray>(1);
+      if (b_braces) { stack.ua_append(eff_path); }
+    s_long iassign = 1; // the current array assignment index
+      bool b_reset_iassign = true;
     while (pos < ssrc.n())
     {
       s_ll pos2 = _find_str_linear(ssrc, pterm2, pos);
@@ -8273,76 +8987,315 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags
           {
             for (s_ll i = pos; i < pos2; ++i)
             {
-              if (ssrc[i] == L'{') { if (last_path == stack.ua_last()) { last_path.ua_append(unity()); } stack.ua_append(last_path); }
-                else if (ssrc[i] == L'}') { last_path = stack.ua_last(); if (stack.uaS() > 1) { stack.ua_resize(stack.uaUb(), -1); } }
+              if (ssrc[i] == L'{')
+              {
+                if (eff_path == stack.ua_last())
+                {
+                  eff_path.ua_append(unity());
+                  b_reset_iassign = true;
+                }
+                stack.ua_append(eff_path);
+              }
+              else if (ssrc[i] == L'}')
+              {
+                if (stack.uaS() > 1) { stack.ua_resize(stack.uaUb(), -1); }
+                eff_path = stack.ua_last();
+                b_reset_iassign = true;
+              }
             }
             b_skip = true;
           }
         }
         if (!b_skip) // decode branch, calc. path, merge
         {
-          unity h; paramline().decode(arrayref_t<wchar_t>(&ssrc[pos], pos2 - pos), h, false, pterm2);
-
-          bool b_hk = h.u_has(k_empty_str, 6);
-          const unity* pk = b_hk ? &h[k_empty_str] : &k_empty_str;
-          if (b_braces)
+          unity aksv; // 0-based (key, string, key, string...)
+          bool b_has_brpath = false;
+          unity _path_modifier;
+          const unity* ppm = &_path_modifier;
+          s_long replflags = 0;
+          if (1)
           {
-            last_path = stack.ua_last();
-            if (pk->utype() == utUnityArray)
+            s_long ff2 = 0;
+              ff2 |= pled__use_array;
+              ff2 |= pled__get_strvals;
+              if (b_1v_for_names) { ff2 |= pled_encdec1v_for_names; }
+              if (b_overwrite) { ff2 |= pled_overwrite_dup_keys; }
+            _opt_unity brpath;
+            x_decode(arrayref_t<wchar_t>(&ssrc[pos], pos2 - pos), aksv, ff2, pterm2, &brpath, &replflags);
+            b_has_brpath = brpath.b_has_v;
+            if (brpath.b_has_v) { b_reset_iassign = true; }
+            if (brpath.v.utype() == utUnityArray)
             {
-              if (last_path.uaS() > 0) { for (int j = pk->arrlb(); j <= pk->arrub(); ++j)  { last_path.ua_append(pk->ref<utUnity>(j)); } *(unity*)pk = last_path; }
-                else { last_path = *pk; }
-              pk = &last_path;
+              if (b_braces) { _path_modifier = stack.ua_last(); }
+                else { _path_modifier.arr_init<utUnity>(1); }
+              for (int j = brpath.v.arrlb(); j <= brpath.v.arrub(); ++j)
+                { _path_modifier.ua_append(brpath.v[j]); }
             }
             else
             {
-              if (last_path.uaS() > 0) { if (b_hk) { *(unity*)pk = last_path; } else { h.hash_set(k_empty_str, last_path, 0, h.hashl_first()); } pk = &last_path; }
+              if (b_braces) { ppm = &stack.ua_last(); }
+                else { ppm = &eff_path; }
             }
           }
 
-          unity* node = &mh;
-          if (pk->utype() == utUnityArray)
-          {
-            for (int j = pk->arrlb(); j <= pk->arrub(); ++j)
+          unity* node = &mha;
+          bool b_rootnode = true;
+          unity _new_path;
+            if (b_has_brpath) { _new_path.arr_init<utUnity>(1); }
+            for (int j = 1; j <= ppm->arrub(); ++j)
             {
-              const unity& k2 = pk->ref<utUnity>(j);
-              node->assoc_set(k2, unity(), true);
-              node = &(*node)[k2];
-              if (node->isAssoc()) {}
-              else if (!node->isEmpty() && b_keep) { node = 0; break; }
+                // At iteration start, node is granted to be container:
+                //  a) map or hashlist,
+                //  b) utUnityArray.
+              const unity& rpe = (*ppm)[j];
+              if (rpe.isObject()) // expecting: array modifier
+              {
+                if (!(
+                  b_overwrite
+                  || node->isAssoc()
+                  || node->utype() == utUnityArray
+                ))
+                { node = 0; break; }
+                const _paramline_array_spec& asp = rpe.objRef_c<_paramline_array_spec>();
+                if (!asp._ensure_array_shape(*node)) { throw XUExec("decode_tree.5"); }
+                continue;
+              }
+
+              if (b_has_brpath) { _new_path.ua_append(rpe); }
+
+              if (node->utype() == utUnityArray)
+              {
+                if (!rpe.isIntOrEmpty()) { throw XUExec("decode_tree.6"); }
+                s_ll ind = rpe.vint();
+                if (!_paramline_array_spec::sb_valid_int32(ind)) { throw XUExec("decode_tree.7"); }
+                node = &node->ua(s_long(ind));
+              }
               else
               {
-                if (b_map) { node->u_clear(utMap); node->mapFlags_set(0, mh.mapFlags()); }
-                  else { node->u_clear(utHash); node->hashFlags_set(0, mh.hashFlags()); }
+                node->assoc_set(rpe, unity(), true);
+                node = &(*node)[rpe];
+              }
+
+              b_rootnode = false;
+
+              if (node->isAssoc()) {}
+              else if (node->utype() == utUnityArray) {}
+              else if (node->isEmpty() || b_overwrite)
+              {
+                if (b_map) { node->u_clear(utMap); node->mapFlags_set(0, flags_assoc); }
+                  else { node->u_clear(utHash); node->hashFlags_set(0, flags_assoc); }
+              }
+              else { node = 0; break; }
+            }
+            if (node && b_has_brpath && b_braces) { eff_path = _new_path; }
+
+          if (node)
+          {
+            if (node->utype() == utUnityArray)
+            {
+              if (b_reset_iassign) { iassign = node->arrlb(); b_reset_iassign = false; }
+              for (int ikv = 0; ikv < aksv.arrsz(); ikv += 2)
+              {
+                const unity& k0 = aksv[ikv];
+                const unity& sv0 = aksv[ikv + 1];
+                enum EBuildOp
+                {
+                  _noop = 0,
+                  op_append_seq = 1,
+                  op_append_1 = 2,
+                  op_set_seq = 3,
+                  op_set_1 = 4
+                };
+                int op_type = _noop;
+                if (k0.isString())
+                {
+                  const std::wstring& sk = k0.rstr();
+                  if (sk == wao_appseq) { op_type = op_append_seq; }
+                    else if (sk == wao_app1) { op_type = op_append_1; }
+                    else if (sk == wao_setseq) { op_type = op_set_seq; }
+                    else if (sk == wao_set1) { op_type = op_set_1; }
+                }
+                if (op_type != _noop)
+                {
+                  unity v;
+                    if (sv0.isString()) { x_decode1v(sv0.rstr(), false, replflags, v); }
+
+                  if (op_type == op_append_seq && v.utype() == utUnityArray)
+                  {
+                    iassign = node->arrub() + 1;
+                    node->arrub_(node->arrub() + v.arrsz());
+                    for (s_long j = v.arrlb(); j <= v.arrub(); ++j)
+                      { node->ua(iassign++).swap(v[j]); }
+                    continue;
+                  }
+                  else if (op_type == op_append_1 || op_type == op_append_seq)
+                  {
+                    node->ua_append(unity());
+                    node->ua_last().swap(v);
+                    iassign = node->arrub() + 1;
+                    continue;
+                  }
+
+                  if (op_type == op_set_seq && v.utype() == utUnityArray)
+                  {
+                    for (s_long j = v.arrlb(); j <= v.arrub(); ++j)
+                      { node->ua(iassign++).swap(v[j]); }
+                    continue;
+                  }
+                  else if (op_type == op_set_1 || op_type == op_set_seq)
+                  {
+                    node->ua(iassign++).swap(v);
+                    continue;
+                  }
+
+                }
+
+                unity k1;
+                const unity* pk = &k0;
+                  //  With strictly string keys, still case is possible for
+                  //    <integer_index>=<value>
+                  //  where key remains in string form, and must be converted to integer in normal way.
+                if (!b_1v_for_names && pk->isString())
+                {
+                  try { k1 = str2i(pk->rstr(), 0, false); pk = &k1; } catch (...) {}
+                }
+
+                if (pk->isIntOrEmpty())
+                {
+                  s_ll ind64 = pk->vint();
+                  if (!_paramline_array_spec::sb_valid_int32(ind64)) { throw XUExec("decode_tree.8"); }
+                  s_long j = s_long(ind64);
+                  bool b_v_ex = node->u_has(j, 1);
+                  unity& vdest = node->ua(j);
+                  if (vdest.isEmpty()) { b_v_ex = false; }
+                    if (sv0.isString())
+                    {
+                      s_long rff = replflags;
+                        if (b_v_ex) { rff |= plrf_value_exists; }
+                        if (b_overwrite) { rff |= plrf_allow_modify_all; }
+                      x_decode1v(sv0.rstr(), false, rff, vdest);
+                    }
+                    else
+                    {
+                      vdest.clear(); // key only (assigns utEmpty)
+                    }
+                  iassign = j + 1;
+                  continue;
+                }
+                throw XUExec("decode_tree.9"); // unknown key type specified in the array area
+              }
+            }
+            else
+            {
+              if (b_inclpath && !node->u_has(k_path, 6) && (!b_rootnode || b_has_brpath))
+                { (*node)(k_path).clear(); }
+              for (int ikv = 0; ikv < aksv.arrsz(); ikv += 2)
+              {
+                const unity& k = aksv[ikv];
+                const unity& sv0 = aksv[ikv + 1];
+                if (b_inclpath && k == k_path) { continue; }
+                bool b_v_ex = node->u_has(k, 6);
+                unity& vdest = (*node)(k);
+                  if (sv0.isString())
+                  {
+                    s_long rff = replflags;
+                      if (b_v_ex) { rff |= plrf_value_exists; }
+                      if (b_overwrite) { rff |= plrf_allow_modify_all; }
+                    x_decode1v(sv0.rstr(), false, rff, vdest);
+                  }
+                  else
+                  {
+                    if (!b_v_ex || b_overwrite) { vdest.clear(); } // key only (assigns utEmpty)
+                  }
               }
             }
           }
-          if (node) { if (b_noinclpath) { h.assoc_del(k_empty_str); } if (h.hashS_c() > 0) { paramline().merge(*node, h, b_keep); } }
         }
+
       }
       pos = pos2 + pterm2.length();
+    }
+    if (b_inclpath)
+    {
+      struct _path_setter
+      {
+        const unity k_path;
+        _path_setter() : k_path(L"") {}
+        void f_top(unity& mha)
+        {
+          unity apath; apath.arr_init<utUnity>(1);
+          f(mha, apath);
+        }
+        void f(unity& branch, unity& apath)
+        {
+          if (branch.isAssoc())
+          {
+            for (s_long pos = branch.assocl_first(); pos != branch.assocl_noel(); pos = branch.assocl_next(pos))
+            {
+              unity& x = branch.assocl(pos);
+              if (x.isAssoc() || x.utype() == utUnityArray)
+              {
+                apath.ua_append(branch.assocl_key(pos));
+                f(x, apath);
+                apath.arrsz_(apath.arrsz() - 1);
+              }
+            }
+            if (branch.u_has(k_path, 6)) { unity& k = branch[k_path]; if (k.isEmpty()) { k = apath; } }
+          }
+          else if (branch.utype() == utUnityArray)
+          {
+            for (s_long i = branch.arrlb(); i <= branch.arrub(); ++i)
+            {
+              unity& x = branch[i];
+              if (x.isAssoc() || x.utype() == utUnityArray)
+              {
+                apath.ua_append(i);
+                f(x, apath);
+                apath.arrsz_(apath.arrsz() - 1);
+              }
+            }
+          }
+        }
+      };
+      _path_setter().f_top(mha);
     }
   }
   catch(_XUBase&) { throw; }
   catch(std::exception& e) { throw XUExec("decode_tree.1", e.what(), _fls75(ssrc0.pd(), ssrc0.n())); }
   catch(...) { throw XUExec("decode_tree.2", _fls75(ssrc0.pd(), ssrc0.n())); }
-  return mh;
+  return mha;
 }
 
-std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, arrayref_t<wchar_t> pterm_0)
+std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, s_long ff_encdec, arrayref_t<wchar_t> pterm_0)
 {
   if (!pterm_0.is_valid()) { throw XUExec("encode.3"); }
   try
   {
     sdest.clear(); if (!mh.isAssoc() || mh.assocS_c() == 0) { return sdest; }
-    std::wstring s1, s2; arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
+    arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
+    hashx<const unity*, s_long> hstop;
     s_long pos = mh.assocl_first();
     while (pos != mh.assocl_noel())
     {
-      x_encode1(mh.assocl_key(pos), s1, true, false); x_encode1(mh.assocl_c(pos), s2, false, false);
-      if (s2.length() || s1.empty()) { s1 += weterm; s1 += s2; } s2.clear(); x_replace2a(s1, 1);
+      std::wstring sk, s1, s2;
+      x_encode1n(mh.assocl_key(pos), sk, ff_encdec & _pled__mask__encode);
+      vec2_t<std::wstring, __vecm_tu_selector> xsubarrs;
+      x_encode1v(mh.assocl_c(pos), s2, _pled__nullflags, &xsubarrs, &hstop);
+      if (1)
+      {
+        s1 += sk;
+        if (s2.length() || s1.empty()) { s1 += weterm; s1 += s2; }
+      }
+      for (s_long j = 0; j < xsubarrs.n(); ++j)
+      {
+        s1.append(pterm.pd(), pterm._end_u());
+        s1 += sk;
+        s1 += weterm;
+        s1 += xsubarrs[j];
+      }
+      x_replace2a(s1, 1);
       pos = mh.assocl_next(pos);
-      if (pos != mh.assocl_noel()) { s1.append(pterm.pd(), _t_wz(pterm.n())); }
+      if (pos != mh.assocl_noel()) { s1.append(pterm.pd(), pterm._end_u()); }
       sdest += s1;
     }
     return sdest;
@@ -8352,9 +9305,9 @@ std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, arrayref_t
   catch(...) { throw XUExec("encode.2", mh.vflstr()); }
 }
 
-std::wstring paramline::encode1n(const unity& name)
+std::wstring paramline::encode1n(const unity& name, s_long ff_encdec)
 {
-  try { std::wstring s; x_encode1(name, s, true, false); x_replace2a(s, 1); return s; }
+  try { std::wstring s; x_encode1n(name, s, ff_encdec & _pled__mask__encode); x_replace2a(s, 1); return s; }
   catch(_XUBase&) { throw; }
   catch(std::exception& e) { throw XUExec("encode1n.1", e.what(), name.vflstr()); }
   catch(...) { throw XUExec("encode1n.2", name.vflstr()); }
@@ -8362,13 +9315,23 @@ std::wstring paramline::encode1n(const unity& name)
 
 std::wstring& paramline::encode1v(const unity& value, std::wstring& s)
 {
-  try { x_encode1(value, s, false, false); x_replace2a(s, 1); return s; }
+  try
+  {
+    hashx<const unity*, s_long> hstop;
+    x_encode1v(value, s, _pled__nullflags, 0, &hstop);
+    x_replace2a(s, 1);
+    return s;
+  }
   catch(_XUBase&) { throw; }
   catch(std::exception& e) { throw XUExec("encode1v.1", e.what(), "Failed to encode val.", value.utype()); }
   catch(...) { throw XUExec("encode1v.2", "Failed to encode val.", value.utype()); }
 }
 
-void paramline::x_encode_branch(const unity& mh, const std::wstring& path, std::wstring& sdest, hashx<const unity*, int>& hstop, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, const std::wstring& pathpfx)
+  // mha: map, hash, or array. Expected to be dereferenced (no case of utObject/unity).
+  // path: path to mha in the tree.
+  //  If mha is array, path should not contain its \z<spec.>
+  //  (this will be done by x_encode_branch as necessary).
+void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayref_t<wchar_t>& path, std::wstring& sdest, hashx<const unity*, s_long>& hstopk, hashx<const unity*, s_long>& hstopv, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, arrayref_t<wchar_t> pathpfx)
 {
     // return if not assoc or empty assoc
     // append path if not empty
@@ -8376,66 +9339,168 @@ void paramline::x_encode_branch(const unity& mh, const std::wstring& path, std::
     // append term2
     // for each branch, call x_encode_branch recursively with path + string(branch key)
   if (!(pterm.is_valid() && pterm2.is_valid())) { throw XUExec("x_encode_branch.5"); }
-  if (!(mh.isAssoc() && mh.assocS_c())) { return; }
-  bool bpath = false;
-  vec2_t<s_long> ibr;
-  hashx<std::wstring, int> hsk;
-  s_long res = -1;
-  for (s_long ind = mh.assocl_first(); ind != mh.assocl_noel(); ind = mh.assocl_next(ind))
+  const bool b_1v_for_names = !!(ff_encdec & pled_encdec1v_for_names);
+  const bool b_bse = !!(ff_encdec & pled_enc_empty_key_as_bse);
+
+  if (mha.isAssoc())
   {
-    const unity& k = mh.assocl_key(ind);
-      res = hstop.insert(&k);
-        if (res == 0) { continue; } if (res != 1) { throw XUExec("x_encode_branch.1"); }
-    const unity& v = mh.assocl_c(ind); const unity* pv = v.objPtr_c<unity>();
-    if (v.isAssoc() || (pv && pv->isAssoc())) { ibr.push_back(ind); }
-    else
+    bool b_line1_data = false;
+      if (path.is_nonempty()) { b_line1_data = true; sdest.append(path.pd(), path._end_u()); }
+    hashx<std::wstring, s_long, hashx_common::kf_basic<std::wstring>, __vecm_tu_selector> hsk;
+    s_long res = -1;
+    unity _empty;
+    vec2_t<_paramline_branch, __vecm_tu_selector> abr;
+    for (s_long pos = mha.assocl_first(); pos != mha.assocl_noel(); pos = mha.assocl_next(pos))
     {
-      meta::s_ll ls = k.lenstr();
-      if (ls < -2) { throw XUExec("x_encode_branch.4"); }
-      if (ls == -1 || ls == 0) { continue; }
+      const unity* pk = &_paramline_branch::deref_pu_once(mha.assocl_key(pos), _empty, &hstopk);
+        if (pk == &_empty) { continue; }
+        res = hstopk.insert(pk);
+          if (res == 0) { continue; }
+          if (res != 1) { throw XUExec("x_encode_branch.1"); }
+
+      const unity* px = &_paramline_branch::deref_pu_once(mha.assocl_c(pos), _empty, &hstopv);
+
+      std::wstring sk;
+        x_encode1n(*pk, sk, ff_encdec & _pled__mask__encode);
+            // Key, represented as empty string, is ignored because it conflicts with path specifier key.
+            // Except for when the key occurs in path only (i.e. leads to assoc. array).
+          if (sk.empty() && !px->isAssoc()) { continue; }
+        res = hsk.insert(sk);
+          if (res == 0) { continue; }
+          if (res != 1) { throw XUExec("x_encode_branch.2"); }
+
+      if (px->isAssoc())
+      {
+        if (b_line1_data) { sdest.append(pterm2.pd(), pterm2._end_u()); b_line1_data = false; }
+        std::wstring _sp;
+            // NOTE b_enc1v = true ensures compaibility with non-array-aware paramline,
+            //    when encoding paths of assoc. arrays.
+          _paramline_branch::_add_to_path_with_enc1v_ar(true, b_bse, pathpfx, path, *pk, hstopv, _sp);
+        x_encode_branch(ff_encdec, *px, _sp, sdest, hstopk, hstopv, pterm, pterm2, pathpfx);
+        continue;
+      }
+        // Whem *px is utUnityArray, it may contain subbranches, directly of through nested arrays.
+        //  Such subbranches are saved into abr, to be encoded later.
+        //  First, *px array is encoded as one or more entries (array building with \z<spec.>).
+      const bool b_uar = px->utype() == utUnityArray;
+      if (b_uar)
+      {
+        std::wstring _sp;
+          _paramline_branch::_add_to_path_with_enc1v_ar(b_1v_for_names, b_bse, pathpfx, path, *pk, hstopv, _sp);
+          _paramline_branch::collect_array_subbranches(pathpfx, _sp, *px, hstopv, abr, false);
+      }
+
+      vec2_t<std::wstring, __vecm_tu_selector> xsubarrs;
       std::wstring s1, s2;
-      x_encode1(k, s1, true, false);
-        res = hsk.insert(s1);
-          if (res == 0) { continue; } if (res != 1) { throw XUExec("x_encode_branch.2"); }
-      x_encode1(v, s2, false, false);
-      if (!bpath) { bpath = true; if (path.length()) { sdest += path; sdest.append(pterm.pd(), _t_wz(pterm.n())); } }
-        else { sdest.append(pterm.pd(), _t_wz(pterm.n())); }
-      if (s2.length() || s1.empty()) { s1 += weterm; s1 += s2; } s2.clear(); x_replace2a(s1, 1);
-      sdest += s1;
-    }
-  }
-  if (bpath) { sdest.append(pterm2.pd(), _t_wz(pterm2.n())); }
-  for (s_long i = 0; i < ibr.n(); ++i)
-  {
-    const unity& k = mh.assocl_key(ibr[i]);
-    const unity& v = mh.assocl_c(ibr[i]); const unity* pv = v.objPtr_c<unity>();
-      if (!pv) { pv = &v; }
-    std::wstring s1, sp;
-      x_encode1(k, s1, false, true);
-        res = hsk.insert(s1);
-          if (res == 0) { continue; } if (res != 1) { throw XUExec("x_encode_branch.3"); }
+        // NOTE If b_uar, hstopv is not used with *px twice, because it's already been used
+        //  during collect_array_subbranches call, see above.
+      x_encode1v(*px, s2, pled__enc_assoc_as_empty, &xsubarrs, b_uar ? 0 : &hstopv);
+      if (1)
+      {
+        s1 += sk;
+        if (s2.length() || s1.empty()) { s1 += weterm; s1 += s2; }
+      }
+      for (s_long j = 0; j < xsubarrs.n(); ++j)
+      {
+        s1.append(pterm.pd(), pterm._end_u());
+        s1 += sk;
+        s1 += weterm;
+        s1 += xsubarrs[j];
+      }
       x_replace2a(s1, 1);
-      sp = path; if (sp.empty()) { sp += pathpfx; } sp += wvterm; sp += s1; s1.clear();
-    x_encode_branch(*pv, sp, sdest, hstop, pterm, pterm2, pathpfx);
+
+      if (!b_line1_data && path.is_nonempty()) { b_line1_data = true; sdest.append(path.pd(), path._end_u()); }
+      if (b_line1_data) { sdest.append(pterm.pd(), pterm._end_u()); }
+      b_line1_data = true;
+      sdest += s1;
+      if (abr.n() > 0)
+      {
+        sdest.append(pterm2.pd(), pterm2._end_u());
+        b_line1_data = false;
+        for (s_long i = 0; i < abr.n(); ++i)
+          { x_encode_branch(ff_encdec, *abr[i].pv, abr[i].usp.rstr(), sdest, hstopk, hstopv, pterm, pterm2, pathpfx); }
+        abr.clear();
+      }
+    }
+    if (b_line1_data) { sdest.append(pterm2.pd(), pterm2._end_u()); }
+
+    return;
+  }
+  if (mha.isArray()) // this case is for root array, but also can work with non-empty path
+  {
+    const unity* pa = &mha;
+    const bool b_empty_array = pa->isArray() && pa->arrsz() == 0;
+
+    std::wstring path_full;
+    _paramline_branch::add_to_path(pathpfx, path, L"\\z", path_full);
+    if (pa->arrlb() != 1) { path_full += L"b"; path_full += itows(pa->arrlb(), true); }
+
+    if (b_empty_array)
+    {
+      path_full += L"n0";
+      sdest += path_full;
+      sdest.append(pterm2.pd(), pterm2._end_u());
+      return;
+    }
+
+    const bool b_uar = pa->utype() == utUnityArray;
+    vec2_t<_paramline_branch, __vecm_tu_selector> abr;
+    if (b_uar)
+      { _paramline_branch::collect_array_subbranches(pathpfx, path, *pa, hstopv, abr, false); }
+
+    vec2_t<std::wstring, __vecm_tu_selector> xsubarrs;
+    std::wstring s1, s2;
+      // NOTE If b_uar, hstopv is not used with *px twice, because it's already been used
+      //  during collect_array_subbranches call, see above.
+    x_encode1v(*pa, s2, pled__enc_assoc_as_empty | pled__enc1v_for_array_area, &xsubarrs, b_uar ? 0 : &hstopv);
+    if (1)
+    {
+      s1 += wao_setseq;
+      s1 += weterm_short;
+      s1 += s2;
+    }
+    for (s_long j = 0; j < xsubarrs.n(); ++j)
+    {
+      s1.append(pterm.pd(), pterm._end_u());
+      s1 += xsubarrs[j];
+    }
+    x_replace2a(s1, 1);
+
+    sdest += path_full;
+    sdest.append(pterm.pd(), pterm._end_u());
+    sdest += s1;
+    sdest.append(pterm2.pd(), pterm2._end_u());
+    if (abr.n() > 0)
+    {
+      for (s_long i = 0; i < abr.n(); ++i)
+        { x_encode_branch(ff_encdec, *abr[i].pv, abr[i].usp.rstr(), sdest, hstopk, hstopv, pterm, pterm2, pathpfx); }
+    }
+    return;
   }
 }
 
-std::wstring& paramline::encode_tree(const unity& mh, std::wstring& sdest, arrayref_t<wchar_t> pterm_0, arrayref_t<wchar_t> pterm2_0)
+std::wstring& paramline::encode_tree(const unity& _mha0, std::wstring& sdest, s_long ff_encdec, arrayref_t<wchar_t> pterm_0, arrayref_t<wchar_t> pterm2_0)
 {
   if (!(pterm_0.is_valid() && pterm2_0.is_valid())) { throw XUExec("encode_tree.3"); }
   try
   {
-    sdest.clear(); if (!mh.isAssoc() || mh.assocS_c() == 0) { return sdest; }
-    hashx<const unity*, int> hstop;
+    hashx<const unity*, s_long> hstopk, hstopv;
+    unity _empty;
+    const unity& mha = _paramline_branch::deref_pu_once(_mha0, _empty, &hstopv);
+    sdest.clear();
+      if (!(mha.isAssoc() || mha.isArray())) { return sdest; }
     arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
     arrayref_t<wchar_t> pterm2 = pterm2_0.length() == 0 ? wCRLF : pterm2_0;
-    std::wstring pathpfx = _trim(weterm, L" ", true, true);
-    x_encode_branch(mh, L"", sdest, hstop, pterm, pterm2, pathpfx);
+    arrayref_t<wchar_t> pathpfx = _trim_arrayref(arrayref_t<wchar_t>(weterm), L" ", true, true);
+    s_long ff = 0;
+      if (ff_encdec & pled_encdec1v_for_names) { ff |= pled_encdec1v_for_names; }
+      if (ff_encdec & pled_enc_empty_key_as_bse) { ff |= pled_enc_empty_key_as_bse; }
+    x_encode_branch(ff, mha, L"", sdest, hstopk, hstopv, pterm, pterm2, pathpfx);
     return sdest;
   }
   catch(_XUBase&) { throw; }
-  catch(std::exception& e) { throw XUExec("encode_tree.1", e.what(), mh.vflstr()); }
-  catch(...) { throw XUExec("encode_tree.2", mh.vflstr()); }
+  catch(std::exception& e) { throw XUExec("encode_tree.1", e.what(), _mha0.vflstr()); }
+  catch(...) { throw XUExec("encode_tree.2", _mha0.vflstr()); }
 }
 
 unity& paramline::merge(unity& set1, const unity& set2, bool keep_first)
@@ -8463,220 +9528,344 @@ unity& paramline::merge(unity& set1, const unity& set2, bool keep_first)
   return set1;
 }
 
-unity& paramline::merge(unity& set1, const std::wstring& set2_pl, bool keep_first)
+unity& paramline::merge(unity& set1, const arrayref_t<wchar_t>& set2_pl, bool keep_first)
   { return merge(set1, decode(set2_pl, true), keep_first); }
 
 void paramline::_list_mx_set_u ( unity& mdest, s_long fk, _rcu x1, _rcu x2, _rcu x3, _rcu x4, _rcu x5, _rcu x6, _rcu x7, _rcu x8, _rcu x9, _rcu x10, _rcu x11, _rcu x12, _rcu x13, _rcu x14, _rcu x15, _rcu x16, _rcu x17, _rcu x18, _rcu x19, _rcu x20, _rcu x21, _rcu x22, _rcu x23, _rcu x24, _rcu x25, _rcu x26, _rcu x27, _rcu x28, _rcu x29, _rcu x30, _rcu x31, _rcu x32, _rcu x33, _rcu x34, _rcu x35, _rcu x36, _rcu x37, _rcu x38, _rcu x39, _rcu x40, _rcu x41, _rcu x42, _rcu x43, _rcu x44, _rcu x45, _rcu x46, _rcu x47, _rcu x48, _rcu x49, _rcu x50, _rcu x51, _rcu x52, _rcu x53, _rcu x54, _rcu x55, _rcu x56, _rcu x57, _rcu x58, _rcu x59, _rcu x60 )
 {
-  vec2_t<const unity*> a; mdest.map_clear(true); mdest.mapFlags_set(-1, fk);
+  vec2_t<const unity*, __vecm_tu_selector> a; mdest.map_clear(true); mdest.mapFlags_set(-1, fk);
   do { if (&x1!=&_0) a.el_append(&x1); else break; if (&x2!=&_0) a.el_append(&x2); else break; if (&x3!=&_0) a.el_append(&x3); else break; if (&x4!=&_0) a.el_append(&x4); else break; if (&x5!=&_0) a.el_append(&x5); else break; if (&x6!=&_0) a.el_append(&x6); else break; if (&x7!=&_0) a.el_append(&x7); else break; if (&x8!=&_0) a.el_append(&x8); else break; if (&x9!=&_0) a.el_append(&x9); else break; if (&x10!=&_0) a.el_append(&x10); else break; if (&x11!=&_0) a.el_append(&x11); else break; if (&x12!=&_0) a.el_append(&x12); else break; if (&x13!=&_0) a.el_append(&x13); else break; if (&x14!=&_0) a.el_append(&x14); else break; if (&x15!=&_0) a.el_append(&x15); else break; if (&x16!=&_0) a.el_append(&x16); else break; if (&x17!=&_0) a.el_append(&x17); else break; if (&x18!=&_0) a.el_append(&x18); else break; if (&x19!=&_0) a.el_append(&x19); else break; if (&x20!=&_0) a.el_append(&x20); else break; if (&x21!=&_0) a.el_append(&x21); else break; if (&x22!=&_0) a.el_append(&x22); else break; if (&x23!=&_0) a.el_append(&x23); else break; if (&x24!=&_0) a.el_append(&x24); else break; if (&x25!=&_0) a.el_append(&x25); else break; if (&x26!=&_0) a.el_append(&x26); else break; if (&x27!=&_0) a.el_append(&x27); else break; if (&x28!=&_0) a.el_append(&x28); else break; if (&x29!=&_0) a.el_append(&x29); else break; if (&x30!=&_0) a.el_append(&x30); else break; if (&x31!=&_0) a.el_append(&x31); else break; if (&x32!=&_0) a.el_append(&x32); else break; if (&x33!=&_0) a.el_append(&x33); else break; if (&x34!=&_0) a.el_append(&x34); else break; if (&x35!=&_0) a.el_append(&x35); else break; if (&x36!=&_0) a.el_append(&x36); else break; if (&x37!=&_0) a.el_append(&x37); else break; if (&x38!=&_0) a.el_append(&x38); else break; if (&x39!=&_0) a.el_append(&x39); else break; if (&x40!=&_0) a.el_append(&x40); else break; if (&x41!=&_0) a.el_append(&x41); else break; if (&x42!=&_0) a.el_append(&x42); else break; if (&x43!=&_0) a.el_append(&x43); else break; if (&x44!=&_0) a.el_append(&x44); else break; if (&x45!=&_0) a.el_append(&x45); else break; if (&x46!=&_0) a.el_append(&x46); else break; if (&x47!=&_0) a.el_append(&x47); else break; if (&x48!=&_0) a.el_append(&x48); else break; if (&x49!=&_0) a.el_append(&x49); else break; if (&x50!=&_0) a.el_append(&x50); else break; if (&x51!=&_0) a.el_append(&x51); else break; if (&x52!=&_0) a.el_append(&x52); else break; if (&x53!=&_0) a.el_append(&x53); else break; if (&x54!=&_0) a.el_append(&x54); else break; if (&x55!=&_0) a.el_append(&x55); else break; if (&x56!=&_0) a.el_append(&x56); else break; if (&x57!=&_0) a.el_append(&x57); else break; if (&x58!=&_0) a.el_append(&x58); else break; if (&x59!=&_0) a.el_append(&x59); else break; if (&x60!=&_0) a.el_append(&x60); else break; } while (false);
   for(s_long ind = 0; ind < a.n(); ind += 2) { mdest.map_append(*a[ind], ind + 1 < a.n() ? *a[ind+1] : unity(), true); }
 }
 void paramline::_list_hx_set_u ( unity& hdest, s_long fk, _rcu x1, _rcu x2, _rcu x3, _rcu x4, _rcu x5, _rcu x6, _rcu x7, _rcu x8, _rcu x9, _rcu x10, _rcu x11, _rcu x12, _rcu x13, _rcu x14, _rcu x15, _rcu x16, _rcu x17, _rcu x18, _rcu x19, _rcu x20, _rcu x21, _rcu x22, _rcu x23, _rcu x24, _rcu x25, _rcu x26, _rcu x27, _rcu x28, _rcu x29, _rcu x30, _rcu x31, _rcu x32, _rcu x33, _rcu x34, _rcu x35, _rcu x36, _rcu x37, _rcu x38, _rcu x39, _rcu x40, _rcu x41, _rcu x42, _rcu x43, _rcu x44, _rcu x45, _rcu x46, _rcu x47, _rcu x48, _rcu x49, _rcu x50, _rcu x51, _rcu x52, _rcu x53, _rcu x54, _rcu x55, _rcu x56, _rcu x57, _rcu x58, _rcu x59, _rcu x60 )
 {
-  vec2_t<const unity*> a; hdest.hash_clear(true); hdest.hashFlags_set(-1, fk);
+  vec2_t<const unity*, __vecm_tu_selector> a; hdest.hash_clear(true); hdest.hashFlags_set(-1, fk);
   do { if (&x1!=&_0) a.el_append(&x1); else break; if (&x2!=&_0) a.el_append(&x2); else break; if (&x3!=&_0) a.el_append(&x3); else break; if (&x4!=&_0) a.el_append(&x4); else break; if (&x5!=&_0) a.el_append(&x5); else break; if (&x6!=&_0) a.el_append(&x6); else break; if (&x7!=&_0) a.el_append(&x7); else break; if (&x8!=&_0) a.el_append(&x8); else break; if (&x9!=&_0) a.el_append(&x9); else break; if (&x10!=&_0) a.el_append(&x10); else break; if (&x11!=&_0) a.el_append(&x11); else break; if (&x12!=&_0) a.el_append(&x12); else break; if (&x13!=&_0) a.el_append(&x13); else break; if (&x14!=&_0) a.el_append(&x14); else break; if (&x15!=&_0) a.el_append(&x15); else break; if (&x16!=&_0) a.el_append(&x16); else break; if (&x17!=&_0) a.el_append(&x17); else break; if (&x18!=&_0) a.el_append(&x18); else break; if (&x19!=&_0) a.el_append(&x19); else break; if (&x20!=&_0) a.el_append(&x20); else break; if (&x21!=&_0) a.el_append(&x21); else break; if (&x22!=&_0) a.el_append(&x22); else break; if (&x23!=&_0) a.el_append(&x23); else break; if (&x24!=&_0) a.el_append(&x24); else break; if (&x25!=&_0) a.el_append(&x25); else break; if (&x26!=&_0) a.el_append(&x26); else break; if (&x27!=&_0) a.el_append(&x27); else break; if (&x28!=&_0) a.el_append(&x28); else break; if (&x29!=&_0) a.el_append(&x29); else break; if (&x30!=&_0) a.el_append(&x30); else break; if (&x31!=&_0) a.el_append(&x31); else break; if (&x32!=&_0) a.el_append(&x32); else break; if (&x33!=&_0) a.el_append(&x33); else break; if (&x34!=&_0) a.el_append(&x34); else break; if (&x35!=&_0) a.el_append(&x35); else break; if (&x36!=&_0) a.el_append(&x36); else break; if (&x37!=&_0) a.el_append(&x37); else break; if (&x38!=&_0) a.el_append(&x38); else break; if (&x39!=&_0) a.el_append(&x39); else break; if (&x40!=&_0) a.el_append(&x40); else break; if (&x41!=&_0) a.el_append(&x41); else break; if (&x42!=&_0) a.el_append(&x42); else break; if (&x43!=&_0) a.el_append(&x43); else break; if (&x44!=&_0) a.el_append(&x44); else break; if (&x45!=&_0) a.el_append(&x45); else break; if (&x46!=&_0) a.el_append(&x46); else break; if (&x47!=&_0) a.el_append(&x47); else break; if (&x48!=&_0) a.el_append(&x48); else break; if (&x49!=&_0) a.el_append(&x49); else break; if (&x50!=&_0) a.el_append(&x50); else break; if (&x51!=&_0) a.el_append(&x51); else break; if (&x52!=&_0) a.el_append(&x52); else break; if (&x53!=&_0) a.el_append(&x53); else break; if (&x54!=&_0) a.el_append(&x54); else break; if (&x55!=&_0) a.el_append(&x55); else break; if (&x56!=&_0) a.el_append(&x56); else break; if (&x57!=&_0) a.el_append(&x57); else break; if (&x58!=&_0) a.el_append(&x58); else break; if (&x59!=&_0) a.el_append(&x59); else break; if (&x60!=&_0) a.el_append(&x60); else break; } while (false);
   for(s_long ind = 0; ind < a.n(); ind += 2) { hdest.hash_set(*a[ind], ind + 1 < a.n() ? *a[ind+1] : unity(), true); }
 }
 
-void paramline::x_encode1(const unity& x, std::wstring& retval, bool b_name, bool b_ar_elem, bool x_nourecur)
+  // ff_encdec:
+  //    pled__ar_elem,
+  //    _pled__mask__encode: pled_enc_empty_key_as_bse, pled_encdec1v_for_names
+void paramline::x_encode1n(const unity& x, std::wstring& retval, s_long ff_encdec)
 {
-    if (b_name && x.utype() != utString) { x_encode1(_vstr_scalar(x), retval, true, false); }
+  const bool b_ar_elem = !!(ff_encdec & pled__ar_elem);
+  const bool b_bse = !!(ff_encdec & pled_enc_empty_key_as_bse);
+  const bool b_1v_for_names = !!(ff_encdec & pled_encdec1v_for_names);
+  if (b_1v_for_names)
+  {
+    hashx<const unity*, s_long> hstop;
+    x_encode1v(x, retval, pled_encdec1v_for_names | (b_bse ? pled_enc_empty_key_as_bse : _pled__nullflags), 0, &hstop);
+    return;
+  }
+  retval.clear();
+  if (x.isEmpty())
+  {
+    if (b_bse) { retval = L"\\e"; }
+    return;
+  }
+  if (x.isString()) { x_repl_e1(x.cref<utString>().ref(), retval, !b_ar_elem, b_ar_elem, false); return; }
+  x_repl_e1(_vstr_scalar(x), retval, !b_ar_elem, b_ar_elem, false);
+}
 
-    if (x.isArray())
+  // _x0 - a) if value - encoded as is.
+  //    b) if utObject/unity - recursively dereferenced and then encoded.
+  //    (the below description uses "_x0" in sense of "dereferenced _x0".
+  // ret_psubarrs (optional):
+  //    if _x0 is array with subarrays, all subarrays are encoded recursively and appended to *ret_psubarrs.
+  //    *ret_psubarrs is not cleared by x_encode1v, only appended.
+  // ff_encdec:
+  //  0x1000 (pled__enc_assoc_as_empty): encode assoc. array as empty value
+  //    (for use in x_encode_branch, meaning: ignore branches)
+  //  0x2000 (pled__ar_elem): _x0 is an element of encoded array
+  //  0x10000 (pled__enc1v_for_array_area):
+  //      a) (main case) _x0 is an array, encoded by x_encode_branch in the form of array area.
+  //        The array area path is constructed by the client. Values, returned by x_encode1v,
+  //        should be appended to the path spec., e.g.
+  //            =|<path elem.>|<etc.>|\z<array shape>; ..=<retval of x_encode1v>; [<(*ret_psubarrs)[i]>;]
+  //          retval of x_encode1v is a list of top-level array elements, separated by "|".
+  //            The list is expected to be assigned into pre-shaped array, starting from the current index.
+  //            The array shape is expected to be encoded by the client.
+  //        *ret_psubarrs will be list of
+  //            <index in top-level array>=<encoded lower level array>
+  //          (The index is not prepended with \z, as when pled__enc1v_for_array_area is unset.)
+  //      b) (formal case, not used) if _x0 is not an array, it is encoded in usual way.
+  //        The above array area example may also work in this case,
+  //        because ..=<retval of x_encode1v> would simply add 1 element (string repr. of _x0) to top-level array.
+  //  0x100 (pled_encdec1v_for_names): if _x0 is utString, always escape equality sign character '='.
+  //    (For encoding keys in same fashion as values.)
+  //  0x200 (pled_enc_empty_key_as_bse): if x is utEmpty, force encoding it as "\e".
+  //
+  // Returns:
+  //  retval, *ret_psubarrs.
+  //  The resulting strings must be processed with x_replace2a, to get final strings for external client.
+void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_encdec, vec2_t<std::wstring, __vecm_tu_selector>* ret_psubarrs, hashx<const unity*, s_long>* phstop)
+{
+  const bool b_ar_elem = !!(ff_encdec & pled__ar_elem);
+  const bool b_enc_assoc_as_empty = !!(ff_encdec & pled__enc_assoc_as_empty);
+  const bool b_enc_name = !!(ff_encdec & pled_encdec1v_for_names);
+  const bool b_enc_name_allow_array = false;
+  const bool b_bse = !!(ff_encdec & pled_enc_empty_key_as_bse);
+  const bool b_enc_for_array_area = !!(ff_encdec & pled__enc1v_for_array_area);
+    ff_encdec &= ~pled__enc1v_for_array_area;
+  retval.clear();
+
+  unity _empty;
+  const unity& x = _paramline_branch::deref_pu_once(_x0, _empty, phstop);
+
+  if (x.isArray() && !(b_enc_name && !b_enc_name_allow_array))
+  {
+    const bool b_uar = x.utype() == utUnityArray;
+    if (ret_psubarrs && b_uar && !b_enc_name && x.arrsz() > 0) // full processing with possibly nested arrays (the resulting string will keep all data)
     {
-      if (b_ar_elem) { retval = L"\\z"; }
-      else
+      std::wstring vlist;
+      bool b_vals_empty = true;
+      for(s_long i = 0; i < x.arrsz(); ++i)
       {
-          if (x.arrsz() == 0) { retval = L"\\z"; }
-          else
-          {
-            unity ar; ar.arr_init<utString>(x.arrlb() - 1); ar.arrub_(x.arrub());
-            if (x.utype() == utUnityArray)
-              { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.ref<utUnity>(ind), ar.rstr(ind), false, true); } }
-            else { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.val<utUnity>(ind), ar.rstr(ind), false, true); } }
-            retval = join(ar, L"|");
-          }
-      }
-    }
-    else
-    {
-        switch(x.utype())
+        std::wstring sv;
+        vlist += L'|';
+        const s_long ind = i + x.arrlb();
+        const unity& rxelem = _paramline_branch::deref_pu_once(x[ind], _empty, phstop);
+        if (rxelem.isArray())
         {
-            case utEmpty: if (b_ar_elem) retval = L""; else retval = L"\\e"; break;
-            case utChar: retval = x.val<utChar>() ? L"\\1" : L"\\0"; break;
-            case utInt: retval = x.vstr(); break;
-            case utDate: retval = x.vstr(); break;
-            case utFloat:
-            {
-              double x1 = x.vfp();
+          s_long ff = 0;
+            if (b_enc_assoc_as_empty) { ff |= pled__enc_assoc_as_empty; }
+          vec2_t<std::wstring, __vecm_tu_selector> xsubarrs;
+          x_encode1v(rxelem, sv, ff, &xsubarrs, phstop);
+          std::wstring prefix;
+            if (!b_enc_for_array_area) { prefix += L"\\z"; }
+            prefix += itows(ind, true);
+            prefix += weterm_short;
 
-              if (!bmdx_str::conv::is_finite(x1)) { retval = L"\\f"; retval += _fls75(x1).wstr(); break; }
+          // Contents of the array x[ind] are pushed into ret_psubarrs, and will be joined at the topmost call level.
+          ret_psubarrs->push_back(prefix + sv);
+          for (s_long j = 0; j < xsubarrs.n(); ++j)
+            { ret_psubarrs->push_back(prefix + xsubarrs[j]); }
+        }
+        else
+        {
+          if (!rxelem.isEmpty()) { b_vals_empty = false; }
+          s_long ff = 0;
+            if (1) { ff |= pled__ar_elem; }
+            if (b_enc_assoc_as_empty) { ff |= pled__enc_assoc_as_empty; }
+          x_encode1v(rxelem, sv, ff, 0, phstop);
+          vlist += sv;
+        }
+      }
 
-              const int prec_mimi = 11;
-              int prec = 13;
-              while (prec >= prec_mimi)
-              {
-                _fls75 z1(x1, prec + 1, prec);
-                if (prec == prec_mimi) { retval = z1.wstr(); break; }
-                double x2 = str2f(z1.c_str(), 0, true, false); _fls75 z2(x2, prec + 1, prec);
-                if (z2 == z1) { retval = z1.wstr(); break; }
-                --prec;
-              }
+      if (b_vals_empty && (b_enc_for_array_area || x.arrsz() > 10))
+      {
+        if (b_enc_for_array_area)
+        {
+          retval += L"\\zn"; retval += itows(x.arrsz(), true);
+        }
+        else
+        {
+          retval += L"\\z";
+          retval += L"b"; retval += itows(x.arrlb(), true);
+          retval += L"n0++=\\zn"; retval += itows(x.arrsz(), true);
+        }
+        return;
+      }
+      if (b_enc_for_array_area || x.arrlb() == 1)
+      {
+        retval.swap(vlist);
+        return;
+      }
 
-              if (retval.find(L".") == nposw) { retval.insert(0,L"\\f"); }
-              break;
-            }
-            case utString:
-                {
-                  cref_t<std::wstring> r_s = x.cref<utString>();
-                  x_repl_e1(r_s.ref(), retval, b_name, b_ar_elem);
-                  if (b_name) { return; }
+      retval += L"\\z";
+      retval += L"b"; retval += itows(x.arrlb(), true);
+      retval += L"n0++=";
+      retval += vlist;
+      return;
+    }
+
+    if (b_enc_for_array_area && x.arrsz() == 0)
+    {
+      retval += L"\\z";
+      return;
+    }
+    if (b_ar_elem || b_enc_name || x.arrsz() == 0)
+    {
+      retval += L"\\z";
+      if (!(x.arrlb() == 1 && x.arrsz() == 0))
+      {
+        retval += L"b"; retval += itows(x.arrlb(), true);
+        retval += L"n"; retval += itows(x.arrsz(), true);
+      }
+      return;
+    }
+    if (x.arrlb() != 1 && !b_enc_for_array_area)
+    {
+      retval += L"\\z";
+      retval += L"b"; retval += itows(x.arrlb(), true);
+      retval += L"n0++=";
+    }
+    s_long ff = 0;
+      if (1) { ff |= pled__ar_elem; }
+      if (b_enc_assoc_as_empty) { ff |= pled__enc_assoc_as_empty; }
+    for(s_long i = 0; i < x.arrsz(); ++i)
+    {
+      const s_long ind = i + x.arrlb();
+      std::wstring sv;
+      x_encode1v(b_uar ? x[ind] : x.val<utUnity>(ind), sv, ff, 0, phstop);
+      retval += L'|';
+      retval += sv;
+    }
+    return;
+  }
+
+  switch(x.utype())
+  {
+    case utEmpty:
+    {
+      if (b_ar_elem || (b_enc_name && !b_bse)) { retval = L""; }
+        else { retval = L"\\e"; }
+      break;
+    }
+    case utChar: retval = x.val<utChar>() ? L"\\1" : L"\\0"; break;
+    case utInt: retval = x.vstr(); break;
+    case utDate: retval = x.vstr(); break;
+    case utFloat:
+      {
+        double x1 = x.vfp();
+
+        if (!bmdx_str::conv::is_finite(x1)) { retval = L"\\f"; retval += _fls75(x1).wstr(); break; }
+
+        const int prec_mimi = 11;
+        int prec = 13;
+        while (prec >= prec_mimi)
+        {
+          _fls75 z1(x1, prec + 1, prec);
+          if (prec == prec_mimi) { retval = z1.wstr(); break; }
+          double x2 = str2f(z1.c_str(), 0, true, false); _fls75 z2(x2, prec + 1, prec);
+          if (z2 == z1) { retval = z1.wstr(); break; }
+          --prec;
+        }
+
+        if (retval.find(L".") == nposw) { retval.insert(0,L"\\f"); }
+        break;
+      }
+    case utString:
+      {
+        cref_t<std::wstring> r_s = x.cref<utString>();
+        x_repl_e1(r_s.ref(), retval, false, b_ar_elem, b_enc_name);
 //                  std::wstring s = _trim(retval, L" ");
 //                  if (s.length() == 0) { goto lInsertStringPrefix; }
 //                  if (wstring_like(s.substr(0,1), L"[0123456789.+-]")) { goto lInsertStringPrefix; }
 //                  if (lcase(s) == L"true") { goto lInsertStringPrefix; }
 //                  if (lcase(s) == L"false") { goto lInsertStringPrefix; }
-                  _t_wz pos1 = retval.find_first_not_of(' '); if (pos1 == nposw) { goto lInsertStringPrefix; }
-                  wchar_t c = retval[pos1]; if ((c >= L'0' && c <= L'9') || c == L'.' || c == L'+' || c == L'-') { goto lInsertStringPrefix; }
-                  if (_eq_wcs_ascii_nocase(&retval[pos1], L"true") || _eq_wcs_ascii_nocase(&retval[pos1], L"false")) { goto lInsertStringPrefix; }
-                  break;
-                }
+        _t_wz pos1 = retval.find_first_not_of(' '); if (pos1 == nposw) { goto lInsertStringPrefix; }
+        wchar_t c = retval[pos1]; if ((c >= L'0' && c <= L'9') || c == L'.' || c == L'+' || c == L'-') { goto lInsertStringPrefix; }
+        if (_eq_wcs_ascii_nocase(&retval[pos1], L"true") || _eq_wcs_ascii_nocase(&retval[pos1], L"false")) { goto lInsertStringPrefix; }
+        break;
+      }
 lInsertStringPrefix:
-                retval.insert(0, L"\\s");
-                break;
-            case utObject:
-                {
-                  const unity* pv = x.objPtr_c<unity>();
-                  if (!pv || x_nourecur)
-                    { x_encode1(_vstr_scalar(x), retval, false, b_ar_elem); }
-                  else if (pv->isArray())
-                  {
-                    if (b_ar_elem) { retval = L"\\z"; }
-                    else
-                    {
-                        const unity& x = *pv;
-                        if (x.arrsz()==0) { retval = L"\\z"; }
-                        else
-                        {
-                          unity ar; ar.arr_init<utString>(x.arrlb() - 1); ar.arrub_(x.arrub());
-                          if (x.utype() == utUnityArray)
-                            { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.ref<utUnity>(ind), ar.rstr(ind), false, true); } }
-                          else { for(s_long ind = x.arrlb(); ind <= x.arrub(); ++ind) { x_encode1(x.val<utUnity>(ind), ar.rstr(ind), false, true); } }
-                          retval = join(ar, L"|");
-                        }
-                    }
-                  }
-                  else { x_encode1(*pv, retval, false, b_ar_elem, true); }
-                  break;
-                }
-            default: // unknown type
-                x_encode1(_vstr_scalar(x), retval, false, b_ar_elem);
-                break;
-        }
-    }
+      retval.insert(0, L"\\s");
+      break;
+    case utObject:
+      {
+        s_long ff = 0;
+          if (b_ar_elem) { ff |= pled__ar_elem; }
+        x_encode1v(_vstr_scalar(x), retval, ff, 0, phstop);
+        break;
+      }
+    default: // unknown type, maybe assoc. array
+      if (x.isAssoc() && b_enc_assoc_as_empty)
+        { x_encode1v(unity(), retval, ff_encdec, 0, phstop); }
+      else
+      {
+        s_long ff = 0;
+          if (b_ar_elem) { ff |= pled__ar_elem; }
+        x_encode1v(_vstr_scalar(x), retval, ff, 0, phstop);
+      }
+      break;
+  }
 }
 
-void paramline::x_repl_e1(const std::wstring& s1, std::wstring& s2, bool b_name, bool b_ar_elem)
+void paramline::x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool b_name, bool b_ar_elem, bool b_esc_eqsign)
 {
-    switch(s1.length())
+  if (s1.is_empty())
+    { return; }
+  if (s1.n() == 1)
+  {
+    if (b_name) { switch (s1[0]) { case L';': case L' ': case L'=': case L'\\': s2.clear(); s2 += L'\\'; s2 += s1[0]; break; default: s2.assign(s1.pd(), s1._end_u()); break; } }
+      else { switch (s1[0]) { case L';': case L' ': case L'=': case L'|': case L'\\': s2.clear(); s2 += L'\\'; s2 += s1[0]; break; default: s2.assign(s1.pd(), s1._end_u()); break; } }
+    return;
+  }
+  s_ll ps = 0, n = s1.n();
+  s2.clear();
+    if (n > 40)
     {
-        case 0: { break; }
-        case 1:
-        {
-          if (b_name) { switch (s1[0]) { case L';': case L' ': case L'=': case L'\\': s2.clear(); s2 += L'\\'; s2 += s1[0]; break; default: s2 = s1; break; } }
-            else { switch (s1[0]) { case L';': case L' ': case L'=': case L'|': case L'\\': s2.clear(); s2 += L'\\'; s2 += s1[0]; break; default: s2 = s1; break; } }
-          break;
-        }
-        default:
-        {
-          _t_wz ps = 0, n = s1.size();
-          s2.clear(); if (n > 40) { s2.reserve(n + 10 + (n >> 4)); }
-          wchar_t c0 = s1[ps];
-          switch (c0)
-          {
-            case L'\\':
-            {
-              ++ps; wchar_t c = s1[ps];
-              switch (c)
-              {
-                case L'\\': s2 += L"`b`b`b`b"; ++ps; break;
-                case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b`b`b~"; ++ps; } else { s2 += L"`b`b\r"; } break;
-                case L' ': case L';': case L'=': case L'~': case L'|': s2 += L"`b`b"; break;
-                default: if (b_name) { s2 += L"`b"; } else { s2 += L"`b`b"; } break;
-              }
-              break;
-            }
-            case L' ': s2 += L"`b "; ++ps; break;
-            case L';': s2 += L"`b`,"; ++ps; break;
-            case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b~"; ++ps; } else { s2 += c0; } break;
-            case L'=': if (b_name) { s2 += L"`b`e"; } else { s2 += c0; } ++ps; break;
-            case L'|': if (b_name) { s2 += c0; } else { s2 += L"`b`v"; } ++ps; break;
-            case L'`': s2 += L"`a"; ++ps; break;
-            default: s2 += c0; ++ps; break;
-          }
-          while (ps < n)
-          {
-            c0 = s1[ps];
-            switch (c0)
-            {
-              case L'\\':
-              {
-                ++ps;
-                if (ps < n)
-                {
-                  wchar_t c = s1[ps];
-                  switch (c)
-                  {
-                    case L'\\': s2 += L"`b`b`b`b"; ++ps; continue;
-                    case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b`b`b~"; ++ps; } else { s2 += L"`b`b\r"; } continue;
-                    case L';': case L'=': case L'|': case L'~': case L' ': s2 += L"`b`b"; continue;
-                    default: s2 += c0; continue;
-                  }
-                }
-                else { s2 += c0; continue; }
-              }
-              case L';': s2 += L"`b`,"; ++ps; continue;
-              case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b~"; ++ps; } else { s2 += c0; } continue;
-              case L'=': if (b_name) { s2 += L"`b`e"; } else { s2 += c0; } ++ps; continue;
-              case L'|': if (b_ar_elem) { s2 += L"`b`v"; } else { s2 += c0; } ++ps; continue;
-              case L'`': s2 += L"`a"; ++ps; continue;
-              default: s2 += c0; ++ps; continue;
-            }
-          }
-          ps = s2.size() - 1; c0 = s2[ps]; if (c0 == L' ' || c0 == L'\\') { s2[ps] = L'\\'; s2 += c0; }
-          break;
-
-
-//          s2 = s1;
-//            if (s2.find(L"`") != nposw) s2 = replace(s2, L"`", L"`a");
-//            if (s2.find(L"\\\\") != nposw) s2 = replace(s2, L"\\\\", L"`b`b`b`b");
-//            if (s2.find(L"\\;") != nposw) s2 = replace(s2, L"\\;", L"`b`b;");
-//            if (s2.find(L"\\~") != nposw) s2 = replace(s2, L"\\~", L"`b`b~");
-//            if (s2.find(__wBSCRLF()) != nposw) s2 = replace(s2, __wBSCRLF(), L"`b`b`b~");
-//            if (s2.find(L"\\=") != nposw) s2 = replace(s2, L"\\=", L"`b`b=");
-//            if (s2.find(L"\\ ") != nposw) s2 = replace(s2, L"\\ ", L"`b`b ");
-//            if (s2.find(L"\\|") != nposw) s2 = replace(s2, L"\\|", L"`b`b|");
-
-//            if (s2.find(L";") != nposw) s2 = replace(s2, L";", L"`b`,");
-//            if (s2.find(wCRLF) != nposw) s2 = replace(s2, wCRLF, L"`b~");
-
-//            if (s2.substr(0,1).find_first_of(L" \\") != nposw) s2.insert(0,L"\\");
-//            if (s2.substr(s2.length() - 1,1).find_first_of(L" \\") != nposw) s2.insert(s2.length() - 1,L"\\");
-
-//            if (b_name) { if (s2.find(L"=") != nposw) s2 = replace(s2, L"=", L"`b`e"); }
-//            else
-//            {
-//                if (b_ar_elem) { if (s2.find(L"|") != nposw) s2 = replace(s2, L"|", L"`b`v"); }
-//                  else { if (s2.substr(0,1) == L"|") s2.insert(0, L"\\"); }
-//            }
-        }
+      s_ll n2 = n + 10 + (n >> 4);
+      if (n2 > n)
+      {
+        size_t z = size_t(n2);
+        if (z > s2.max_size()) { z = s2.max_size(); }
+        s2.reserve(z);
+      }
     }
+  wchar_t c0 = s1[ps];
+  switch (c0)
+  {
+    case L'\\':
+    {
+      ++ps; wchar_t c = s1[ps];
+      switch (c)
+      {
+        case L'\\': s2 += L"`b`b`b`b"; ++ps; break;
+        case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b`b`b~"; ++ps; } else { s2 += L"`b`b\r"; } break;
+        case L' ': case L';': case L'=': case L'~': case L'|': s2 += L"`b`b"; break;
+        default: if (b_name) { s2 += L"`b"; } else { s2 += L"`b`b"; } break;
+      }
+      break;
+    }
+    case L' ': s2 += L"`b "; ++ps; break;
+    case L';': s2 += L"`b`,"; ++ps; break;
+    case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b~"; ++ps; } else { s2 += c0; } break;
+    case L'=': if (b_name || b_esc_eqsign) { s2 += L"`b`e"; } else { s2 += c0; } ++ps; break;
+    case L'|': if (b_name) { s2 += c0; } else { s2 += L"`b`v"; } ++ps; break;
+    case L'`': s2 += L"`a"; ++ps; break;
+    default: s2 += c0; ++ps; break;
+  }
+  while (ps < n)
+  {
+    c0 = s1[ps];
+    switch (c0)
+    {
+      case L'\\':
+      {
+        ++ps;
+        if (ps < n)
+        {
+          wchar_t c = s1[ps];
+          switch (c)
+          {
+            case L'\\': s2 += L"`b`b`b`b"; ++ps; continue;
+            case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b`b`b~"; ++ps; } else { s2 += L"`b`b\r"; } continue;
+            case L';': case L'=': case L'|': case L'~': case L' ': s2 += L"`b`b"; continue;
+            default: s2 += c0; continue;
+          }
+        }
+        else { s2 += c0; continue; }
+      }
+      case L';': s2 += L"`b`,"; ++ps; continue;
+      case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b~"; ++ps; } else { s2 += c0; } continue;
+      case L'=': if (b_name || b_esc_eqsign) { s2 += L"`b`e"; } else { s2 += c0; } ++ps; continue;
+      case L'|': if (b_ar_elem) { s2 += L"`b`v"; } else { s2 += c0; } ++ps; continue;
+      case L'`': s2 += L"`a"; ++ps; continue;
+      default: s2 += c0; ++ps; continue;
+    }
+  }
+  size_t i_back = s2.size() - 1;
+  c0 = s2[i_back];
+  if (c0 == L' ' || c0 == L'\\')
+    { s2[i_back] = L'\\'; s2 += c0; }
 }
 
-void paramline::x_replace2a(std::wstring& s, s_long flags)
+void paramline::x_replace2a(std::wstring& s, s_long replflags)
 {
-  if (flags & 1)
+  if (replflags & plrf_has_esc_seq)
   {
     _t_wz ps = 0, pd = 0, n = s.size();
     while (ps < n)
@@ -8702,25 +9891,25 @@ void paramline::x_replace2a(std::wstring& s, s_long flags)
   }
 }
 
-void paramline::x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& flags)
+void paramline::x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& replflags)
 {
   _t_wz n = _t_wz(s1.n()), n2 = 0, nmax = _t_wz(max_swstr() - 2), ps = 0, pd = 0;
   while (ps < n)
   {
     wchar_t c = s1[ps++];
-    if (c == L'`') { if (n2 > nmax) { throw XUExec("x_replace4.1"); } n2 += 2; flags |= 1; continue; }
+    if (c == L'`') { if (n2 > nmax) { throw XUExec("x_replace4.1"); } n2 += 2; replflags |= plrf_has_esc_seq; continue; }
     if (c == L'\\')
     {
       switch (s1[ps])
       {
         case L'\\':  case L';':  case L'~':  case L' ':  case L'=':  case L'|':
-          if (n2 > nmax) { throw XUExec("x_replace4.2"); } n2 += 2; ++ps; flags |= 1; continue;
+          if (n2 > nmax) { throw XUExec("x_replace4.2"); } n2 += 2; ++ps; replflags |= plrf_has_esc_seq; continue;
         default: break;
       }
     }
     n2 += 1; if (n2 > nmax) { throw XUExec("x_replace4.3"); }
   }
-  if ((flags & 1) == 0) { if (s1.n() > 0) { s2.assign(s1.pd(), _t_wz(s1.n())); } else { s2.clear(); } return; }
+  if ((replflags & plrf_has_esc_seq) == 0) { if (s1.n() > 0) { s2.assign(s1.pd(), _t_wz(s1.n())); } else { s2.clear(); } return; }
   ps = 0; s2.resize(n2);
   while (ps < n)
   {
@@ -8743,97 +9932,266 @@ void paramline::x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& fla
   }
 }
 
-  // NOTE v must contain string, already passed
-  //   through x_replace4 and _trim(, L" ")
-void paramline::x_decode1v(unity& v, bool v_ar_elem, s_long flags)
+  // NOTE sv must contain string, already passed
+  //    through x_replace4 and _trim(, L" ")
+  // replflags: ORed
+  //    plrf_has_esc_seq:
+  //      flag must be set by x_replace4 call that generated ssv.
+  //    plrf_value_exists:
+  //      means vdest referencing the existing value (which may be, in part., array to be updated)
+  //    plrf_allow_modify_all:
+  //      means
+  //        a) create new value,
+  //        b) overwrite the current value if it exists,
+  //        c) update the current array if sv is array spec.
+  //      If this flag is not set, only
+  //        1) creating new values and
+  //        2) updating existing arrays with array spec.
+  //        is allowed.
+  //    plrf_use_path_array_modifiers:
+  //      means that vdest is path array (for decode_tree),
+  //      so if ssv specifies an array in the form "|<elem>|<elem>...",
+  //      for all elements in the form "\z<spec.>",
+  //      return the corresponding utObject _paramline_array_spec
+  //      instead of actual array.
+  //      NOTE With plrf_use_path_array_modifiers, must have vdest.isLocal() == true.
+  // vdest may reference already existing value or be empty.
+  //    According to replflags, vdest may be
+  //      a) kept,
+  //      b) cleared (if plrf_value_exists is unset) and assigned a new value,
+  //      c) modified (if contains an array and plrf_value_exists is set, and sv specifies some array updates).
+
+void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_long replflags, unity& vdest)
 {
-  std::wstring s;
+  typedef _paramline_array_spec t_asp;
+  arrayref_t<wchar_t> part;
   try
   {
-    std::wstring pfx = v.rstr().substr(0,1);
-    if (pfx == L"") { v.clear(); }
-    else if (pfx == L"\\")
+    unity _sv_dflt;
+    const bool b_v_ex = !!(replflags & plrf_value_exists);
+    const bool b_mod_all = !!(replflags & plrf_allow_modify_all);
+    const bool b_use_pam = !!(replflags & plrf_use_path_array_modifiers);
+
+    if (ssv.is_empty() || ssv[0] == L'\0')
     {
-      pfx = v.rstr().substr(0,2);
-      if (pfx == L"\\e") { if (_trim(v.rstr().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v.clear(); }
-      else if (pfx == L"\\s") { v = v.rstr().substr(2); x_replace2a(v.rstr(), flags); }
-      else if (pfx == L"\\i") { s = v.rstr().substr(2); if (x_incorrect_integer_value_str(s, false)) { goto lLogicalDecodeError; } v = str2i(s); }
-      else if (pfx == L"\\f") { s = v.rstr().substr(2); if (x_incorrect_numeric_value_str(s, true)) { goto lLogicalDecodeError; } v = str2f(s, 0, true, true); }
-      else if (pfx == L"\\d") { s = v.rstr().substr(2); try { v = unity(s).val<utDate>(); } catch (...) { goto lLogicalDecodeError; } }
-      else if (pfx == L"\\0") { if (_trim(v.rstr().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = false; }
-      else if (pfx == L"\\1") { if (_trim(v.rstr().substr(2), L" ").length()>0) { goto lLogicalDecodeError; } v = true; }
-      else if (pfx == L"\\z") { v.arr_init<utUnity>(1); }
+      if (b_v_ex && !b_mod_all) { return; }
+      vdest.clear();
+      return;
+    }
+
+    wchar_t char0 = ssv[0];
+
+    if (char0 == L'\\')
+    {
+      wchar_t char1 = ssv.n() >= 2 ? ssv[1] : 0;
+      if (char1 == L'z')
+      {
+          // Check read-only condition.
+        if (b_v_ex && !b_mod_all && vdest.utype() != utUnityArray)
+          { return; }
+
+          // Parse array spec.
+        _paramline_array_spec asp;
+          if (!asp._init_from_string(ssv.range_intersect(2))) { goto lLogicalDecodeError; }
+
+          // Grant vdest being an array of correct type.
+        bool _b_assign_empty_ar = !(asp.b_has_base || asp.b_has_n || asp.b_has_op());
+        if (_b_assign_empty_ar || !b_v_ex || vdest.utype() != utUnityArray)
+          { vdest.arr_init<utUnity>(1); }
+        if (_b_assign_empty_ar)
+          { return; }
+
+          // Assign base index and size.
+        if (asp.b_has_base)
+        {
+          if (!asp.b_valid_ibase32()) { goto lLogicalDecodeError; }
+          vdest.arrlb_(s_long(asp.ibase & 0xffffffffll));
+        }
+        if (asp.b_has_n)
+        {
+          if (!asp.b_valid_n_elem32()) { goto lLogicalDecodeError; }
+          vdest.arrsz_(s_long(asp.n_elem & 0x7fffffffll));
+        }
+
+          // Set or append values if any.
+        if (asp.b_has_op())
+        {
+          if (asp.op_type == t_asp::op_append)
+          {
+            s_long replf2 = replflags & ~plrf_value_exists;
+            unity u;
+              paramline::x_decode1v(_trim_arrayref(asp.rvalue, L" "), v_ar_elem, replf2, u);
+            if (asp.b_op_append_vec && u.utype() == utUnityArray)
+            {
+              s_long j = vdest.arrub() + 1;
+              s_ll n2 = s_ll(vdest.arrsz()) + u.arrsz();
+              if (n2 > 0x7fffffffll) { goto lLogicalDecodeError; }
+              vdest.uaS_set(s_long(n2));
+              if (vdest.isLocal())
+              {
+                for (s_long i = u.arrlb(); i <= u.arrub(); ++i)
+                  { vdest[j].swap(u[i]); ++j; }
+              }
+              else
+              {
+                for (s_long i = u.arrlb(); i <= u.arrub(); ++i)
+                  { vdest[j] = u[i]; ++j; }
+              }
+            }
+            else
+            {
+              if (vdest.isLocal())
+              {
+                vdest.ua_append(unity());
+                vdest.ua_last().swap(u);
+              }
+              else { vdest.ua_append(u); }
+            }
+          }
+          else if (asp.op_type == t_asp::op_assign_at_index)
+          {
+            if (!asp.b_valid_iassign32()) { goto lLogicalDecodeError; }
+            s_long ind = s_long(asp.iassign);
+            s_long replf2 = replflags & ~plrf_value_exists;
+              if (vdest.u_has(ind, 1)) { replf2 |= plrf_value_exists; replf2 |= plrf_allow_modify_all; }
+            paramline::x_decode1v(_trim_arrayref(asp.rvalue, L" "), v_ar_elem, replf2, vdest.ua(ind));
+          }
+        }
+
+        return;
+      }
+
+      if (b_v_ex && !b_mod_all) { return; }
+
+      if (char1 == L'e') { if (_trim_arrayref(ssv.range_intersect(2), L" ").length()>0) { goto lLogicalDecodeError; } vdest.clear(); }
+      else if (char1 == L's')
+      {
+        std::wstring s;
+        s.assign(&ssv[2], ssv._end_u());
+        x_replace2a(s, replflags);
+        if (vdest.isLocal()) { vdest.clear(); vdest.rx<utString>().swap(s); }
+          else { vdest = s; }
+      }
+      else if (char1 == L'i') { part = ssv.range_intersect(2); if (x_incorrect_integer_value_str(part, false)) { goto lLogicalDecodeError; } vdest = str2i(part); }
+      else if (char1 == L'f') { part = ssv.range_intersect(2); if (x_incorrect_numeric_value_str(part, true)) { goto lLogicalDecodeError; } vdest = str2f(part, 0, true, true); }
+      else if (char1 == L'd') { part = ssv.range_intersect(2); try { vdest = unity(part).val<utDate>(); } catch (...) { goto lLogicalDecodeError; } }
+      else if (char1 == L'0') { if (_trim_arrayref(ssv.range_intersect(2), L" ").length()>0) { goto lLogicalDecodeError; } vdest = false; }
+      else if (char1 == L'1') { if (_trim_arrayref(ssv.range_intersect(2), L" ").length()>0) { goto lLogicalDecodeError; } vdest = true; }
       else
       {
-        if (v.rstr().length()<=2) { v.clear(); return; }
-        v = v.rstr().substr(2);
-        s = _trim(v.rstr(), L" ");
+        if (ssv.n() <= 2) { vdest.clear(); return; }
+        _sv_dflt = ssv.range_intersect(2);
+        part = _trim_arrayref(ssv.range_intersect(2), L" ");
         goto lAutoDetectType;
       }
+      return;
     }
-    else if (pfx == L"|")
+
+    if (b_v_ex && !b_mod_all) { return; }
+
+    if (char0 == L'|') // == wvterm
     {
-      if (v_ar_elem) goto lLogicalDecodeError;
-      unity ar2 = split(v.rstr(),L"|");
-      v.arr_init<utUnity>(1);
-      v.arrub_(ar2.arrub());
+      if (v_ar_elem) { goto lLogicalDecodeError; }
+      unity ar2 = split(ssv, wvterm);
+      vdest.arr_init<utUnity>(1);
+      vdest.arrub_(ar2.arrub());
       for(s_long ind = 1; ind <= ar2.arrub(); ++ind)
       {
-        v.arr_set(ind, _trim(ar2.rstr(ind), L" "));
-        x_decode1v(v.ref<utUnity>(ind), true, flags);
+        unity& rx = vdest[ind];
+        arrayref_t<wchar_t> ssv2 = _trim_arrayref(arrayref_t<wchar_t>(ar2.rstr(ind)), L" ");
+        if (b_use_pam && ssv2.range_intersect(0, 2) == L"\\z")
+        {
+          rx.objt<t_asp>(0)();
+          t_asp& asp = rx.objRef<t_asp>();
+          if (!asp._init_from_string(ssv2.range_intersect(2))) { goto lLogicalDecodeError; }
+        }
+        else
+        {
+          x_decode1v(ssv2, true, replflags, rx);
+        }
       }
+      return;
     }
-    else { s = v.rstr(); goto lAutoDetectType; }
-    return;
+
+    part = ssv;
 
 lAutoDetectType:
 
-    if (x_decode1v_auto_date(s, v)) return;
-    if (!x_incorrect_integer_value_str(s, false)) { v = str2i(s); return; }
-    if (!x_incorrect_numeric_value_str(s, false)) { v = str2f(s); return; }
-    if (s == L"true") { v = true; return; }
-    if (s == L"false") { v = false; return; }
-    x_replace2a(v.rstr(), flags);
+    if (x_decode1v_auto_date(part, vdest)) { return; }
+    if (!x_incorrect_integer_value_str(part, false)) { vdest = str2i(part); return; }
+    if (!x_incorrect_numeric_value_str(part, false)) { vdest = str2f(part); return; }
+    if (part == L"true") { vdest = true; return; }
+    if (part == L"false") { vdest = false; return; }
+    if (vdest.isLocal())
+    {
+      if (_sv_dflt.isNonempty()) { vdest.swap(_sv_dflt); }
+        else { vdest = ssv; }
+      x_replace2a(vdest.rstr(), replflags);
+    }
+    else
+    {
+      std::wstring s;
+      if (_sv_dflt.isNonempty()) { s.swap(_sv_dflt.rstr()); }
+        else { s.assign(ssv.pd(), ssv._end_u()); }
+      x_replace2a(s, replflags);
+      vdest = s;
+    }
     return;
   }
-  catch(std::exception& e) { throw XUExec("x_decode1v.1", e.what(), v.vflstr()); }
-  catch(...) { throw XUExec("x_decode1v.2", v.vflstr()); }
+  catch(std::exception& e) { throw XUExec("x_decode1v.1", e.what(), ssv); }
+  catch(...) { throw XUExec("x_decode1v.2", ssv); }
 lLogicalDecodeError:
-  throw XUExec("x_decode1v.3", v.vflstr());
+  throw XUExec("x_decode1v.3", ssv);
   return;
 }
 
-bool paramline::x_decode1v_auto_date(const std::wstring& s, unity& retval) __bmdx_noex
+bool paramline::x_decode1v_auto_date(const arrayref_t<wchar_t>& s_, unity& retval) __bmdx_noex
 {
-  try { _unitydate d; if (!_static_conv::conv_String_Date0(s, d, true)) { return false; } retval = d; return true; }
+  try { _unitydate d; if (!_static_conv::conv_String_Date0(s_, d, true)) { return false; } retval = d; return true; }
     catch(...) { return false; }
 }
 
-bool paramline::x_incorrect_numeric_value_str(const std::wstring& s, bool b_nans)
+bool _str_has_any_not_of(const arrayref_t<wchar_t>& s_, const arrayref_t<wchar_t>& chars_)
 {
-    if (s.find_first_not_of(L"0123456789.Eeinfa +-") != nposw) return true;
-    try { (void)str2f(s, 0., false, b_nans); return false; } catch(...) { return true; }
+  if (s_.is_empty()) { return false; }
+  if (chars_.is_empty()) { return true; }
+  for (s_ll i = 0; i < s_.n(); ++i) { if (chars_.find1(s_[i]) >= chars_.n()) { return true; } }
+  return false;
 }
-bool paramline::x_incorrect_integer_value_str(const std::wstring& s, bool allow_float_str)
+
+bool paramline::x_incorrect_numeric_value_str(const arrayref_t<wchar_t>& s_, bool b_nans)
+{
+  if (_str_has_any_not_of(s_, L"0123456789.Eeinfa +-")) { return true; }
+  try { (void)str2f(s_, 0., false, b_nans); return false; } catch(...) { return true; }
+}
+bool paramline::x_incorrect_integer_value_str(const arrayref_t<wchar_t>& s_, bool allow_float_str)
 {
   if (allow_float_str)
   {
-    if (s.find_first_not_of(L"0123456789.Eeinfa +-") != nposw) { return true; }
-    try { (void)str2i(s, 0, false); double y = str2f(s, 0., false, false); return std::floor(y) != y; } catch(...) { return true; }
+    if (_str_has_any_not_of(s_, L"0123456789.Eeinfa +-")) { return true; }
+    try { (void)str2i(s_, 0, false); double y = str2f(s_, 0., false, false); return std::floor(y) != y; } catch(...) { return true; }
   }
   else
   {
-    if (s.find_first_not_of(L"0123456789 +-") != nposw) { return true; }
-    try { (void)str2i(s, 0, false); return false; } catch(...) { return true; }
+    if (_str_has_any_not_of(s_, L"0123456789 +-")) { return true; }
+    try { (void)str2i(s_, 0, false); return false; } catch(...) { return true; }
   }
 }
 
-unity paramline::decode(arrayref_t<wchar_t> ssrc, bool useMap, arrayref_t<wchar_t> pterm2) { unity x; decode(ssrc, x, useMap, pterm2); return x; }
-unity paramline::decode1v(arrayref_t<wchar_t> ssrc) { unity x; decode1v(ssrc, x); return x; }
-unity paramline::decode_tree(arrayref_t<wchar_t> ssrc, s_long flags, arrayref_t<wchar_t> pterm2) { unity x; decode_tree(ssrc, x, flags, pterm2); return x; }
-std::wstring paramline::encode(const unity& mhsrc, arrayref_t<wchar_t> pterm) { std::wstring s; encode(mhsrc, s, pterm); return s; }
-std::wstring paramline::encode1v(const unity& value) { std::wstring s; encode1v(value, s); return s; }
-std::wstring paramline::encode_tree(const unity& mhsrc, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2) { std::wstring s; encode_tree(mhsrc, s, pterm, pterm2); return s; }
+unity& paramline::decode(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags_encdec, arrayref_t<wchar_t> pterm_0)
+  { x_decode(ssrc0, mh, flags_encdec & _pled__mask__decode, pterm_0, 0, 0); return mh; }
+unity paramline::decode(arrayref_t<wchar_t> ssrc, s_long flags_encdec, arrayref_t<wchar_t> pterm2)
+  { unity x; decode(ssrc, x, flags_encdec, pterm2); return x; }
+unity paramline::decode1v(arrayref_t<wchar_t> ssrc)
+  { unity x; decode1v(ssrc, x); return x; }
+unity paramline::decode_tree(arrayref_t<wchar_t> ssrc, s_long flags_encdec, arrayref_t<wchar_t> pterm2)
+  { unity x; decode_tree(ssrc, x, flags_encdec, pterm2); return x; }
+std::wstring paramline::encode(const unity& mhsrc, s_long flags_encdec, arrayref_t<wchar_t> pterm)
+  { std::wstring s; encode(mhsrc, s, flags_encdec, pterm); return s; }
+std::wstring paramline::encode1v(const unity& value)
+  { std::wstring s; encode1v(value, s); return s; }
+std::wstring paramline::encode_tree(const unity& mhsrc, s_long flags_encdec, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2)
+  { std::wstring s; encode_tree(mhsrc, s, flags_encdec, pterm, pterm2); return s; }
 
 
 unity paramline::list_m
@@ -9150,9 +10508,9 @@ namespace bmdx
         else { unity a; a.arr_init<utString>(0); a.arr_append(L""); return a; }
     }
 
-  std::string cmd_arg1(const std::string& s, bool b_shell)
+  std::string cmd_arg1(const arrayref_t<char>& s, bool b_shell)
     { return processctl::ff_mc().arg1(s, b_shell); }
-  std::string cmd_arg1(const std::wstring& s, bool b_shell)
+  std::string cmd_arg1(const arrayref_t<wchar_t>& s, bool b_shell)
     { return processctl::ff_mc().arg1(wsToBs(s), b_shell); }
 
 }
@@ -9557,8 +10915,8 @@ namespace bmdx
             {
               const int n0 = sizeof(__buf_argv) - 1;
               int fd;
-              fd = open("/proc/self/cmdline", O_RDONLY);
-              if (fd == 0) { fd = open("/proc/curproc/cmdline", O_RDONLY); }
+              fd = open("/proc/self/cmdline", O_RDONLY | O_CLOEXEC);
+              if (fd == 0) { fd = open("/proc/curproc/cmdline", O_RDONLY | O_CLOEXEC); }
               if (fd == 0) { break; }
               int n = (int)read(fd, __buf_argv, n0);
               close(fd);
@@ -9899,26 +11257,15 @@ std::string file_utils::join_path(const std::string& ps1, const std::string& ps2
 bool file_utils::has_rightmost_patshep(const std::wstring& s) const { return s_long(s.length())>=pslen && s.substr(s.length()-pslen)==wpathsep(); }
 bool file_utils::has_rightmost_patshep(const std::string& s) const { return s_long(s.length())>=pslen && s.substr(s.length()-pslen)==cpathsep(); }
 
-bool file_utils::is_ex_file(const std::wstring& sPath) const { return is_ex_file(wsToBs(sPath)); }
+bool file_utils::is_ex_file(const std::wstring& sPath) const
+  { return is_ex_file(wsToBs(sPath)); }
 bool file_utils::is_ex_file(const std::string& sPath) const
-{
-    if (has_rightmost_patshep(sPath))return false;
-    std::string p = sPath;
-    if ( 0 == __bmdx_std_access(p.c_str(),F_OK) ) // file exists...
-    {
-        p += cpathsep();
-        return 0 != __bmdx_std_access(p.c_str(),F_OK); // ...and the directory does not
-    }
-    else { return false; }
-}
+  { return file_io::is_ex_file(sPath); }
 
-bool file_utils::is_ex_dir(const std::wstring& sPath) const { return is_ex_dir(wsToBs(sPath)); }
+bool file_utils::is_ex_dir(const std::wstring& sPath) const
+  { return is_ex_dir(wsToBs(sPath)); }
 bool file_utils::is_ex_dir(const std::string& sPath) const
-{
-    std::string p = sPath;
-    if (!has_rightmost_patshep(sPath)) { p += cpathsep(); }
-    return 0 == __bmdx_std_access(p.c_str(), F_OK); // directory exists
-}
+  { return file_io::is_ex_dir(sPath); }
 
 std::wstring file_utils::expand_env_nr(const std::wstring& s) const
 {
@@ -10714,7 +12061,7 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
     if (!(phm && px && pterm)) { return -1; }
     try {
       unity x2; std::wstring& s = x2.rx<utString>();
-      paramline().encode(*phm, s, pterm->vstr());
+      paramline().encode(*phm, s, 0, pterm->vstr());
       px->swap(x2);
       return 1;
     } catch (...) {}
@@ -11233,8 +12580,8 @@ struct cch_slot
 {
   struct qbci_value { inprocess_message msg; cref_t<std::wstring, cref_nonlock> src; s_ll id_msg_cmd; qbci_value() : id_msg_cmd(-1) {} };
   struct qs_value : inprocess_message {};
-  struct csl_tracking { unity thn, sln_exact, key_hbo; };
-  struct csl_tracking_ext { csl_tracking csl_info; i_dispatcher_mt::tracking_info trk_info; };
+  struct csl_tracking { csl_tracking(__bmdx_noarg1) {} unity thn, sln_exact, key_hbo; };
+  struct csl_tracking_ext { csl_tracking_ext(__bmdx_noarg1) {} csl_tracking csl_info; i_dispatcher_mt::tracking_info trk_info; };
 
   typedef vnnqueue_t<inprocess_message, __vecm_tu_selector> t_qumi;
   typedef vnnqueue_t<cref_t<qbci_value, cref_nonlock>, __vecm_tu_selector> t_qubci;
@@ -11312,11 +12659,11 @@ struct cch_thread
 
     // { qs slot name (string), 0 } thread's qs slots with immediate delivery
     //  RW lock: mst_semaphore m_sl_acquire. Ro lock: m_th_ro_acquire.
-  hashx<unity, int> h_qs_imm;
+  hashx<unity, s_long> h_qs_imm;
 
     // { qs slot name (string), 0 } thread's qs slots with delivery by thread periodic()
     //  RW lock: mst_semaphore m_sl_acquire. Ro lock: m_th_ro_acquire.
-  hashx<unity, int> h_qs_thread;
+  hashx<unity, s_long> h_qs_thread;
 
     // true if this thread is allowed to execute LPA delivery (for qs queues with 'input lpa = true", in all threads).
     //  This flag is assigned once on thread creation, and is constant during thread lifetime.
@@ -11345,7 +12692,7 @@ namespace bmdx
 {
 struct dispatcher_mt::cch_session
 {
-  cch_session()
+  cch_session(__bmdx_noarg1)
   :
     gm(0),
     exitmode(2),
@@ -11363,7 +12710,7 @@ struct dispatcher_mt::cch_session
     // 1 during the session.
     // 0 after the session
   volatile int ses_state;
-  void __set_ses_state(int st)
+  void __set_ses_state(int st __bmdx_noarg)
   {
     if (st == 1) { ses_state = st; if (lmsc) { lmsc->clt_set_ses_state(st); } }
       else { if (lmsc) { lmsc->clt_set_ses_state(st); } ses_state = st; }
@@ -11372,8 +12719,8 @@ struct dispatcher_mt::cch_session
     // Dflt. == 0xff. Desc.: see dispatcher_mt frqperm();
   volatile s_long frqperm;
   unsigned char __thm_lqsd, __thm_lmsc, __thm_nsc, __thm_cdcc; // internal threads activity mode; NOTE all by dflt. = -1
-  void __thm_lqsd_enable_full() { if (th_lqsd) { __thm_lqsd = 2; } }
-  void __thm_lmsc_enable_full() { if (lmsc) { __thm_lmsc = 2; } }
+  void __thm_lqsd_enable_full(__bmdx_noarg1) { if (th_lqsd) { __thm_lqsd = 2; } }
+  void __thm_lmsc_enable_full(__bmdx_noarg1) { if (lmsc) { __thm_lmsc = 2; } }
 
     // Short-time lock for main cch_session members: hg_threads, hg_qs_disp, hg_lpai (for read/write); name_th_disp (for associated variable modification).
   critsec_t<dispatcher_mt>::csdata lkd_disp_ths;
@@ -11468,9 +12815,10 @@ struct dispatcher_mt::thread_proxy : i_dispatcher_mt
   struct lks_idgen {};
     // Common ID generator for messages and subscription requests.
     //  NOTE Non-local msg. delivery and subscription tracking uses the same structures.
-  static s_ll idgen() { static s_ll x(make_id0()); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
-  static s_ll make_id0() { s_ll dt = s_ll(1.e4 * (clock_ms() - idgen_t0)) & 0xffffffffll; return (((s_ll(d_nowutc().f()) & 0x7ffffe) + 1) << 40) + (dt << 16); }
-  typedef hashx<std::wstring, hashx<std::wstring, s_long> > t_hsubs;
+  static s_ll idgen();
+  static s_ll make_id0();
+  typedef hashx<std::wstring, s_long, hashx_common::kf_basic<std::wstring>, __vecm_tu_selector> t_hsubs_L2;
+  typedef hashx<std::wstring, t_hsubs_L2, hashx_common::kf_basic<std::wstring>, __vecm_tu_selector> t_hsubs;
 
   struct th_lqsd_impl : threadctl::ctx_base { virtual void _thread_proc(); };
   struct th_lmsc_impl : threadctl::ctx_base, lm_slot_controller::i_callback
@@ -11478,11 +12826,13 @@ struct dispatcher_mt::thread_proxy : i_dispatcher_mt
     virtual void _thread_proc();
     virtual s_long local_write(t_stringref umsg, s_long enc, const cref_t<t_stringref>& bin, s_ll id_msg, s_ll id_msg_cmd);
     virtual s_long local_subscribe(t_stringref mde, const netmsg_header::mdd_subs_request& dm, const bmdx_shm::t_name_shm& name_peerf);
-    virtual s_long cslph_update(vec2_t<tracking_info>& vtii);
+    virtual s_long cslph_update(vec2_t<tracking_info>& tii);
   };
 
   struct address
   {
+    address(__bmdx_noarg1) {}
+
     const unity& addr() const __bmdx_noex;
     bool is_empty() const __bmdx_noex;
     s_long n() const __bmdx_noex;
@@ -11583,8 +12933,8 @@ public:
   static s_long _s_slot_remove(cref_t<dispatcher_mt::cch_session>& _r_ths, const unity& slotname0, const std::wstring& _name_th) __bmdx_noex;
   static s_long _s_update_subs_lists(cref_t<dispatcher_mt::cch_session>& _r_ths, const t_hsubs& hsubs, int actions) __bmdx_noex;
 
-  static void _s_thh_signal_stop(cch_session& rses) __bmdx_noex { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
-  static bool _s_thh_active(cch_session& rses) __bmdx_noex { return rses.th_lqsd || rses.th_lmsc; }
+  static void _s_thh_signal_stop(cch_session& rses) __bmdx_noex;
+  static bool _s_thh_active(cch_session& rses) __bmdx_noex;
 
   static void _s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) __bmdx_noex;
   static void _s_disp_dtor(dispatcher_mt* pdisp) __bmdx_noex;
@@ -11826,12 +13176,14 @@ s_long dispatcher_mt::thread_proxy::msend(const unity& msg, cref_t<t_stringref> 
       } catch (...) { return -2; }
     }
     bool b_da_is_local = true;
+    enum { trkstate_not_modified = -1999 }; // _s_write never returns this code
+    tracking->state = trkstate_not_modified;
     s_long res = dispatcher_mt::thread_proxy::_s_write(_r_ths, _name_th, msg, att, st_client, flags, false, -1, tracking->id, &this->mtrk_htracking, &b_da_is_local);
     if (1)
     {
       refmaker_t<t_htracking_proxy>::t_lock __lock(this->mtrk_htracking); if (sizeof(__lock)) {}
       if (b_da_is_local) { tracking->state = res >= 0 ? 3 : res; }
-        else { if (res < 0 || res > tracking->state) { tracking->state = res; } }
+        else { if (tracking->state == trkstate_not_modified) { tracking->state = res; } }
       if (res < 0 || b_da_is_local) { try { this->mtrk_htracking.strongref->remove(tracking->id); } catch (...) {} }
     }
     return res;
@@ -11963,19 +13315,19 @@ s_long dispatcher_mt::thread_proxy::th_lmsc_impl::local_subscribe(t_stringref md
   } catch (...) {}
   return -2;
 }
-s_long dispatcher_mt::thread_proxy::th_lmsc_impl::cslph_update(vec2_t<tracking_info>& vtii)
+s_long dispatcher_mt::thread_proxy::th_lmsc_impl::cslph_update(vec2_t<tracking_info>& tii)
 {
-  if (vtii.empty()) { return 1; }
+  if (tii.empty()) { return 1; }
   cref_t<cch_session>& _r_ths = *this->pdata<cref_t<cch_session> >(); if (!_r_ths) { return -2; } cch_session& rses = *_r_ths._pnonc_u();
-  vec2_t<cch_slot::csl_tracking_ext> vtrk2;
+  vec2_t<cch_slot::csl_tracking_ext, __vecm_tu_selector> vtrk2;
   if (1)
   {
     critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_htrk_csl);
-    for (s_long i = 0; i < vtii.n(); ++ i)
+    for (s_long i = 0; i < tii.n(); ++ i)
     {
-      const hashx<s_ll, cch_slot::csl_tracking>::entry* e = rses.htrk_csl.find(vtii[i].id);
+      const hashx<s_ll, cch_slot::csl_tracking>::entry* e = rses.htrk_csl.find(tii[i].id);
         if (!e) { continue; }
-      try { vtrk2.resize(vtrk2.size() + 1); bmdx_str::words::swap_bytes(vtrk2.back().csl_info, e->v); vtrk2.back().trk_info = vtii[i]; } catch (...) { return -2; }
+      try { vtrk2.resize(vtrk2.size() + 1); bmdx_str::words::swap_bytes(vtrk2.back().csl_info, e->v); vtrk2.back().trk_info = tii[i]; } catch (...) { return -2; }
     }
   }
   for (s_long i = 0; i < vtrk2.n(); ++ i)
@@ -13198,7 +14550,7 @@ s_long dispatcher_mt::thread_proxy::_s_write(cref_t<dispatcher_mt::cch_session>&
           }
           else { return -2; }
         }
-        else if (dsln1[1] == L'b') // LMSC --> response --> (any: pbo, hbo, pbi, qbi)
+        else if (dsln1[1] == L'b') // LMSC --> cmd. or response --> (any: pbo, hbo, pbi, qbi)
         {
           inprocess_message msg2; if (msg2.set_parts(hm1, att, true, flags_msend, flags_ses) < 1) { return -2; }
 
@@ -13893,23 +15245,22 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
   try {
 
       // used on (flags & 1)
-    vec2_t<std::wstring> sl_th1_thn;
-      vec2_t<cref_t<cch_slot> > sl_th1;
+    vec2_t<std::wstring, __vecm_tu_selector> sl_th1_thn;
+      vec2_t<cref_t<cch_slot>, __vecm_tu_selector> sl_th1;
 
       // used on (flags & 2)
-    vec2_t<std::wstring> sl_disp_sln, sl_disp_thn;
-      vec2_t<cref_t<cch_slot> > sl_disp;
-
+    vec2_t<std::wstring, __vecm_tu_selector> sl_disp_sln, sl_disp_thn;
+      vec2_t<cref_t<cch_slot>, __vecm_tu_selector> sl_disp;
     if (1)
     {
       mst_semaphore ms_th1(rses, _name_th);
-      hashx<std::wstring, mst_semaphore> h_ms_disp;
+      hashx<std::wstring, mst_semaphore, hashx_common::kf_basic<std::wstring>, __vecm_tu_selector> h_ms_disp;
 
       if (!b_internal) { hangdet hd; while (true) { int res = ms_th1.m_th_ro_acquire(); if (res != 0 || hd) { break; } sleep_mcs(50); } }
       cch_thread* pth_qs = ms_th1.p_thread(); if (!b_internal && !pth_qs) { return -1; } // under m_th_ro_acquire
       if ((flags & 2) && (b_internal || pth_qs->cb_disp))
       {
-        hashx<dispatcher_mt::mst_semaphore*, int> h_waits;
+        hashx<dispatcher_mt::mst_semaphore*, s_long> h_waits;
         if (1) // get refs. for (disp. delivery) slots that are ready to receive messages
         {
           critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_ths); if (sizeof(__lock)) {}
@@ -13917,7 +15268,7 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
           {
             std::wstring sln = rses.hg_qs_disp(i)->k.vstr();
             std::wstring thn = rses.hg_qs_disp(i)->v.vstr();
-            mst_semaphore& ms_x = h_ms_disp[thn];
+            mst_semaphore& ms_x = h_ms_disp.opsub(thn);
             ms_x.set_refs(rses, thn);
 
             sl_disp_sln.push_back(sln);
@@ -13925,7 +15276,7 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
             sl_disp.push_back(cref_t<cch_slot>());
 
             int res = ms_x.m_th_ro_acquire();
-              if (res == 0) { h_waits[&ms_x] = 1; }
+              if (res == 0) { h_waits.opsub(&ms_x) = 1; }
               if (res == 1) { ms_x.r_sl(sln, sl_disp.back()); }
           }
         }
@@ -13952,7 +15303,7 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
           {
             cref_t<cch_slot>& r_qs = sl_disp[i];
               if (r_qs) { continue; }
-            std::wstring& sln = sl_disp_sln[i]; std::wstring& thn = sl_disp_thn[i]; mst_semaphore& ms_x = h_ms_disp[thn];
+            std::wstring& sln = sl_disp_sln[i]; std::wstring& thn = sl_disp_thn[i]; mst_semaphore& ms_x = h_ms_disp.opsub(thn);
             if (ms_x.m_th_ro_acquire() == 1) { ms_x.r_sl(sln, r_qs); } // try to get slot ref. if having thread lock
           }
         }
@@ -13960,7 +15311,7 @@ s_long dispatcher_mt::thread_proxy::_s_qs_deliver(cref_t<dispatcher_mt::cch_sess
 
       if ((flags & 1) && pth_qs) // collect refs. for the calling thread's (_name_th) qs slots with conf. "delivery = thread"
       {
-        hashx<unity, int>& h_qs = pth_qs->h_qs_thread;
+        hashx<unity, s_long>& h_qs = pth_qs->h_qs_thread;
         for (s_long i = 0; i < h_qs.n(); ++i)
         {
           std::wstring sln = h_qs(i)->k.vstr(); cref_t<cch_slot> r_qs;
@@ -14090,7 +15441,6 @@ s_long dispatcher_mt::thread_proxy::_s_subs_deliver(cref_t<dispatcher_mt::cch_se
               hmsg.assoc_set(k_trg0, da_msg, false);
             }
           } catch (...) { continue; }
-
           dispatcher_mt::thread_proxy::_s_write(_r_ths, _name_th, hmsg, qsv.att, st_s_subs_deliver, _fl_msend_anlo_msg | _fl_msend_anlo_att, false, -1, -1, 0, 0);
         }
         if (pnmsent) { ++*pnmsent; }
@@ -14222,7 +15572,7 @@ s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_s
   // update subs. lists
 
   cch_thread* pth = 0;
-  hashx<std::wstring, hashx<std::wstring, s_long> > hsubs_outs, hsubs_ins;
+  t_hsubs hsubs_outs, hsubs_ins;
   try {
     unity __thn1; const unity* pku_thn = pthn; if (!pku_thn) { pku_thn = &__thn1; __thn1 = thn; }
     mst_semaphore ms(rses, thn);
@@ -14260,12 +15610,12 @@ s_long dispatcher_mt::thread_proxy::_s_thread_remove(cref_t<dispatcher_mt::cch_s
                 if (deliv != 0) // r_sl (sla) is a qs slot
                 {
                   std::wstring sla = _a.wstr_addr();
-                  for (s_long i = 0; i < hs_sl.n(); ++i) { try { hsubs_ins[hs_sl(i)->k.vstr()][sla] = 0; } catch (...) {} }
+                  for (s_long i = 0; i < hs_sl.n(); ++i) { try { hsubs_ins.opsub(hs_sl(i)->k.vstr()).opsub(sla) = 0; } catch (...) {} }
                 }
                 else // r_sl (sla) is non-qs slot that may be subscribed
                 {
                   std::wstring sla = _a.wstr_addr();
-                  for (s_long i = 0; i < hs_sl.n(); ++i) { try { hsubs_outs[sla][hs_sl(i)->k.vstr()] = 0; } catch (...) {} }
+                  for (s_long i = 0; i < hs_sl.n(); ++i) { try { hsubs_outs.opsub(sla).opsub(hs_sl(i)->k.vstr()) = 0; } catch (...) {} }
                 }
               }
             }
@@ -14321,11 +15671,11 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
     struct _aux_qsh
     {
       hashx<unity, unity> h_qsd_, h_lpai_;
-      hashx<unity, int> h_qst_, h_qsimm_;
+      hashx<unity, s_long> h_qst_, h_qsimm_;
     };
     _aux_qsh qsh;
     hashx<unity, cref_t<cch_slot> > h_sl2;
-    hashx<unity, int>& h_qst = pth->h_qs_thread; hashx<unity, int>& h_qsimm = pth->h_qs_imm;
+    hashx<unity, s_long>& h_qst = pth->h_qs_thread; hashx<unity, s_long>& h_qsimm = pth->h_qs_imm;
     unity ku_input_all(L"input all"), ku_input_lpa(L"input lpa"), ku_input_qsa(L"input qsa");
     for (s_long pos = sl_cfgroot.assocl_first(); pos != sl_cfgroot.assocl_noel(); pos = sl_cfgroot.assocl_next(pos))
     {
@@ -14424,7 +15774,7 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
                 if (slntail.length() > 0 && suba.wstr_sln_tail() != slntail) { return -1; }
               std::wstring suba_s = suba.wstr_addr();
               if (new_sl.r_haddrl->insert(suba_s) != 1) { return -1; }
-              hsubs_outs[suba_s][sa_s] = 0;
+              hsubs_outs.opsub(suba_s).opsub(sa_s) = 0;
             }
           }
           if (psc && psc->u_has(k_output_fixed, 6)) { const unity& x = (*psc)[k_output_fixed]; if (!x.isBool()) { return -1; } if (x.isBoolTrue()) { qsoutp |=  0x10; } }
@@ -14481,7 +15831,7 @@ s_long dispatcher_mt::thread_proxy::_s_add_slots_nl(cch_session& rses, const std
             if (!new_sl.r_haddrl) { if (!new_sl.r_haddrl.create0(true)) { return -2; } }
             std::wstring qsa_s = qsa.wstr_addr();
             if (new_sl.r_haddrl->insert(qsa_s) != 1) { return -1; }
-            hsubs_ins[sa_s][qsa_s] = 0;
+            hsubs_ins.opsub(sa_s).opsub(qsa_s) = 0;
           }
         }
       }
@@ -14574,7 +15924,7 @@ s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_ses
   if (_r_ths.ref().ses_state != 1) { return -3; }
   cch_session& rses = *_r_ths._pnonc_u();
   try {
-    t_hsubs hsubs, hsubs_empty;
+    t_hsubs hsubs;
     unity sln = slotname0; if (!(sln.isString() || sln.isArray())) { return -1; }
     unity _a; // exact slot name
     if (sln.isString()) { paramline().decode1v(sln.vstr(), _a); if (!sln1chk_main((_a.isArray() ? _a[1] : _a).vstr())) { return -1; } }
@@ -14624,12 +15974,12 @@ s_long dispatcher_mt::thread_proxy::_s_slot_remove(cref_t<dispatcher_mt::cch_ses
           if (deliv) // r_sl is a qs slot
           {
             std::wstring sla = _a.wstr_addr();
-            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs[hs_sl(i)->k.vstr()][sla] = 0; } } catch (...) {}
+            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs.opsub(hs_sl(i)->k.vstr()).opsub(sla) = 0; } } catch (...) {}
           }
           else // r_sl may have subscriptions
           {
             std::wstring sla = _a.wstr_addr();
-            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs[sla][hs_sl(i)->k.vstr()] = 0; } } catch (...) {}
+            try { for (s_long i = 0; i < hs_sl.n(); ++i) { hsubs.opsub(sla).opsub(hs_sl(i)->k.vstr()) = 0; } } catch (...) {}
           }
         }
       }
@@ -14669,11 +16019,11 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::c
   s_long resfl = 0x0;
   if (!!(actions & 8) && rses.lmsc)
   {
-    hashx<std::wstring, s_long> hpn;
+    hashx<std::wstring, s_long, hashx_common::kf_basic<std::wstring>, __vecm_tu_selector> hpn;
     for (s_long i1 = 0; i1 < hsubs.n(); ++i1)
     {
       if (1) { const std::wstring& k = hsubs(i1)->k; if (k.find(L"LM") != nposw) { address suba; suba.set_addr(k); try { if (suba.isLM()) { hpn.opsub(suba.wstr_pn()); } } catch (...) {} } }
-      const hashx<std::wstring, s_long>& h_qsa = hsubs(i1)->v;
+      const t_hsubs_L2& h_qsa = hsubs(i1)->v;
       for (s_long i2 = 0; i2 < h_qsa.n(); ++i2) { try { const std::wstring& k = h_qsa(i2)->k; if (k.find(L"LM") == nposw) { continue; } address qsa; qsa.set_addr(k); if (qsa.isLM()) { hpn.opsub(qsa.wstr_pn()); } } catch (...) {} }
     }
     if (hpn.n() > 0)
@@ -14691,7 +16041,7 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::c
   {
     bool bf = false;
     try {
-      const hashx<std::wstring, s_long>& h_qsa = hsubs(i1)->v;
+      const t_hsubs_L2& h_qsa = hsubs(i1)->v;
       address suba; suba.set_addr(hsubs(i1)->k);
         if (!sln1chk_subscriber(suba.wstr_sln_1())) { resfl |= 0x4; continue; }
       for (s_long i2 = 0; i2 < h_qsa.n(); ++i2)
@@ -14729,6 +16079,14 @@ s_long dispatcher_mt::thread_proxy::_s_update_subs_lists(cref_t<dispatcher_mt::c
   return resfl;
 }
 
+s_ll dispatcher_mt::thread_proxy::idgen()
+  { static s_ll x(make_id0()); critsec_t<lks_idgen> __lock(0, -1); if (sizeof(__lock)) {} return ++x; }
+s_ll dispatcher_mt::thread_proxy::make_id0()
+  { s_ll dt = s_ll(1.e4 * (clock_ms() - idgen_t0)) & 0xffffffffll; return (((s_ll(d_nowutc().f()) & 0x7ffffe) + 1) << 40) + (dt << 16); }
+void dispatcher_mt::thread_proxy::_s_thh_signal_stop(cch_session& rses) __bmdx_noex
+  { rses.th_lqsd.signal_stop(); rses.th_lmsc.signal_stop(); }
+bool dispatcher_mt::thread_proxy::_s_thh_active(cch_session& rses) __bmdx_noex
+  { return rses.th_lqsd || rses.th_lmsc; }
 
 void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<wchar_t> process_name, const unity& _cfg0, s_long flags_ctor) __bmdx_noex
 {
@@ -14758,7 +16116,6 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
     const unity kg_lmsc_chsbin(L"__lmsc_chsbin");
 
     const unity kth_disp(L"disp");
-
 
     if (!thread_proxy::pnchk(process_name)) { b = false; break; }
     rses.name_pr.assign(process_name.pd(), _t_wz(process_name.n()));
@@ -14811,7 +16168,6 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
       rses.lmsc->clt_setparam_chsbin(_lmsc_chsbin);
       rses.lmsc->det_init(); // 1st-time init., not critical if fails: it is periodically repeated by th_lmsc_impl, when necessary
     }
-
     rses.__set_ses_state(-1); // setting session state to "late initialization", to be able to handle subscription requests from IPC
     if (rses.__thm_lqsd > 0) { if (!rses.th_lqsd.start_auto<thread_proxy::th_lqsd_impl>(pdisp->_r_ths)) { b = false; break; } }
     if (rses.__thm_lmsc > 0) { if (!rses.th_lmsc.start_auto<thread_proxy::th_lmsc_impl>(pdisp->_r_ths)) { b = false; break; } }

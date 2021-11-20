@@ -1,7 +1,7 @@
-// BMDX library 1.4 RELEASE for desktop & mobile platforms
+// BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2021-03-23
+// rev. 2021-11-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -14,18 +14,24 @@
 // https://opensource.org/licenses/MIT
 
 
-// In bmdx_main.h, bmdx_main.cpp: .
+// In bmdx_main.h, bmdx_main.cpp:
 //
-//    Polymorphic container for storing high-level data and objects and passing them between binary modules.    (bmdx::  struct unity)
+//    Polymorphic container for storing high-level data and objects and passing them between binary modules.
+//      (bmdx::  struct unity)
+//    Original readable text format for data trees, with encoding/decoding utility.
+//      (bmdx::  struct paramline)
+//    Asynchronous in- and interprocess message dispatcher.
+//      (bmdx::  dispatcher_mt)
 //
-//    Simple date class.    (bmdx::  struct _unitydate)
-//    Configuration file format with support of trees, + encoding/decoding utility.    (bmdx::  struct paramline)
-//    Utilities for files and directories.    (bmdx::  struct file_utils)
-//    Access to command line arguments array, executable name/path etc.    (bmdx::  cmd_myexe, cmd_string, cmd_array)
-//    String character set conversions.    (bmdx::  wsToBs, bsToWs etc.)
-//    String manipulation and other utility functions.    (bmdx::  split, trim, replace, array etc.)
+//    Filename and path utilities, file manipulation utilities.
+//      (bmdx::  struct file_utils)
+//    Getting executable name, path, command line arguments array, etc.
+//      (bmdx::  cmd_myexe, cmd_string, cmd_array)
+//    String utilities and character set conversions.
+//      (bmdx::  wsToBs, bsToWs, split, trim, replace etc.)
+//    Simple date class.
+//      (bmdx::  struct _unitydate)
 //
-//    Asynchronous message dispatcher.    (bmdx::  dispatcher_mt)
 
 #ifndef bmdx_main_H
 #define bmdx_main_H
@@ -45,56 +51,6 @@
 #else
   #define __BMDX_DLLEXPORT
 #endif
-
-
-
-//==  struct unity CONSTRUCTION (brief)
-
-  // unity() - constructs an empty object (utype() == utEmpty)
-  // unity(<scalar value>) - constructs a scalar value; input value may be converted to one of the supported types
-  // unity(std::wstring) - constructs a wrapped string that may be passed between incompatible binary modules
-  // unity(std::string) - converts string to wide string using the system-default locale (equiv. to std::setlocale(..., ""))
-  // unity(std::vector<scalar value>) - constructs an array of values
-  // unity(<object type>&, bool b_strong) - constructs an object reference; see also set_obj and objt
-
-  // clear() - sets utEmpty, all internally handled objects are freed, storage cleared
-
-
-//==  struct unity FUNCTION FAMILIES (brief)
-
-  // pval - pointer to value or array elem.
-  // ref - ref. to value or array elem.
-  // rx - pointer to value or array elem. with autoconversion to the specified type
-  // val - value copy to the specified type
-  // cref - ref. to value if it is of the specified type, otherwise to temp. dflt. value
-  // conv - in-place type conv.
-  // arr_* - array info and modification
-  // obj*, set_obj, cpvoid*, pinterface, o_api - referenced objects and interfaces
-  //
-  // u_*; sc*, ua*, map*, hash*; [ ], path, u_name*
-  //    -- general functions; manipulating scalar, array, hashed ordered map, hashlist; accessing values by key, index, path,
-  //      additional object name field support.
-  //
-  // +<unity object>/<path>/<dflt. value and ret. type specifier> -- ternary operator to extract value
-  //    from associative tree (consisting of hashlists, maps, arrays) by the given path.
-
-
-//==  Indexation summary.
-
-  //  Historically, the library uses, in various functions referring to arrays of values,
-  //    different values of base indexes.
-  //
-  //  1-based indexation:
-  //    choose, mapi*, hashi*.
-  //  1-based indexation on automatic array creation:
-  //    rx, conv, ua*, array, decoded paramline arrays.
-  //  0-based indexation:
-  //    array0, hashl* (unordered), cmd_array, split.
-  //  Setting base index dependent on arguments:
-  //    arr_init, arrlb_, i_dispatcher_mt::request.
-  //  Indexation, dependent on individual array base index:
-  //    [], pval, ref, rx, vstr, vcstr, vint*, vfp, ua*, map*, hashi*.
-
 
 #include <vector>
 #include <exception>
@@ -1237,6 +1193,54 @@ namespace bmdx
 
 
 
+  //==  struct unity CONSTRUCTION (brief)
+
+    // unity() - constructs an empty object (utype() == utEmpty)
+    // unity(<scalar value>) - constructs a scalar value; input value may be converted to one of the supported types
+    // unity(std::wstring) - constructs a wrapped string that may be passed between incompatible binary modules
+    // unity(std::string) - converts string to wide string using the system-default locale (equiv. to std::setlocale(..., ""))
+    // unity(std::vector<scalar value>) - constructs an array of values
+    // unity(<object type>&, bool b_strong) - constructs an object reference; see also set_obj and objt
+
+    // clear() - sets utEmpty, all internally handled objects are freed, storage cleared
+
+
+  //==  struct unity FUNCTION FAMILIES (brief)
+
+    // pval - pointer to value or array elem.
+    // ref - ref. to value or array elem.
+    // rx - pointer to value or array elem. with autoconversion to the specified type
+    // val - value copy to the specified type
+    // cref - ref. to value if it is of the specified type, otherwise to temp. dflt. value
+    // conv - in-place type conv.
+    // arr_* - array info and modification
+    // obj*, set_obj, cpvoid*, pinterface, o_api - referenced objects and interfaces
+    //
+    // u_*; sc*, ua*, map*, hash*; [ ], path, u_name*
+    //    -- general functions; manipulating scalar, array, hashed ordered map, hashlist; accessing values by key, index, path,
+    //      additional object name field support.
+    //
+    // +<unity object>/<path>/<dflt. value and ret. type specifier> -- ternary operator to extract value
+    //    from associative tree (consisting of hashlists, maps, arrays) by the given path.
+
+
+  //==  Indexation summary.
+
+    //  Historically, the library uses, in various functions referring to arrays of values,
+    //    different values of base indexes.
+    //
+    //  1-based indexation:
+    //    choose, mapi*, hashi*.
+    //  1-based indexation on automatic array creation:
+    //    rx, conv, ua*, array, decoded paramline arrays.
+    //  0-based indexation:
+    //    array0, hashl* (unordered), cmd_array, split.
+    //  Setting base index dependent on arguments:
+    //    arr_init, arrlb_, i_dispatcher_mt::request.
+    //  Indexation, dependent on individual array base index:
+    //    [], pval, ref, rx, vstr, vcstr, vint*, vfp, ua*, map*, hashi*.
+
+
   struct unity //==
   {
   private:
@@ -1391,9 +1395,11 @@ namespace bmdx
       template<class _> struct trivconv_t<char*, _> { typedef std::wstring t_target; static inline t_target F(const char* x) { return bsToWs(x); } static inline _wr_cstring Fback(const t_target& x) { return wsToBs(x); } };
       template<class _> struct trivconv_t<char[], _> { typedef std::wstring t_target; static inline t_target F(const char x[]) { return bsToWs(x); } static inline _wr_cstring Fback(const t_target& x) { return wsToBs(x); } };
       template<class _> struct trivconv_t<carray_r_t<char>, _> { typedef std::wstring t_target; static inline t_target F(const carray_r_t<char>& x) { if (x.pd()) { return bsToWs(x.pd(), x.n()); } return t_target(); } static inline carray_r_t<char> Fback(const t_target& x) { return carray_r_t<char>(wsToBs(x)); } };
+      template<class _> struct trivconv_t<arrayref_t<char>, _> { typedef std::wstring t_target; static inline t_target F(const arrayref_t<char>& x) { return bsToWs(x); } static inline _wr_cstring Fback(const t_target& x) { return wsToBs(x); } };
 
       template<class _> struct trivconv_t<wchar_t*, _> { typedef std::wstring t_target; static inline t_target F(const wchar_t* x) { return x; } static inline const _wr_wstring Fback(const t_target& x) { return x; } };
       template<class _> struct trivconv_t<wchar_t[], _> { typedef std::wstring t_target; static inline t_target F(const wchar_t x[]) { return x; } static inline const _wr_wstring Fback(const t_target& x) { return x; } };
+      template<class _> struct trivconv_t<arrayref_t<wchar_t>, _> { typedef std::wstring t_target; static inline t_target F(const arrayref_t<wchar_t>& x) { if (x.is_empty()) { return t_target(); } return t_target(x.pd(), size_t(x.n())); } static inline _wr_wstring Fback(const t_target& x) { return x; } };
 
       template<class _> struct trivconv_t<_wr_cstring, _> { typedef std::wstring t_target; static inline t_target F(const _wr_cstring& x) { return x.wstr(); } static inline _wr_cstring Fback(const t_target& x) { return wsToBs(x); } };
       template<class _> struct trivconv_t<_wr_wstring, _> { typedef std::wstring t_target; static inline const t_target& F(const _wr_wstring& x) { return x.wstr(); } static inline _wr_wstring Fback(const t_target& x) { return x; } };
@@ -1771,7 +1777,7 @@ namespace bmdx
       //    a default value is created:
       //      a) T() - no conversion,
       //      b) T(x_dflt) - no conversion,
-      //      c) crefx<utUnity>(ind)) only: for any scalar type - dynamically created unity(ref(ind)) .
+      //      c) crefx<utUnity>(ind) only: for any scalar type - dynamically created unity(ref(ind)) .
       //  MODE This function does not modify the object.
       //    cref() family is analogous to val(), but it does not make any copies when the contained object
       //    may be accessed directly by reference.
@@ -2115,6 +2121,8 @@ namespace bmdx
       //    0x1 - clear array/map/hashlist in full (array base index = 1, assoc. array key fn. flags = 0, etc.).
       //      If flag is not set, only elements are removed, no container parameters changed.
       //      For assoc. array flags meaning, see static const s_long fkcmp*.
+      // Returns:
+      //    *this.
       // NOTE Unlike clear(), u_clear() may generate exceptions.
     unity& u_clear(s_long utt = -1, s_long flags = 0x1, EConvStrength cs = csNormal);
 
@@ -2201,6 +2209,7 @@ namespace bmdx
     unity& map_keys_get(unity& dest, s_long lb);  // returns *this
     unity map_values(s_long lb);
     unity& map_values_get(unity& dest, s_long lb);  // returns *this
+      // NOTE like all non-const map*, autoconverts to utMap, see also assocFlags_c.
     s_long mapFlags();
     void mapFlags_set(s_long fk_reset, s_long fk_set);
 
@@ -2238,6 +2247,7 @@ namespace bmdx
     unity hash_values(s_long lb);
     unity& hash_values_get(unity& dest, s_long lb);  // returns *this
       // NOTE fkcmpRevOrder is ignored by hashlist object.
+      // NOTE like all non-const hash*, autoconverts to utHash, see also assocFlags_c.
     s_long hashFlags();
     void hashFlags_set(s_long fk_reset, s_long fk_set);
 
@@ -2321,35 +2331,43 @@ namespace bmdx
 
       // Return a pointer to the element in a branch of the tree, consisting of maps, hashlists, arrays.
       //  keylist: path to the element,
-      //    a) as string - in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional),
-      //    b) as unity array - path as such, split into elements.
+      //    a) as string in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional),
+      //    b) (path(unity&) only) as array of path elements.
       // On error, null pointer is returned: a) path not found, b) array indexing with non-number, c) mem. alloc. error.
-    checked_ptr<const unity> path(const std::wstring& keylist) const __bmdx_noex;
-    checked_ptr<const unity> path(const wchar_t* keylist) const __bmdx_noex;
-    checked_ptr<const unity> path(const std::string& keylist) const __bmdx_noex;
-    checked_ptr<const unity> path(const char* keylist) const __bmdx_noex;
     checked_ptr<const unity> path(const unity& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const arrayref_t<wchar_t>& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const arrayref_t<char>& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const std::wstring& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const std::string& keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const wchar_t* keylist) const __bmdx_noex;
+    checked_ptr<const unity> path(const char* keylist) const __bmdx_noex;
 
-    checked_ptr<const unity> path(const std::wstring& keylist, const unity& x_dflt) const __bmdx_noex;
-    checked_ptr<const unity> path(const wchar_t* keylist, const unity& x_dflt) const __bmdx_noex;
-    checked_ptr<const unity> path(const std::string& keylist, const unity& x_dflt) const __bmdx_noex;
-    checked_ptr<const unity> path(const char* keylist, const unity& x_dflt) const __bmdx_noex;
     checked_ptr<const unity> path(const unity& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const arrayref_t<wchar_t>& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const arrayref_t<char>& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const std::wstring& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const std::string& keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const wchar_t* keylist, const unity& x_dflt) const __bmdx_noex;
+    checked_ptr<const unity> path(const char* keylist, const unity& x_dflt) const __bmdx_noex;
 
       // Return a pointer to the element in a branch of the tree, consisting of maps, hashlists, arrays,
       //  with autocreation of the given path.
-      //  keylist: path to the element, in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional).
+      //  keylist: path to the element,
+      //    a) as string in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional).
+      //    b) (path_w(unity&) only) as array of path elements.
       //  path_w automatically creates the given path, if it does not exist.
       //  If branch element is empty (e.g. just created), and is indexed with the key which is Empty, Int, or Float,
       //      the branch element is automatically converted to array, and resized to make the index valid.
       //      With other key types, such branch element is converted to hashlist,
       //      and only one element is inserted (the key with and empty value).
       // On error, null pointer is returned: a) existing array indexing with non-number, b) mem. alloc. error.
-    checked_ptr<unity> path_w(const std::wstring& keylist)        __bmdx_noex { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const wchar_t* keylist)        __bmdx_noex { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const std::string& keylist)        __bmdx_noex { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const char* keylist)        __bmdx_noex { return _path_w(keylist); }
-    checked_ptr<unity> path_w(const unity& keylist)        __bmdx_noex { return _path_w(keylist); }
+    checked_ptr<unity> path_w(const unity& keylist) __bmdx_noex;
+    checked_ptr<unity> path_w(const arrayref_t<wchar_t>& keylist) __bmdx_noex;
+    checked_ptr<unity> path_w(const arrayref_t<char>& keylist) __bmdx_noex;
+    checked_ptr<unity> path_w(const std::wstring& keylist) __bmdx_noex;
+    checked_ptr<unity> path_w(const std::string& keylist) __bmdx_noex;
+    checked_ptr<unity> path_w(const wchar_t* keylist) __bmdx_noex;
+    checked_ptr<unity> path_w(const char* keylist) __bmdx_noex;
 
 
 
@@ -2363,6 +2381,9 @@ namespace bmdx
     bool assoc_del(const unity& k);
 
     s_long assocS_c() const;
+      // Returns associative array (utHash or utMap) flags.
+      //  If *this is of other type, an exception is generated.
+    s_long assocFlags_c() const;
 
       // NOTE assocl_noel() is returned by assocl_ first, last, next, prev if *this is not map or hashlist.
     s_long assocl_noel() const { return hashx_common::no_elem; }
@@ -2582,7 +2603,7 @@ namespace bmdx
       // NOTE Same as "T& ref = x.objRef<T>();", one may use "T& ref = +x;".
       //    See also: unity operator+ and unitypc operator T&.
     template<class Obj> Obj& objRef(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>())        { return *checked_ptr<Obj>(this->objPtr<Obj>(b_checked, b_allow_cm)); }
-    template<class Obj> const Obj& objRef_c(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>()) const        { return *checked_ptr<Obj>(this->objPtr<Obj>(b_checked, b_allow_cm)); }
+    template<class Obj> const Obj& objRef_c(bool b_checked = true, bool b_allow_cm = false, meta::noarg_tu_t<Obj> = meta::noarg_tu_t<Obj>()) const        { return *checked_ptr<Obj>(const_cast<unity*>(this)->objPtr<Obj>(b_checked, b_allow_cm)); }
 
       // Search direction in the list of interface sets: from end (larger inds, latest attached sets) to the beginning (smaller inds).
       //  Search direction inside an interface set: from beginning (leftmost listed in o_interfaces<...>) to end (rightmost).
@@ -3341,10 +3362,10 @@ namespace bmdx
     void _ensure_m();
     void _ensure_sc();
 
-    unity* _path_u(const std::wstring& keylist, bool forced) __bmdx_noex;
-    unity* _path_w(const std::wstring& keylist) __bmdx_noex;
+    unity* _path_u(const arrayref_t<wchar_t>& keylist, bool forced) __bmdx_noex;
+    unity* _path_w(const arrayref_t<wchar_t>& keylist) __bmdx_noex;
     unity* _path_w(const wchar_t* keylist) __bmdx_noex;
-    unity* _path_w(const std::string& keylist) __bmdx_noex;
+    unity* _path_w(const arrayref_t<char>& keylist) __bmdx_noex;
     unity* _path_w(const char* keylist) __bmdx_noex;
     unity* _path_w(const unity& keylist) __bmdx_noex;
   };
@@ -4094,8 +4115,8 @@ namespace
 
     // Prepare single command line argument with properly escaped and replaced characters.
     //  See original processctl::ff_mc::arg1() for details.
-  std::string cmd_arg1(const std::string& s, bool b_shell);
-  std::string cmd_arg1(const std::wstring& s, bool b_shell);
+  std::string cmd_arg1(const arrayref_t<char>& s, bool b_shell);
+  std::string cmd_arg1(const arrayref_t<wchar_t>& s, bool b_shell);
 
   const std::string cCR = "\r";
   const std::string cLF = "\n";
@@ -4131,7 +4152,7 @@ namespace
     //    1: use system-default locale (equiv. to std::setlocale(..., "")) to search for substrings.
     //    2: use C locale (equiv. to std::setlocale(..., "C")) to search for substrings.
     //    any other value: return an empty string.
-  std::wstring replace(const std::wstring& s, const std::wstring& from, const std::wstring& to, bool b_case_insensitive = false, s_ll nmax = -1, s_long loc_type = 1);
+  std::wstring replace(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& from, const arrayref_t<wchar_t>& to, bool b_case_insensitive = false, s_ll nmax = -1, s_long loc_type = 1);
     //
     // (locale-aware)
     // Convert s to lowercase (lcase_la) or uppercase (ucase_la) representation.
@@ -4140,8 +4161,8 @@ namespace
     //    1: use system-default locale (equiv. to std::setlocale(..., "")).
     //    2: use C locale (equiv. to std::setlocale(..., "C")).
     //    any other value: return an empty string.
-  std::wstring lcase_la(const std::wstring& s, s_long loc_type = 1);
-  std::wstring ucase_la(const std::wstring& s, s_long loc_type = 1);
+  std::wstring lcase_la(const arrayref_t<wchar_t>& s, s_long loc_type = 1);
+  std::wstring ucase_la(const arrayref_t<wchar_t>& s, s_long loc_type = 1);
     //
     // (locale-independent)
     // true if str matches the given pattern.
@@ -4152,18 +4173,19 @@ namespace
     //
     // (locale-independent)
     // Trim all 'swat' string occurrences in the beginning and end of the string 's'
-  std::wstring trim(const std::wstring& s, const std::wstring& swhat = L" ", bool b_left = true, bool b_right = true);
+  std::wstring trim(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& swhat = L" ", bool b_left = true, bool b_right = true);
     //
     // (locale-independent)
     // Sequentially split s into 0-based array of strings, based on delimiter (delim).
     // nmax: max number of string parts in the output array. nmax < 0 means "no limit".
-  unity split(const std::wstring& s, const std::wstring& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
-  std::vector<std::wstring> splitToVector(const std::wstring&, const std::wstring& delim, meta::s_ll nmax = -1);
+  unity split(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
+  std::vector<std::wstring> splitToVector(const arrayref_t<wchar_t>& s, const arrayref_t<wchar_t>& delim, meta::s_ll nmax = -1);
     //
     // (locale-independent)
     //  If asrc is an array, join string representations of its elements (asrc.vstr(i)), inserting delim between them.
     //  If asrc is not an array, join() returns asrc.vstr().
-  std::wstring join(const unity& asrc, const std::wstring& delim);
+  std::wstring join(const unity& asrc, const arrayref_t<wchar_t>& delim);
+  std::wstring joinVector(const std::vector<std::wstring>& asrc, const arrayref_t<wchar_t>& delim);
 
 
   //== 1-byte character string helper functions.
@@ -4173,28 +4195,29 @@ namespace
     //    returns the result.
     // If b_case_insensitive == true, the search of 'from' in s is based on C locale.
     // If b_case_insensitive == false, replace_c is locale-independent.
-  std::string replace_c(const std::string& s, const std::string& from, const std::string& to, bool b_case_insensitive = false, s_ll nmax = -1);
+  std::string replace_c(const arrayref_t<char>& s, const arrayref_t<char>& from, const arrayref_t<char>& to, bool b_case_insensitive = false, s_ll nmax = -1);
     //
     // (using C locale)
     // Convert s to lowercase (lcase_c) or uppercase (ucase_c) representation.
-  std::string lcase_c(const std::string& s);
-  std::string ucase_c(const std::string& s);
+  std::string lcase_c(const arrayref_t<char>& s);
+  std::string ucase_c(const arrayref_t<char>& s);
     //
     // (locale-independent)
     // Trim all 'swat' string occurrences in the beginning and end of the string 's'
-  std::string trim(const std::string& s, const std::string& swhat = " ", bool b_left = true, bool b_right = true);
+  std::string trim(const arrayref_t<char>& s, const arrayref_t<char>& swhat = " ", bool b_left = true, bool b_right = true);
     //
     // (locale-independent)
     // Sequentially split s into 0-based array of strings, based on delimiter (delim).
     // nmax: max number of string parts in the output array. nmax < 0 means "no limit".
-  unity split(const std::string&, const std::string& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
-  std::vector<std::string> splitToVector(const std::string&, const std::string& delim, meta::s_ll nmax = -1);
+  unity split(const arrayref_t<char>& s, const arrayref_t<char>& delim, meta::s_ll nmax = -1); // returns 0-based array of utString
+  std::vector<std::string> splitToVector(const arrayref_t<char>& s, const arrayref_t<char>& delim, meta::s_ll nmax = -1);
     //
     // (using system-default locale)
     //  If asrc is an array, join string representations of its elements (asrc.vcstr(i)), inserting delim between them.
     //  If asrc is not an array, join() returns asrc.vcstr().
     //  See also unity :: vcstr().
-  std::string join(const unity& asrc, const std::string& delim);
+  std::string join(const unity& asrc, const arrayref_t<char>& delim);
+  std::string joinVector(const std::vector<std::string>& asrc, const arrayref_t<char>& delim);
 
 
 
@@ -4212,183 +4235,565 @@ namespace
 
 
 
-    //==  Decode/encode a line like param1=val1; param2=val2...
+    //==  Data trees decoding/encoding.
+    //  struct paramline provides original text format, representing
+    //    acyclic data trees, consisting of pairs key = value,
+    //    where key, in general, may be string or scalar value of any type,
+    //    and value may be scalar, string, array or associative array.
+    //    The text format is designed so that it could be easily written manually,
+    //    and easily read in forward direction, line by line (without jumps between sections),
+    //    even if data structure is quite complex and encoded by computer, not human.
+    //  Paramline functions are organized into 2 levels:
+    //    1. Encoding and decoding single set of "key = value" pairs.
+    //      See decode(), encode().
+    //      At this level, there's one limitation: the encoded values cannot represent nested associative arrays,
+    //      so that multilevel data tree may be formed from arrays only.
+    //    2. Encoding and decoding full data tree.
+    //      See decode_tree(), encode_tree().
+    //
   struct paramline
   {
-    static const std::string cpterm; // "; ";
-    static const std::string ceterm; // " = ";
-    static const std::string cvterm; // "|";
+    static const std::string    cpterm;       // "; "
+      static const std::string  cpterm_short; // ";"
+    static const std::string    ceterm;       // " = "
+      static const std::string  ceterm_short; // "="
+    static const std::string    cvterm;       // "|"
+    static const std::string    cao_appseq;   // array op. "++"
+    static const std::string    cao_app1;     // array op. "+"
+    static const std::string    cao_setseq;   // array op. ".."
+    static const std::string    cao_set1;     // array op. "."
 
-    static const std::wstring wpterm; // L"; ";
-    static const unity uwpterm; // == wpterm
-    static const std::wstring weterm; // L" = ";
-    static const std::wstring wvterm; // L"|";
+    static const std::wstring   wpterm;         // L"; "
+      static const std::wstring wpterm_short;   // L";"
+      static const unity        uwpterm;        // == wpterm
+      static const unity        uwpterm_short;  // == wpterm_short
+    static const std::wstring   weterm;         // L" = "
+      static const std::wstring weterm_short;   // L"="
+    static const std::wstring   wvterm;         // L"|"
+    static const std::wstring   wao_appseq;     // array op. L"++"
+    static const std::wstring   wao_app1;       // array op. L"+"
+    static const std::wstring   wao_setseq;     // array op. L".."
+    static const std::wstring   wao_set1;       // array op. L"."
 
-    static const unity& _0;
-
-      // Decode a string, specifying one-level set of named parameters.
-      // Recognizes ";" and pterm2 as element separator.
+      // Decode a string, specifying single set of pairs "key = value".
+      // Recognizes ";" and pterm2 as separator of the pairs.
       // Puts keys and values into mh.
-      //  mh is initialized as utMap (or existing map cleared) on useMap == true,
-      //  or as utHash on useMap (or existing hashlist cleared) == false.
-      // NOTE (decode(mh) only) When the existing map or hashlist is cleared, its flags (keys comparison) are kept.
-      //    The results of decoding depend on it. If default behavior is necessary,
-      //    the client should call mh.clear() or mh.u_clear() before decode().
-      // Example:
-      //  key1 = value1; key2 = value2; key3 = | array elem. 1 | array elem. 2 | array elem. 3 | 1234 | 3.14159 | array elem. 6;
-      //  key4 = \0; key4a = false; key5 = \1; key5a = true;
-      //  key6 = 2014-01-15 23:59:00; key6a = \d2014-01-15 23:59:00;
-      //  key6b = 2014-01-15; key6c = \d2014-01-15;
-      //  key6d = \s2014-01-15 23:59:00;
-      //  key7 = \e;
-      //  key8 = 1.1; key8a = 1.; key8b = \f1;
-      //  key9 = 2; key9a = \i2.0;
-      //  key10 = \z
       //
-      //  Here,
-      //    key1, key2 have literal "value1", "value2" values,
-      //    key3 is 1-based utArray of 6 utUnity elements,
-      //    keys 4 to 5a have boolean values,
-      //    keys 6 to 6c have utDate values,
-      //    key6d has the literal string value,
-      //    key7 has the utEmpty value,
-      //    all key8* have the floating point values,
-      //    both key9* have integer values,
-      //    key10 has the utArray value with no elements.
+      // flags:
       //
-      //  The key itself is always a string value.
+      //  0x1 - set map (utMap) as type of mh or the returned container.
+      //    By default (flag not set): set hashlist (utHash) as type of mh or the returned container.
+      //    NOTE (decode(mh) only) When the existing map or hashlist is cleared, its flags are kept.
+      //      This influences keys comparison behavior when inserting decoded keys and values from the string.
       //
-      // Returns mh.
+      //  0x2 - overwrite value if met duplicate key.
+      //    By default (flag not set): use keep-first rule with one exception.
+      //	  1. Keep-first rule: the first occurred value with particular key is not overwritten
+      //      by later values with the same key.
+      //    2. Exception:
+      //        k = \z<spec.>
+      //      a) If k already exists in the decoded container, AND its value is an array,
+      //        the new spec. modifies the existing array:
+      //        1) if spec. is empty (\z only is specified), k is assigned an array with size 0 and base index 1.
+      //        2) if spec. contains instructions (base index, size, operation),
+      //          they are sequentially applied to the existing array under k.
+      //      b) If k occurs first time, k is assigned an array with size 0 and base index 1,
+      //        and then modified according to spec.
+      //      For array spec. (\z), see detailed description (4, 5) below.
       //
-      // Note 1. Literal occurrences of special characters must be escaped
-      //  in places or cases where they would be treated incorrectly.
+      //  0x100 - decode keys in the same way as values (i.e. decode1v()).
+      //      This restores key AND its data type
+      //      (string, date, integer number, floating-point number, boolean, empty,
+      //      also \z<spec.> can make a key which is itself an array),
+      //      if ssrc has been specifically written,
+      //      or obtained from assoc. array with encode() with 0x100 flag set.
+      //    By default (flag not set): keys are decoded as strings, which means only unescaping certain sequences
+      //      (\;, \\, \<space>, \=, \|, \~)
+      //
+      // Returns:
+      //    decode(ssrc, mh, flags, pterm2): mh.
+      //    decode(ssrc, flags, pterm2): new associative array.
+      //
+      // Detailed description.
+      //
+      // 1. 10 basic examples of decoding. (flags = 0)
+      //
+      //    Original string:
+      //      key1 = value1; key2 = value2; key3 = | array elem. 1 | array elem. 2 | 1234 | 3.14159 | array elem. 5;
+      //      key4 = \0; key4a = false; key5 = \1; key5a = true;
+      //      key6 = 2014-01-15 23:59:00; key6a = \d2014-01-15 23:59:00;
+      //      key6b = 2014-01-15; key6c = \d2014-01-15;
+      //      key6d = \s2014-01-15 23:59:00;
+      //
+      //      key7 = \e;
+      //      key8 = 1.1; key8a = 1.; key8b = \f1;
+      //      key9 = 2; key9a = \i2.0;
+      //      key10 = \z
+      //      key11 = \z += |1|2|3; key11 = \z += |a|b|c
+      //
+      //    The decoded associative array:
+      //      "key1", "key2" have literal "value1", "value2" values,
+      //      "key3" is 1-based utUnityArray of 5 elements of various types
+      //        (2 strings, integer number, floating point number, string),
+      //      keys 4 to 5a have boolean values,
+      //      keys 6 to 6c have utDate values,
+      //      "key6d" has the literal string value,
+      //
+      //      "key7" has the utEmpty value,
+      //      all key8* have the floating point values,
+      //      both key9* have integer values,
+      //      "key10" is empty 1-based utUnityArray.
+      //      "key11" is utUnityArray, containing 2 second-level arrays:
+      //          ["key11"][1] = (1, 2, 3), ["key11"][2] = ("a", "b", "c")
+      //
+      //    NOTE By default (if 0x100 flag is not set), the key as such is treated as string value,
+      //      even if it resembles a number or other type.
+      //
+      // 2. Escape sequences.
+      //
+      //  Literal occurrences of special characters must be escaped
+      //    in places or cases where the characters could be treated incorrectly.
       //  In any place, special characters that are escaped, are treated literally.
-      //  All rules do not depend on the platform.
+      //  Escaping rules, as well as whole paramline format, are independent on the platform.
       //  More detailed:
-      //    1.1. Literal semicolon (;) must be escaped in all cases (\;).
-      //    1.2. Literal 2-byte (CR, LF) sequence should be stated as \~ by default (pterm2 == wCRLF),
+      //    2.1. Literal semicolon (;) must be escaped in all cases (\;).
+      //    2.2. Literal 2-byte (CR, LF) sequence should be stated as \~ by default (because pterm2 == wCRLF),
       //      to avoid splitting the string literal, i.e. if you need to decode multiline strings as single values.
-      //    1.3. Literal spaces must be escaped if occurring leftmost/rightmost of keys, values, and array values.
-      //      Otherwise they will not go with the corresponding strings to further processing.
-      //    1.4. Literal equality signs (=) must be escaped in keys, i.e. in a "<key>=<value>" construct
+      //    2.3. Literal spaces must be escaped if occurring leftmost/rightmost of keys, values,
+      //      and array values.
+      //      Unescaped leading and trailing spaces are always stripped off the key or value text before decoding.
+      //    2.4. Literal equality signs (=) must be escaped in keys (\=),
+      //      because in a "<key>=<value>" construct
       //      the first unescaped "=" is treated as separating the key and the value.
-      //      Literal "=" in values is treated correctly both with and without preceding "\".
-      //    1.5. Literal "|" must be escaped in values only if it is the first character of a string value.
-      //      Alternatively, such string may be preceded by \s.
-      //      Otherwise, the value will be treated as an array.
-      //    1.6. Literal backslash must be escaped (\\) when it's necessary to avoid any of the above cases,
-      //      and also if \0, \1, \e, \d, \i, \f, \s or \z should occur literally at the beginning of a string value,
-      //      instead of specifying a type or a special value.
+      //      Literal "=" in values can, but not required to be escaped, because they carry no special meaning.
+      //    2.5. Literal "|" must be escaped in values only (\|), in the following cases:
+      //        a) if it is the first character of a string value. Alternatively, such string may be prefixed with \s.
+      //        b) if it is a character in a text, representing an array element.
+      //      These rules are due to leading "|" character in key's value means that an array is encoded,
+      //        and also it separates successive array elements.
+      //    2.6. Literal backslash must be escaped (\\):
+      //        a) when it's necessary to avoid any special backslash use, like described above, and also
+      //        b) if any of 2-character sequences
+      //            \0, \1, \e, \d, \i, \f, \s, \z
+      //          should occur literally at the beginning of any string value.
       //      Any other occurrences of the backslash are not treated as escape sequences,
-      //      and both the backslash and the following character are normal part of a key or string value.
-      // Note 2. If an exception occurs during the decoding,
-      //  mh contains keys and values decoded up to the place in ssrc that caused the exception.
-    unity& decode(arrayref_t<wchar_t> ssrc, unity& mh, bool useMap, arrayref_t<wchar_t> pterm2 = wCRLF);
-    unity decode(arrayref_t<wchar_t> ssrc, bool useMap, arrayref_t<wchar_t> pterm2 = wCRLF);
+      //        and both the backslash and the following character are normal part of a key or string value.
+      //
+      // 3. An error during decoding causes an exception,
+      //    in part. on failure to interpret explicitly specified type, e.g. integer (\i<number>) etc.
+      //
+      //    At this point, mh can be partially modified.
+      //    It contains keys and values decoded up to the place in ssrc that caused the exception.
+      //
+      // 4. General format for decode() input string (ssrc):
+      //
+      //		<key> <rvalue> [; <etc.>]
+      //
+      //	rvalue: [ = [<scalar value, sequence, or array spec.>] ]
+      //	scalar value: string, date, integer number, floating-point number, boolean, empty
+      //	sequence: | <scalar value or array spec.> [| <etc.>]
+      //	array spec.: \z [<base index>] [<size>] [<array simple op.> <rvalue>]
+      //		base index: b<[+-]integer_base>
+      //		size: n<[+]unsigned_integer_size>
+      //		array simple op.: <[+-]integer_index|+|++>
+      //	NOTE All spaces and number signs are optional, except for separating two numbers.
+      //
+      // 5. Ways of array construction.
+      //
+      // 	5.1. Basic array initialization (if not created yet).
+      //		k = |a|123|c\|d
+      //		k = \z++=|a|123|c\|d
+      //		k = \z+=a; k = \z+=123; k = \z+=c|d
+      //		k = \z1=a; k = \z2=123; k = \z3=c|d
+      //		All of the above       means        set k = array of ("a"; 123; "c|d").
+      //
+      //		NOTE += and ++= operations may be used many times with the same key, for appending elements and sequences.
+      //    NOTE <integer_index>= operation automatically expands the resulting array to the specified index,
+      //      and then makes an assignment.
+      // 		NOTE Inside string value, both "|" and "\|" mean literal "|".
+      //			k=\z+=c|d
+      //			k=\z+=c\|d
+      //			k=\z+=\sc|d
+      //			k=\z+=\sc\|d
+      //		All of the above       means        set k = array with single element "c|d".
+      //
+      // 	5.2. Basic second-level arrays.
+      // 		In a sequence, "|" immediately separates elements, while "\|" means literal "|".
+      //			After separation, each element is processed individually.
+      //
+      //		k=|a|b|\zn10|d         means        set k = array of ("a"; "b"; 1-based array with 10 empty elements; "d")
+      //		k=|a|b|\zn10 5=x|d     means        set k = array of ("a"; "b";
+      //                                            1-based array with 10 elements: [1..4, 6..10] are empty, [5] = "x";
+      //                                            "d")
+      //		k=|a|b|\zb0n10|d       means        set k = array of ("a"; "b"; 0-based array with 10 empty elements; "d")
+      //		k=|a|b|\z+=|c|d        means        set k = array of ("a"; "b"; array with 1 empty element; "c"; "d")
+      //		k=|a|b|\z+=c\|d        means        set k = array of ("a"; "b"; array with 1 string "c|d")
+      //		k=|a|b|\z+=\|c|d       means        set k = array of ("a"; "b"; array with 1 string "|c"; "d")
+      //		k=|a|b|\z+=\|c\|d      means        set k = array of ("a"; "b"; array with 1 string "|c|d")
+      //    NOTE When key is assigned inside a sequence, \z as element of sequence cannot be assigned
+      //      second-level sequence, because "|" already separates elements of the top-level sequence.
+      //      In this case, only single elements can be appended or assigned, also base index and size
+      //      (i.e. array shape) can be set.
+      //      For full multilevel arrays, see below.
+      //
+      //	5.3. Matrices and multilevel arrays.
+      //		In the examples, "|" characters, used for listing array elements, fill the the most nested array.
+      //
+      // 		Matrix 3*3 with strings as elements ("ax1", "ax2" etc.).
+      //			k = \z1=|ax1|ax2|ax3; k = \z2=|bx1|bx2|bx3; k = \z3=|cx1|cx2|cx3
+      //
+      // 		Matrix 3*5 with empty elements.
+      //			k = \z1=\zn5; k = \z2=\zn5; k = \z3=\zn5
+      //
+      // 		Matrix 3*5 with empty elements and 0-based indexation.
+      //			k = \zb0 0=\zb0n5; k = \z1=\zb0n5; k = \z2=\zb0n5
+      //
+      // 		Array of arrays of arrays (dimension 2*2*3). All arrays are 1-based.
+      //			k = \z1=\z1=|x111|x112|x113; k = \z1=\z2=|x121|x122|x123; k = \z2=\z1=|x211|x212|x213; k = \z2=\z2=|x221|x222|x223
+      //
+    unity& decode(arrayref_t<wchar_t> ssrc, unity& mh, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
+    unity decode(arrayref_t<wchar_t> ssrc, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
 
+      // Functional part of decode().
+      // Decodes ssrc as one value (scalar, sequence, or array spec.), specified without key and equality sign.
+      // See also decode().
+      //
     unity& decode1v(arrayref_t<wchar_t> ssrc, unity& dest);
     unity decode1v(arrayref_t<wchar_t> ssrc);
 
+
       // Decode multiline text, representing a tree of values.
       //  Default behavior:
-      //  1. Clear mh and set its type to map or hashlist (for useMap true or false resp.).
-      //  2. Split ssrc, using pterm2.
-      //  3. Decode each resulting substring and merge the result into mh,
+      //    1. Clear mha and set its type to map/hashlist (if flags has 0x1 set/unset resp.).
+      //    2. Split ssrc, using pterm2.
+      //    3. Decode each resulting substring in the same way as decode() does,
+      //      then merge the result into mha, under the current, or new specified (in the current line) branch path.
       //      On duplicate key, the existing (i.e. first set) value is kept.
-      //      For lines with the same branch paths, contents are merged into the same branch of mh.
-      //  Branch path rules:
-      //  1. Normally, in a substring of ssrc, "" (empty string) key specifies a branch path, e.g. "=|key1|key2".
-      //      All other keys and values from this substring are put into the branch,
-      //      e.g. mh.hash("key1").hash("key2").hash(k[i]) = v[i].
-      //  2. If no path specified (or "" key's value is not an array), k[i], v[i] are merged into the root (mh itself).
-      //  3. Path element type: string, number, empty, or any other type, normally supported by paramline::decode() for array elements.
+      //      For lines with equal branch paths, contents are merged into the same branch of mha.
+      //  Branch path format:
+      //    1. The path in mha is specified by list of elements after an empty key,
+      //      in the same line with normal keys and values, e.g.
+      //        "=|pathelem1|pathelem2; k1 = v1; k2 = v2"
+      //      means
+      //        mha("pathelem1")("pathelem2")("k1") = "v1";
+      //        mha("pathelem1")("pathelem2")("k2") = "v2";
+      //    2. If no path specified (or empty key's value is not an array),
+      //      k[i], v[i] pairs are merged into the root (mha itself).
+      //    3. In general, types and number of path elements, keys and values may be anything that decode() supports:
+      //      string, number, empty, or any other type, normally supported by paramline::.
+      //
       // flags:
-      //  NOTE For good default in parsing manually written text, use flags = 0x5a.
-      //  0x1 - for mh and branches, use map as target container type instead of hashlist.
-      //  0x2 - overwrite value in a branch if met duplicate path.
-      //      (Branch by value, value by branch, value by value. Branches having same path are always merged).
-      //  0x4 (decode_tree(mh) only) - do not clear mh if it's already associative, merge ssrc tree into mh.
+      //  NOTE For good default in parsing manually written text, use
+      //    flags = 0x5a.
+      //
+      //  0x1 - for mha and branches, use map as target container type instead of hashlist.
+      //
+      //  0x2 - overwrite value in a branch if met duplicate path or key.
+      //      1. When the flag is set,
+      //        1) (+) any new value or branch (map, hashlist or array)
+      //          will overwrite the existing value,
+      //          and also the new single value may replace the existing branch.
+      //        2) (+) Branches as such are always merged.
+      //          When same branch path is explicitly specified in more than one text line,
+      //          all keys/values from that line are merged into the existing branch.
+      //      2. When the flag is not set, the following actions are not done (spec. is ignored):
+      //        1) (-) assigning new value instead of existing value or branch
+      //          with the same key is not done.
+      //        2) (-) branch path, assigning new branch over the existing single value
+      //          (except for utEmpty), is not applied.
+      //          (Such assignment would be equivalent to converting a value into map, hash or array -
+      //          in order to follow the specified path.)
+      //          The previous path remains effective.
+      //          NOTE This can lead to strange effects when braced blocks are enabled (see flag 0x40).
+      //            Such block, after path that hasn't been applied, will be instead merged
+      //            into the previous effective path.
+      //        3) (-) in array area: assigning a value to already existing array element,
+      //          except for
+      //            1) the existing element is utEmpty (might be created automatically on array shape setting)
+      //            2) the existing element is subarray, and the new value is \z<spec.>,
+      //              i.e. creates a subarray or modifies the existing subarray shape and values.
+      //      3. Regardless of 0x2 flag:
+      //        1) (!) branch path, whose particular element points into an existing array,
+      //          but is not itself an array index of type utInt or utEmpty (same as integer 0),
+      //          decode_tree generates C++ exception.
+      //        2) (+) if the specified path/key exists, and its value is empty (utEmpty) -
+      //          any specified action (either value assignment, or branch creation/modification)
+      //          will be done unconditionally.
+      //        3) (+) if the specified path leads to existing branch (map, hashlist or array),
+      //          and converts it into an array with \z spec. (or modifies shape modification of existing array),
+      //          such modification is done unconditionally.
+      //        4) (-) if branch path spec. is not an array (e.g. "=key" instead of "=|key"),
+      //          it is ignored.
+      //          The previous path remains effective.
+      //          See also note in 2.2 above.
+      //
+      //  0x4 (decode_tree(mha) only) - do not clear mha if it's already associative, merge ssrc tree into mha.
       //    This has the following effects:
-      //      1) flag 0x1 is ignored, the input mh type (map or hashlist (dflt.)) is used for all new nodes.
-      //      2) mh is not cleared, all decoded branches are merged into it.
-      //      3) all new nodes inherit mapFlags (or hashFlags) from mh.
-      //  0x8 - ignore substring like regexp. "^[\t ]*//.*$". This allows for writing single-line C-style comments.
+      //      1) flag 0x1 is ignored, the input mha type (map or hashlist (dflt.)) is used for all new nodes.
+      //      2) mha is not cleared, all decoded branches are merged into it.
+      //      3) all new nodes inherit mapFlags (or hashFlags) from mha.
+      //
+      //  0x8 - ignore substring like regexp. "^[\t ]*//.*$".
+      //    This allows for writing single-line C-style comments.
+      //
       //  0x10 - convert distinct CR, LF and LFCR sequences to CRLF before decoding.
+      //
       //  0x20 - include branch paths, i.e. pairs ("", branch path as utUnityArray of keys),
       //      into all branches of the decoded tree.
-      //      (NOTE By default, root path (empty array) is not assigned to mh[""], unless explicitly specified: "=\z").
-      //      When 0x20 flag is not set, "" (empty string) key does not occur in mh.
-      //  0x40 - treat lines containing braces and optional spaces (like regexp. "[ {}]+") as start/end of multiline key/value block.
+      //      If flag is not set, no empty string key ("") occurs in any branch of the decoded tree.
+      //      NOTE 0x100 flag (see) disables 0x20, but empty string key ("") may occur in the tree,
+      //        because its encoded form "\s" is different from empty string.
+      //      NOTE By default, root path (empty array) is not assigned to mha[""],
+      //        unless explicitly specified: "=\z".
       //
-      //    A. decode_tree() without 0x40 flag:
-      //      begin: process lines.
-      //      (path[, keys/values]): branch path = path; branch[key[i]] = value[i].
-      //      keys/values only: branch path = empty path (i.e. root); mh[key[i]] = value[i].
-      //      line without path or keys: skip.
+      //  0x40 - treat lines containing only braces and optional spaces (matching regexp. "[ {}]+")
+      //      as start/end of multiline key/value block.
       //
-      //    B. decode_tree() with 0x40 flag:
-      //      begin: stack.front = empty path (i.e. root); last_path = empty path; process lines.
-      //      (path[, keys/values]): last_path = stack.back + path; branch path = last_path; branch[key[i]] = value[i].
-      //      (keys/values only): last_path = stack.back; branch path = last_path; branch[key[i]] = value[i].
-      //      line without path or keys: skip.
-      //      {: if (last_path == stack.back) { last_path += empty elem. (utEmpty); } stack.push(last_path).
-      //      }: last_path = stack.size > 1 ? stack.pop() : stack.front.
+      //    Example. The following text, in its basic form,
       //
-      //      Example. The following two sequences are equivalent, when decoded with 0x40 flag:
+      //          =|playback; autostart = true; stop1 = true
+      //          =|playback|lists; /home/list1; /home/list2
       //
-      //      =|playback; autostart = true; stop1 = true
-      //      =|playback|lists; /home/list1.m3u; /home/list2.m3u; /home/list3.m3u;
+      //      is decoded into the following data structure
+      //      regardless of 0x40 flag:
       //
-      //      =|playback
-      //      {
-      //        autostart = true; stop1 = true
-      //        =|lists
-      //        {
-      //          /home/list1.m3u;
-      //          /home/list2.m3u;
-      //          /home/list3.m3u;
-      //        }
-      //      }
+      //          // pseudocode
+      //          hashlist(
+      //            "autostart" => true,
+      //            "stop1" => true,
+      //            "playback" => hashlist("/home/list1" => <empty>, "/home/list2" => <empty>)
+      //          )
+      //
+      //      Same data structure can be decoded from the alternate form of text (only with 0x40 flag):
+      //
+      //          =|playback
+      //          {
+      //            autostart = true; stop1 = true
+      //            =|lists
+      //            {
+      //              /home/list1
+      //              /home/list2
+      //            }
+      //          }
       //
       //      NOTE Braces are recognized only if the line does not contain any other characters except spaces,
       //        otherwise brace will be treated as part of a key.
+      //      NOTE Line with the opening brace is associated with path,
+      //        specified in the line above,
+      //        only if
+      //          a) no additional lines between them (the line with path is the nearest to the line with opening brace),
+      //          b) additional lines are empty, or (on flag 0x8 set) contain comments only.
+      //        Otherwise, the path assumed for in-braces area, is =|, relative to the current branch.
+      //        This case works, even if not very useful.
+      //            =|a|b|c
       //
-      // Returns: mh.
+      //            // comment
+      //
+      //            {
+      //            z = 5
+      //            {
+      //            z = 7
+      //            =|d; z = 10
+      //            }
+      //            }
+      //          means the same as
+      //            =|a|b|c; z = 5
+      //            =|a|b|c|; z = 7
+      //            =|a|b|c||d; z = 10
+      //
+      //  0x100 - decode keys in the same way as values (i.e. as if with decode1v()).
+      //      This restores key AND its data type
+      //      (string, date, integer number, floating-point number, boolean, empty,
+      //      also \z<spec.> can make a key which is itself an array).
+      //      Should be used if the original tree has been encoded with 0x100 flag (on the flag: see encode()),
+      //      or manually written with keys that are not only of string type (see also decode()).
+      //    By default (flag not set): keys are decoded as strings, which means only unescaping certain sequences
+      //      (\;, \\, \<space>, \=, \|, \~).
+      //    NOTE 0x100 mode distinguishes between two string representations (in ssrc)
+      //      of the empty key (equivalent to empty unity()):
+      //        a) as empty string, b) as \e.
+      //      (a) is still treated as key for an array, specifying branch path.
+      //        This empty key and its value are not included into mha
+      //        even if 0x20 flag is specified.
+      //      (b) is treated as normal pair (empty key, user-defined value), which should appear
+      //        in mha when the function completes.
+      //      Keys in the form (a) and (b) do not overwrite each other, while inside each of forms
+      //        "overwrite" rule is controlled by 0x2 flag (see above).
+      //
+      //
+      // Returns: mha.
+      //    mha may be
+      //      a) utHash (default root container type),
+      //      b) utMap (default root type on flag 0x1 set),
+      //      c) utUnityArray (when dflt. root type has been changed by path with array spec., e.g. =|\z ).
       // NOTE With default pterm2, literal CRLF pairs in ssrc must be replaced with special sequence "\~".
-      //  See also decode().
-    unity& decode_tree(arrayref_t<wchar_t> ssrc, unity& mh, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
+      //    See also decode().
+      //
+      // Detailed information.
+      //
+      // 1. Formal description of the encoded tree format.
+      //
+      //   a) In array area:
+      //    <path> <array area op.> <rvalue> [; <etc.>]
+      //   b) In associative array area:
+      //    <path> <key> <rvalue> [; <etc.>]
+      //
+      //  path:
+      //    a) Specifies a path to branch, in the form of sequence of keys.
+      //      The branch itself, if already exists, may be an array or associative array.
+      //      If the branch does not exist, it is created as assoc. array.
+      //        =|<path element>[|etc.]
+      //    b) Specifies a path to branch, ensuring it being an array (even if it exists as e.g. assoc. array).
+      //      NOTE Branch type change clears its previous contents.
+      //        =|<path element>[|etc.]|<path element>|\z<array shape spec.>
+      //    c) Specifies the tree root, which can be assoc. array (default), or an array
+      //      (if previously converted with =|\z<array shape spec.>).
+      //        =\z
+      //  array area op.: <[+-]integer_index|+|++|.|..>
+      //  rvalue: [ = [<scalar value, sequence, or array spec.>] ]
+      //  scalar value: string, date, boolean value, integer number, floating-point number, empty
+      //  sequence: | <scalar value or array spec.> [| <etc.>]
+      //  array spec.: \z [<base index>] [<size>] [<array simple op.> <rvalue>]
+      //    base index: b<[+-]integer_base>
+      //    size: n<[+]unsigned_integer_size>
+      //    array simple op.: <[+-]integer_index|+|++>
+      //  array shape spec.: \z [<base index>] [<size>]
+      //
+      //  NOTE All spaces and number signs are optional, except for separating two numbers.
+      //
+      //
+      // 2. Formal description of the encoded tree format with braced areas enabled (flag 0x40).
+      //  This is multiline extension of the default format, described above.
+      //
+      //	=<path to assoc. array> [; <key> <rvalue>] [; etc...]
+      //	{
+      //			// Array elements at the current level.
+      //		[<key> <rvalue>] [; etc...]
+      //		[etc...]
+      //			// Nested branches, with or without braces.
+      //		[<nested branch>]
+      //		[etc...]
+      //	}
+      //
+      //	=<path to array> [; <array area op.> <rvalue>] [; etc...]
+      //	{
+      //			// Array elements at the current level.
+      //		[<array area op.> <rvalue>] [; etc...]
+      //		[etc...]
+      //			// Nested branches, with or without braces.
+      //      //  Here, the first element in the nested branch path is expected to be an integer index
+      //      //  in the current array. If the array does not contain such index,
+      //      //  it's automatically expanded as necessary.
+      //		[<nested branch>]
+      //		[etc...]
+      //	}
+      //
+      //  NOTE The nested branch path is specified relative to path of the braced area,
+      //    containing that branch.
+      //
+    unity& decode_tree(arrayref_t<wchar_t> ssrc, unity& mha, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
     unity decode_tree(arrayref_t<wchar_t> ssrc, s_long flags = 0, arrayref_t<wchar_t> pterm2 = wCRLF);
 
-      // Encodes the given map or hashlist (uses pterm as element separator).
-      //  If mhsrc is of other subtype, returns "".
-      //  If an exception occurs during encoding, sdest may contain partially encoded data.
-    std::wstring& encode(const unity& mhsrc, std::wstring& sdest, arrayref_t<wchar_t> pterm = wpterm);
-    std::wstring encode(const unity& mhsrc, arrayref_t<wchar_t> pterm = wpterm);
+      // Encodes the given map or hashlist (uses pterm as element separator),
+      //    in the form of one-level list "key1 = value1; key2 = value2 ...".
+      //  The resulting string is recognizable by decode() and decode_tree().
+      //  Details on the encoded string format: see decode().
+      // flags:
+      //    0x100 - encode keys in the same way as values (i.e. encode1v()).
+      //        This allows keys to keep original data type
+      //        (string, date, integer number, floating-point number, boolean, empty),
+      //        and later recover it by passing the same flag (0x100) into decode() or decode_tree().
+      //      NOTE For complex key (itself array or assoc. array),
+      //        only short string representation (e.g. array dimensions) is encoded.
+      //        Later, it can be decoded as plain string only.
+      //      By default (flag not set):
+      //        1. Non-string keys are converted into strings first.
+      //        2. If string key contains certain characters, they are escaped as necessary for unambiguous decoding.
+      //          Details: see decode().
+      //    0x200 - if met an empty key (utEmpty), force encoding it as \e.
+      //      By default (flag not set): encode empty key as empty string.
+      // pterm:
+      //    key-value pairs are joined with pterm (if it's empty, wpterm == "; " is used).
+      // Returns:
+      //    The encoded string representation of mhsrc.
+      //    If mhsrc is not an assoc. array, encode() returns "".
+      //    If an exception occurs during encoding, sdest may contain partially encoded data.
+      // NOTE encode() supports multilevel arrays,
+      //    e.g.
+      //      encode1v(unity("k", unity().array(unity().array(1, 2, 3), unity().array(), unity().array("a", "b", "c"))))
+      //    yields
+      //      k = |||; k = \z1=|1|2|3; k = \z2=\z; k = \z3=|a|b|c
+      //    for which decode() will reconstruct exactly the original array into value of the key "k".
+      //
+    std::wstring& encode(const unity& mhsrc, std::wstring& sdest, s_long flags = 0, arrayref_t<wchar_t> pterm = wpterm);
+    std::wstring encode(const unity& mhsrc, s_long flags = 0, arrayref_t<wchar_t> pterm = wpterm);
 
-      // Encode single value (scalar, string or one-dimensional array).
-    std::wstring encode1n(const unity& name); // encode single name
+      // Functional parts of encode().
+      // Details on the format of encoded names and values: see decode().
+      //
+      // encode1n(): converts the given value into string with proper escaping of certain characters,
+      //      the result could be used as left part of string like "key = value", recognizable by decode().
+      //  flags: see encode() flags 0x100, 0x200.
+      //
+      // encode1v(): encodes single value (scalar, string or one-dimensional array),
+      //    so that it can be passed to decode1v()
+      //    or used as right part of string like "key = value", recognizable by decode().
+      //  NOTE One limitation in comparison with encode() is that encode1v()
+      //    does not encode multilevel arrays.
+      //    If the given value is an array with nested arrays (the second level),
+      //    the returned string will define only shape of the 2nd-level arrays,
+      //    e.g.
+      //      encode1v(unity().array(unity().array(1, 2, 3), unity().array(), unity().array("a", "b", "c")))
+      //    yields
+      //      |\zb1n3|\z|\zb1n3
+      //    For 3rd and deeper level of arrays nesting, any values are ignored by encode1v()).
+      //
+    std::wstring encode1n(const unity& name, s_long flags = 0); // encode single name
     std::wstring& encode1v(const unity& value, std::wstring& sdest); // encode single value (scalar or array)
     std::wstring encode1v(const unity& value);
 
-      // Encodes the given map or hashlist into multiline text, producing separate text line
-      //  for each branch (all key-value pairs of each associative array except pairs where value is associative array itself).
-      //  At the beginning of each line, an empty key with value == full path of the branch is inserted: "=|key1|key2...".
-      //  pterm - used to separate parameters in a line, representing a branch.
-      //  pterm2 - used to separate lines (branches).
+      // Encodes the given data tree into multiline text, producing separate text line for each branch.
+      //    Here, "branch" means collection of (key, value) pairs of an associative array,
+      //      where value is anything except an associative array.
+      //      Such value is considered separate branch
+      //      and is encoded into one of lines, following the line of the parent branch.
+      //      (Additionally, if the value is an array whose some element (recursively)
+      //      is an assoc. array, that assoc. array is also encoded into separate line,
+      //      while in the original line the corresponding array element is empty.)
+      //    At the beginning of each line, full path of the branch is inserted in the form:
+      //        =|<path element>[|etc.]
+      //        =|<path element>[|etc.]|<path element>|\z<array shape spec.>
+      //      See also decode_tree() / detailed information / 1.
+      //
+      //  mhasrc: the root map, hashlist or array.
+      //  flags: see encode().
+      //  pterm: used to separate parameters in a line, representing a branch.
+      //  pterm2: used to separate lines (branches).
+      //
       // Result:
       //  a) multiline text.
-      //  b) if mhsrc is not an associative array, returns "".
+      //  b) "", if mhasrc is not an array or associative array, or utObject that can be dereferenced to it.
       //  c) if an exception occurs during encoding, sdest may contain partially encoded data.
-    std::wstring& encode_tree(const unity& mhsrc, std::wstring& sdest, arrayref_t<wchar_t> pterm = wpterm, arrayref_t<wchar_t> pterm2 = wCRLF);
-    std::wstring encode_tree(const unity& mhsrc, arrayref_t<wchar_t> pterm = wpterm, arrayref_t<wchar_t> pterm2 = wCRLF);
+      //
+    std::wstring& encode_tree(const unity& mhasrc, std::wstring& sdest, s_long flags = 0, arrayref_t<wchar_t> pterm = wpterm, arrayref_t<wchar_t> pterm2 = wCRLF);
+    std::wstring encode_tree(const unity& mhasrc, s_long flags = 0, arrayref_t<wchar_t> pterm = wpterm, arrayref_t<wchar_t> pterm2 = wCRLF);
 
-      // set1 += set2, where sets can be utMap or utHash (or else XUTypeMismatch is generated),
-      //  keep_first = true prevents overwriting the existing values in set1 by values from set2.
-      // Returns set1.
-    unity& merge(unity& set1, const unity& set2, bool keep_first = false);
-    unity& merge(unity& set1, const std::wstring& set2_pl, bool keep_first = false);
+
+
+
+    //== Helper functions for assoc. arrays.
 
     typedef const unity& _rcu;
+    static _rcu _0; // empty value, for representing default argument
+
+      // Makes set1 += set2,
+      //    where sets can be utMap or utHash (otherwise XUTypeMismatch is generated).
+      // keep_first:
+      //    true will prevent overwriting the existing values in set1 by values from set2.
+      // Returns:
+      //    set1.
+    unity& merge(unity& set1, const unity& set2, bool keep_first = false);
+    unity& merge(unity& set1, const arrayref_t<wchar_t>& set2_pl, bool keep_first = false);
 
       // Returns utMap, containing pairs {x1, x2}, {x3, x4} and so one. NOTE All values after first _0 are ignored.
       //  On inserting keys into the output map, duplicate keys are ignored, i.e. the first unique key-values pairs are kept.
@@ -4419,7 +4824,8 @@ namespace
         _rcu x59=_0, _rcu x60=_0 );
 
       // _list_*_set_u are same as list_*, only assign the result directly to dest. arg.
-      //  NOTE The functions do not check for assigning a value to its own container. This must be avoided.
+      //  NOTE The functions do not check for assigning a value to its own container.
+      //    This case must be avoided by the client.
     void _list_mx_set_u
       ( unity& mdest,
         s_long fk, // unity::fkcmp* flags, 0 for default
@@ -4433,21 +4839,36 @@ namespace
 
   private:
     enum { fl_v = 1, fl_bs = 2, fl_crlf = 4, fl_sc = 8, fl_sp = 16, fl_eq = 32, fl_ba = 64 };
-    static void x_encode1(const unity& x, std::wstring& retval, bool x_name, bool x_ar_elem, bool x_nourecur = false);
-    static void x_encode_branch(const unity& mh, const std::wstring& path, std::wstring& sdest, hashx<const unity*, int>& hstop, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, const std::wstring& pathpfx);
-    static void x_repl_e1(const std::wstring& s1, std::wstring& s2, bool s_name, bool s_ar_elem);
+    friend struct _paramline_branch;
+    friend struct _paramline_array_spec;
+    friend struct _paramline_test;
+    static void x_encode1n(const unity& x, std::wstring& retval, s_long flags_encdec);
+    static void x_encode1v(const unity& x, std::wstring& retval, s_long flags_encdec, vec2_t<std::wstring, __vecm_tu_selector>* ret_psubarrs, hashx<const unity*, s_long>* phstop);
+    static void x_encode_branch(s_long flags_encdec, const unity& mh, const arrayref_t<wchar_t>& path, std::wstring& sdest, hashx<const unity*, s_long>& hstopk, hashx<const unity*, s_long>& hstopv, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, arrayref_t<wchar_t> pathpfx);
+    static void x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool s_name, bool s_ar_elem, bool b_esc_eqsign);
     static void x_replace2a(std::wstring& s, s_long flags);
-    static void x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& flags);
-    static void x_decode1v(unity& v, bool v_ar_elem, s_long flags);
-    static bool x_decode1v_auto_date(const std::wstring& s, unity& retval) __bmdx_noex;
-    static bool x_incorrect_numeric_value_str(const std::wstring& s, bool b_nans);
-    static bool x_incorrect_integer_value_str(const std::wstring& s, bool allow_float_str);
+    static void x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& replflags);
+    struct _opt_unity;
+    static void x_decode(arrayref_t<wchar_t> ssrc, unity& mha, s_long flags_encdec, arrayref_t<wchar_t> pterm2, _opt_unity* pret_path, s_long* pret_replflags);
+    static void x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_long replflags, unity& vdest);
+    static bool x_decode1v_auto_date(const arrayref_t<wchar_t>& s, unity& retval) __bmdx_noex;
+    static bool x_incorrect_numeric_value_str(const arrayref_t<wchar_t>& s, bool b_nans);
+    static bool x_incorrect_integer_value_str(const arrayref_t<wchar_t>& s, bool allow_float_str);
+    static int _match_spaces(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend);
+    static int _match_character(arrayref_t<wchar_t> s, s_ll pos, arrayref_t<wchar_t> cc);
+    static int _match_int32(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_x, arrayref_t<wchar_t> terms);
+    static int _match_uint64(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, bmdx_meta::u_ll& ret_x, arrayref_t<wchar_t> terms);
+    static int _msp_op_index(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_i);
+    static int _msp_op_pluseq(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend);
+    static int _msp_op_pluspluseq(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend);
+    static int _msp_b(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_b);
+    static int _msp_n(arrayref_t<wchar_t> s, s_ll pos, s_ll& ret_iend, s_long& ret_n);
   };
 
 
 
 
-    //==  File operations utilities.
+    //==  FILE UTILITIES.
   enum EFileUtilsPredefinedDir
   {
       pdCurDir, // the current directory
@@ -5217,8 +5638,9 @@ namespace
       //      This request may be used
       //        a) by command sender, when it detects that its command has been lost or timed out due to exceptional situation.
       //          E.g. mget returning -20 for too long, which may mean terminated command recipient thread or peer process.
-      //        b) by command sender, if it attempts to send a command in normal way, but its msend returns receives -5 (out of order).
-      //        c) by command recipient, if it attempts to respond to a command, but its msend returns receives -5 (out of order).
+      //        b) by command sender, if it attempts to send a command in normal way, but its msend returns -5 (out of order).
+      //        c) by command recipient, if it attempts to respond to a command, but its msend returns -5 (out of order).
+      //        d) by command recipient, if it polls for new command, but its mget returns -21 (out of order).
       //      Common usage hint:
       //        For any particular pair of command sender - command target slots, if any side has been reset (or restarted, recreated),
       //          another side must be reset (or restarted, recreated) as well.

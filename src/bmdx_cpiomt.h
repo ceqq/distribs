@@ -1,7 +1,7 @@
-// BMDX library 1.4 RELEASE for desktop & mobile platforms
+// BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2021-03-23
+// rev. 2021-11-20
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -114,10 +114,22 @@
   //    resulting in fast (>6 GB/s) data transfer.
   //  In case of problems with IPC and/or overall system performance,
   //    pre-define the constant to 4 (normal priority).
+  //    With this, data transfer speed still remains high (50..90% of max. speed).
   // NOTE In Windows, IPC message delivery works perfectly on default (normal)
   //    thread priority, so the priority is not modified.
 #ifndef __bmdx_cfg_ipc_th_delivery_prio_psx
   #define __bmdx_cfg_ipc_th_delivery_prio_psx 5
+#endif
+
+  // For processctl::launch():
+  //    POSIX-specific setting, meaning "for starting a process, prefer vfork over fork if possible".
+  //    May be pre-defined to 0 - this disables vfork() use by launch().
+  //    (launch() will then choose fork() in most cases.)
+  //    NOTE Even if disabled as default choice, vfork may still be forced by the client at run time,
+  //      by supplying hints with
+  //        processctl_launch_hints::psx_force_exectype = ppet_vfork.
+#ifndef __bmdx_cfg_allow_vfork
+  #define __bmdx_cfg_allow_vfork 1
 #endif
 
 
@@ -249,6 +261,9 @@ namespace bmdx
     inline const t_value* pd() const __bmdx_noex { return _data; }
     inline t_value* pd() __bmdx_noex { return _data; }
 
+    inline const t_value* _end_u() const __bmdx_noex { return _data + _n; }
+    inline t_value* _end_u() __bmdx_noex { return _data + _n; }
+
     inline const t_value& operator[] (_s_ll i) const __bmdx_noex { return _data[t_size(i)]; }
     inline t_value& operator[] (_s_ll i) __bmdx_noex { return _data[t_size(i)]; }
 
@@ -266,13 +281,13 @@ namespace bmdx
       // True if *this is valid, and references non-empty string.
     inline bool is_nonempty() const __bmdx_noex { return _data && _n > 0; }
 
-      // True is *this and x are equal element-by-element.
+      // True if *this and x are equal element-by-element.
     inline bool is_eq(const arrayref_t<t_value>& x __bmdx_noarg) const;
 
-      // True is *this and x point to same memory location, with same number of elements (n()).
+      // True if *this and x point to same memory location, with same number of elements (n()).
     bool is_eq_pn(const arrayref_t<t_value>& x __bmdx_noarg)        const { return x._data == this->_data && x._n == this->_n; }
 
-      // NOTE operator==, operator!= do comparison by value. See also is_eq, is_eq_pn.
+      // NOTE operator==, operator!= do comparison of referenced strings values. See also is_eq, is_eq_pn.
     inline bool operator==(const arrayref_t<t_value>& x) const { return this->is_eq(x); }
     inline bool operator!=(const arrayref_t<t_value>& x) const { return !this->is_eq(x); }
 
@@ -307,6 +322,19 @@ namespace bmdx
       //    begin = (i0 in [0..n()-1] ? i0 : n()),
       //    end = (i2 in [0..n()-1] ? i2 : n()).
     inline _s_ll find1(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1 __bmdx_noarg) const __bmdx_noex;
+
+      // Same as find1, but looks for any character except x.
+    inline _s_ll find1not(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1 __bmdx_noarg) const __bmdx_noex;
+
+      // Returns true if *this contains x.
+      // See also find1.
+    inline bool has1(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1 __bmdx_noarg) const __bmdx_noex
+      { _s_ll i = find1(x, i0, i2); return i >= 0 && i < _n; }
+
+      // Returns true if *this contains any character != x.
+      // See also find1not, find1.
+    inline bool has1not(const t_value& x, _s_ll i0 = 0, _s_ll i2 = -1 __bmdx_noarg) const __bmdx_noex
+      { _s_ll i = find1not(x, i0, i2); return i >= 0 && i < _n; }
 
       // Returns
       //  a) if *this is not valid, an empty arrayref (pd() == 0, n() == 0).
@@ -365,6 +393,8 @@ namespace bmdx
     inline int set(const t_value& x, _s_ll i0, _s_ll i2 __bmdx_noarg) __bmdx_noex;
 
     inline void swap(arrayref_t& src __bmdx_noarg) __bmdx_noex;
+
+    inline std::basic_string<t_value> str(__bmdx_noarg1) const { std::basic_string<t_value> s; if (is_nonempty()) { s.assign(_data, _data + t_size(_n)); } return s; }
 
   private:
     _s_ll _n; union { T* _data; _s_ll __pad1; };
@@ -1790,11 +1820,11 @@ namespace bmdx
     // Internal exceptions, do not reach the client.
   struct __exc_carr_asg : std::exception { const char* what() const __bmdx_noex { return "_carr_asgx_t::try_asg"; } };
   struct __exc_carr_cc : std::exception { const char* what() const __bmdx_noex { return "_carr_asgx_t:try_cc"; } };
-  template<class A, class Ax, class _ = __vecm_tu_selector> struct _carr_aux1_t { static inline void try_asg(A& dest, const A& src) { (Ax&)dest = (const Ax&)src; if (dest.n() != src.n()) { throw __exc_carr_asg(); } } static inline void try_cc(void* pdest, const A& src) { new (pdest) Ax((const Ax&)src); if (((A*)pdest)->n() != src.n()) { throw __exc_carr_cc(); } } };
+  template<class A, class Ax, class _ = __vecm_tu_selector> struct _carr_aux1_t { static inline void try_asg(A& dest, const A& src) { (Ax&)dest = (const Ax&)src; if (dest.n() != src.n()) { throw __exc_carr_asg(); } } static inline void try_cc(void* pdest, const A& src __bmdx_noarg) { new (pdest) Ax((const Ax&)src); if (((A*)pdest)->n() != src.n()) { throw __exc_carr_cc(); } } };
     // This provides assignment and placement copy construction (try_asg, try_cc)
     //    with forced exceptions on error for all carray_t and cpparray_t variants.
     //    (Easier error processing for deeply nested structures.)
-  template<class A, class Aux = bmdx_meta::nothing, class _ = yk_c::__vecm_tu_selector> struct _carr_asgx_t { enum { is_carr_any = 0, is_cpparray = 0 }; typedef A t_ax; static inline void try_asg(A& dest, const A& src) { dest = src; } static inline void try_cc(void* pdest, const A& src) { new (pdest) A(src); } };
+  template<class A, class Aux = bmdx_meta::nothing, class _ = yk_c::__vecm_tu_selector> struct _carr_asgx_t { enum { is_carr_any = 0, is_cpparray = 0 }; typedef A t_ax; static inline void try_asg(A& dest, const A& src) { dest = src; } static inline void try_cc(void* pdest, const A& src __bmdx_noarg) { new (pdest) A(src); } };
   template<class T, class _> struct _carr_asgx_t<carray_t<T, true>, bmdx_meta::nothing, _> : _carr_aux1_t<carray_t<T, true>, carray_t<T, false>, _> { enum { is_carr_any = 1, is_cpparray = 0 }; typedef carray_t<T, false> t_ax; static inline void check_exc_alloc() { } };
   template<class T, class _, class _bs> struct _carr_asgx_t<cpparray_t<T, true, _bs>, bmdx_meta::nothing, _> : _carr_aux1_t<cpparray_t<T, true, _bs>, cpparray_t<T, false, _bs>, _> { enum { is_carr_any = 1, is_cpparray = 1 }; typedef cpparray_t<T, false, _bs> t_ax; static inline void check_exc_alloc() { } };
   template<class T, class _> struct _carr_asgx_t<carray_t<T, false>, bmdx_meta::nothing, _> : _carr_asgx_t<carray_t<T, false>, int, _> { enum { is_carr_any = 1, is_cpparray = 0 }; static inline void check_exc_alloc() { throw exc_carr_alloc_asg(); } };
@@ -1861,7 +1891,7 @@ namespace bmdx
       //    == 0 with imode == 1 - initialize as T().
       // Returns: true - success, false - failure, no changes.
       // NOTE realloc() proceeds with realloc/copy/init even if n2 == n().
-    bool realloc(_s_ll n2, int dmode, int imode, const t_value* px) __bmdx_noex
+    bool realloc(_s_ll n2, int dmode, int imode, const t_value* px __bmdx_noarg) __bmdx_noex
     {
       if (!(n2 >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
       if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
@@ -1889,7 +1919,7 @@ namespace bmdx
       return true;
     }
       // Same as realloc, only uses x to initialize array elements. t_value may have no default constructor.
-    bool realloc_cp(_s_ll n2, int dmode, int imode, const t_value& x) __bmdx_noex
+    bool realloc_cp(_s_ll n2, int dmode, int imode, const t_value& x __bmdx_noarg) __bmdx_noex
     {
       if (!(n2 >= 0 && dmode == (dmode & 1) && (imode == 4 || imode == (imode & 1)))) { return false; }
       if (n2 > this->_n) { _s_ll q = n2 * _s_ll(sizeof(T)); if (q <= 0) { return false; } if (q / _s_ll(sizeof(T)) != n2) { return false; } if (!(_t_size(q) > 0 && _s_ll(_t_size(q)) == q)) { return false; } }
@@ -2048,7 +2078,7 @@ namespace bmdx
       // If this != &src: clears this, moves src to this, sets src to be empty.
     void move(cpparray_t& src) __bmdx_noex { if (this == &src) { return; } this->~cpparray_t(); bmdx_str::words::memmove_t<T>::sf_memcpy(this, &src, sizeof(t_a)); src._data = 0; src._n = 0; }
     void swap(cpparray_t& src) __bmdx_noex { if (this == &src) { return; } bmdx_str::words::swap_bytes(this, &src); }
-    bool resize(_s_ll n) __bmdx_noex { if (n == this->_n) { return true; } return this->realloc(n, 1, 1, 0); }
+    bool resize(_s_ll n __bmdx_noarg) __bmdx_noex { if (n == this->_n) { return true; } return this->realloc(n, 1, 1, 0); }
     void clear() __bmdx_noex { this->realloc_0(1); }
     bool operator=(const cpparray_t& x)
     {
@@ -2089,6 +2119,16 @@ namespace bmdx
     _yk_reg _s_ll ibegin = i0 >= 0 && i0 < _n ? i0 : _n;
     _yk_reg _s_ll iend = i2 >= 0 && i2 < _n ? i2 : _n;
     while (ibegin < iend) { if (_data[ibegin] == x) { return ibegin; } ++ibegin; }
+    return _n;
+  }
+
+  template<class T>
+  _s_ll arrayref_t<T>::find1not(const t_value& x, _s_ll i0, _s_ll i2  __bmdx_noargt) const __bmdx_noex
+  {
+    if (!is_valid()) { return -1; }
+    _yk_reg _s_ll ibegin = i0 >= 0 && i0 < _n ? i0 : _n;
+    _yk_reg _s_ll iend = i2 >= 0 && i2 < _n ? i2 : _n;
+    while (ibegin < iend) { if (_data[ibegin] != x) { return ibegin; } ++ibegin; }
     return _n;
   }
 
@@ -2687,9 +2727,9 @@ namespace bmdx
       //    b) from Consumer side: nfree() may only decrease, down to 0, at any time, as side effect of value pushing by Supplier.
     _s_ll nfree() const __bmdx_noex { return a.n() - navl(); }
 
-    struct new_dflt { void operator()(T* p) const { new (p) T(); } }; // creates a T() at p
-    struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p) const { new (p) T(x); } }; // creates a T(x) at p
-    struct new_cp_seq { mutable const T* psrc; new_cp_seq(const T* psrc_) : psrc(psrc_) {} void operator()(T* p) const { new (p) T(*psrc++); } }; // creates a T(*psrc++) at each call
+    struct new_dflt { void operator()(T* p __bmdx_noarg) const { new (p) T(); } }; // creates a T() at p
+    struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p __bmdx_noarg) const { new (p) T(x); } }; // creates a T(x) at p
+    struct new_cp_seq { mutable const T* psrc; new_cp_seq(const T* psrc_) : psrc(psrc_) {} void operator()(T* p __bmdx_noarg) const { new (p) T(*psrc++); } }; // creates a T(*psrc++) at each call
 
       // push_1(x): push a copy of x.
       // push_1f(f): accepts a client-defined functor f that is able to create an element,
@@ -2699,8 +2739,8 @@ namespace bmdx
       //    -1 - no place in the buffer currently,
       //    -3 - element copying failed.
       // Concurrency: may be safely called by Supplier only.
-    _s_long push_1(const t_value& x) __bmdx_noex { return _push_1(new_cp(x)); }
-    template<class F> _s_long push_1f(const F& f) __bmdx_noex { return _push_1(f); }
+    _s_long push_1(const t_value& x __bmdx_noarg) __bmdx_noex { return _push_1(new_cp(x)); }
+    template<class F> _s_long push_1f(const F& f __bmdx_noarg) __bmdx_noex { return _push_1(f); }
 
       // Push n (>= 0) values. n must be [0..nfree()] to succeed.
       // push_n(n): uses copy constructor to create elements.
@@ -2712,8 +2752,8 @@ namespace bmdx
       //    -1 - a) n < 0, b) there's no place for n elements in the buffer currently.
       //    -3 - failure (element creation or copying).
       // Concurrency: may be safely called by Supplier only.
-    _s_long push_n(const t_value* pss, _s_ll n) __bmdx_noex { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
-    template<class F> _s_long push_nf(const F& f, _s_ll n) __bmdx_noex { return _push_n(f, n); }
+    _s_long push_n(const t_value* pss, _s_ll n __bmdx_noarg) __bmdx_noex { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
+    template<class F> _s_long push_nf(const F& f, _s_ll n __bmdx_noarg) __bmdx_noex { return _push_n(f, n); }
 
       // Returns ref. to absolute pos. (ipush() + ineg) (internally: by modulus ncap()).
       //    ineg must be negative, in [-navl()..-1], to point to valid position.
@@ -3187,9 +3227,9 @@ namespace bmdx
 
     // SUPPLIER part
 
-    struct new_dflt { void operator()(T* p) const { new (p) T(); } }; // creates a T() at p
-    struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p) const { new (p) T(x); } }; // creates a T(x) at p
-    struct new_cp_seq { mutable const T* psrc; new_cp_seq(const T* psrc_) : psrc(psrc_) {} void operator()(T* p) const { new (p) T(*psrc++); } }; // creates a T(*psrc++) at each call
+    struct new_dflt { void operator()(T* p __bmdx_noarg) const { new (p) T(); } }; // creates a T() at p
+    struct new_cp { const T& x; new_cp(const T& x_) : x(x_) {} void operator()(T* p __bmdx_noarg) const { new (p) T(x); } }; // creates a T(x) at p
+    struct new_cp_seq { mutable const T* psrc; new_cp_seq(const T* psrc_) : psrc(psrc_) {} void operator()(T* p __bmdx_noarg) const { new (p) T(*psrc++); } }; // creates a T(*psrc++) at each call
 
       // push_1(x): push a copy of x.
       // push_1f(f): accepts a client-defined functor f that is able to create an element,
@@ -3200,8 +3240,8 @@ namespace bmdx
       //    -2 - failure (mem. alloc. or similar).
       //    -3 - failed to construct the new element.
       // Concurrency: may be safely called by Supplier only.
-    _s_long push_1(const t_value& x) __bmdx_noex { return _push_1(new_cp(x)); }
-    template<class Fcreate> _s_long push_1f(const Fcreate& f) __bmdx_noex { return _push_1(f); }
+    _s_long push_1(const t_value& x __bmdx_noarg) __bmdx_noex { return _push_1(new_cp(x)); }
+    template<class Fcreate> _s_long push_1f(const Fcreate& f __bmdx_noarg) __bmdx_noex { return _push_1(f); }
 
       // Push n (>= 0) values.
       // push_n(n): uses copy constructor to create elements.
@@ -3215,8 +3255,8 @@ namespace bmdx
       //    -2 - failure (mem. alloc. or similar).
       //    -3 - failed to construct the new element.
       // Concurrency: may be safely called by Supplier only.
-    _s_long push_n(const t_value* pss, _s_ll n) __bmdx_noex { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
-    template<class F> _s_long push_nf(const F& f, _s_ll n) __bmdx_noex { return _push_n(f, n); }
+    _s_long push_n(const t_value* pss, _s_ll n __bmdx_noarg) __bmdx_noex { if (!pss) { return 0; } return _push_n(new_cp_seq(pss), n); }
+    template<class F> _s_long push_nf(const F& f, _s_ll n __bmdx_noarg) __bmdx_noex { return _push_n(f, n); }
 
       // Returns ref. to the last pushed element.
       // Generates an exception on no elements in queue.
@@ -3465,24 +3505,40 @@ namespace bmdx
     }
   #endif
 
-    // NOTE avg. max. sleep duration error depends on thread priority.
+    // NOTE avg. max. sleep duration error depends on thread priority and CPU load.
     //  On overloaded CPU, order of 160..40 ms for normal..time-critical priority.
     //  In normal conditions, order of 1 mcs.
   static void sleep_mcs(_s_ll t)
   {
     if (t < 0) { return; }
     if (t == 0) { SleepEx(0, 1); return; }
-    static _s_ll _tlagmcs(1000); // (mcs) max. detected lag of SleepEx call (real sleep time minus required)
-    double ft0 = clock_ms();
-    if (t - _tlagmcs < 1000) { do { SleepEx(0, 1); } while (clock_ms() - ft0 < t / 1000.); return; }
-    _s_ll t1 =  (t - _tlagmcs) / 1000; // in milliseconds
-    SleepEx(DWORD(t1), 1);
-    ft0 = clock_ms() - ft0;
-    _s_ll t2 = _s_ll(ft0 * 1000);
-    _s_ll t3 = t2 - t1 * 1000;
-    if (t3 > _tlagmcs) { _tlagmcs = t3; }
-    t3 = t - t2;
-    if (t3 > 0) { ft0 = clock_ms(); do { SleepEx(0, 1); } while (clock_ms() - ft0 < t3 / 1000.); }
+
+    enum { tms_lag_fact_min = 7 }; // measured sleep time variation, in normal conditions
+
+    const double ft0 = clock_ms();
+    const double ft2 = ft0 + double(t) / 1000;
+
+    static _s_ll _tlagmcs(tms_lag_fact_min * 1000);
+    const _s_ll lag1 = bmdx_str::words::atomrdal64(&_tlagmcs);
+    _s_ll lag2 = lag1;
+      const _s_ll dtms_whole =  (t - lag1) / 1000; // part of sleep time in whole milliseconds, can be spent without losing accuracy
+      if (dtms_whole > 0)
+      {
+
+        SleepEx(DWORD(dtms_whole), 1);
+
+        const double ft1 = clock_ms();
+        lag2 = _s_ll(1000 * (ft1 + tms_lag_fact_min - ft0 - double(dtms_whole)));
+        if (lag2 > lag1) { lag2 = (lag1 * 2 + lag2) / 3; }
+          else { lag2 = (lag1 * 7 + lag2) / 8; }
+      }
+      else if (lag2 > 1000)
+      {
+        lag2 = lag2 * 99 / 100;
+      }
+    if (lag2 != lag1) { bmdx_str::words::atomwral64(&_tlagmcs, lag2); }
+
+    while (clock_ms() < ft2) { SleepEx(0, 1); }
   }
 
 
@@ -3741,10 +3797,9 @@ template<class T, class _> _critsec_data0_t<T> _critsec_tu_static_t<T, _>::dat =
 #include <setjmp.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <errno.h>
 
-#ifdef __ANDROID__
-  #include <errno.h>
-#else
+#ifndef __ANDROID__
   #include <spawn.h>
 #endif
 
@@ -3755,6 +3810,20 @@ template<class T, class _> _critsec_data0_t<T> _critsec_tu_static_t<T, _>::dat =
 extern char **environ;
 namespace bmdx
 {
+    inline bool __bmdx_fcntl_set_nonblock(int fd, bool b = true)
+    {
+      int f = fcntl(fd, F_GETFL);
+      if (f != -1)
+      {
+        if (b) { f = fcntl(fd, F_SETFL, f | O_NONBLOCK); }
+          else {  f = fcntl(fd, F_SETFL, f & ~O_NONBLOCK); }
+      }
+      return f == 0;
+    }
+    inline bool __bmdx_fcntl_set_ocloexec(int fd)    { int f = fcntl(fd, F_GETFD); if (f != -1) { f = fcntl(fd, F_SETFD, f | FD_CLOEXEC); } return f == 0; }
+    inline bool __bmdx_fcntl_b_valid_fd(int fd) { return !(fcntl(fd, F_GETFD) == -1 && errno == EBADF); }
+    inline bool __bmdx_f_nfdmax() { long n = sysconf(_SC_OPEN_MAX); if (n < 0) { n = 4096; } return n; }
+
   #ifndef __bmdx__clock_ms
     #define __bmdx__clock_ms
 
@@ -3795,39 +3864,17 @@ namespace bmdx
 
   static void sleep_mcs(_s_ll t)
   {
-    #if !defined(__FreeBSD__) || (__FreeBSD__ >= 12)
       if (t < 0) { return; }
       timespec ts;
       if (t == 0) { ts.tv_sec = 0; ts.tv_nsec = 0; nanosleep(&ts, 0); return; }
-      double ft0 = clock_ms();
-      static _s_ll _tlagmcs(1); // (mcs) max. detected lag of nanosleep call (real sleep time minus required)
-      if (t - _tlagmcs < 10) { ts.tv_sec = 0; ts.tv_nsec = _s_long(t >= 10000000 ?  500000000 : t * 50); do { nanosleep(&ts, 0); } while (clock_ms() - ft0 < t / 1000.); return; }
-      _s_ll t1s =  (t - _tlagmcs) / 1000000; // in seconds
-      ts.tv_sec = time_t(t1s); ts.tv_nsec = 0;
+      _s_ll tns = t * 1000;
+      if (tns < 5000) { tns /= 2; }
+        else if (tns < 20000) { tns -= 1500;  }
+        else if (tns < 100000) { tns -= 3000; if (tns < 18500) { tns = 18500; } }
+        else if (tns < 1000000) { tns -= 5000; if (tns < 97000) { tns = 97000; }  }
+        else { tns -= 10000; if (tns < 995000) { tns = 995000; } }
+      ts.tv_sec = time_t(tns / 1000000000); ts.tv_nsec = long(tns % 1000000000);
       nanosleep(&ts, 0);
-      ft0 = clock_ms() - ft0;
-      _s_ll t2 = _s_ll(ft0 * 1000);
-      _s_ll t3 = t2 - t1s * 1000000;
-      if (t3 > _tlagmcs) { _tlagmcs = t3; }
-      t3 = t - t2;
-      if (t3 > 0) { ft0 = clock_ms(); ts.tv_sec = 0; ts.tv_nsec = _s_long(t3 >= 10000000 ?  500000000 : t3 * 50); do { nanosleep(&ts, 0); } while (clock_ms() - ft0 < t3 / 1000.); }
-    #else
-      if (t < 0) { return; }
-      timespec ts; ts.tv_sec = 0; ts.tv_nsec = 0;
-      if (t == 0) { nanosleep(&ts, 0); return; }
-      const double ft0 = clock_ms();
-      nanosleep(&ts, 0);
-      while (1)
-      {
-        _s_ll dt = t - _s_ll((clock_ms() - ft0) * 1000);
-        if (dt <= 0) { return; }
-        ts.tv_sec = dt / 1000000; ts.tv_nsec = (dt % 1000000) * 1000;
-// NOTE Frequent calls with small time hang/crash.
-//        if (dt >= 20) { ts.tv_sec = dt / 1000000; ts.tv_nsec = (dt % 1000000) * 1000; }
-//          else { ts.tv_sec = 0; ts.tv_nsec = 100; }
-        nanosleep(&ts, 0);
-      }
-    #endif
   }
 
 
@@ -4637,6 +4684,46 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
 
 
 
+
+
+
+
+namespace bmdx
+{
+    // Hints, controlling additional features of processctl::launch.
+  struct processctl_launch_hints
+  {
+      // See processctl::launch for description of this flag.
+    bool b_literal_args;
+
+      // dir_startup is non-empty:
+      //      If b_shell == false, the current directory of the launched process
+      //        will be set to dir_startup (should be full path, otherwise effect is undefined across platforms).
+      //      If b_shell == true, dir_startup is ignored.
+      // dir_startup is empty:
+      //      the new process starts in the current directory.
+    std::string dir_startup;
+
+    enum EPlspecPosixExecType
+    {
+      ppet_auto = 0,
+      ppet_fork = 1,
+      ppet_vfork = 2,
+        // NOTE ppet_posix_spawn works only posix_spawn is supoorted AND dir_startup is empty (== use current directory).
+      ppet_posix_spawn = 3,
+      _ppet_end
+    };
+      // Platform-specific hint.
+      //    1. By default (ppet_auto), launch() chooses the best suitable API for process start in particular OS.
+      //    2. If != ppet_auto, launch() is forcedly using particular API for process start.
+      //      If that API is not available or cannot do the job for some reason,
+      //      launch() fails (returns false).
+    EPlspecPosixExecType psx_force_exectype;
+
+    processctl_launch_hints() { b_literal_args = false; psx_force_exectype = ppet_auto; }
+  };
+}
+
 #ifdef _bmdxpl_Wnds
 
   namespace bmdx
@@ -4646,7 +4733,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
       struct ff_mc;
 
       bool has_ref() const __bmdx_noex { return !!_hp; }
-      operator bool() const __bmdx_noex { return !!_hp; }
+      operator bool() const __bmdx_noex { return has_ref(); }
 
         //  NOTE (Platform-dependent: This function is not protected against PID reuse.)
       bool is_running() const __bmdx_noex
@@ -4677,6 +4764,12 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
 
       void clear() __bmdx_noex { _pid = 0; _exited = false; if (_hp) { CloseHandle(_hp); _hp = 0; } if (_ht) { CloseHandle(_ht); _ht = 0; } }
 
+        // Terminates the process with TerminateProcess, but does not forget PID and handles.
+        // Returns:
+        //    true if PID was correct, and TerminateProcess() succeeded.
+        //    false in any other case.
+      bool terminate_dflt() {  return has_ref() && !!TerminateProcess(_hp, 1);  }
+
         // Creates new process and returns immediately.
         //
         // fnp_process with b_shell == false: must be full path and executable name (for CreateProcessA()).
@@ -4684,9 +4777,17 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
         //
         // args: program arguments, separated with null character ('\0').
         //    Arguments must not include executable name (i.e. first of args is equivalent to argv[1]).
-        //    Each argument will be pre-processed with arg1(),
+        //    Each argument is pre-processed with arg1(),
         //    so the client must not do any special processing (escaping etc.).
-        //    NOTE Empty args is treated as no arguments. There's no way to pass exactly one zero-length argument.
+        //    NOTE Empty args is treated as no arguments.
+        //      There's no way to pass exactly one zero-length argument.
+        //    NOTE In case of nested command (e.g. running cmd /k <command>),
+        //      when part or all the arguments should be passed into the inner command as is,
+        //      supply hints->b_literal_args = true.
+        //      This disables arg1().
+        //      Each of args, without modification, is appended to executable name, via space character.
+        //      Null characters, if occur in args, are replaced with space characters.
+        //      In Windows, b_literal_args acts similarly with any value of b_shell.
         //
         // b_shell false (dflt.):
         //    use CreateProcessA() to launch process.
@@ -4700,7 +4801,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
         //  Returned value:
         //    On success, launch() returns true.
         //    On failure, launch() returns false.
-      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false) __bmdx_noex
+      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false, const processctl_launch_hints* hints = 0) __bmdx_noex
       { try {
         clear();
         if (fnp_process.empty()) { return false; }
@@ -4710,13 +4811,23 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
         {
           pos2 = args.find('\0', pos);
           if (pos2 == end) { pos2 = args.length(); }
-          if (pos > 0) { a2 += ' '; } a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
-          if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
+          if (pos > 0) { a2 += ' '; }
+          if (hints && hints->b_literal_args)
+          {
+            a2 += args.substr(pos, pos2 - pos);
+            if (pos2 + 1 == args.length()) { a2 += ' '; }
+          }
+          else
+          {
+            a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
+            if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
+          }
           pos = pos2 + 1;
         }
+
         if (b_shell)
         {
-          std::string s = "start \"\" ";
+          std::string s = "start \" \" ";
           if (fnp_process[0] != '\"') { s += '\"'; }
           s += fnp_process;
           if (fnp_process[fnp_process.length() - 1] != '\"') { s += '\"'; }
@@ -4724,20 +4835,24 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
           int res = system(s.c_str());
           return res == 0;
         }
-        else
-        {
-          std::string s;
-          if (fnp_process.find(' ') != end) { s = "\"" + fnp_process + "\""; } else { s = fnp_process; }
-          if (a2.length()) { s += ' '; s += a2; }
-          STARTUPINFOA si; PROCESS_INFORMATION pi; ZeroMemory(&si, sizeof(si)); ZeroMemory(&pi, sizeof(pi));
-          BOOL res = CreateProcessA(fnp_process.c_str(), &s[0], 0, 0, FALSE, CREATE_NEW_CONSOLE, 0, 0, &si, &pi);
-          if (!res) { return false; }
-          _hp = pi.hProcess;
-          _ht = pi.hThread;
-          _pid = pi.dwProcessId;
-          _exited = false;
-          return true;
-        }
+
+        std::string s;
+        if (fnp_process.find(' ') != end) { s = "\"" + fnp_process + "\""; } else { s = fnp_process; }
+        if (a2.length()) { s += ' '; s += a2; }
+        STARTUPINFOA si; PROCESS_INFORMATION pi; ZeroMemory(&si, sizeof(si)); ZeroMemory(&pi, sizeof(pi));
+        BOOL res = CreateProcessA
+        (
+          fnp_process.c_str(), &s[0], 0, 0, FALSE, CREATE_NEW_CONSOLE,
+          0, (hints && hints->dir_startup.length()) ? hints->dir_startup.c_str() : 0,
+          &si, &pi
+        );
+        if (!res) { return false; }
+        _hp = pi.hProcess;
+        _ht = pi.hThread;
+        _pid = pi.dwProcessId;
+        _exited = false;
+        return true;
+
       } catch (...) { return false; } }
 
         // Waits for the launched process completion, return its exit code or termination code.
@@ -4771,15 +4886,15 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
           //  b_shell true replaces CR and LF characters with ' ', intended for passing single line into system().
           //  In all cases, horz./vert. tab. and formfeed characters are kept.
           //  Other ASCII control characters (0..31) are replaced with '?'.
-        std::string arg1(const std::string& s, bool b_shell = false)
+        std::string arg1(const arrayref_t<char>& s, bool b_shell = false)
         {
           bool b = false;
-          for (size_t i = 0; i < s.length(); ++i)
+          for (_s_ll i = 0; i < s.length(); ++i)
             { if ( ! ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9') || s[i] == '-' || s[i] == '_' || s[i] == '.') )
               { b = true; break; } }
-          if (!b && !(b_shell && s.empty())) { return s; }
+          if (!b && !(b_shell && s.is_empty())) { return s.str(); }
 
-          std::string z = s; b = b_shell;
+          std::string z; if (s.is_nonempty()) { z.assign(s.pd(), s._end_u()); } b = b_shell;
           for (size_t i = 0; i < z.length(); ++i)
             { if (z[i] >= 0 && z[i] < 32) { switch(z[i]) { case '\r': case '\n': if (b) { z[i] = ' '; } break; case '\t': case '\v': case '\f': break; default: z[i] = '?'; break; } } }
 
@@ -4842,54 +4957,74 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
     extern "C" typedef void (*PF_threadctl_terminate_hsig)(int);
 
     extern "C" typedef void (*PF_processctl_handler_sigchld)(int, siginfo_t*, void*);
-    static void _processctl_handler_sigchld(int, siginfo_t*, void*) { pid_t p; do { p = waitpid(-1, NULL, WNOHANG); } while (p != (pid_t)0 && p != (pid_t)-1); }
+    static void _processctl_handler_sigchld(int, siginfo_t*, void*) { pid_t p; do { p = waitpid((pid_t)-1, NULL, WNOHANG); } while (p != (pid_t)0 && p != (pid_t)-1); }
     static bool& _processctl_has_sigchld() { struct _deinit { ~_deinit() { _processctl_handler_sigchld(0, 0, 0); } }; static bool b(false); static _deinit x1; if (sizeof(x1)) {} return b; }
 
     struct processctl
     {
       struct ff_mc;
 
-      bool has_ref() const __bmdx_noex { return _pid > 0; }
-      operator bool() const __bmdx_noex { return _pid > 0; }
+      bool has_ref() const __bmdx_noex { return (_s_ll)_pid > 0; }
+      operator bool() const __bmdx_noex { return has_ref(); }
 
         //  NOTE This function is not protected against PID reuse.
       bool is_running() const __bmdx_noex
       {
         if (!has_ref()) { return false; }
-        int res = kill(pid_t(_pid), 0);
+        int res = kill(_pid, 0);
         return res == 0;
       }
 
         // On has_ref() == true, pid() has meaningful value.
       typedef pid_t t_pid;
-      t_pid pid() const __bmdx_noex { return t_pid(_pid); }
+      t_pid pid() const __bmdx_noex { return _pid; }
 
-      processctl() __bmdx_noex : _pid(-1) {}
+      processctl() __bmdx_noex : _pid((pid_t)-1) {}
       ~processctl() __bmdx_noex { clear(); }
 
-      void clear() __bmdx_noex { _pid = -1; if (_processctl_has_sigchld()) { _processctl_handler_sigchld(0, 0, 0); } }
+      void clear() __bmdx_noex { _pid = (pid_t)-1; if (_processctl_has_sigchld()) { _processctl_handler_sigchld(0, 0, 0); } }
+
+        // Terminates the process with SIGKILL, but does not forget PID.
+        // Returns:
+        //    true if PID was correct, and kill() succeeded.
+        //    false in any other case.
+      bool terminate_dflt() {  return has_ref() && 0 == kill(_pid, SIGTERM);  }
 
         // Creates new process and returns immediately.
         //
         // fnp_process with b_shell == false: must be full path and executable name (for posix_spawn()).
         //    fnp_process with b_shell == true: must be executable path and name in any form (for system()).
         //
-        // args: program arguments, separated with null character ('\0').
-        //    Arguments must not include executable name (i.e. first of args is equivalent to argv[1]).
-        //    Each argument will be pre-processed with arg1() as necessary,
-        //    so the client must not do any special processing (escaping etc.).
-        //    NOTE Empty args is treated as no arguments. There's no way to pass exactly one zero-length argument.
-        //
         // b_shell false (dflt.):
-        //    use posix_spawn() to launch process.
+        //      use posix_spawn() to launch process.
+        //  args: program arguments, separated with null character ('\0').
+        //    (The last argument should not be appended with null character.)
+        //    Arguments must not include executable name (i.e. first of args is equivalent to argv[1]).
+        //    All arguments are passed without pre-processing,
+        //      except for non-whitespace ASCII characters in range 1..31
+        //      being replaced with '?'.
+        //    NOTE Empty args is treated as no arguments.
+        //      There's no way to pass exactly one zero-length argument.
+        //    NOTE On b_shell == false, hints->b_literal_args is ignored.
         //    NOTE launch() with b_shell == false sets custom SIGCHLD handler.
         //  Returned value:
         //    On success, launch() returns true. Also, has_ref() and pid() reflect the result.
         //    On failure, launch() returns false. Also, has_ref() == false, and pid() value is not valid.
         //
         // b_shell true:
-        //    use system("... &") to launch process (asynchronously).
+        //      use system("... &") to launch process (asynchronously).
         //    In this case, has_ref() == false, and pid() value is not valid.
+        //  args: program arguments, separated with null character ('\0').
+        //    (The last argument does not need to be appended with null character.)
+        //    Arguments must not include executable name (i.e. first of args is equivalent to argv[1]).
+        //    Each argument is pre-processed with arg1(),
+        //    so the client must not do any special processing (escaping etc.).
+        //    NOTE On b_shell == true, in case of nested command,
+        //      when part or all the arguments should be passed into the inner command as is,
+        //      supply hints->b_literal_args = true.
+        //      This disables arg1().
+        //      Each of args, without modification, is appended to executable name, via space character.
+        //      Null characters, if occur in args, are replaced with space characters.
         //  Returned value:
         //    On success, launch() returns true.
         //    On failure, launch() returns false.
@@ -4900,7 +5035,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
           #define bmdx_processctl_allowshell 1
         #endif
       #endif
-      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false) __bmdx_noex
+      bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false, const processctl_launch_hints* hints = 0) __bmdx_noex
       { try {
         clear();
         if (fnp_process.empty()) { return false; }
@@ -4917,8 +5052,17 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
             {
               pos2 = args.find('\0', pos);
               if (pos2 == end) { pos2 = args.length(); }
-              if (pos > 0) { a2 += ' '; } a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
-              if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
+              if (pos > 0) { a2 += ' '; }
+              if (hints && hints->b_literal_args)
+              {
+                a2 += args.substr(pos, pos2 - pos);
+                if (pos2 + 1 == args.length()) { a2 += ' '; }
+              }
+              else
+              {
+                a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
+                if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
+              }
               pos = pos2 + 1;
             }
             std::string s;
@@ -4940,53 +5084,235 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
             return false;
           #endif
         }
-        else
+
+        std::string z = args;
+            for (size_t i = 0; i < z.length(); ++i)
+              { if (z[i] >= 0 && z[i] < 32) { switch(z[i]) { case '\0': case '\r': case '\n': case '\t': case '\v': case '\f': break; default: z[i] = '?'; break; } } }
+        std::basic_string<char*> a2;
+        std::string sp = fnp_process;
+        a2 += &sp[0];
+        size_t pos = 0, pos2 = 0, end = std::string::npos;
+        while (pos < z.length())
         {
-          std::string z = args;
-              for (size_t i = 0; i < z.length(); ++i)
-                { if (z[i] >= 0 && z[i] < 32) { switch(z[i]) { case '\0': case '\r': case '\n': case '\t': case '\v': case '\f': break; default: z[i] = '?'; break; } } }
-          std::basic_string<char*> a2;
-          std::string sp = fnp_process;
-          a2 += &sp[0];
-          size_t pos = 0, pos2 = 0, end = std::string::npos;
-          while (pos < z.length())
-          {
-            pos2 = z.find('\0', pos);
-            if (pos2 == end) { pos2 = z.length(); }
-            if (pos2 - pos >= 1) { a2 += &z[pos]; }
-            pos = pos2 + 1;
-          }
-          a2 += (char*)0;
-
-          struct sigaction act; std::memset(&act, 0, sizeof(act)); act.sa_sigaction = (PF_processctl_handler_sigchld)&_processctl_handler_sigchld; sigemptyset(&act.sa_mask); act.sa_flags = SA_NOCLDSTOP|SA_RESTART|SA_SIGINFO;
-          sigaction(SIGCHLD, &act, NULL);
-          _processctl_has_sigchld() = true;
-
-          struct _local1
-          {
-            static inline int spawn(pid_t* pid, const char* path, char* const argv[], char* const envp[])
-            #ifdef __ANDROID__
-              {
-                volatile int error = 0; pid_t p = vfork();
-                switch (p)
-                {
-                  case -1: return errno;
-                  case 0: execve(path, argv, envp); error = errno; _exit(127);
-                  default:
-                    if (error != 0) { waitpid(p, NULL, WNOHANG); } else { if (pid != NULL) { *pid = p; } }
-                    return error;
-                }
-              }
-            #else
-              { return posix_spawn(pid, path, 0, 0, argv, envp); }
-            #endif
-          };
-          pid_t __pid;
-          int res = _local1::spawn(&__pid, &sp[0], &a2[0], environ);
-          if (res != 0) { return false; }
-          _pid = __pid;
-          return true;
+          pos2 = z.find('\0', pos);
+          if (pos2 == end) { pos2 = z.length(); }
+          if (pos2 - pos >= 1) { a2 += &z[pos]; }
+          pos = pos2 + 1;
         }
+        a2 += (char*)0;
+
+        // ================
+
+        struct sigaction act;
+          std::memset(&act, 0, sizeof(act));
+          sigemptyset(&act.sa_mask);
+            // Disable SIGCHLD on clild stop/resume
+            // Resume I/O function after sig. handler exits
+            // Use 3-argument handler for SIGCHLD.
+          act.sa_flags = SA_NOCLDSTOP | SA_RESTART | SA_SIGINFO;
+          act.sa_sigaction = (PF_processctl_handler_sigchld)&_processctl_handler_sigchld;
+        sigaction(SIGCHLD, &act, NULL);
+        _processctl_has_sigchld() = true;
+
+        // ================
+
+        typedef bmdx::processctl_launch_hints t_h;
+        struct _exec_process
+        {
+          inline int f(t_h::EPlspecPosixExecType t_exec, const char* pfnp_exe, const char* pstartup_path, char* const argv[], char* const envp[], pid_t* pret_pid = 0)
+          {
+            if (!(pfnp_exe && pfnp_exe[0]))
+              { return -1; }
+            const char* volatile ppstartup = pstartup_path && pstartup_path[0] ? pstartup_path : 0;
+            volatile long nfdmax = __bmdx_f_nfdmax();
+
+            if (t_exec == t_h::ppet_auto)
+            {
+              #if defined(__GLIBC__) && __bmdx_cfg_allow_vfork
+                t_exec = t_h::ppet_vfork;
+              #else
+                t_exec = t_h::ppet_fork;
+                if (!ppstartup) { t_exec = t_h::ppet_vfork; }
+              #endif
+            }
+
+            if (t_exec == t_h::ppet_vfork)
+            {
+              volatile int error = 0;
+              struct sigaction act1, act2;
+              sigset_t sigm_empty, sigm1, sigm2;
+              sigfillset(&sigm2);
+              pthread_sigmask (SIG_BLOCK, &sigm2, &sigm1);
+                volatile pid_t p2 = vfork();
+                  if (p2 == 0)
+                  {
+                    act2.sa_handler = SIG_DFL;
+                    if (sigemptyset(&sigm_empty) != 0)
+                      { _exit(EXIT_FAILURE); }
+                    act2.sa_mask = sigm_empty;
+                    act2.sa_flags = 0;
+                    #if !(defined(__FreeBSD__) || defined(__SUNPRO_CC) || defined(__sun) || (__APPLE__ && __MACH__))
+                      act2.sa_restorer = 0;
+                    #endif
+                    for (int i = 0; i < NSIG; ++i)
+                    {
+                      if (0 == sigaction(i, 0, &act1) && act1.sa_handler != SIG_IGN && act1.sa_handler != SIG_DFL)
+                      {
+                          if (0 != sigaction(i, &act2, NULL) && errno != EINVAL)
+                            { _exit (EXIT_FAILURE); }
+                      }
+                    }
+                    pthread_sigmask (SIG_SETMASK, &sigm1, 0);
+
+                    for (long fd = 3; fd < nfdmax; ++fd)
+                      { close(fd); }
+                    if (ppstartup && chdir(ppstartup) != 0)
+                      { _exit(EXIT_FAILURE); }
+
+                    execve(pfnp_exe, argv, envp);
+
+                    error = 1;
+                    _exit(EXIT_FAILURE);
+                  }
+              pthread_sigmask (SIG_SETMASK, &sigm1, 0);
+
+              if (p2 == (pid_t)-1)  { return -2; }
+              if (error != 0) { waitpid(p2, NULL, WNOHANG); }
+                else { if (pret_pid != NULL) { *pret_pid = p2; } }
+
+              return error == 0 ? 1 : -2;
+            }
+
+            if (t_exec == t_h::ppet_fork)
+            {
+              int pipefds[2] = { -1, -1 };
+              #if defined(__SUNPRO_CC) || defined(__sun) || (__APPLE__ && __MACH__)
+                if (0 != pipe(pipefds))
+                  { return -2; }
+                if (!(__bmdx_fcntl_set_ocloexec(pipefds[0]) && __bmdx_fcntl_set_ocloexec(pipefds[1])))
+                  { close(pipefds[0]); close(pipefds[1]); return -2; }
+              #else
+                if (0 != pipe2(pipefds, O_CLOEXEC))
+                  { return -2; }
+              #endif
+              if (!__bmdx_fcntl_set_nonblock(pipefds[0]))
+                { close(pipefds[0]); close(pipefds[1]); return -2; }
+
+              volatile pid_t p2 = fork();
+
+              if (p2 == 0)
+              {
+                bool b_error = false;
+
+                for (long fd = 3; fd < nfdmax; ++fd)
+                  { if (fd != pipefds[1]) { close(fd); } }
+
+                if (!b_error && ppstartup && chdir(ppstartup) != 0)
+                  { b_error = true; }
+
+                if (!b_error) { execve(pfnp_exe, argv, envp); b_error = true; }
+
+                char error = 1;
+                ssize_t _z = write(pipefds[1], &error, 1); if (_z) {}
+                close(pipefds[1]);
+
+                _exit(EXIT_FAILURE);
+              }
+
+              close(pipefds[1]);
+              int res = -2;
+              do { // once
+
+                if (p2 == (pid_t)-1)
+                { break; }
+                const double tmo_ms = 500;
+                const double t0 = clock_ms();
+                bool b_tmo = false;
+                bool b_error = false;
+                  while (1)
+                  {
+                    if (clock_ms() - t0 >= tmo_ms) { b_tmo = true; break; }
+                    char buf = 0;
+                    int nb = read(pipefds[0], &buf, 1);
+                      if (nb > 0) { b_error = true; break; }
+                      if (nb == 0) { break; }
+                      if (nb == -1 && !(errno == EAGAIN || errno == EWOULDBLOCK)) { break; }
+                    sleep_mcs(100);
+                  }
+                  if (b_tmo || b_error)
+                    { break; }
+
+                if (pret_pid != NULL) { *pret_pid = p2; }
+                res = 1;
+
+              } while (false);
+
+              close(pipefds[0]);
+              return res;
+            }
+
+            if (t_exec == t_h::ppet_posix_spawn)
+            {
+              #if defined(__ANDROID__)
+                return -2;
+              #else
+                if (ppstartup) { return -2; } // setting the startup directory is not supported by posix_spawn
+                posix_spawn_file_actions_t a;
+                  if (0 != posix_spawn_file_actions_init(&a)) {  return -2; }
+                const long nfdmax = __bmdx_f_nfdmax();
+                const long nfdextra = 50;
+                long nfdfree = 0;
+                long imaxbusy = 2;
+                long imaxadded = 2;
+                bool b_error = false;
+                int res = -2;
+                  // NOTE Closing file descriptors in child process is not 100% protected from race conditions,
+                  //  some of descriptors, concurrently created while the below code is executed, may be left open.
+                do { // once
+                  for (long i = 3; i < nfdmax; ++i)
+                  {
+                    bool b_free = !__bmdx_fcntl_b_valid_fd(i);
+                    if (b_free) { ++nfdfree; }
+                    if (!b_free) { imaxbusy = i; }
+                    if (!b_free || nfdfree <= nfdextra)
+                    {
+                      imaxadded = i;
+                      if (0 != posix_spawn_file_actions_adddup2(&a, 0, i)) { b_error = true; break; }
+                      if (0 != posix_spawn_file_actions_addclose(&a, i)) { b_error = true; break; }
+                    }
+                  }
+                  if (b_error) { break; }
+
+                  const long i20 = 1 + (imaxadded > imaxbusy ? imaxadded : imaxbusy);
+                  long n2 = 0;
+                  for (long i = i20; i < nfdmax; ++i)
+                  {
+                    if (0 != posix_spawn_file_actions_adddup2(&a, 0, i)) { b_error = true; break; }
+                    if (0 != posix_spawn_file_actions_addclose(&a, i)) { b_error = true; break; }
+                    n2 += 1;
+                    if (n2 >= nfdextra) { break; }
+                  }
+                  if (b_error) { break; }
+
+                  int res2 = posix_spawn(pret_pid, pfnp_exe, &a, 0, argv, envp);
+                    res = res2 == 0 ? 1 : -2;
+
+                } while (false);
+                posix_spawn_file_actions_destroy(&a);
+                return res;
+              #endif
+            }
+
+            return -1;
+          }
+        };
+
+        pid_t __pid;
+        int res = _exec_process().f(hints ? hints->psx_force_exectype : t_h::ppet_auto, &sp[0], hints ? hints->dir_startup.c_str() : 0, &a2[0], environ, &__pid);
+          if (res < 1) { return false; }
+        _pid = __pid;
+        return true;
+
       } catch (...) { return false; } }
 
         // Waits for the launched process completion, return its exit code or termination code.
@@ -4999,19 +5325,19 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
         //    -2 - failure, process may exist, but its state is undefined. *ret_pec not changed.
       int wait_exit(long* ret_pec = 0) __bmdx_noex
       {
-        if (_pid == -2) { if (ret_pec) { *ret_pec = 0; } return 0; }
-        if (_pid < 0) { return -1; }
+        if (_pid == (pid_t)-2) { if (ret_pec) { *ret_pec = 0; } return 0; }
+        if (!has_ref()) { return -1; }
         int st;
-        long res = waitpid(pid_t(_pid), &st, 0);
+        pid_t res = waitpid(_pid, &st, 0);
         if (res == _pid)
         {
-          _pid = -2;
+          _pid = (pid_t)-2;
           if (WIFEXITED(st)) { if (ret_pec) { *ret_pec = long(WEXITSTATUS(st)); } return 2; }
           if (WIFSIGNALED(st)) { if (ret_pec) { *ret_pec = long(WTERMSIG(st)); } return 1; }
           return -2;
         }
-        if (res != -1) { return -2; }
-        _pid = -2; if (ret_pec) { *ret_pec = 0; }
+        if (res != (pid_t)-1) { return -2; }
+        _pid = (pid_t)-2; if (ret_pec) { *ret_pec = 0; }
         return 0;
       }
 
@@ -5055,7 +5381,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
       };
 
     private:
-      long _pid;
+      pid_t _pid;
     };
 
 
@@ -5605,7 +5931,7 @@ namespace bmdx
 
         // Copying and assignment do not generate exceptions,
         //  because the reference remains valid and locked.
-      safe_refnc(const safe_refnc& x) __bmdx_noex        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
+      safe_refnc(const safe_refnc& x __bmdx_noarg) __bmdx_noex        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
       void operator=(const safe_refnc& x) __bmdx_noex    { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
     private:
       static T& _ref(const cref_t& r __bmdx_noarg) __bmdx_exs(exc_ref_ts)    { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
@@ -5674,8 +6000,8 @@ namespace bmdx
 
       // Return a pointer to the crit. sec. data object, that is used by this cref_t for locking (if locking is not disabled).
       //  The returned pointer is non-0.
-    _critsec_data0_t<LockSelector>* pcsd0() const __bmdx_noex    { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
-    typename critsec_t<LockSelector>::csdata* pcsd() const __bmdx_noex    { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
+    _critsec_data0_t<LockSelector>* pcsd0(__bmdx_noarg1) const __bmdx_noex    { if (_ps) { return _ps; } if (_ph && _ph->b_v2()) { return _s_ph2(_ph)->pcsd; } return typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
+    typename critsec_t<LockSelector>::csdata* pcsd(__bmdx_noarg1) const __bmdx_noex    { return static_cast<typename critsec_t<LockSelector>::csdata*>(pcsd0()); }
 
       // Returns true is this object actually uses locking, false otherwise.
     bool b_cs() const { if (!t_lock::does_locking()) { return false; } t_lock __lock(*this); if (sizeof(__lock)) {} if (_ph && _ph->b_v2()) { return !!_ps; } return true; }
@@ -5710,7 +6036,7 @@ namespace bmdx
 
       // Copy object, and own the new copy.
       //  (The copy is automatically deleted when the last owning cref_t object is cleared, deleted or overwritten.)
-    cref_t(const T& x, bool no_exc)
+    cref_t(const T& x, bool no_exc __bmdx_noarg)
       : _ph(0), _p(0), _ps(typename critsec_t<LockSelector>::ff_mc().pdefcsd())
       { copy(x, no_exc); }
 
@@ -5718,24 +6044,24 @@ namespace bmdx
       //  NOTE: on is_own_ == true,
       //    1) x must have been created dynamically.
       //    2) the current cref object must be the first existing owner.
-    cref_t(const T& x, bool is_own_, bool no_exc)
+    cref_t(const T& x, bool is_own_, bool no_exc __bmdx_noarg)
       : _ph(0), _p(0), _ps(typename critsec_t<LockSelector>::ff_mc().pdefcsd())
       { if (is_own_) { _ph = (_cref_handle*)_new_pcnt(1); if (!_ph) { if (!no_exc) { throw exc_cc3(); }  return; } } _p = &x; }
 
       // Create a cross-module reference. Copy x, and own the new copy.
       //    The resulting cref_t may be thread-safely copied and passed across binary module boundary.
       // pcsd, flags: see cm_copy.
-    cref_t(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)
+    cref_t(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc __bmdx_noarg)
       : _ph(0), _p(0), _ps(pcsd ? pcsd : typename critsec_t<LockSelector>::ff_mc().pdefcsd())
       { cm_copy(x, pcsd, flags, no_exc); }
 
 
       // NOTE The following 6 functions do not throw exceptions.
-    cref_t() __bmdx_noex
+    cref_t(__bmdx_noarg1) __bmdx_noex
       : _ph(0), _p(0), _ps(typename critsec_t<LockSelector>::ff_mc().pdefcsd())
       {}
 
-    cref_t(const cref_t& x) __bmdx_noex
+    cref_t(const cref_t& x __bmdx_noarg) __bmdx_noex
       : _ph(0), _p(0), _ps(0)
       {
         t_lock __lock(x); _ps = x._ps; if (sizeof(__lock)) {}
@@ -5755,7 +6081,7 @@ namespace bmdx
 
       // NOTE Clearing does not change the critical section used for object locking, only ensures it to be non-0.
       //  Assign another empty cref_t instead of clear(), for guaranteed setting the default critical section.
-    void clear() __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
+    void clear(__bmdx_noarg1) __bmdx_noex    { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
       // Same as clear(), but does not delete the object if it's strongly referenced.
       //    The client becomes responsible for object lifetime.
@@ -5786,7 +6112,7 @@ namespace bmdx
       //    If the last strong ref. was changed to weak, the object may be deleted,
       //    but its pointer is still kept.
       // NOTE assign() does not copy x in any way. Do not pass temporary object as x.
-    bool assign(const T& x, bool is_own_, bool no_exc)
+    bool assign(const T& x, bool is_own_, bool no_exc __bmdx_noarg)
     {
       t_lock __lock(*this); if (sizeof(__lock)) {}
       if (&x == _p)
@@ -5812,7 +6138,7 @@ namespace bmdx
       //  The present cref_t object lock is set only after,
       //  when setting the new object reference in the cref_t object.
       //  If locking during copying is necessary, use cm_copy with pcsd == 0.
-    bool copy(const T& x, bool no_exc)
+    bool copy(const T& x, bool no_exc __bmdx_noarg)
     {
       t_cnt* pcnt2(0); const T* p2(0);
       try { p2 = new T(x); } catch (...) {} pcnt2 = _new_pcnt(1);
@@ -5835,7 +6161,7 @@ namespace bmdx
       //    or generates exception on failure with no_exc == false.
       //    On failure, the current reference is kept.
       // NOTE cm_assign() does not copy x in any way. Do not pass temporary object as x.
-    bool cm_assign(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)
+    bool cm_assign(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc __bmdx_noarg)
     {
       if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
       _cref_handle* ph2 = _new_ph(1, flags);
@@ -5869,7 +6195,7 @@ namespace bmdx
       //    On failure, the current reference is kept.
       //  NOTE The binary module that has created the object copy, must remain valid (prevent unloading)
       //  until its last object is released, no matter in which module it's used.
-    bool cm_copy(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)
+    bool cm_copy(const T& x, typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc __bmdx_noarg)
     {
       if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); }
       _cref_handle* ph2 = _new_ph(1, flags);
@@ -5891,48 +6217,48 @@ namespace bmdx
       //    On success, the previous object reference is correctly removed, and the new is set on its place.
       //    On failure, the previous object reference remains unchanged.
       // NOTE create1 with A1 == T behaves same as copy().
-    bool create0(bool no_exc)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create0(); } return false; }
-    template<class A1> bool create1(bool no_exc, const A1& x1)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
-    template<class A1, class A2> bool create2(bool no_exc, const A1& x1, const A2& x2)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
-    template<class A1, class A2, class A3> bool create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
-    template<class A1, class A2, class A3, class A4> bool create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5> bool create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
+    bool create0(bool no_exc __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create0(); } return false; }
+    template<class A1> bool create1(bool no_exc, const A1& x1 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
+    template<class A1, class A2> bool create2(bool no_exc, const A1& x1, const A2& x2 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
+    template<class A1, class A2, class A3> bool create3(bool no_exc, const A1& x1, const A2& x2, const A3& x3 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
+    template<class A1, class A2, class A3, class A4> bool create4(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool create5(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
 
           // Same as create#(), but calling T constructor with all arguments cast to non-const.
-        template<class A1> bool create1nc(bool no_exc, const A1& x1)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
-        template<class A1, class A2> bool create2nc(bool no_exc, const A1& x1, const A2& x2)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
-        template<class A1, class A2, class A3> bool create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
-        template<class A1, class A2, class A3, class A4> bool create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5> bool create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
+        template<class A1> bool create1nc(bool no_exc, const A1& x1 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create1(); } return false; }
+        template<class A1, class A2> bool create2nc(bool no_exc, const A1& x1, const A2& x2 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create2(); } return false; }
+        template<class A1, class A2, class A3> bool create3nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create3(); } return false; }
+        template<class A1, class A2, class A3, class A4> bool create4nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create4(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool create5nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create5(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool create6nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create6(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool create7nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create7(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool create8nc(bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8 __bmdx_noarg)    { t_lock __lock(*this); if (sizeof(__lock)) {} t_cnt* pcnt2(0); const T* p2(0); try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} pcnt2 = _new_pcnt(1); if (p2 && pcnt2) { _reset(); _p = p2; _ph = (_cref_handle*)pcnt2; return true; } try { delete p2; } catch (...) {} _del_pcnt(pcnt2); if (!no_exc) { throw exc_create8(); } return false; }
 
       // Cross-module object creation with 0..8 arguments.
       // pcsd, flags, no_exc: see cm_copy.
       // NOTE If flags contain disable_des (0x2), the client is responsible for deleting the object after the last reference destruction.
-    bool cm_create0(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(); } catch (...) {} } else { try { p2 = new T(); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create0(); } return false; }
-    template<class A1> bool cm_create1(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1); } catch (...) {} } else { try { p2 = new T(x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
-    template<class A1, class A2> bool cm_create2(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2); } catch (...) {} } else { try { p2 = new T(x1, x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
-    template<class A1, class A2, class A3> bool cm_create3(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3); } catch (...) {} } else { try { p2 = new T(x1, x2, x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
-    template<class A1, class A2, class A3, class A4> bool cm_create4(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5> bool cm_create5(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
-    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
+    bool cm_create0(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(); } catch (...) {} } else { try { p2 = new T(); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create0(); } return false; }
+    template<class A1> bool cm_create1(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1); } catch (...) {} } else { try { p2 = new T(x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
+    template<class A1, class A2> bool cm_create2(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2); } catch (...) {} } else { try { p2 = new T(x1, x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
+    template<class A1, class A2, class A3> bool cm_create3(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3); } catch (...) {} } else { try { p2 = new T(x1, x2, x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
+    template<class A1, class A2, class A3, class A4> bool cm_create4(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5> bool cm_create5(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
+    template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } else { try { p2 = new T(x1, x2, x3, x4, x5, x6, x7, x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
 
           // Same as cm_create#(), but calling T constructor with all arguments cast to non-const.
-        template<class A1> bool cm_create1nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1); } catch (...) {} } else { try { p2 = new T((A1&)x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
-        template<class A1, class A2> bool cm_create2nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
-        template<class A1, class A2, class A3> bool cm_create3nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
-        template<class A1, class A2, class A3, class A4> bool cm_create4nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5> bool cm_create5nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
-        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
+        template<class A1> bool cm_create1nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1); } catch (...) {} } else { try { p2 = new T((A1&)x1); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create1(); } return false; }
+        template<class A1, class A2> bool cm_create2nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create2(); } return false; }
+        template<class A1, class A2, class A3> bool cm_create3nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create3(); } return false; }
+        template<class A1, class A2, class A3, class A4> bool cm_create4nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create4(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5> bool cm_create5nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create5(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6> bool cm_create6nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create6(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7> bool cm_create7nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create7(); } return false; }
+        template<class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8> bool cm_create8nc(typename critsec_t<LockSelector>::csdata* pcsd, _s_long flags, bool no_exc, const A1& x1, const A2& x2, const A3& x3, const A4& x4, const A5& x5, const A6& x6, const A7& x7, const A8& x8 __bmdx_noarg)    { if (!pcsd) { pcsd = typename critsec_t<LockSelector>::ff_mc().pdefcsd(); } _cref_handle* ph2 = _new_ph(1, flags); if (ph2) { const T* p2(0); if (!!(flags & 4)) { t_lock __lock(true, pcsd); if (sizeof(__lock)) {} try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } else { try { p2 = new T((A1&)x1, (A2&)x2, (A3&)x3, (A4&)x4, (A5&)x5, (A6&)x6, (A7&)x7, (A8&)x8); } catch (...) {} } if (p2) { t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = p2; _ph = ph2; _ps = pcsd; return true; } _del_ph(ph2); } if (!no_exc) { throw exc_create8(); } return false; }
 
     template<class I, class LS = I, class _ = __vecm_tu_selector> struct iref
     {
@@ -6936,6 +7262,9 @@ namespace bmdx
       #else
         if (is_ex_file(pfilename)) { if (can_wrcr) { _desc = ::fopen(pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { _desc = ::fopen(pfilename, "rb"); _res = _desc ? 1 : -1; } }
           else { if (can_wrcr) { _desc = ::fopen(pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
+        #ifdef _bmdxpl_Psx
+          if (_desc) { __bmdx_fcntl_set_ocloexec(fileno(_desc)); }
+        #endif
       #endif
       _mode = can_wrcr ? 2 : 1;
       if (_res == 1) { std::setvbuf(_desc, 0, _IOFBF, _nwrchunk); }
@@ -7185,7 +7514,6 @@ namespace bmdx
   #elif defined(__FreeBSD__)
   #elif defined(__SUNPRO_CC) || defined(__sun)
     #include <thread.h>
-    #include <errno.h>
   #elif defined(__ANDROID__)
     #include <sys/socket.h>
     #include <sys/un.h>
@@ -7335,9 +7663,6 @@ using namespace bmdx_str::words;
       _res = -2; return _res;
     }
 
-      // Sets non-blocking behavior for file or socket descriptor.
-    static bool fcntl_set_nonblock(int fd)    { int f = fcntl(fd, F_GETFL); if (f != -1) { f = fcntl(fd, F_SETFL, f | O_NONBLOCK); } return f == 0; }
-
       // Try to automatically create a socket, bind/listen/accept or connect.
       // 1 - done. try_send, try_receive ready to transfer data.
       // -1 - Server: no peer connected yet (accept returned "wait" state). Client: server is not responding (does not exist?), or connection pending. Maybe sleep and retry.
@@ -7350,7 +7675,7 @@ using namespace bmdx_str::words;
         if (_state == 0)
         {
           _h1 = ::socket(PF_LOCAL, SOCK_STREAM, 0);
-          if (!fcntl_set_nonblock(_h1)) { close_h1h2(); _res = -3; return _res; }
+          if (!__bmdx_fcntl_set_nonblock(_h1)) { close_h1h2(); _res = -3; return _res; }
           int res_b = ::bind(_h1, (sockaddr*)&_a, sizeof(sa_family_t) + size_t(_name.n()));
           int res_l = ::listen(_h1, 20);
           if (res_b || res_l) { close_h1h2(); _res = -3; return _res; }
@@ -7369,7 +7694,7 @@ using namespace bmdx_str::words;
         if (_state == 0)
         {
           _h2 = ::socket(PF_LOCAL, SOCK_STREAM, 0);
-          if (!fcntl_set_nonblock(_h2)) { close_h1h2(); _res = -3; return _res; }
+          if (!__bmdx_fcntl_set_nonblock(_h2)) { close_h1h2(); _res = -3; return _res; }
           _state = 1;
         }
         if (_state == 1)
@@ -7448,7 +7773,7 @@ using namespace bmdx_str::words;
       //  -2 - failure.
     int fd_remove(const t_name& name_orig) __bmdx_noex    { return ((p_fd_remove)pff[2])(*this, name_orig); }
 
-      // Remove all names and search tasks, stop (join with) service thread.
+      // Finally remove all names and search tasks, stop service thread.
     void reset(bool b_wait) __bmdx_noex    { ((p_reset)pff[3])(*this, b_wait); }
 
     _fd_sharing() { pff[0] = (void*)&_fd_search; pff[1] = (void*)&_fd_expose; pff[2] = (void*)&_fd_remove; pff[3] = (void*)&_reset; }
@@ -7506,8 +7831,27 @@ private:
       }
     };
     typedef std::map<t_name, cref_t<job> > t_map1;
-    inline static cref_t<t_map1> rmap1() { static bool b_des = false; if (b_des) { return cref_t<t_map1>(); } static cref_t<t_map1> x; static struct _local_des { ~_local_des() { b_des = true; } } __des; if (!x) { x.cm_create0(0, 0, 1); } return x; }
-    inline static cref_t<threadctl> rth() { static bool b_des = false; if (b_des) { return cref_t<threadctl>(); } static cref_t<threadctl> x; static struct _local_des { ~_local_des() { b_des = true; _fd_sharing().reset(true); } } __des; if (!x) { x.cm_create0(0, 0, 1); } if (x && !x.ref()) { x._pnonc_u()->start_auto<_th>(int(0)); } return x; }
+    inline static cref_t<t_map1> rmap1()
+    {
+      static bool b_des = false;
+      if (b_des) { return cref_t<t_map1>(); }
+      static cref_t<t_map1> x;
+      struct _local_des { ~_local_des() { b_des = true; } };
+      static _local_des __des;
+      if (!x) { x.cm_create0(0, 0, 1); }
+      return x;
+    }
+    inline static cref_t<threadctl> rth()
+    {
+      static bool b_des = false;
+      if (b_des) { return cref_t<threadctl>(); }
+      static cref_t<threadctl> x;
+      struct _local_des { ~_local_des() { b_des = true; if(x) { x->stop(2000); if (x->state() == 2) { x->terminate(); } } } };
+      static _local_des __des;
+      if (!x) { x.cm_create0(0, 0, 1); }
+      if (x && !x.ref()) { x._pnonc_u()->start_auto<_th>(int(0)); }
+      return x;
+    }
     static int _fd_search(_fd_sharing& par, const t_name& name_orig, _s_long t_retry_mcs, _s_long n_role_expose)
     {
       rth();
@@ -7601,7 +7945,7 @@ private:
       cref_t<t_map1> rm = rmap1();
       if (rm) { cref_t<t_map1>::t_lock __lock(rm); if (sizeof(__lock)) {} rm._pnonc_u()->clear(); rm.clear(); }
       cref_t<threadctl> rt = rth();
-      if (rt) { rt._pnonc_u()->signal_stop(); if (b_wait && rt.ref()) { sleep_mcs(0); while (rt.ref()) { sleep_mcs(10000); } } rt.clear(); }
+      if (rt) { rt->signal_stop(); if (b_wait) { while (rt.ref()) { sleep_mcs(10000); } } }
     }
     struct _th : threadctl::ctx_base
     {
@@ -8148,6 +8492,7 @@ namespace _api // public API, merged into namespace bmdx_shm
 
 
       // Open/create/initialize/lock the shared memory in role as specified by b_side1 on shmobj2s_t construction.
+      //  NOTE This operation does not execute any constructor of T, see obj_create* for that.
       //
       //  b_keeplk:
       //    1) Lock the memory at least for the current side (b_side1()).
@@ -8623,8 +8968,8 @@ namespace _api // public API, merged into namespace bmdx_shm
           else
           {
             if (__p) { munmap(__p, __nb); __p = 0; __nb = 0; }
-            fd2 = __shmfile_open(O_RDWR);
-            if (fd2 == -1 && b_maycreate) { b_reset = true; fd2 = __shmfile_open(O_CREAT|O_RDWR); }
+            fd2 = __shmfile_open(O_RDWR|O_CLOEXEC);
+            if (fd2 == -1 && b_maycreate) { b_reset = true; fd2 = __shmfile_open(O_CREAT|O_RDWR|O_CLOEXEC); }
             if (fd2 == -1) { return 0; }
           }
           size_t n2 = nbtotal > 0 ? size_t(nbtotal) : 0;
@@ -8822,6 +9167,8 @@ private:
   #define __bmdx_shmfifo_nbytes_dflt (150 * 1024ll)
   #define __bmdx_shmfifo_push1_quot 5
   #define __bmdx_shmfifo_idle_t_short_mcs 8
+  #define __bmdx_shmfifo_idle_t_long_mcs 10000
+  #define __bmdx_shmfifo_idle_t_enable_time_ms 2100
 #endif
 #ifdef _bmdxpl_Psx
   #if __APPLE__ && __MACH__
@@ -8831,15 +9178,11 @@ private:
     #define __bmdx_shmfifo_nbytes_dflt (150 * 1024ll)
     #define __bmdx_shmfifo_push1_quot 4
   #endif
-  #if defined(__sun)
-    #define __bmdx_shmfifo_idle_t_short_mcs 0
-  #else
-    #define __bmdx_shmfifo_idle_t_short_mcs 8
-  #endif
+  #define __bmdx_shmfifo_idle_t_short_mcs 8
+  #define __bmdx_shmfifo_idle_t_long_mcs 5000
+  #define __bmdx_shmfifo_idle_t_enable_time_ms 400
 #endif
 
-#define __bmdx_shmfifo_idle_t_long_mcs 10000
-#define __bmdx_shmfifo_idle_t_enable_time_ms 2100
 #define __bmdx_shmfifo_push1_nbmin 3000
 #define __bmdx_shmfifo_rcv_deact_timeout_ms 1500
 #define __bmdx_shmfifo_rcv_recover_timeout_ms 400
@@ -8855,6 +9198,7 @@ struct shmqueue_ctx
 
   shmqueue_ctx(const t_name_shm& name, bool b_receiver, _s_ll nbhint)
   :
+    _b_in_removal(false), _b_removed(false), iver_m0(-1),
     b_rcv_mlk(0), pmsend1(0), pmsend2(0), nmsend(0), b_just_started(true), b_enrq(true),
     bufstate(0), _mprg_ver(0), _mprg_ver_proc(0), _mprg_iend_done(0), iver_al(0),
 
@@ -8869,6 +9213,9 @@ struct shmqueue_ctx
   // A. Queue client-related part.
 
     critsec_t<shmqueue_ctx>::csdata csd;
+    cref_t<shmqueue_ctx> _rqnext;
+    bool _b_in_removal, _b_removed;
+    _s_ll iver_m0;
     vnnqueue_t<cref_t<t_stringref> > msgs;
     cref_t<t_stringref> msg_rcv;
     bool b_rcv_mlk;
@@ -8986,7 +9333,7 @@ struct shmqueue_ctx
 
     shmobj2s_t<shmqueue_ctx_rso> buf;
     volatile _s_long sndr_rcv_act; // sender side flag: 0: no receiver activity detected yet, 1 or 2: receiver activity detected at least once, -1: detected that receiver is not active after being active
-    bool b_sndr_waitrcvinit; // true: set together with tr_end = -1: the sender waits for the receiver to a) initialize the shared buffer, b) reconnect to the existing buffer
+    bool b_sndr_waitrcvinit; // true: set together with tr_send = -1: the sender waits for the receiver to a) initialize the shared buffer, b) reconnect to the existing buffer
     double sndr_t0_rcvst; _s_ll sndr_ircvst;
 
       // NOTE Must be protected by critsec_t<shmqueue_ctx> with this->csd.
@@ -9091,13 +9438,50 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
   };
   std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> m;
   volatile _s_ll iver_m;
+  volatile _s_ll iver_m2;
 
 
-  _shmqueue_ctxx_impl() { iver_m = 0; }
+  _shmqueue_ctxx_impl() { iver_m = 0; iver_m2 = -1; }
   ~_shmqueue_ctxx_impl() {}
 
   virtual cref_t<shmqueue_ctx> rqueue(const t_name_shm& name, _s_long autocreate_mode, _s_ll nbhint)
   {
+    using namespace bmdx_str::words;
+
+      // Remove.
+    if (autocreate_mode == 8 || autocreate_mode == 9)
+    {
+      cref_t<shmqueue_ctx> rvdel;
+      if (1)
+      {
+        qmap_key k(autocreate_mode & 1, name);
+        critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+        if (m.count(k) > 0)
+        {
+          cref_t<shmqueue_ctx>& x = m[k];
+            // In case if internal thread does not reference x yet,
+            //  x will be immediately removed by rqueue() (see below),
+            //  without getting into the internal thread.
+          if (atomrdal64(&iver_m2) < x->iver_m0) { rvdel = x; }
+          m.erase(k);
+          atomadd64(&iver_m, 1);
+        }
+      }
+      if (rvdel)
+      {
+        shmqueue_ctx& q = rvdel._rnonc();
+        critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+        q._b_in_removal = true;
+        q.buf.close();
+        q._msend_clear(); q.b_sndr_waitrcvinit = false;
+        q._mrcv_clear();
+        q.bufstate = 4;
+        q._b_removed = true;
+      }
+      return cref_t<shmqueue_ctx>();
+    }
+
+      // Add/check.
     cref_t<shmqueue_ctx> rv;
     if (autocreate_mode >= 0 && autocreate_mode <= 3)
     {
@@ -9106,11 +9490,17 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       qmap_key k(autocreate_mode & 1, name);
       try { if (autocreate_mode >= 2 || m.count(k) > 0) {
         cref_t<shmqueue_ctx>& rv2 = m[k];
-        if (!rv2)  { rv2.cm_create3(0, 0, 0, name, !!(autocreate_mode & 1), nbhint >= 0 ? nbhint : __bmdx_shmfifo_nbytes_dflt); }
+        if (!rv2)
+        {
+          rv2.cm_create3(0, 0, 0, name, !!(autocreate_mode & 1), nbhint >= 0 ? nbhint : __bmdx_shmfifo_nbytes_dflt);
+          rv2->iver_m0 = iver_m + 1;
+        }
         rv = rv2;
       } } catch (...) {}
-      if (m.size() != n1) { bmdx_str::words::atomadd64(&iver_m, 1); }
+      if (m.size() != n1) { atomadd64(&iver_m, 1); }
     }
+
+      // Initialize immediately.
     if (rv)
     {
       if (autocreate_mode >= 2 && (rv->bufstate & 0xff) < 3)
@@ -9134,26 +9524,109 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
   struct _ipc_delivery_thread : threadctl::ctx_base
   {
     typedef std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less> t_ctxmap;
+    typedef t_ctxmap::iterator t_ctxmapit;
 
-    inline static bool _part_update_ctxmap(t_ctxmap& m2, _s_ll& iver_m2) __bmdx_noex
+    inline static bool _part_update_ctxmap(t_ctxmap& m2) __bmdx_noex
     {
+      using namespace bmdx_str::words;
       cref_t<i_shmqueue_ctxx> mqq1;
       _shmqueue_ctxx_impl* pqq1 = 0;
       if (!mqq1) { mqq1 = mqq(); }
       if (!pqq1) { pqq1 = static_cast<_shmqueue_ctxx_impl*>(mqq1._pnonc_u()); }
       if (!pqq1) { return false; }
       bool b_succ = 1;
-      if (iver_m2 < bmdx_str::words::atomrdal64(&pqq1->iver_m))
-      {
-        critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
-        try { m2 = pqq1->m; iver_m2 = bmdx_str::words::atomrdal64(&pqq1->iver_m); } catch (...) { b_succ = 0; }
-      }
+      t_ctxmap m3;
+      do { // once
+        if (atomrdal64(&pqq1->iver_m2) == atomrdal64(&pqq1->iver_m))
+          { break; }
+        if (1)
+        {
+          critsec_t<t_lks_qq> __lock(10, -1); if (sizeof(__lock)) {}
+          try {
+            m3 = pqq1->m;
+            atomwral64(&pqq1->iver_m2, atomrdal64(&pqq1->iver_m));
+          } catch (...) { b_succ = 0; }
+        }
+        if (b_succ)
+        {
+          for (t_ctxmapit i = m2.begin(); i != m2.end(); ++i)
+          {
+            cref_t<shmqueue_ctx>& rq = i->second;
+            if (!rq) { continue; }
+            if (m3.count(i->first) > 0)
+            {
+              cref_t<shmqueue_ctx>& rrxnew = m3[i->first];
+                if (rrxnew._pnonc_u() == rq._pnonc_u())
+                  { continue; }
+                rq->_b_in_removal = true;
+                if (rq->_rqnext && rq->_rqnext._pnonc_u() != rrxnew._pnonc_u())
+                  { rq->_rqnext->_b_in_removal = true; rq->_rqnext->_b_removed = true; }
+                rq->_rqnext = rrxnew;
+                rrxnew.clear();
+                rrxnew = rq;
+              continue;
+            }
+            rq->_b_in_removal = true;
+            if (rq->_rqnext)
+              { rq->_rqnext->_b_in_removal = true; rq->_rqnext->_b_removed = true; rq->_rqnext.clear(); }
+            m3[i->first] = rq;
+          }
+          m2.swap(m3);
+        }
+      } while (0);
       if (!b_succ) { return false; }
       return true;
     }
 
-    inline static bool _part_validate_ctx1(shmqueue_ctx& q, bool& b_changed) __bmdx_noex
+    inline static bool _try_disable(shmqueue_ctx& q) __bmdx_noex
     {
+      bool b_may_disable = false;
+      critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
+      const _s_long bsm = (q.bufstate & 0xff);
+      if (q.b_sndr_waitrcvinit) { b_may_disable = true; }
+      else if (bsm == 3 && q.buf.f_constructed() == 1)
+      {
+        if (q.buf.b_side1())
+        {
+          signed char& tr_rcv = *q.buf.pf_state1();
+          b_may_disable = tr_rcv == 0 || tr_rcv == 1 || tr_rcv == -1;
+        }
+        else
+        {
+          signed char& tr_send = *q.buf.pf_state2();
+          b_may_disable = tr_send == 0 || tr_send == 1 || tr_send == -1;
+        }
+      }
+      else { b_may_disable = true; }
+      if (b_may_disable)
+      {
+        q.buf.close();
+        q._msend_clear(); q.b_sndr_waitrcvinit = false;
+        q._mrcv_clear();
+        q.bufstate = 4;
+        return true;
+      }
+      return false;
+    }
+    inline static bool _part_validate_ctx1(cref_t<shmqueue_ctx>& rq, bool& b_changed) __bmdx_noex
+    {
+      // -1. Complete disabling old queue object and replace with new if it exists.
+
+      if (!rq) { return false; }
+      if (rq->_b_in_removal)
+      {
+        if (_try_disable(rq._rnonc()))
+        {
+          rq->_b_removed = true;
+          b_changed = true;
+          cref_t<shmqueue_ctx> x = rq->_rqnext;
+          rq = x; // may be empty
+        }
+      }
+      if (!rq) { return false; }
+      shmqueue_ctx& q = rq._rnonc();
+
+
       // 0. Pre-update volatile settings.
 
       q.v_al.g_update_pre();
@@ -9175,33 +9648,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       }
       else if (!q.b_enrq) // the queue is currently enabled, try to disable as requested
       {
-        bool b_may_disable = false;
-        critsec_t<shmqueue_ctx> __lock(10, -1, &q.csd); if (sizeof(__lock)) {}
-        const _s_long bsm = (q.bufstate & 0xff);
-        if (q.b_sndr_waitrcvinit) { b_may_disable = true; }
-        else if (bsm == 3 && q.buf.f_constructed() == 1)
-        {
-          if (q.buf.b_side1())
-          {
-            signed char& tr_rcv = *q.buf.pf_state1();
-            b_may_disable = tr_rcv == 0 || tr_rcv == 1 || tr_rcv == -1;
-          }
-          else
-          {
-            signed char& tr_send = *q.buf.pf_state2();
-            b_may_disable = tr_send == 0 || tr_send == 1 || tr_send == -1;
-          }
-        }
-        else { b_may_disable = true; }
-        if (b_may_disable)
-        {
-          q.buf.close();
-          q._msend_clear(); q.b_sndr_waitrcvinit = false;
-          q._mrcv_clear();
-          q.bufstate = 4;
-          b_changed = true;
-          return false;
-        }
+        if (_try_disable(q)) { b_changed = true; return false; }
       }
 
       // 2. Process: buffer construction, queue purge rq., working state setting.
@@ -9623,18 +10070,18 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
       const _s_ll idle_t_short_mcs = __bmdx_shmfifo_idle_t_short_mcs;
       const _s_ll idle_t_enable_time_ms = __bmdx_shmfifo_idle_t_enable_time_ms;
 
-      t_ctxmap m2; _s_ll iver_m2 = -1;
+      t_ctxmap m2;
       double t0_idle_en = clock_ms();
       while (1)
       {
         const bool b_exit = !!b_stop();
-        if (!b_exit && !_part_update_ctxmap(m2, iver_m2)) { sleep_mcs(idle_t_long_mcs); continue; }
+        if (!b_exit && !_part_update_ctxmap(m2)) { sleep_mcs(idle_t_long_mcs); continue; }
         bool b_changed = false;
         for (std::map<qmap_key, cref_t<shmqueue_ctx>, qmap_key::less>::iterator i = m2.begin(); i != m2.end(); ++i)
         {
+          const bool b_validated = _part_validate_ctx1(i->second, b_changed);
           if (!i->second) { continue; }
           shmqueue_ctx& q = *i->second._pnonc_u();
-          const bool b_validated = _part_validate_ctx1(q, b_changed);
           if (q.buf.b_side1()) { _part_update_conf_rcv(q, b_changed, b_validated); }
             else { _part_update_conf_send(q, b_changed, b_validated); }
           if (!b_validated) { continue; }
@@ -9645,7 +10092,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         }
         if (b_exit) { break; }
         if (b_changed) { t0_idle_en = clock_ms(); }
-          else { sleep_mcs(clock_ms() - t0_idle_en < idle_t_enable_time_ms ? idle_t_short_mcs : idle_t_long_mcs); }
+          else { const bool b = clock_ms() - t0_idle_en < idle_t_enable_time_ms; sleep_mcs(b  ? idle_t_short_mcs : idle_t_long_mcs); }
       }
     }
   };
@@ -10081,7 +10528,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     const _s_ll _nbdflt; const _s_long _flags; const _s_long _idle_t_mcs;
     mutable cref_t<shmqueue_ctx> _rq; // cached reference to the queue with the specified name
     struct exc_new_pack3 : std::exception { const char* what() const __bmdx_noex { return "new_pack3::operator()(t*)"; } };
-    struct new_pack3 { typedef cref_t<t_stringref> t; const t &prefix, &msg; mutable _s_long ind; new_pack3(const t& prefix_, const t& msg_) : prefix(prefix_), msg(msg_), ind(-1) {} void operator()(t* p) const { ++ind; if (ind == 0) { new (p) t(); } else if (ind == 1) { new (p) t(prefix); } else if (ind == 2) { new (p) t(msg); } else { throw exc_new_pack3(); } } };
+    struct new_pack3 { typedef cref_t<t_stringref> t; const t &prefix, &msg; mutable _s_long ind; new_pack3(const t& prefix_, const t& msg_) : prefix(prefix_), msg(msg_), ind(-1) {} void operator()(t* p __bmdx_noarg) const { ++ind; if (ind == 0) { new (p) t(); } else if (ind == 1) { new (p) t(prefix); } else if (ind == 2) { new (p) t(msg); } else { throw exc_new_pack3(); } } };
   public:
 
 
@@ -10091,13 +10538,26 @@ namespace _api // public API, merged into namespace bmdx_shm
       // idle_t_mcs_: sleep time at each iteration inside client-side blocking mget or msend (0..1e6 mcs). Dflt. 5000 mcs.
     shmqueue_s(const t_name& name_, const _s_ll nbdflt_ = -1, _s_long flags_ = 1, _s_ll idle_t_mcs_ = -1) __bmdx_noex
       : name(name_.n() ? name_ : "_"), res(0), _nbdflt(nbdflt_), _flags(flags_), _idle_t_mcs(idle_t_mcs_ >= 0 ? _s_long(bmdx_minmax::myllmin(1000000, idle_t_mcs_)) : 5000)
-    { if (_flags & 4) { bufstate(2); } if (_flags & 8) { bufstate(3); } }
+      { if (_flags & 4) { bufstate(2); } if (_flags & 8) { bufstate(3); } }
+
+    ~shmqueue_s()
+      { if (_flags & 0x10) { bufstate(8); } if (_flags & 0x20) { bufstate(9); } }
+
+
+      // Removes cached reference to local message queue and shared memory wrapper.
+      //  These objects may continue to exist internally, unless bufstate(8 or 9)
+      //  has been called before clear_rq(), and this->_rq was the last reference.
+    void clear_rq() { _rq.clear(); }
+
+      // True is *this contains non-empty reference to message queue objects (this->_rq).
+    bool b_rq() const { return !!_rq; }
+
 
       // Flags, set by constructor.
       //    0x1 - use client-side locks when sending and receiving messages.
       //      Dflt. value: the flag is set.
-      //      Needed only in case if on client side there that more than one thread
-      //        in the current process is sending or receiving messages through the same queue
+      //      Needed only in case if on client side there is more than one thread
+      //        in the current process that is sending or receiving messages through the same queue
       //        (multiple shmqueue_s with same name).
       //      NOTE shmqueue_s object itself is not protected from concurrency.
       //        Unsetting this flag disables only locks on local queue push/pop
@@ -10112,8 +10572,14 @@ namespace _api // public API, merged into namespace bmdx_shm
       //            d) if shared memory exists, but the receiver is not active.
       //            NOTE This does NOT include cases when the shared memory object is locked, or the queue is disabled by the client.
       //        If this flag not set, only the above case (a) works.
-      //    0x4 - constructor's flag (already done): automatically connect to sender side, and create local queue for msend (i.e. call bufstate(2)).
-      //    0x8 - constructor's flag (already done): automatically connect to receiver side, and create local queue for mget (i.e. call bufstate(3)).
+      //    0x4 - automatically connect to sender side, and create local queue for msend.
+      //      This flag reflects the action already done by constructor: calling bufstate(2).
+      //    0x8 - (already done by constructor) automatically connect to receiver side, and create local queue for mget
+      //      This flag reflects the action already done by constructor: calling bufstate(3).
+      //    0x10 - automatically remove all sender-side objects when entering ~shmqueue_s().
+      //      Calls bufstate(8).
+      //    0x20 - automatically remove all receiver-side objects when entering ~shmqueue_s().
+      //      Calls bufstate(9).
       // NOTE flags() does not modify this->res.
     _s_long flags() const __bmdx_noex { return _flags; }
 
@@ -10147,6 +10613,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       if (!(_flags & 1)) { return -5; }
       _s_long res2 = bufstate(3); if (!(res2 >= 3 && res2 <= 5)) { return -2; }
       if (!_rq) { return -2; }
+      if (_rq->_b_in_removal) { return -2; }
       if (_rq->buf.b_side1() != true) { return -2; } // not expected to occur
       _s_ll vs = 0; bool b_vs = false;
       if (p_al)
@@ -10162,6 +10629,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       const double t0 = clock_ms();
       while (1)
       {
+        if (_rq->_b_removed) { return -2; }
         if (1)
         {
           critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
@@ -10198,6 +10666,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       r_al.clear();
       _s_long res2 = bufstate(3); if (!(res2 >= 3 && res2 <= 5)) { return -2; }
       if (!_rq) { return -2; }
+      if (_rq->_b_in_removal) { return -2; }
       if (_rq->buf.b_side1() != true) { return -2; } // not expected to occur
       critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
       r_al = (const cref_t<i_allocctl>&)_rq->v_al.x;
@@ -10246,6 +10715,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         if (b_receiver && !(res2 >= 3 && res2 <= 5)) { return -2; }
         if (!b_receiver && !(res2 >= 0)) { return -2; }
       if (!_rq) { return -2; }
+      if (_rq->_b_in_removal) { return -2; }
       if (_rq->buf.b_side1() != b_receiver) { return -2; } // not expected to occur
       shmqueue_ctx::lqconf_cap c;
         c.ncapmin_set(ncapmin);
@@ -10264,6 +10734,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       const double t0 = clock_ms();
       while (1)
       {
+        if (_rq->_b_removed) { return -2; }
         if (1)
         {
           critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
@@ -10300,6 +10771,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         if (b_receiver && !(res2 >= 3 && res2 <= 5)) { return -2; }
         if (!b_receiver && !(res2 >= 0)) { return -2; }
       if (!_rq) { return -2; }
+      if (_rq->_b_in_removal) { return -2; }
       if (_rq->buf.b_side1() != b_receiver) { return -2; } // not expected to occur
       critsec_t<shmqueue_ctx> __lock(10, -1, &_rq->csd); if (sizeof(__lock)) {}
       res2 = 1; unsigned char res3 = 0;
@@ -10424,6 +10896,7 @@ namespace _api // public API, merged into namespace bmdx_shm
 
 
       // Returns IPC buffer state, and optionally ensures the queue creation and enabling/disabling.
+      //    IPC buffer == shared memory + wrapper + local (in-process) queue with messages.
       // rqtype:
       //    0 - return the sender-side queue state, but do not autocreate or modify the queue,
       //    1 - return the receiver-side queue state, but do not autocreate or modify the queue,
@@ -10433,41 +10906,65 @@ namespace _api // public API, merged into namespace bmdx_shm
       //      if the shared object does not exist, the receiver queue will perform its complete initialization,
       //      while the sender queue will only try to connect to the existing shared object.
       //    4, 5 - if the (sender, receiver)-side queue already exists, request queue enabling.
-      //        NOTE By default, when the queue is first created/connected to, it's enabled.
-      //        WARNING Queue enabling is done by internal thread and does not effect immediately.
+      //          By default, when the queue is first created/connected to, it's enabled.
+      //        NOTE Queue enabling is done by internal thread and does not effect immediately.
+      //          When the queue is reenabled after being disabled, its bufstate becomes 0,
+      //          and grows to 3, as in usual initialization sequence.
       //    6, 7 - if the (sender, receiver)-side queue already exists, request queue disabling.
       //        The shared object will be closed, and after that, can be opened/used by another process
-      //        or another binary module of the current process.
-      //        WARNING Queue disabling is done by internal thread and does not effect immediately.
-      //    NOTE rqtype's 4..7 are satisfied by internal thread after some delay,
-      //      when all necessary conditions are met.
-      //      When the queue is factually disabled, its bufstate becomes 4.
-      //      After it's reenabled, its bufstate becomes 0, and grows to 3, as in usual initialization sequence.
+      //          or another binary module of the current process.
+      //        NOTE Queue disabling is done by internal thread and does not effect immediately.
+      //          When the queue is factually disabled, its bufstate becomes 4.
+      //    8, 9 - remove the (sender, receiver)-side queue and shared memory wrapper from internal storage.
+      //        This does not clear cached reference (this->_rq).
+      //        The removal is done by internal thread and does not effect immediately.
+      //          E.g. for sender-side queue, the internal thread tries to complete pending sending procedure first.
+      //          Until the queue is removed, an attempt to create new queue with the same name and direction
+      //          will result in shared memory lock error (bufstate() ret. code -3).
+      //        The client may call bufstate(0 or 1) and wait for ret. code -4,
+      //          which means that shared memory object is completely released.
+      //        NOTE To reuse the current shmqueue_s object, the client should call clear_rq(),
+      //          and then bufstate(2 or 3).
+      // NOTE The internal local queue and shared memory wrapper usually belong to the current binary module,
+      //    but this is platform-dependent: in some cases, main executable and/or shared libraries
+      //    may share static variables.
       // Returns:
       //    ret. code (also in this->res):
       //      0, 1 - during shared object initialization by the receiver side.
       //      2 - for receiver: the last  initialization attempt has failed (maybe retry once more);
       //        for sender: failed to connect to shared memory (probably, the receiver, which is responsible for creation, does not yet exist).
       //      3 - initialized successfully (normal work).
-      //      4 - disabled (see enrq below).
+      //      4 - disabled.
       //      5 (sender only) - the buffer is initialized successfully, but the receiver process is not active for too long, i.e. it may currently not exist.
-      //      -1 - the local queue object is not created yet (use rqtype 2 or 3 to make it).
+      //      -1 -
+      //        a) the local queue object is not created yet (use rqtype 2 or 3 to make it).
+      //        b) bufstate(8 or 9) has been called.
       //      -2 - common case failure, no changes.
       //      -3 - shared memory is locked by some other side.
+      //      -4 - the buffer has been internally removed, shared memory closed.
+      //        For *this reuse, call clear_rq() to remove the stale reference,
+      //        then bufstate(2 or 3).
       //    *pipush, *pipop - the current (volatile) push/pop char index in the shared memory queue.
       //      Meaningful values are set only if bufstate returns 3 (i.e. only when the queue is working normally).
       //        Otherwise, values are set to -1.
       //      Hint: in application-specific context, along with regular sending some messages,
       //        *pipop may be used (in sender process) to check if the receiving process is alive and actively consumes messages.
-      //    enrq:
     _s_long bufstate(_s_long rqtype, _s_ll* pipush = 0, _s_ll* pipop = 0) const __bmdx_noex
     {
       if (pipush) { *pipush = -1; } if (pipop) { *pipop = -1; }
       if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; }
-      const _s_long enrq = rqtype == 4 || rqtype == 5 ? 1 : (rqtype == 6 || rqtype == 7 ? 0 : -1);
-      if (enrq >= 0) { rqtype &= 1; }
+      _s_long enrq = -1;
+        if (rqtype == 4 || rqtype == 5) { enrq = 1; rqtype &= 1; }
+          else if (rqtype == 6 || rqtype == 7) { enrq = 1; rqtype &= 1; }
+      const bool b_rmv = rqtype == 8 || rqtype == 9;
+      if (b_rmv)
+      {
+        try { _shmqueue_ctxx_impl::mqq()->rqueue(name, rqtype, _nbdflt); } catch (...) {}
+        res = -1; return -1;
+      }
       if (!_rq) { try { _rq = _shmqueue_ctxx_impl::mqq()->rqueue(name, rqtype, _nbdflt); } catch (...) {} }
       if (!_rq) { res = -1; return -1; }
+      if (_rq->_b_removed) { res = -4; return -4; }
       if ((rqtype >= 0 && rqtype <= 3) && _rq->buf.b_side1() != !!(rqtype & 1)) { res = -2; return -2; }
       const _s_long st = _rq->bufstate;
       const bool b_rcv_act_all = _rq->buf.b_side1() || _rq->sndr_rcv_act >= 1;
@@ -10553,7 +11050,11 @@ namespace _api // public API, merged into namespace bmdx_shm
       //        by the receiving side (the program is not run, or more time needed?).
       //    -1 - attempt to push message into the input queue.
       //    -2 - failure (memory allocation, incompatibility, message too long, the queue is disabled, etc.).
-      //    -3 - shared memory is locked by some other side.
+      //    -3 - shared memory is locked by some other side (sender).
+      //      This case is possible e.g. if two processes attempt to send messages
+      //        concurrently via the queue with the same name, but the receiving side does not exist.
+      //        (Senders are in concurrency, because they are not allowed to create shared memory object.
+      //        Only receiver side may do that, and then only one of the senders can win the input side of the queue.)
       //      NOTE When locked state is detected, msend does not wait for timeout and returns immediately.
       //    -4 - shared memory exists, but not ready yet (during initialization by the receiver side).
     _s_long msend(cref_t<t_stringref> msg, double timeout_ms = 0, cref_t<t_stringref> prefix = cref_t<t_stringref>(), _s_ll* pipush_last = 0) const __bmdx_noex

@@ -1,4 +1,4 @@
-// rev. 2021-03-23
+// rev. 2021-11-20
 =======================================================================================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 =======================================================================================================================
@@ -629,7 +629,11 @@ This section presents classes, whose objects may be passed between from binary m
     b) use exclusively common objects storage of the main executable (see struct pcos)
       for continuous storing any objects, shared between binary modules.
 
-
+2. (Context: POSIX systems only / processctl::launch).
+  The default choice for starting new processes is vfork(), which may be unsafe in certain (very specific) conditions.
+  If this is the case, disallow vfork() use at compile time:
+      -D__bmdx_cfg_allow_vfork=0
+  See __bmdx_cfg_allow_vfork for details.
 
 =======================================================================================================================
 === MESSAGE DISPATCHER ===
