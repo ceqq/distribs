@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-11-21
+// rev. 2021-11-22
 // See bmdx_main.h for details.
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -165,28 +165,28 @@ namespace yk_c
     template<s_long nmax> struct hashx_common::kf_basic<bmdx_str::flstr_t<nmax> > : _skf_pchars<char>
     {
       typedef bmdx_str::flstr_t<nmax> t_k;
-      inline void _fls_cnew(t_k* p, const t_k& x) const { new (p) t_k(x); }
-      inline s_long _fls_hash(const t_k& x) const { return this->Fhash(x.pd(), x.n()); }
-      inline bool _fls_is_eq(const t_k& x1, const t_k& x2) const { return x1 == x2; }
-      template<class K2> inline void cnew(t_k* p, const K2& x) const { this->_fls_cnew(p, x); }
-      template<class K2> inline s_long hash(const K2& x) const { return this->_fls_hash(x); }
-      template<class K2> inline bool is_eq(const t_k& x1, const K2& x2) const { return this->_fls_is_eq(x1, x2); }
-      inline bool is_eq(const t_k& x1, const char* x2) const { if (!x2) { return false; } for (s_long i = 0; i < x1.n(); ++i) { char c = *x2++; if (!c || c != x1[i]) { return false; } } return !*x2; }
+      inline void _fls_cnew(t_k* p, const t_k& x __vecm_noarg) const { new (p) t_k(x); }
+      inline s_long _fls_hash(const t_k& x __vecm_noarg) const { return this->Fhash(x.pd(), x.n()); }
+      inline bool _fls_is_eq(const t_k& x1, const t_k& x2 __vecm_noarg) const { return x1 == x2; }
+      template<class K2> inline void cnew(t_k* p, const K2& x __vecm_noarg) const { this->_fls_cnew(p, x); }
+      template<class K2> inline s_long hash(const K2& x __vecm_noarg) const { return this->_fls_hash(x); }
+      template<class K2> inline bool is_eq(const t_k& x1, const K2& x2 __vecm_noarg) const { return this->_fls_is_eq(x1, x2); }
+      inline bool is_eq(const t_k& x1, const char* x2 __vecm_noarg) const { if (!x2) { return false; } for (s_long i = 0; i < x1.n(); ++i) { char c = *x2++; if (!c || c != x1[i]) { return false; } } return !*x2; }
     };
 
     template<class _> struct hashx_common::kf_basic<bmdx::carray_r_t<char>, _>
     {
       typedef bmdx::carray_r_t<char> t_k; typedef bmdx::arrayref_t<char> t_arf;
-      void cnew(t_k* p, t_arf x) const { new (p) t_k(x.pd(), x.n()); }
-      s_long hash(t_arf x) const { return hashx_common::_skf_pchars<char>().Fhash(x.pd(), x.n()); }
-      bool is_eq(const t_k& x1, t_arf x2) const { return t_arf(x1).is_eq(x2); }
+      void cnew(t_k* p, t_arf x __vecm_noarg) const { new (p) t_k(x.pd(), x.n()); }
+      s_long hash(t_arf x __vecm_noarg) const { return hashx_common::_skf_pchars<char>().Fhash(x.pd(), x.n()); }
+      bool is_eq(const t_k& x1, t_arf x2 __vecm_noarg) const { return t_arf(x1).is_eq(x2); }
     };
     template<class _> struct hashx_common::kf_basic<bmdx::carray_r_t<wchar_t>, _>
     {
       typedef bmdx::carray_r_t<wchar_t> t_k;typedef bmdx::arrayref_t<wchar_t> t_arf;
-      void cnew(t_k* p, t_arf x) const { new (p) t_k(x.pd(), x.n()); }
-      s_long hash(t_arf x) const { return hashx_common::_skf_pchars<wchar_t>().Fhash(x.pd(), x.n()); }
-      bool is_eq(const t_k& x1, t_arf x2) const { return t_arf(x1).is_eq(x2); }
+      void cnew(t_k* p, t_arf x __vecm_noarg) const { new (p) t_k(x.pd(), x.n()); }
+      s_long hash(t_arf x __vecm_noarg) const { return hashx_common::_skf_pchars<wchar_t>().Fhash(x.pd(), x.n()); }
+      bool is_eq(const t_k& x1, t_arf x2 __vecm_noarg) const { return t_arf(x1).is_eq(x2); }
     };
   }
 #endif

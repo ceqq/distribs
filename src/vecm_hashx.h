@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2021-11-21
+// rev. 2021-11-22
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -198,9 +198,25 @@ struct meta
     // T() replacement for vecm and other structures.
     //  Aux can serve as additional discriminator for particular T at the time of construction.
     //
-    //  _bs (binding selector) = __vecm_tu_selector forces calling op. new and constructor compiled in the current translation unit.
-    //    With default _bs == nothing, op. new / constructor are bound as chosen by compiler
-    //    (most frequently, == that of one chosen unit in the current binary module).
+    //  _bs (binding selector):
+    //    Customized _bs = __vecm_tu_selector would force construct_f and all its dependent template classes
+    //    being instantiated individually to the current translation unit when it is compiled.
+    //    This disables possible unexpected member functions by-name binding to another binary module,
+    //    because __vecm_tu_selector is from anonymous namespace.
+    //  With default _bs, member functions are bound as chosen by compiler.
+    //    This can make issues on certain platforms (macOS),
+    //    e.g. shared library developer can find that functions, defined in that library,
+    //    are ignored, and calls are mapped to classes/functions with same name, but in main executable.
+    //    The way of mapping is compiler-dependent and no common cross-compiler rules exist.
+    //  One way to overcome this is adding fictional argument of anonymous type
+    //    to each member function that is expected to appear in multiple binary modules of a process.
+    //    This is done in the default construct_f::f.
+    //    In custom specializations, making either _bs or fictional arguments of anonymous type
+    //      can prevent the above issues.
+    //    NOTE Fictional arguments of anonymous type produce less compiler warnings than anonymous classes,
+    //      while it's hard to define certain important functions in this way,
+    //      because of language restrictions (fixed number of arguments):
+    //      1) destructor, 2) operator=, 3) operator[].
     //
     // NOTE Custom constructors.
     //  Any custom structure my_ctor may be defined/used same as construct_f.
@@ -222,9 +238,14 @@ struct meta
     //    b) template<class Aux> struct construct_f<T_alt, Aux> { typedef T t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
     //    See nt_allowDfltConstruct and ta_meta_construct in vecm::config_aux, and also vecm(ptyper p, s_long base).
   struct tag_construct {};
-  template<class T, class Aux = nothing, class _bs = nothing> struct construct_f { typedef T t; typedef Aux aux; inline void f(t* p) const { new (p) t(); } };
-    template<class T, class Aux, class _bs> struct type_equi<construct_f<T, Aux, _bs>, tag_construct> { typedef tag_construct t_3; };
-    template<class T, class Aux, class _bs> struct type_equi<construct_f<T, Aux, _bs>, tag_functor> { typedef tag_functor t_3; };
+  template<class T, class Aux = nothing, class _bs = nothing> struct construct_f
+  {
+    typedef T t;
+    typedef Aux aux;
+    inline void f(t* p __vecm_noarg) const { new (p) t(); }
+  };
+  template<class T, class Aux, class _bs> struct type_equi<construct_f<T, Aux, _bs>, tag_construct> { typedef tag_construct t_3; };
+  template<class T, class Aux, class _bs> struct type_equi<construct_f<T, Aux, _bs>, tag_functor> { typedef tag_functor t_3; };
 
     // Distinguishing between an element type and a functor. Tag must be valid functor, i.e. have type_equi<Tag, tag_functor>.
     // NOTE Empty specs. are for invalid cases.
@@ -3390,7 +3411,7 @@ template<class TA, s_long y, s_long m, s_long d, s_long h, s_long size, class _>
   //  (V(H), V(V), H(H), H(V), recursively) are very efficient.
 template<> struct vecm::spec<vecm> { struct aux : vecm::config_aux<vecm> { enum { nt_allowDfltConstruct = false }; };  typedef config_t<vecm, 1, 4, 2, aux> config; };
 template<> struct meta::copy_t<vecm> { struct exc_copy {}; static inline void F(vecm* pdest, const vecm* psrc) { new (pdest) vecm(*psrc); if (pdest->nexc() != 0) { pdest->~vecm(); throw exc_copy(); } } };
-template<class Aux, class _bs> struct meta::construct_f<vecm, Aux, _bs> { typedef vecm t; typedef Aux aux; void f(t* p) const { new (p) vecm(typer<aux, _bs>, 0); } };
+template<class Aux, class _bs> struct meta::construct_f<vecm, Aux, _bs> { typedef vecm t; typedef Aux aux; void f(t* p __vecm_noarg) const { new (p) vecm(typer<aux, _bs>, 0); } };
 template<class _bs> struct meta::construct_f<vecm, meta::nothing, _bs> { };
 
 template<class T, bool b, class _bs> struct meta::type_equi<vecm::link1_t<T, b, _bs>, meta::tag_construct> { typedef meta::tag_construct t_3; };
@@ -3545,23 +3566,23 @@ struct hashx_common
   template<class S, class _> struct _skf_string<S, typename S::value_type, typename S::traits_type::char_type, _>
   {
     enum { _is_pc = false, _is_string = true }; typedef typename S::value_type t_char;
-    void Fcnew(S* p, const S& x) const { new (p) S(x); }
-    void Fcnew(S* p, const t_char* x) const { new (p) S(x); }
-    void Fcnew(const t_char** p, const t_char* x) const { *p = x; }
-    void Fcnew(const t_char** p, const S& x) const { *p = x.c_str(); }
-    s_long Fhash(const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
-    s_long Fhash(const S& key) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg s_long n = s_long(key.size() < 0x7fffffff ? key.size() : 0x7fffffff); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(key.size()); h ^= 53970; return h; }
-    bool Fis_eq(const S& k1, const S& k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2.c_str(), k1.size(), k2.size()); }
-    bool Fis_eq(const S& k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1.c_str(), k2, k1.size(), -1); }
-    bool Fis_eq(const t_char* k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
+    void Fcnew(S* p, const S& x __vecm_noarg) const { new (p) S(x); }
+    void Fcnew(S* p, const t_char* x __vecm_noarg) const { new (p) S(x); }
+    void Fcnew(const t_char** p, const t_char* x __vecm_noarg) const { *p = x; }
+    void Fcnew(const t_char** p, const S& x __vecm_noarg) const { *p = x.c_str(); }
+    s_long Fhash(const t_char* p0 __vecm_noarg) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
+    s_long Fhash(const S& key __vecm_noarg) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = key.c_str(); _yk_reg s_long n = s_long(key.size() < 0x7fffffff ? key.size() : 0x7fffffff); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(key.size()); h ^= 53970; return h; }
+    bool Fis_eq(const S& k1, const S& k2 __vecm_noarg) const { return _bytes_tu::is_eq_str(k1.c_str(), k2.c_str(), k1.size(), k2.size()); }
+    bool Fis_eq(const S& k1, const t_char* k2 __vecm_noarg) const { return _bytes_tu::is_eq_str(k1.c_str(), k2, k1.size(), -1); }
+    bool Fis_eq(const t_char* k1, const t_char* k2 __vecm_noarg) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
   };
   template<class C, class _ = meta::nothing> struct _skf_pchars
   {
     enum { _is_pc = true, _is_string = false }; typedef C t_char;
-    void Fcnew(const t_char** p, const t_char* x) const { *p = x; }
-    s_long Fhash(const t_char* p0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
-    s_long Fhash(const t_char* p0, meta::s_ll n0) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg s_long n = s_long(n0 < 0x7fffffff ? n0 : 0x7fffffff); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(p - p0); h ^= 53970; return h; }
-    bool Fis_eq(const t_char* k1, const t_char* k2) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
+    void Fcnew(const t_char** p, const t_char* x __vecm_noarg) const { *p = x; }
+    s_long Fhash(const t_char* p0 __vecm_noarg) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg t_char c; while ((c = *p++)) { h *= 19; h -= c; } h ^= s_long(p - p0 - 1); h ^= 53970; return h; }
+    s_long Fhash(const t_char* p0, meta::s_ll n0 __vecm_noarg) const { _yk_reg s_long h = 0; _yk_reg const t_char* p = p0; _yk_reg s_long n = s_long(n0 < 0x7fffffff ? n0 : 0x7fffffff); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(p - p0); h ^= 53970; return h; }
+    bool Fis_eq(const t_char* k1, const t_char* k2 __vecm_noarg) const { return _bytes_tu::is_eq_str(k1, k2, -1, -1); }
   };
   template<class T1, class T2, class _ = meta::nothing, int __s1 = _select_kf<T1, _>::_kf_kind, int __s2 = _select_kf<T2, _>::_kf_kind> struct _select_skf {};
   template<class S, class _> struct _select_skf<S, S, _, 1, 1> : _skf_string<S, char, char, _> {};
@@ -3582,9 +3603,9 @@ struct hashx_common
   template<class K, class _ = meta::nothing>
   struct kf_basic : _select_kf<K, _>
   {
-    template<class K2> inline void cnew(K* p, const K2& x) const { new (p) K(x); }
-    template<class K2> inline s_long hash(const K2& x) const { return this->operator()(x); }
-    template<class K2> inline bool is_eq(const K& x1, const K2& x2) const { return this->operator()(x1, x2); }
+    template<class K2> inline void cnew(K* p, const K2& x __vecm_noarg) const { new (p) K(x); }
+    template<class K2> inline s_long hash(const K2& x __vecm_noarg) const { return this->operator()(x); }
+    template<class K2> inline bool is_eq(const K& x1, const K2& x2 __vecm_noarg) const { return this->operator()(x1, x2); }
   };
 
     // kf_std is the single class, combining STL-style hash and equality functions for passing into hashx.
@@ -3596,9 +3617,9 @@ struct hashx_common
   struct kf_std
   {
     HashF _h; Eq _e;
-    template<class K2> inline void cnew(K* p, const K2& x) const { new (p) K(x); }
-    template<class K2> inline s_long hash(const K2& x) const { return s_long(_h(K(x))); }
-    template<class K2> inline bool is_eq(const K& x1, const K2& x2) const { return _e(x1, K(x2)); }
+    template<class K2> inline void cnew(K* p, const K2& x __vecm_noarg) const { new (p) K(x); }
+    template<class K2> inline s_long hash(const K2& x __vecm_noarg) const { return s_long(_h(K(x))); }
+    template<class K2> inline bool is_eq(const K& x1, const K2& x2 __vecm_noarg) const { return _e(x1, K(x2)); }
   };
 
 
@@ -3626,9 +3647,9 @@ struct hashx_common
   template<class SP, class _ = meta::nothing>
   struct kf_str
   {
-    template<class SP2> inline void cnew(SP* p, const SP2& x) const { _select_skf<typename meta::nonc_t<SP>::t, typename meta::nonc_t<SP2>::t, _>().Fcnew(p, x); }
-    template<class SP2> inline s_long hash(const SP2& x) const { return _select_skf<typename meta::nonc_t<SP>::t, typename meta::nonc_t<SP2>::t, _>().Fhash(x); }
-    template<class SP2> inline bool is_eq(const SP& x1, const SP2& x2) const { return _select_skf<typename meta::nonc_t<SP>::t, typename meta::nonc_t<SP2>::t, _>().Fis_eq(x1, x2); }
+    template<class SP2> inline void cnew(SP* p, const SP2& x __vecm_noarg) const { _select_skf<typename meta::nonc_t<SP>::t, typename meta::nonc_t<SP2>::t, _>().Fcnew(p, x); }
+    template<class SP2> inline s_long hash(const SP2& x __vecm_noarg) const { return _select_skf<typename meta::nonc_t<SP>::t, typename meta::nonc_t<SP2>::t, _>().Fhash(x); }
+    template<class SP2> inline bool is_eq(const SP& x1, const SP2& x2 __vecm_noarg) const { return _select_skf<typename meta::nonc_t<SP>::t, typename meta::nonc_t<SP2>::t, _>().Fis_eq(x1, x2); }
   };
 
 };
@@ -4961,7 +4982,7 @@ template<class TA> struct vecm::spec<_yk_c2::_v2ta_a<TA> > { typedef typename ve
 template<class TA, class _bs> struct vecm::spec<vec2_t<TA, _bs> > { typedef config_t<vec2_t<TA, _bs>, 3, 3, 1> config; };
   // Special construction functor for vec2_t insert.
   //  After creating each value, increments its copy of source iterator.
-template <class T, class Itr, class _bs> struct meta::construct_f<_yk_c2::_v2insert_arg<T, Itr>, meta::nothing, _bs> { typedef T t; mutable Itr z; construct_f(const Itr& begin) : z(begin) {} inline void f(t* p) const { new (p) t(*z); ++z; } };
+template <class T, class Itr, class _bs> struct meta::construct_f<_yk_c2::_v2insert_arg<T, Itr>, meta::nothing, _bs> { typedef T t; mutable Itr z; construct_f(const Itr& begin __vecm_noarg) : z(begin) {} inline void f(t* p __vecm_noarg) const { new (p) t(*z); ++z; } };
 
 namespace _yk_c2
 {
