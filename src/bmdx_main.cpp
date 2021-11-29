@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-11-29
+// rev. 2021-11-30
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -4663,18 +4663,20 @@ void _static_conv::conv_Object_String(s_long fc, char& x0, std::wstring& retval)
   try {
     unity::o_api a(&x0, !!(fc & unity::xfObjItfsList));
     unity::o_api::critsec_rc __lock(a.prc);
-    o_ref_info ri = a.ref_info();
+    o_ref_info ri(0, 0, 0);
+    if (a.prc) { ((unity::o_api::__Posm_ref_info)a.prc->rc_posm(unity_common::osm_ref_info))(a.prc, &ri, !!(fc & unity::xfObjStrongRef) ? 3 : 2); }
     o_type_info ti = a.type_info(1+8);
 
     typedef bmdx_meta::u_ll u_ll;
       u_ll q = u_ll((char*)ti._pobj - (char*)0);
+      if (sizeof(void*) < 8) { volatile u_ll nsh = 8 * sizeof(void*); q &= ~(~u_ll(0) << nsh); }
     char qsbuf[20] = "";
       for (int pos = 0, i = 15; i >= 0; --i) { int x = int(0xf & (q >> (i << 2))); if (x || pos || i == 0) { qsbuf[pos] = char(x) + (x >= 10 ? 'A' - 10 : '0'); ++pos; qsbuf[pos] = 0; } }
 
     std::wstring buf;
       buf += bsToWs(ti.ptstat());
       buf += L':';
-      buf += ( ri.b_deleted() ? L'D' : (ri.b_strong() ? L'S' : L'W') );
+      buf += ( ri.b_deleted() ? L'D' : (ri.b_strong() ? L'S' : (ri.b_weak() ? L'W' : L'_')) );
       buf += L"0x";
       buf += _fls75(qsbuf).wstr();
 
@@ -6102,7 +6104,7 @@ void unity::swap(unity& x) __bmdx_noex
 bool unity::unity_delete() __bmdx_noex { return _Ldelete_this() > 0; }
 unity& unity::recreate() __bmdx_noex { this->~unity(); new (this) unity(); return *this; }
 unity& unity::recreate_as(const unity& modsrc) __bmdx_noex { this->~unity(); new (this) unity(); this->pmsm = modsrc.pmsm; return *this; }
-unity& unity::_rnonc_self() const __bmdx_noex { return const_cast<unity&>(*this); }
+unity& unity::_rnonc_self() const __bmdx_noex { return *const_cast<unity*>(this); }
 
 s_long unity::arrlb() const { if (isArray()) { return cv_ff::cv_array::Llb_u(this); } throw XUTypeMismatch("arrlb", _tname0(utype()), "array"); }
 s_long unity::arrub() const { if (isArray()) { return cv_ff::cv_array::Lub_u(this); } throw XUTypeMismatch("arrub", _tname0(utype()), "array"); }
@@ -11342,7 +11344,14 @@ unity file_utils::load_text(const std::string& format_string, const std::wstring
     char fileBuf[ReadBufSize];
     f.rdbuf()->pubsetbuf(fileBuf, ReadBufSize);
       // load whole file
-    std::string s(static_cast<std::stringstream const&>(std::stringstream() << f.rdbuf()).str());
+    std::string s;
+    if (1)
+    {
+      std::stringstream ss;
+      ss << f.rdbuf();
+      std::string s2(ss.str());
+      s.swap(s2);
+    }
       // Test for allowed encodings.
     unsigned int pos = 0;
     int ind_enc = -1;

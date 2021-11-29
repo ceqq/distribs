@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2021-11-29
+// rev. 2021-11-30
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -2821,9 +2821,9 @@ namespace bmdx
     volatile _s_ll _ipush, _ipop; // the next push position, corresponding pos. in bc == _ipush % ncap(); the next pop position; _ipop <= _ipush; corresponding position in bc == _ipop % ncap()
 
     struct __a2 : carray_t<t_value, false> { typedef carray_t<t_value, false> t; void _destroy(T* pd_, typename t::_t_size i0, typename t::_t_size i2) { this->t::_destroy(pd_, i0, i2); } void _destroy1(T* pd_) { this->t::_destroy1(pd_); } };
-    void _a_pop_1() { const _s_ll j = _ipop; static_cast<__a2&>(a)._destroy1(a.pd() + j % a.n()); bmdx_str::words::atomwral64(&_ipop, j + 1); }
+    void _a_pop_1() { const _s_ll j = _ipop; static_cast<__a2*>(&a)->_destroy1(a.pd() + j % a.n()); bmdx_str::words::atomwral64(&_ipop, j + 1); }
     _s_ll _a_pop_n(_s_ll n) { const _s_ll j = _ipop; n = bmdx_minmax::myllmin(n, bmdx_str::words::atomrdal64(&_ipush) - j, a.n()); if (n <= 0) { return 0; } _a_destroy_n_u(a, j, n); bmdx_str::words::atomwral64(&_ipop, j + n); return n; }
-    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = ind0 % a.n(); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2&>(a)._destroy(a.pd(), i0, i2); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2&>(a)._destroy(a.pd(), 0, i2); } }
+    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = ind0 % a.n(); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2*>(&a)->_destroy(a.pd(), i0, i2); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2*>(&a)->_destroy(a.pd(), 0, i2); } }
     static bool _a_copy_n_u(carray_t<t_value, false>& adest, _s_ll idest, const carray_t<t_value, false>& asrc, _s_ll isrc, _s_ll n) // transactional copying (without array capacity and other checks)
     {
       if (n <= 0) { return true; }

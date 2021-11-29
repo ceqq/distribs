@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2021-11-29
+// rev. 2021-11-30
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -129,8 +129,8 @@ struct meta
       t_stg stg;
       const T& x;
       arg_tu_t(const T& x_) : x(x_) {}
-      template<class T2> arg_tu_t(const T2& x_) : x(reinterpret_cast<T&>(*this)) { new (this) T(x_); }
-      ~arg_tu_t() { if ((void*)&x == this) { reinterpret_cast<T&>(*this).~T(); } }
+      template<class T2> arg_tu_t(const T2& x_) : x(*reinterpret_cast<T*>(this)) { new (this) T(x_); }
+      ~arg_tu_t() { if ((void*)&x == this) { reinterpret_cast<T*>(this)->~T(); } }
     private: arg_tu_t(const arg_tu_t&); void operator=(const arg_tu_t&);
     };
   #endif
@@ -4446,7 +4446,7 @@ namespace _yk_c2
       inline s_long try_deinit() __bmdx_noex { if (inited) { try { T* p = ptr(); (void)p; p->~T(); inited = false; return 1; } catch (...) {} inited = false; return -1; } return 0; }
       inline operator T*() const __bmdx_noex { return reinterpret_cast<T*>(&pl); }
       inline T* ptr() const __bmdx_noex { return reinterpret_cast<T*>(&pl); }
-      inline operator T&() const __bmdx_noex { return reinterpret_cast<T&>(*ptr()); }
+      inline operator T&() const __bmdx_noex { return *ptr(); }
     };
 
 
