@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-11-30
+// rev. 2021-12-03
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -1029,12 +1029,12 @@ private:
   struct _r_prc_uid
   {
     volatile s_ll _sig, _pid, _pid_deriv, _livecnt, _disp_ses_state, _prc_inst_id; // NOTE prc_inst_id must be the last in sequence
-    s_ll sig() volatile const { return bmdx_str::words::atomrdal64(&_sig); } void sig(s_ll x) volatile { bmdx_str::words::atomwral64(&_sig, x); }
-    s_ll pid() volatile const { return bmdx_str::words::atomrdal64(&_pid); } void pid(s_ll x) volatile { bmdx_str::words::atomwral64(&_pid, x); }
-    s_ll pid_deriv() volatile const { return bmdx_str::words::atomrdal64(&_pid_deriv); } void pid_deriv(s_ll x) volatile { bmdx_str::words::atomwral64(&_pid_deriv, x); }
-    s_ll livecnt() volatile const { return bmdx_str::words::atomrdal64(&_livecnt); } void livecnt(s_ll x) volatile { bmdx_str::words::atomwral64(&_livecnt, x); }
-    s_ll disp_ses_state() volatile const { return bmdx_str::words::atomrdal64(&_disp_ses_state); } void disp_ses_state(s_ll x) volatile { bmdx_str::words::atomwral64(&_disp_ses_state, x); }
-    s_ll prc_inst_id() volatile const { return bmdx_str::words::atomrdal64(&_prc_inst_id); } void prc_inst_id(s_ll x) volatile { bmdx_str::words::atomwral64(&_prc_inst_id, x); }
+    s_ll sig() volatile const { return bmdx_str::words::atomrdal64_g(&_sig); } void sig(s_ll x) volatile { bmdx_str::words::atomwral64_g(&_sig, x); }
+    s_ll pid() volatile const { return bmdx_str::words::atomrdal64_g(&_pid); } void pid(s_ll x) volatile { bmdx_str::words::atomwral64_g(&_pid, x); }
+    s_ll pid_deriv() volatile const { return bmdx_str::words::atomrdal64_g(&_pid_deriv); } void pid_deriv(s_ll x) volatile { bmdx_str::words::atomwral64_g(&_pid_deriv, x); }
+    s_ll livecnt() volatile const { return bmdx_str::words::atomrdal64_g(&_livecnt); } void livecnt(s_ll x) volatile { bmdx_str::words::atomwral64_g(&_livecnt, x); }
+    s_ll disp_ses_state() volatile const { return bmdx_str::words::atomrdal64_g(&_disp_ses_state); } void disp_ses_state(s_ll x) volatile { bmdx_str::words::atomwral64_g(&_disp_ses_state, x); }
+    s_ll prc_inst_id() volatile const { return bmdx_str::words::atomrdal64_g(&_prc_inst_id); } void prc_inst_id(s_ll x) volatile { bmdx_str::words::atomwral64_g(&_prc_inst_id, x); }
 
     _r_prc_uid() __bmdx_noex { sig(Fsig()); pid(0); pid_deriv(0); livecnt(0); disp_ses_state(-2); prc_inst_id(0); }
 

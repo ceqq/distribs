@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2021-11-30
+// rev. 2021-12-03
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -45,9 +45,47 @@
 #ifndef bmdx_cpiomt_H
 #define bmdx_cpiomt_H
 
+
+  // NOTE This constant is IPC message delivery thread priority on POSIX systems.
+  //  The original value 5 (boosted priority) works well for most of systems,
+  //    resulting in fast (>6 GB/s) data transfer.
+  //  In case of problems with IPC and/or overall system performance,
+  //    pre-define the constant to 4 (normal priority).
+  //    With this, data transfer speed still remains high (50..90% of max. speed).
+  // NOTE In Windows, IPC message delivery works perfectly on default (normal)
+  //    thread priority, so the priority is not modified.
+#ifndef __bmdx_cfg_ipc_th_delivery_prio_psx
+  #define __bmdx_cfg_ipc_th_delivery_prio_psx 5
+#endif
+
+  // For processctl::launch():
+  //    POSIX-specific setting, meaning "for starting a process, prefer vfork over fork if possible".
+  //    May be pre-defined to 0 - this disables vfork() use by launch().
+  //    (launch() will then choose fork() in most cases.)
+  //    NOTE Even if disabled as default choice, vfork may still be forced by the client at run time,
+  //      by supplying hints with
+  //        processctl_launch_hints::psx_force_exectype = ppet_vfork.
+#ifndef __bmdx_cfg_allow_vfork
+  #define __bmdx_cfg_allow_vfork 1
+#endif
+
+  // For atomic operations (Windows only).
+  // If the code is compiled for 32-bit (x86) architecture with old SDK that does not declare atomic 64-bit functions,
+  //  the macro should be globally defined to 1.
+  //  This makes use of InterlockedCompareExchange64 if it's available at run time in kernel32.dll,
+  //  otherwise atomicity is emulated via semaphores.
+  //  Such 32-bit binaries can work and correctly interact, in respect of atomic operations,
+  //    a) in pure 32-bit environment - between each other,
+  //    b) in WoW64 environment - with any 32- or 64-bit executables.
+#ifndef __bmdx_cfg_atomic_allow_emul
+  #define __bmdx_cfg_atomic_allow_emul 0
+#endif
+
+
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+  #pragma GCC diagnostic ignored "-Wstrict-overflow"
   #pragma GCC diagnostic ignored "-Wdeprecated"
   #pragma GCC diagnostic ignored "-Wint-in-bool-context"
   #pragma GCC diagnostic ignored "-Wclass-memaccess"
@@ -107,29 +145,6 @@
 #endif
 #ifndef __bmdx_null_pchar
   #define __bmdx_null_pchar ((char*)1 - 1)
-#endif
-
-  // NOTE This constant is IPC message delivery thread priority on POSIX systems.
-  //  The original value 5 (boosted priority) works well for most of systems,
-  //    resulting in fast (>6 GB/s) data transfer.
-  //  In case of problems with IPC and/or overall system performance,
-  //    pre-define the constant to 4 (normal priority).
-  //    With this, data transfer speed still remains high (50..90% of max. speed).
-  // NOTE In Windows, IPC message delivery works perfectly on default (normal)
-  //    thread priority, so the priority is not modified.
-#ifndef __bmdx_cfg_ipc_th_delivery_prio_psx
-  #define __bmdx_cfg_ipc_th_delivery_prio_psx 5
-#endif
-
-  // For processctl::launch():
-  //    POSIX-specific setting, meaning "for starting a process, prefer vfork over fork if possible".
-  //    May be pre-defined to 0 - this disables vfork() use by launch().
-  //    (launch() will then choose fork() in most cases.)
-  //    NOTE Even if disabled as default choice, vfork may still be forced by the client at run time,
-  //      by supplying hints with
-  //        processctl_launch_hints::psx_force_exectype = ppet_vfork.
-#ifndef __bmdx_cfg_allow_vfork
-  #define __bmdx_cfg_allow_vfork 1
 #endif
 
 
@@ -212,14 +227,18 @@ namespace bmdx_meta
   #include <direct.h>
   #include <conio.h>
 #endif
-#if (__cplusplus >= 201103L || defined(__ICC) || defined(__INTEL_COMPILER)) && !defined(__BORLANDC__) && !(defined(_MSC_VER) && _MSC_VER >= 1920)
-  #define __bmdx_atomic_use_std 1
-#elif defined(_bmdxpl_Wnds) && !defined(__MINGW32_MAJOR_VERSION)
-  #define __bmdx_atomic_use_interlocked 1
-#elif defined(__GNUC__)
-  #define __bmdx_atomic_use_gcc_sync 1
-#elif defined(__SUNPRO_CC)
-  #define __bmdx_atomic_use_cc_atomic_h 1
+#if __bmdx_cfg_atomic_allow_emul && defined(_bmdxpl_Wnds)
+  #define __bmdx_atomic_use_emul 1
+#else
+  #if (__cplusplus >= 201103L || defined(__ICC) || defined(__INTEL_COMPILER)) && !defined(__BORLANDC__) && !(defined(_MSC_VER) && _MSC_VER >= 1920)
+    #define __bmdx_atomic_use_std 1
+  #elif defined(_bmdxpl_Wnds) && !defined(__MINGW32_MAJOR_VERSION)
+    #define __bmdx_atomic_use_interlocked 1
+  #elif defined(__GNUC__)
+    #define __bmdx_atomic_use_gcc_sync 1
+  #elif defined(__SUNPRO_CC)
+    #define __bmdx_atomic_use_cc_atomic_h 1
+  #endif
 #endif
 #if __bmdx_atomic_use_std
   #include <atomic>
@@ -424,11 +443,147 @@ namespace bmdx_str
     static inline void set_be4(void* p, _s_long pos, _s_long x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos + 3; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc-- = char(x); x >>= 8; *pc = char(x);  }
     static inline void set_be2(void* p, _s_long pos, _s_long x) __bmdx_noex { _yk_reg char* pc = ((char*)p) + pos + 1; *pc-- = char(x); x >>= 8; *pc = char(x);  }
 
-    static inline _s_ll atomrdal64(const volatile void* pint64) // atomic read for aligned value
-    {
-      if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
-      else
+    #if __bmdx_atomic_use_emul
+
+      struct __bmdx_aosem
       {
+        static inline int _term_self(int x_ = 0) { static int x = 0; x = 1 / x_; return x; }
+
+        typedef LONG64 (WINAPI *PF_intcmpexch64)(volatile LONG64* Destination, LONG64 ExChange, LONG64 Comperand);
+        static inline PF_intcmpexch64 pf1()
+        {
+          static PF_intcmpexch64 _spf = NULL;
+          static char _sc = 0;
+          if (!_sc)
+          {
+            PF_intcmpexch64 p = (PF_intcmpexch64)GetProcAddress(GetModuleHandleA("kernel32.dll"), "InterlockedCompareExchange64");
+            if (p) { _spf = p; _sc = 2; }
+              else { _sc = 1; }
+          }
+          return _spf;
+        }
+
+        static inline void lock_inpr(bool b_on)
+        {
+          static char _rc_hs = 0;
+          static HANDLE _rhs = NULL;
+          if (b_on)
+          {
+            if (!_rc_hs)
+            {
+              struct _name_hs { static inline const char* f() { enum { q = 20, z = 9 }; static char x[] = "__bmdx_aoemulsem_pid\0\0\0\0\0\0\0\0\0\0"; if (x[q+z] == 0) { sprintf(&x[q], "%luX", (long unsigned int)GetCurrentProcessId()); x[q+z] = 1; } return x; } };
+              HANDLE h = CreateSemaphoreA(0, 1, 1, _name_hs::f());
+              if (!h) { _term_self(); } // CreateSemaphoreA must succeed
+              WaitForSingleObjectEx(h, INFINITE, FALSE);
+              if (!_rc_hs) { _rhs = h; _rc_hs = 1; return; }
+              ReleaseSemaphore(h, 1, 0);
+              CloseHandle(h);
+            }
+            WaitForSingleObjectEx(_rhs, INFINITE, FALSE);
+          }
+          else
+          {
+            if (_rc_hs) { ReleaseSemaphore(_rhs, 1, 0); }
+          }
+        }
+
+        static inline void lock_g(bool b_on)
+        {
+          static char _rc_hs = 0;
+          static HANDLE _rhs = NULL;
+          if (b_on)
+          {
+            if (!_rc_hs)
+            {
+              struct _name_hs { static inline const char* f() { return "__bmdx_aoemulsem__global"; } };
+              HANDLE h = CreateSemaphoreA(0, 1, 1, _name_hs::f());
+              if (!h) { _term_self(); } // CreateSemaphoreA must succeed
+              WaitForSingleObjectEx(h, INFINITE, FALSE);
+              if (!_rc_hs) { _rhs = h; _rc_hs = 1; return; }
+              ReleaseSemaphore(h, 1, 0);
+              CloseHandle(h);
+            }
+            WaitForSingleObjectEx(_rhs, INFINITE, FALSE);
+          }
+          else
+          {
+            if (_rc_hs) { ReleaseSemaphore(_rhs, 1, 0); }
+          }
+        }
+
+        __bmdx_aosem() { if (pf1()) { _s_ll z = 0; pf1()(&z, 0, 0); } else { lock_inpr(1); lock_inpr(0); lock_g(1); lock_g(0); } }
+      };
+      namespace { __bmdx_aosem __inst_init_bmdx_aosem; }
+
+
+
+        // Atomically reads x from location pointed to by pint64.
+        // pint64 must be aligned to 8-byte boundary.
+        // See also atomrdal64_g.
+      static inline _s_ll atomrdal64(const volatile void* pint64)
+      {
+        if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
+        static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
+        if (f) { LONG64 xprv = f((volatile LONG64*)pint64, 0, 0); return xprv; }
+        _s_ll x; __bmdx_aosem::lock_inpr(1); x = *(volatile _s_ll*)pint64; __bmdx_aosem::lock_inpr(0);
+        return x;
+      }
+        // Atomically writes x to location pointed to by pint64.
+        // pint64 must be aligned to 8-byte boundary.
+        // See also atomwral64_g.
+      static inline void atomwral64(volatile void* pint64, _s_ll x)
+      {
+        if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; return; }
+        static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
+        if (f) { LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (f((volatile LONG64*)pint64, x, xprv) != xprv); return; }
+        __bmdx_aosem::lock_inpr(1); *(volatile _s_ll*)pint64 = x; __bmdx_aosem::lock_inpr(0);
+      }
+        // Atomically adds x to value pointed to by pint64.
+        // pint64 must be aligned to 8-byte boundary.
+        // Returns the result of addition.
+        // See also atomadd64_g.
+      static inline _s_ll atomadd64(volatile void* pint64, _s_ll x)
+      {
+        static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
+        if (f) { LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (f((volatile LONG64*)pint64, xprv + x, xprv) != xprv); return xprv + x; }
+        _s_ll s; __bmdx_aosem::lock_inpr(1); s = (*(volatile _s_ll*)pint64 += x); __bmdx_aosem::lock_inpr(0);
+        return s;
+      }
+
+        // atomrdal64_g should be used instead of atomrdal64 when pint64 points to value in shared memory.
+      static inline _s_ll atomrdal64_g(const volatile void* pint64)
+      {
+        if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
+        static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
+        if (f) { LONG64 xprv = f((volatile LONG64*)pint64, 0, 0); return xprv; }
+        _s_ll x; __bmdx_aosem::lock_g(1); x = *(volatile _s_ll*)pint64; __bmdx_aosem::lock_g(0);
+        return x;
+      }
+        // atomwral64_g should be used instead of atomwral64 when pint64 points to value in shared memory.
+      static inline void atomwral64_g(volatile void* pint64, _s_ll x)
+      {
+        if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; return; }
+        static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
+        if (f) { LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (f((volatile LONG64*)pint64, x, xprv) != xprv); return; }
+        __bmdx_aosem::lock_g(1); *(volatile _s_ll*)pint64 = x; __bmdx_aosem::lock_g(0);
+      }
+        // atomadd64_g should be used instead of atomadd64 when pint64 points to value in shared memory.
+      static inline _s_ll atomadd64_g(volatile void* pint64, _s_ll x)
+      {
+        static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
+        if (f) { LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (f((volatile LONG64*)pint64, xprv + x, xprv) != xprv); return xprv + x; }
+        _s_ll s; __bmdx_aosem::lock_g(1); s = (*(volatile _s_ll*)pint64 += x); __bmdx_aosem::lock_g(0);
+        return s;
+      }
+
+    #else
+
+        // Atomically reads x from location pointed to by pint64.
+        // pint64 must be aligned to 8-byte boundary.
+        // See also atomrdal64_g.
+      static inline _s_ll atomrdal64(const volatile void* pint64)
+      {
+        if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
         #if __bmdx_atomic_use_std
           enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
           return ((std::atomic<_s_ll>*)pint64)->load();
@@ -437,17 +592,17 @@ namespace bmdx_str
         #elif __bmdx_atomic_use_gcc_sync
           return __sync_add_and_fetch((volatile _s_ll*)pint64, 0);
         #elif __bmdx_atomic_use_cc_atomic_h
-          return atomic_or_64_nv((volatile uint64_t*)pint64, 0);          
+          return atomic_or_64_nv((volatile uint64_t*)pint64, 0);
         #else
-          enum { e = 1 / 0 }; // OS/compiler must supply atomic read/write funcs. for aligned int64
+          enum { e1 = 1 / 0 }; // OS/compiler must supply atomic read/write funcs. for aligned int64
         #endif
       }
-    }
-    static inline void atomwral64(volatile void* pint64, _s_ll x) // atomic write for aligned value
-    {
-      if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; }
-      else
+        // Atomically writes x to location pointed to by pint64.
+        // pint64 must be aligned to 8-byte boundary.
+        // See also atomwral64_g.
+      static inline void atomwral64(volatile void* pint64, _s_ll x)
       {
+        if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; return; }
         #if __bmdx_atomic_use_std
           enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
           ((std::atomic<_s_ll>*)pint64)->store(x);
@@ -458,31 +613,42 @@ namespace bmdx_str
         #elif __bmdx_atomic_use_cc_atomic_h
           atomic_swap_64((volatile uint64_t*)pint64, x);
         #else
-          enum { e = 1 / 0 }; // OS/compiler must supply atomic read/write funcs. for aligned int64
+          enum { e1 = 1 / 0 }; // OS/compiler must supply atomic read/write funcs. for aligned int64
         #endif
       }
-    }
-    static inline _s_ll atomadd64(volatile void* pint64, _s_ll x) // atomic addition to value; returns the result
-    {
-      #if __bmdx_atomic_use_std
-        enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
-        return ((std::atomic<_s_ll>*)pint64)->fetch_add(x) + x;
-      #elif __bmdx_atomic_use_interlocked
-        #ifdef InterlockedAdd64
-          return InterlockedAdd64((volatile LONG64*)pint64, x);
+        // Atomically adds x to value pointed to by pint64.
+        // pint64 must be aligned to 8-byte boundary.
+        // Returns the result of addition.
+        // See also atomadd64_g.
+      static inline _s_ll atomadd64(volatile void* pint64, _s_ll x)
+      {
+        #if __bmdx_atomic_use_std
+          enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
+          return ((std::atomic<_s_ll>*)pint64)->fetch_add(x) + x;
+        #elif __bmdx_atomic_use_interlocked
+          #ifdef InterlockedAdd64
+            return InterlockedAdd64((volatile LONG64*)pint64, x);
+          #else
+            LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (InterlockedCompareExchange64((volatile LONG64*)pint64, xprv + x, xprv) != xprv); return xprv + x;
+          #endif
+        #elif __bmdx_atomic_use_gcc_sync
+          return __sync_add_and_fetch((volatile _s_ll*)pint64, x);
+        #elif __bmdx_atomic_use_cc_atomic_h
+          return _s_ll(atomic_add_64_nv((volatile uint64_t*)pint64, x));
         #else
-          LONGLONG xprv;
-          do { xprv = *(volatile LONGLONG*)pint64; } while (InterlockedCompareExchange64((volatile LONGLONG*)pint64, xprv + x, xprv) != xprv);
-          return xprv;
+          enum { e1 = 1 / 0 }; // OS/compiler must supply atomic add func.
         #endif
-      #elif __bmdx_atomic_use_gcc_sync
-        return __sync_add_and_fetch((volatile _s_ll*)pint64, x);
-      #elif __bmdx_atomic_use_cc_atomic_h
-        return _s_ll(atomic_add_64_nv((volatile uint64_t*)pint64, x)) - x;
-      #else
-        enum { e = 1 / 0 }; // OS/compiler must supply atomic add func.
-      #endif
-    }
+      }
+
+        // atomrdal64_g should be used instead of atomrdal64 when pint64 points to value in shared memory.
+      static inline _s_ll atomrdal64_g(const volatile void* pint64) { return atomrdal64(pint64); }
+        // atomwral64_g should be used instead of atomwral64 when pint64 points to value in shared memory.
+      static inline void atomwral64_g(volatile void* pint64, _s_ll x) { atomwral64(pint64, x); }
+        // atomadd64_g should be used instead of atomadd64 when pint64 points to value in shared memory.
+      static inline _s_ll atomadd64_g(volatile void* pint64, _s_ll x) { return atomadd64(pint64, x); }
+
+    #endif
+
 
     template<class T, class Aux = bmdx_meta::nothing, class _ = yk_c::__vecm_tu_selector> struct memmove_t
     {
@@ -2820,10 +2986,12 @@ namespace bmdx
     carray_t<t_value, false> a; // certain part of entries contains C++ objects
     volatile _s_ll _ipush, _ipop; // the next push position, corresponding pos. in bc == _ipush % ncap(); the next pop position; _ipop <= _ipush; corresponding position in bc == _ipop % ncap()
 
-    struct __a2 : carray_t<t_value, false> { typedef carray_t<t_value, false> t; void _destroy(T* pd_, typename t::_t_size i0, typename t::_t_size i2) { this->t::_destroy(pd_, i0, i2); } void _destroy1(T* pd_) { this->t::_destroy1(pd_); } };
+    typedef carray_t<t_value, false> _t_a;
+    typedef typename _t_a::_t_size _t_size;
+    struct __a2 : carray_t<t_value, false> { void _destroy(T* pd_, _t_size i0, _t_size i2) { this->_t_a::_destroy(pd_, i0, i2); } void _destroy1(T* pd_) { this->_t_a::_destroy1(pd_); } };
     void _a_pop_1() { const _s_ll j = _ipop; static_cast<__a2*>(&a)->_destroy1(a.pd() + j % a.n()); bmdx_str::words::atomwral64(&_ipop, j + 1); }
     _s_ll _a_pop_n(_s_ll n) { const _s_ll j = _ipop; n = bmdx_minmax::myllmin(n, bmdx_str::words::atomrdal64(&_ipush) - j, a.n()); if (n <= 0) { return 0; } _a_destroy_n_u(a, j, n); bmdx_str::words::atomwral64(&_ipop, j + n); return n; }
-    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = ind0 % a.n(); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2*>(&a)->_destroy(a.pd(), i0, i2); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2*>(&a)->_destroy(a.pd(), 0, i2); } }
+    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = ind0 % a.n(); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2*>(&a)->_destroy(a.pd(), _t_size(i0), _t_size(i2)); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2*>(&a)->_destroy(a.pd(), 0, _t_size(i2)); } }
     static bool _a_copy_n_u(carray_t<t_value, false>& adest, _s_ll idest, const carray_t<t_value, false>& asrc, _s_ll isrc, _s_ll n) // transactional copying (without array capacity and other checks)
     {
       if (n <= 0) { return true; }
@@ -8016,9 +8184,9 @@ namespace _api // public API, merged into namespace bmdx_shm
     // Supplier side.
 
       // The current push position, and the number of bytes (volatile) that may be pushed now.
-    _s_ll ipush() const __bmdx_noex { return bmdx_str::words::atomrdal64(&_ipush); }
+    _s_ll ipush() const __bmdx_noex { return bmdx_str::words::atomrdal64_g(&_ipush); }
     _s_ll nfree() const __bmdx_noex { return _n - navl(); }
-    void _sndr_set_ipush(_s_ll ipush) __bmdx_noex { bmdx_str::words::atomwral64(&_ipush, ipush); } // for "manual" updating push position if needed
+    void _sndr_set_ipush(_s_ll ipush) __bmdx_noex { bmdx_str::words::atomwral64_g(&_ipush, ipush); } // for "manual" updating push position if needed
 
       // If nmax > 0, pushes min(nmax, npush()) bytes from p into the queue.
       // Returns the number of bytes actually pushed (>=0).
@@ -8028,7 +8196,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     {
       if (!p) { return 0; }
       if (nmax <= 0) { return 0; }
-      _s_ll i2 = _ipush, i1 = bmdx_str::words::atomrdal64(&_ipop);
+      _s_ll i2 = _ipush, i1 = bmdx_str::words::atomrdal64_g(&_ipop);
       _s_ll n = _n - (i2 - i1);
       _s_ll __np = nmax >= n ? n : _s_ll(nmax);
       _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - _s_ll(i2 % _n));
@@ -8038,7 +8206,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         p += n1;
         _s_ll n2 = __np - n1;
         if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + (_ipush + n1) % _n, p, size_t(n2)); }
-        bmdx_str::words::atomadd64(&_ipush, __np); // the last action "commits" pushing (important if the object is in shared memory)
+        bmdx_str::words::atomadd64_g(&_ipush, __np); // the last action "commits" pushing (important if the object is in shared memory)
        }
       return __np;
     }
@@ -8049,7 +8217,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     _s_ll push_bytes(char b, _s_ll nmax) __bmdx_noex
     {
       if (nmax <= 0) { return 0; }
-      _s_ll i2 = _ipush, i1 = bmdx_str::words::atomrdal64(&_ipop);
+      _s_ll i2 = _ipush, i1 = bmdx_str::words::atomrdal64_g(&_ipop);
       _s_ll n = _n - (i2 - i1);
       _s_ll __np = nmax >= n ? n : _s_ll(nmax);
       _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - i2 % _n);
@@ -8058,7 +8226,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         std::memset(&d[0] + _ipush % _n, b, size_t(n1));
         _s_ll n2 = __np - n1;
         if (n2 > 0) { std::memset(&d[0] + (_ipush + n1) % _n, b, size_t(n2)); }
-        bmdx_str::words::atomadd64(&_ipush, __np); // the last action "commits" pushing (important if the object is in shared memory)
+        bmdx_str::words::atomadd64_g(&_ipush, __np); // the last action "commits" pushing (important if the object is in shared memory)
       }
       return __np;
     }
@@ -8067,15 +8235,15 @@ namespace _api // public API, merged into namespace bmdx_shm
     // Receiver side.
 
       // The current pop position, and the number of bytes (volatile) that may be popped now.
-    _s_ll ipop() const __bmdx_noex { return bmdx_str::words::atomrdal64(&_ipop); }
-    _s_ll navl() const __bmdx_noex { return bmdx_str::words::atomrdal64(&_ipush) - bmdx_str::words::atomrdal64(&_ipop); }
-    void _rcv_set_ipop(_s_ll ipop) __bmdx_noex { bmdx_str::words::atomwral64(&_ipop, ipop); } // for skipping data if needed
+    _s_ll ipop() const __bmdx_noex { return bmdx_str::words::atomrdal64_g(&_ipop); }
+    _s_ll navl() const __bmdx_noex { return bmdx_str::words::atomrdal64_g(&_ipush) - bmdx_str::words::atomrdal64_g(&_ipop); }
+    void _rcv_set_ipop(_s_ll ipop) __bmdx_noex { bmdx_str::words::atomwral64_g(&_ipop, ipop); } // for skipping data if needed
 
       // How many bytes, which may be popped, are located contiguously. [0..npop()].
-    _s_ll navl_contig() const __bmdx_noex { if (_n <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64(&_ipush), ipo = bmdx_str::words::atomrdal64(&_ipop); return bmdx_minmax::myllmin(_n - ipo % _n, ipu - ipo); }
+    _s_ll navl_contig() const __bmdx_noex { if (_n <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64_g(&_ipush), ipo = bmdx_str::words::atomrdal64_g(&_ipop); return bmdx_minmax::myllmin(_n - ipo % _n, ipu - ipo); }
 
       // Pointer to the next byte that would be popped.
-    const char* peek1() const __bmdx_noex { return &d[0] + bmdx_str::words::atomrdal64(&_ipop) % _n; }
+    const char* peek1() const __bmdx_noex { return &d[0] + bmdx_str::words::atomrdal64_g(&_ipop) % _n; }
 
       // If nmax > 0, pops min(nmax, npop()) bytes from the queue into pdest.
       // If b_do_pop == false, ipop() is not increased, so the client just gets a copy of buffer data.
@@ -8086,7 +8254,7 @@ namespace _api // public API, merged into namespace bmdx_shm
     {
       if (!pdest) { return 0; }
       if (nmax <= 0) { return 0; }
-      _s_ll i1 = _ipop, i2 = bmdx_str::words::atomrdal64(&_ipush);
+      _s_ll i1 = _ipop, i2 = bmdx_str::words::atomrdal64_g(&_ipush);
       _s_ll n = i2 - i1;
       _s_ll __np = nmax >= n ? n : _s_ll(nmax);
       _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - i1 % _n);
@@ -8096,7 +8264,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         pdest += n1;
         _s_ll n2 = __np - n1;
         if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + (_ipop + n1) % _n, size_t(n2), pchs); }
-        if (b_do_pop) { bmdx_str::words::atomadd64(&_ipop, __np); } // the last action "commits" popping (important if the object is in shared memory)
+        if (b_do_pop) { bmdx_str::words::atomadd64_g(&_ipop, __np); } // the last action "commits" popping (important if the object is in shared memory)
       }
       return __np;
     }
@@ -8108,10 +8276,10 @@ namespace _api // public API, merged into namespace bmdx_shm
     _s_ll discard(_s_ll nmax) __bmdx_noex
     {
       if (nmax <= 0) { return 0; }
-      _s_ll i2 = bmdx_str::words::atomrdal64(&_ipush), i1 = _ipop;
+      _s_ll i2 = bmdx_str::words::atomrdal64_g(&_ipush), i1 = _ipop;
       _s_ll n = i2 - i1;
       _s_ll __np = nmax >= n ? n : nmax;
-      bmdx_str::words::atomadd64(&_ipop, __np); // the last action "commits" discarding (important if the object is in shared memory)
+      bmdx_str::words::atomadd64_g(&_ipop, __np); // the last action "commits" discarding (important if the object is in shared memory)
       return __np;
     }
 
@@ -9392,8 +9560,8 @@ struct shmqueue_ctx
           if (!p) { return -2; }
         p->ringbuf.init_ref(nbuf);
         std::memset((void*)&p->__rsv[0], 0, sizeof(p->__rsv));
-        bmdx_str::words::atomwral64(&p->ipop_plan, 0);
-        bmdx_str::words::atomwral64(&p->ipush_plan, 0);
+        bmdx_str::words::atomwral64_g(&p->ipop_plan, 0);
+        bmdx_str::words::atomwral64_g(&p->ipush_plan, 0);
         *buf.pf_state1() = 0;
         *buf.pf_state2() = 0;
         buf.set_f_constructed(1);
@@ -9698,11 +9866,11 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         const double t = clock_ms();
         if (q.buf.b_side1())
         {
-          bmdx_str::words::atomadd64(&q.buf->__rsv[0], 1);
+          bmdx_str::words::atomadd64_g(&q.buf->__rsv[0], 1);
         }
         else
         {
-          _s_ll x = bmdx_str::words::atomrdal64(&q.buf->__rsv[0]);
+          _s_ll x = bmdx_str::words::atomrdal64_g(&q.buf->__rsv[0]);
           const signed char c_rcv = *q.buf.pf_state1();
           if (x != q.sndr_ircvst)
           {
@@ -9838,7 +10006,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         const bool b_extmsg = !!((unsigned char)z[0] & 0x80);
         const _s_ll ndatr = ((_s_ll(z[0]) & 127) << 32) + be4(z, 1); // NOTE client data length bit 39 is ignored (it serves as b_extmsg flag)
         const _s_ll iend = buf.ipop() + nb_mlen + ndatr + 1;
-        bmdx_str::words::atomwral64(&shm.ipop_plan, iend);
+        bmdx_str::words::atomwral64_g(&shm.ipop_plan, iend);
         b_changed = true;
 
         if (b_extmsg)
@@ -9873,7 +10041,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         if (!q.msg_rcv)  { tr_rcv = -1; b_changed = true; return; } // invariant check
 
         const _s_ll ndatr = q.msg_rcv->n();
-        const _s_ll ipoppl = bmdx_str::words::atomrdal64(&shm.ipop_plan);
+        const _s_ll ipoppl = bmdx_str::words::atomrdal64_g(&shm.ipop_plan);
         const _s_ll i1 = ipoppl - 1 - ndatr;
         const _s_ll i0 = i1 - nb_mlen;
 
@@ -9917,8 +10085,8 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         if (c_rcv != -2) { tr_rcv = -2; }
         q._mrcv_clear();
         if (b_exit) { return; }
-        const _s_ll ipushpl = bmdx_str::words::atomrdal64(&shm.ipush_plan);
-        const _s_ll ipoppl = bmdx_str::words::atomrdal64(&shm.ipop_plan);
+        const _s_ll ipushpl = bmdx_str::words::atomrdal64_g(&shm.ipush_plan);
+        const _s_ll ipoppl = bmdx_str::words::atomrdal64_g(&shm.ipop_plan);
         if (ipushpl < ipoppl) { tr_rcv = -1; b_changed = true; }
           else if (buf.ipop() < ipoppl) { const _s_ll nd = buf.discard(ipoppl - buf.ipop()); if (nd > 0) { b_changed = true; } }
           else if (buf.ipop() == ipoppl) { tr_rcv = 1; b_changed = true; }
@@ -9985,7 +10153,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
             if (!r0._pnonc_u()->is_valid()) { q.msgs.pop_1(); return; }
             q.pmsend2 = r0._pnonc_u();
             q.nmsend = q.msend2_n();
-            bmdx_str::words::atomwral64(&shm.ipush_plan, (buf.ipush() + nb_mlen + q.nmsend + 1));
+            bmdx_str::words::atomwral64_g(&shm.ipush_plan, (buf.ipush() + nb_mlen + q.nmsend + 1));
           }
           else
           {
@@ -9996,7 +10164,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
             q.pmsend1 = r1._pnonc_u();
             q.pmsend2 = r2._pnonc_u();
             q.nmsend = q.msend1_n() + q.msend2_n();
-            bmdx_str::words::atomwral64(&shm.ipush_plan, (buf.ipush() + nb_mlen + q.nmsend + 1));
+            bmdx_str::words::atomwral64_g(&shm.ipush_plan, (buf.ipush() + nb_mlen + q.nmsend + 1));
           }
           b_changed = true;
         }
@@ -10010,7 +10178,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         if (_tr_rcv == -2) { q._msend_clear(); tr_send = -2; b_changed = true; return; }
         if (b_exit) { q._msend_clear(); tr_send = -2; return; }
 
-        const _s_ll ipushpl = bmdx_str::words::atomrdal64(&shm.ipush_plan);
+        const _s_ll ipushpl = bmdx_str::words::atomrdal64_g(&shm.ipush_plan);
         const _s_ll i0 = ipushpl - 1 - q.nmsend - nb_mlen;
 
         if (!(q.pmsend2 && buf.ipush() >= i0 && buf.ipush() <= ipushpl)) // invariant check
@@ -10055,7 +10223,7 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         q._msend_clear();
         if (b_exit) { return; }
 
-        const _s_ll ipushpl = bmdx_str::words::atomrdal64(&shm.ipush_plan);
+        const _s_ll ipushpl = bmdx_str::words::atomrdal64_g(&shm.ipush_plan);
 
         if (buf.ipush() < ipushpl) { const bool bpushed = buf.nfree() > 0 && 0 != buf.push_bytes(0, ipushpl - buf.ipush()); if (bpushed) { b_changed = true; } }
           else if (buf.ipush() == ipushpl) { if (q.sndr_rcv_act >= 1) { tr_send = 1; b_changed = true; } }
