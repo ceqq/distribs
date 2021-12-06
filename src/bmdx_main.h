@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2021-12-03
+// rev. 2021-12-06
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -4954,8 +4954,12 @@ namespace
     bool is_ex_dir(const std::wstring& sPath) const;
     bool is_ex_dir(const std::string& sPath) const;
 
-        // Non-recursive expansion of environment variables in s.
-        //  Converts tokens, limited by '%', into corresponding values of env. variables (std::getenv).
+        // Non-recursive sequential expansion of environment variables in s.
+        //  1. Converts tokens, limited by '%', into corresponding values of env. variables (std::getenv).
+        //  2. If variable is not found in the environment, its name is replaced with an empty string.
+        //  3. Sequence "%%" in s is treated specially:
+        //    a) if met beyond variable name, it is immediately converted to single literal percent sign, unrelated to env. variables.
+        //    b) if met inside variable name, ends the name and immediately marks the beginning of the next variable name.
         // NOTE std::wstring version of expand_env_nr:
         //    1. Converts tokens, limited by '%', into 1-byte character string.
         //    2. Gets env. variable value.

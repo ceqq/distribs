@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-12-03
+// rev. 2021-12-06
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -11281,7 +11281,7 @@ std::wstring file_utils::expand_env_nr(const std::wstring& s) const
       pos2 = s.find('%', pos0);
       if (pos2 == nposw) { pos0 -= 1; s2 += s.substr(pos0, s.length() - pos0); break; }
         else if (pos2 > pos0) { std::string sv; if (__bmdx_std_getenv(wsToBs(s.substr(pos0, pos2 - pos0)).c_str(), sv)) { s2 += bsToWs(sv); } pos0 = pos2 + 1; }
-        else { pos0 = pos2 + 1; }
+        else { s2 += L'%'; pos0 = pos2 + 1; }
     }
     else { s2 += s.substr(pos0, s.length() - pos0); break; }
   } while (pos0 < s.length());
@@ -11300,7 +11300,7 @@ std::string file_utils::expand_env_nr(const std::string& s) const
       pos2 = s.find('%', pos0);
       if (pos2 == nposc) { pos0 -= 1; s2 += s.substr(pos0, s.length() - pos0); break; }
         else if (pos2 > pos0) { std::string sv; if (__bmdx_std_getenv(s.substr(pos0, pos2 - pos0).c_str(), sv)) { s2 += sv; } pos0 = pos2 + 1; }
-        else { pos0 = pos2 + 1; }
+        else { s2 += '%'; pos0 = pos2 + 1; }
     }
     else { s2 += s.substr(pos0, s.length() - pos0); break; }
   } while (pos0 < s.length());
