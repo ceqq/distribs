@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2021-12-06
+// rev. 2021-12-19
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3673,13 +3673,17 @@ namespace bmdx
     }
   #endif
 
-    // NOTE avg. max. sleep duration error depends on thread priority and CPU load.
-    //  On overloaded CPU, order of 160..40 ms for normal..time-critical priority.
-    //  In normal conditions, order of 1 mcs.
-  static void sleep_mcs(_s_ll t)
+  static void _sleep_mcs_v2w(_s_ll t, _s_long flags)
   {
     if (t < 0) { return; }
-    if (t == 0) { SleepEx(0, 1); return; }
+    const BOOL b_al = !(flags & 2);
+    if (t == 0) { SleepEx(0, b_al); return; }
+    if (flags & 1)
+    {
+      const DWORD tms = (DWORD)bmdx_minmax::myllmin((t + 999) / 1000, 0xffffffff);
+      SleepEx(tms, b_al);
+      return;
+    }
 
     enum { tms_lag_fact_min = 7 }; // measured sleep time variation, in normal conditions
 
@@ -3693,7 +3697,7 @@ namespace bmdx
       if (dtms_whole > 0)
       {
 
-        SleepEx(DWORD(dtms_whole), 1);
+        SleepEx(DWORD(dtms_whole), b_al);
 
         const double ft1 = clock_ms();
         lag2 = _s_ll(1000 * (ft1 + tms_lag_fact_min - ft0 - double(dtms_whole)));
@@ -3706,8 +3710,35 @@ namespace bmdx
       }
     if (lag2 != lag1) { bmdx_str::words::atomwral64(&_tlagmcs, lag2); }
 
-    while (clock_ms() < ft2) { SleepEx(0, 1); }
+    while (clock_ms() < ft2) { SleepEx(0, b_al); }
   }
+
+    // t: time to sleep, in microseconds.
+    //  If t < 0, the function returns immediately.
+    // flags:
+    //  0x1:
+    //    a) if set, do exactly one call to system API (SleepEx, nanosleep)
+    //      with relative sleep time arg. equal to t.
+    //      NOTE
+    //        1. System API call may return before the specified time has passed
+    //          (for system-dependent reasons).
+    //        2. In Windows, sleep time is rounded up to whole milliseconds.
+    //    b) If the flag is not set (default), attempt to ensure max. accuracy of factual sleep time.
+    //      The method is system-dependent, system API may be called several times and/or
+    //      with sleep time argument != t.
+    //      NOTE In Windows, avg. max. sleep duration error depends on thread priority and CPU load.
+    //        On overloaded CPU, order of 160..40 ms for normal..time-critical priority.
+    //        In normal conditions, order of 1 mcs.
+    //  0x2 (Windows only): if the flag is set, call SleepEx with bAlertable = FALSE.
+    //    Ensures system API sleep call returning only after the specified time elapses.
+    //    The flag is mostly useful when flag 0x1 is set.
+    //  0x4 (POSIX only): if the flag is set, use absolute time (clock_gettime+clock_nanosleep),
+    //    instead of relative (nanosleep).
+    //    Flag 0x1 is ignored unless any of clock_* fails or not available on this platform.
+    //    clock_nanosleep may be called more than one time, if sleeping is interrupted by a signal.
+  inline void sleep_mcs(_s_ll t, _s_long flags = 0 __bmdx_noarg)
+    { _sleep_mcs_v2w(t, flags); }
+
 
 
 typedef HANDLE _t_threadctl_nat_handle;
@@ -4030,20 +4061,76 @@ namespace bmdx
     }
   #endif
 
-  static void sleep_mcs(_s_ll t)
+  static void _sleep_mcs_v2p(_s_ll t, _s_long flags)
   {
-      if (t < 0) { return; }
-      timespec ts;
-      if (t == 0) { ts.tv_sec = 0; ts.tv_nsec = 0; nanosleep(&ts, 0); return; }
-      _s_ll tns = t * 1000;
-      if (tns < 5000) { tns /= 2; }
-        else if (tns < 20000) { tns -= 1500;  }
-        else if (tns < 100000) { tns -= 3000; if (tns < 18500) { tns = 18500; } }
-        else if (tns < 1000000) { tns -= 5000; if (tns < 97000) { tns = 97000; }  }
-        else { tns -= 10000; if (tns < 995000) { tns = 995000; } }
-      ts.tv_sec = time_t(tns / 1000000000); ts.tv_nsec = long(tns % 1000000000);
+    if (t < 0) { return; }
+    timespec ts;
+    if (t == 0) { ts.tv_sec = 0; ts.tv_nsec = 0; nanosleep(&ts, 0); return; }
+    enum { n1e9 = 1000000000 };
+    _s_ll tns = t * 1000;
+    #if __APPLE__ && __MACH__
+    #else
+      if (flags & 4)
+      {
+        do { // once
+          int res = clock_gettime(CLOCK_MONOTONIC, &ts);
+            if (res != 0) { break; }
+          ts.tv_nsec += long(tns % n1e9);
+            if (ts.tv_nsec >= n1e9) { ts.tv_sec += time_t(ts.tv_nsec / n1e9); ts.tv_nsec %= n1e9; }
+          ts.tv_sec += time_t(tns / n1e9);
+          while (1)
+          {
+            res = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, 0);
+              if (res == 0) { return; }
+              if (res == EINTR) { continue; }
+            break; // this assumes the very first call to clock_nanosleep has failed
+          }
+        } while (false);
+      }
+    #endif
+    if (flags & 1)
+    {
+      ts.tv_sec = time_t(tns / n1e9); ts.tv_nsec = long(tns % n1e9);
       nanosleep(&ts, 0);
+      return;
+    }
+    if (tns < 5000) { tns /= 2; }
+      else if (tns < 20000) { tns -= 1500;  }
+      else if (tns < 100000) { tns -= 3000; if (tns < 18500) { tns = 18500; } }
+      else if (tns < 1000000) { tns -= 5000; if (tns < 97000) { tns = 97000; }  }
+      else { tns -= 10000; if (tns < 995000) { tns = 995000; } }
+    ts.tv_sec = time_t(tns / n1e9); ts.tv_nsec = long(tns % n1e9);
+    struct timespec rem;
+    while (1)
+    {
+      int res = nanosleep(&ts, &rem);
+      if (res == -1 && errno == EINTR) { ts = rem; continue; }
+      return;
+    }
   }
+
+    // t: time to sleep, in microseconds.
+    //  If t < 0, the function returns immediately.
+    // flags:
+    //  0x1:
+    //    a) if set, do exactly one call to system API (SleepEx, nanosleep)
+    //      with relative sleep time arg. equal to t.
+    //      NOTE
+    //        1. System API call may return before the specified time has passed
+    //          (for system-dependent reasons).
+    //        2. In Windows, sleep time is rounded up to whole milliseconds.
+    //    b) If the flag is not set (default), attempt to ensure max. accuracy of factual sleep time.
+    //      The method is system-dependent, system API may be called several times and/or
+    //      with sleep time argument != t.
+    //  0x2 (Windows only): if the flag is set, call SleepEx with bAlertable = FALSE.
+    //    Ensures system API sleep call returning only after the specified time elapses.
+    //    The flag is mostly useful when flag 0x1 is set.
+    //  0x4 (POSIX only): if the flag is set, use absolute time (clock_gettime+clock_nanosleep),
+    //    instead of relative (nanosleep).
+    //    Flag 0x1 is ignored unless any of clock_* fails or not available on this platform.
+    //    clock_nanosleep may be called more than one time, if sleeping is interrupted by a signal.
+  inline void sleep_mcs(_s_ll t, _s_long flags = 0 __bmdx_noarg)
+    { _sleep_mcs_v2p(t, flags); }
 
 
 
