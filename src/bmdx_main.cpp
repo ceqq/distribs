@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-12-19
+// rev. 2021-12-24
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -13290,7 +13290,7 @@ void dispatcher_mt::thread_proxy::th_lqsd_impl::_thread_proc()
       if (nm > 0) { break; }
       const s_ll dtmcs = bmdx_minmax::myllmin(sleep1_max, sleep_total - s_ll(1000 * (clock_ms() - t0)));
       if (dtmcs < 0) { break; }
-      sleep_mcs(dtmcs);
+      sleep_mcs(dtmcs, sleep_total >= sleep1_max ? 1 : 0);
     }
   }
 lExit: _r_ths.clear();
@@ -13415,7 +13415,7 @@ void dispatcher_mt::thread_proxy::th_lmsc_impl::_thread_proc()
       }
       const s_ll dtmcs = bmdx_minmax::myllmin(sleep1, sleep_total - s_ll(1000 * (clock_ms() - t0)));
         if (dtmcs < 0) { break; }
-      sleep_mcs(dtmcs);
+      sleep_mcs(dtmcs, sleep_total >= sleep1_long ? 1 : 0);
     }
   }
 lExit:

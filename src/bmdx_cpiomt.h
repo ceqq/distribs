@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2021-12-19
+// rev. 2021-12-24
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -10347,7 +10347,12 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
         }
         if (b_exit) { break; }
         if (b_changed) { t0_idle_en = clock_ms(); }
-          else { const bool b = clock_ms() - t0_idle_en < idle_t_enable_time_ms; sleep_mcs(b  ? idle_t_short_mcs : idle_t_long_mcs); }
+        else
+        {
+          const bool b = clock_ms() - t0_idle_en < idle_t_enable_time_ms;
+          if (b) { sleep_mcs(idle_t_short_mcs); }
+            else { sleep_mcs(idle_t_long_mcs, 1); }
+        }
       }
     }
   };
