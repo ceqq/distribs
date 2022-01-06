@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2021-12-24
+// rev. 2022-01-06
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -2237,8 +2237,8 @@ bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> n
   return x;
 }
 
-#endif // bmdx_part_dispatcher_mt
 }
+#endif // bmdx_part_dispatcher_mt
 } // namespace bmdx_main_intl_lib
 
 #if defined(__clang__)
