@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2022-01-06
+// rev. 2022-02-17
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -774,7 +774,7 @@ namespace bmdx_str
   {
     struct exc_str2i : std::exception { const char* what() const __bmdx_noex { return "bmdx_str::str2i"; } };
     struct exc_str2f : std::exception { const char* what() const __bmdx_noex { return "bmdx_str::str2f"; } };
-    struct exc_conv_ws : std::exception { enum { nmax = 80 }; char msg[nmax ]; const char* what() const __bmdx_noex { return msg; } exc_conv_ws(const char* s1, const char* s2 = 0) { _s_long n = nmax - 1; char* p = msg; if (s1) { while (*s1 && n > 0) { *p++ = *s1++; } } if (s2) { while (*s2 && n > 0) { *p++ = *s2++; } } *p = '\0'; } };
+    struct exc_conv_ws : std::exception { enum { nmax = 80 }; char msg[nmax]; const char* what() const __bmdx_noex { return msg; } exc_conv_ws(const char* s1, const char* s2 = 0) { _s_long n = nmax - 1; char* p = msg; if (s1) { while (*s1 && n > 0) { *p++ = *s1++; --n; } } if (s2) { while (*s2 && n > 0) { *p++ = *s2++; --n; } } *p = '\0'; } };
 
     static inline bool is_finite(double x) { return __bmdx_isfinite(x); }
   }
