@@ -1,4 +1,4 @@
-// rev. 2022-02-17
+// rev. 2022-10-16
 =======================================================================================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 =======================================================================================================================
@@ -307,7 +307,7 @@ icl   -nologo -EHsc -WX  -MD -Od   -Fetest1.dll -LD test1.cpp bmdx_main.cpp  -li
 
 
   -----------------------------------------------------
-  bcc64 3.1 (LLVM 3.1svn), x86_64-pc-win32-elf
+  bcc64 version 5.0.2 (LLVM 5.0.2), x86_64-pc-windows-elf
 
   rem === Executable, static RTL, optimized ===
 bcc64  -tM            -O2 -o test1.exe test1.cpp bmdx_main.cpp
@@ -316,7 +316,7 @@ bcc64  -tR -tM        -O0 -o test1.exe test1.cpp bmdx_main.cpp
   rem === DLL, static RTL, optimized ===
 bcc64  -tM -tD -Wall  -O2 -o test1.dll test1.cpp bmdx_main.cpp
   rem === DLL, dynamic RTL ===
-bcc64  -tR -tD -Wall  -O0 -o test1.dll test1.cpp bmdx_main.cpp
+bcc64  -tR -tM -tD -Wall  -O0 -o test1.dll test1.cpp bmdx_main.cpp
 
 
 
@@ -413,19 +413,25 @@ g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O1
 g++ -shared -fPIC -Wall                                  -m64 -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -lpthread
 
 ==================================
-Raspberry Pi 4 / Arch Linux ARM
+Raspberry Pi 4 Model B / Ubuntu 20.04.3 LTS
 
-All above considerations for Ubuntu 18.04 are also valid here.
+All the above considerations for Ubuntu 18.04 are also valid here.
 
   -----------------------------------------------------
-  gcc version 9.3.0 (GCC)
-  gcc version 10.1.0 (GCC)
+  gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1), aarch64-linux-gnu
 
 g++ -static-libgcc -static-libstdc++ -Wl,-E -Wl,-Bsymbolic -O2 -o test1 test1.cpp bmdx_main.cpp -ldl -lpthread
 g++                                  -Wl,-E -Wl,-Bsymbolic -O0 -o test1 test1.cpp bmdx_main.cpp -ldl -lpthread
 g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -Wl,-Bsymbolic -O2 -o test1.so test1.cpp bmdx_main.cpp -ldl -lpthread
 g++                                  -shared -fPIC -Wall -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -ldl -lpthread
 
+  -----------------------------------------------------
+  clang version 12.0.0-3ubuntu1~20.04.5, aarch64-unknown-linux-gnu
+
+clang++-12 -static-libgcc -m64 -Wl,-E -Wno-psabi -Wl,-Bsymbolic -O2 -o test1 test1.cpp bmdx_main.cpp -lstdc++ -lm -ldl -lpthread -latomic
+clang++-12                -m64 -Wl,-E -Wno-psabi -Wl,-Bsymbolic -O0 -o test1 test1.cpp bmdx_main.cpp -lstdc++ -lm -ldl -lpthread -latomic
+clang++-12 -static-libgcc -m64 -shared -fPIC -Wall -Wno-psabi -Wl,-Bsymbolic -O2 -o test1.so test1.cpp bmdx_main.cpp -lstdc++ -lm -ldl -lpthread -latomic
+clang++-12                -m64 -shared -fPIC -Wall -Wno-psabi -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -lstdc++ -lm -ldl -lpthread -latomic
 
 
 =======================================================================================================================

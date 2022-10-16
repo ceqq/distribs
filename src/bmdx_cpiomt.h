@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2022-02-17
+// rev. 2022-10-16
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -79,6 +79,19 @@
   //    b) in WoW64 environment - with any 32- or 64-bit executables.
 #ifndef __bmdx_cfg_atomic_allow_emul
   #define __bmdx_cfg_atomic_allow_emul 0
+#endif
+
+  // Sleep period between lock acquiring attempts <= this value will be precise
+  //  (multiple calls to system's thread sleep API are possible),
+  //  larger period will be less precise
+  //  (but using single call to sleep API, see sleep_mcs with flag 0x1 set).
+  // NOTE This setting seems to be useful in Windows only, where small micro- and nanosecond
+  //  sleeps are not supported, and precise sleep time may be achieved only
+  //  by multiple execution yields until the specified moment.
+  //  Also, because of locks, usually, using sleep times < 1000 mcs,
+  //  this setting is very application-specific.
+#ifndef __bmdx_cfg_tmcs_lock_precise_max
+  #define __bmdx_cfg_tmcs_lock_precise_max 2000
 #endif
 
 
@@ -230,7 +243,7 @@ namespace bmdx_meta
 #if __bmdx_cfg_atomic_allow_emul && defined(_bmdxpl_Wnds)
   #define __bmdx_atomic_use_emul 1
 #else
-  #if (__cplusplus >= 201103L || defined(__ICC) || defined(__INTEL_COMPILER)) && !defined(__BORLANDC__) && !(defined(_MSC_VER) && _MSC_VER >= 1920)
+  #if (__cplusplus >= 201103L || defined(__ICC) || defined(__INTEL_COMPILER)) && !(defined(_MSC_VER) && _MSC_VER >= 1920)
     #define __bmdx_atomic_use_std 1
   #elif defined(_bmdxpl_Wnds) && !defined(__MINGW32_MAJOR_VERSION)
     #define __bmdx_atomic_use_interlocked 1
@@ -978,7 +991,7 @@ namespace bmdx_str
         do // once
         {
           if (bf) { break; }
-          if (nq2)
+          if (nq2 && q2 != 0)
           {
             const _s_ll nprec = 15;
             _s_ll m(1); for (_s_ll i = 0; i < nq2; ++i) { m *= 10; }
@@ -3673,43 +3686,92 @@ namespace bmdx
     }
   #endif
 
+    // Sets timer resolution, in units of 100 ns, returns actually set resolution (>0),
+    //  or 0 on error.
+  inline long _win_ZwSetTimerResolution(ULONG t100ns)
+  {
+    typedef LONG _t_win_NTSTATUS;
+    typedef _t_win_NTSTATUS (__stdcall *f_setres)(ULONG RequestedResolution, BOOLEAN Set, PULONG ActualResolution);
+    static f_setres f(0);
+    if (!f) { f = (f_setres)GetProcAddress(GetModuleHandleA("ntdll"), "ZwSetTimerResolution"); }
+    if (!f) { return 0; }
+    ULONG actres(0);
+    _t_win_NTSTATUS res = f(t100ns > 0 ? t100ns : 1, TRUE, &actres);
+    if (res >= 0 && actres > 0) { return actres; }
+    return 0;
+  }
+
+    // true on success, false on failure.
+  inline bool _win_NtDelayExecution_mcs(LONGLONG tmcs, BOOL b_al)
+  {
+    typedef LONG _t_win_NTSTATUS;
+    typedef _t_win_NTSTATUS (__stdcall *f_sleep)(BOOL Alertable, PLARGE_INTEGER Interval);
+    static f_sleep f = 0;
+    if (!f) { f = (f_sleep)GetProcAddress(GetModuleHandleA("ntdll"), "NtDelayExecution"); }
+    if (!f) { return false; }
+    LARGE_INTEGER t;
+    t.QuadPart = -tmcs * 10;
+    _t_win_NTSTATUS res = f(b_al, &t);
+    return res >= 0;
+  }
+
   static void _sleep_mcs_v2w(_s_ll t, _s_long flags)
   {
     if (t < 0) { return; }
     const BOOL b_al = !(flags & 2);
     if (t == 0) { SleepEx(0, b_al); return; }
+
+    static long b_setres(0);
+    static long vres(0); // in the units of 100 ns
+    if (!b_setres) { b_setres = true; vres = _win_ZwSetTimerResolution(1); }
+
+    bool b_res1 = false;
+
     if (flags & 1)
     {
-      const DWORD tms = (DWORD)bmdx_minmax::myllmin((t + 999) / 1000, 0xffffffff);
-      SleepEx(tms, b_al);
+      if (vres > 0)
+        { b_res1 = _win_NtDelayExecution_mcs(t, b_al); }
+      if (!b_res1)
+      {
+        const DWORD tms = (DWORD)bmdx_minmax::myllmin((t + 999) / 1000, 0xffffffff);
+        SleepEx(tms, b_al);
+      }
       return;
     }
-
-    enum { tms_lag_fact_min = 7 }; // measured sleep time variation, in normal conditions
 
     const double ft0 = clock_ms();
     const double ft2 = ft0 + double(t) / 1000;
 
-    static _s_ll _tlagmcs(tms_lag_fact_min * 1000);
-    const _s_ll lag1 = bmdx_str::words::atomrdal64(&_tlagmcs);
-    _s_ll lag2 = lag1;
-      const _s_ll dtms_whole =  (t - lag1) / 1000; // part of sleep time in whole milliseconds, can be spent without losing accuracy
-      if (dtms_whole > 0)
-      {
+    if (vres > 0)
+    {
+      _s_ll t2 = t - vres / 10;
+      if (t2 > 0 && t2 < t)
+        { b_res1 = _win_NtDelayExecution_mcs(t2, b_al); }
+    }
+    if (!b_res1)
+    {
+      enum { tms_lag_fact_min = 7 }; // measured sleep time variation, in normal conditions
 
-        SleepEx(DWORD(dtms_whole), b_al);
+      static _s_ll _tlagmcs(tms_lag_fact_min * 1000);
+      const _s_ll lag1 = bmdx_str::words::atomrdal64(&_tlagmcs);
+      _s_ll lag2 = lag1;
+        const _s_ll dtms_whole =  (t - lag1) / 1000; // part of sleep time in whole milliseconds, can be spent without losing accuracy
+        if (dtms_whole > 0)
+        {
 
-        const double ft1 = clock_ms();
-        lag2 = _s_ll(1000 * (ft1 + tms_lag_fact_min - ft0 - double(dtms_whole)));
-        if (lag2 > lag1) { lag2 = (lag1 * 2 + lag2) / 3; }
-          else { lag2 = (lag1 * 7 + lag2) / 8; }
-      }
-      else if (lag2 > 1000)
-      {
-        lag2 = lag2 * 99 / 100;
-      }
-    if (lag2 != lag1) { bmdx_str::words::atomwral64(&_tlagmcs, lag2); }
+          SleepEx(DWORD(dtms_whole), b_al);
 
+          const double ft1 = clock_ms();
+          lag2 = _s_ll(1000 * (ft1 + tms_lag_fact_min - ft0 - double(dtms_whole)));
+          if (lag2 > lag1) { lag2 = (lag1 * 2 + lag2) / 3; }
+            else { lag2 = (lag1 * 7 + lag2) / 8; }
+        }
+        else if (lag2 > 1000)
+        {
+          lag2 = lag2 * 99 / 100;
+        }
+      if (lag2 != lag1) { bmdx_str::words::atomwral64(&_tlagmcs, lag2); }
+    }
     while (clock_ms() < ft2) { SleepEx(0, b_al); }
   }
 
@@ -3798,7 +3860,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
           InterlockedDecrement(&_p->cnt);
         }
         if (timeout_ms >= 0) { double dt = clock_ms() - t0; if (dt < 0 || dt >= double(timeout_ms)) { return; } }
-        sleep_mcs(check_period_mcs);
+        sleep_mcs(check_period_mcs, check_period_mcs <= __bmdx_cfg_tmcs_lock_precise_max ? 0 : 0x1);
       }
     }
     _p->tid = GetCurrentThreadId(); ++_p->cnt2; pflags->_bl = 1;
@@ -3916,7 +3978,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (!p->in_thread) { th_ctx_release(p, 2); return 1; }
     if (timeout_ms < 0) { th_ctx_release(p, 2); return -1; }
     _s_long t = timeout_ms;
-    while (t >= 0) { sleep_mcs(t > 10 ? 10000 : t * 1000); if (!p->in_thread) { th_ctx_release(p, 2); return 2; } t -= 10; }
+    while (t >= 0) { sleep_mcs(t > 10 ? 10000 : t * 1000, 1); if (!p->in_thread) { th_ctx_release(p, 2); return 2; } t -= 10; }
     return -2;
   }
 
@@ -4250,7 +4312,7 @@ template<class T, class _ = __vecm_tu_selector> struct _critsec_tu_static_t
     while (pthread_mutex_trylock(&_p->_m) != 0)
     {
       if (timeout_ms >= 0) { if (!b) { t0 = clock_ms(); b = true; } double dt = clock_ms() - t0; if (dt < 0 || dt >= double(timeout_ms)) { return; } }
-      sleep_mcs(check_period_mcs);
+      sleep_mcs(check_period_mcs, check_period_mcs <= __bmdx_cfg_tmcs_lock_precise_max ? 0 : 0x1);
     }
     pflags->_bl = 1; if (_p->_kind == 1) { new (&_p->_tid) pthread_t(pthread_self()); _p->_b_lk1 = 1; }
   }
@@ -4410,7 +4472,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (!p->in_thread) { _threadctl_tu_static_t<_>::th_ctx_release(p, 2); return 1; }
     if (timeout_ms < 0) { _threadctl_tu_static_t<_>::th_ctx_release(p, 2); return -1; }
     _s_long t = timeout_ms;
-    while (t >= 0) { sleep_mcs(t > 10 ? 10000 : t * 1000); if (!p->in_thread) { th_ctx_release(p, 2); return 2; } t -= 10; }
+    while (t >= 0) { sleep_mcs(t > 10 ? 10000 : t * 1000, 1); if (!p->in_thread) { th_ctx_release(p, 2); return 2; } t -= 10; }
     return -2;
   }
 
@@ -6224,7 +6286,7 @@ namespace bmdx
       // NOTE Copying cref_t usually sets a lock for ref. counting,
       //    also, the object may be destroyed right after the call, because the temporary reference became
       //    the last one during call.
-      //    This can lead to unpredictable delays and cannot be used in time-critical routines, like drive callbacks.
+      //    This can lead to unpredictable delays and cannot be used in time-critical routines, like driver callbacks.
       //    I.e. in cref_t, "--->" action is quite different from "->".
     cref_t operator--(int) const __bmdx_noex    { return *this; }
 
@@ -7252,7 +7314,7 @@ namespace bmdx
         bool b = false; try { mt_proc(); b = true; } catch (...) {}
         if (!b) { *_rb_run._pnonc_u() = 2; }
         if (pcb0) { try { pcb0->cb_proc(this, _ith, -2, b ? 1 : 0); } catch (...) {} }
-        if (pcb0 && _ith == _nth - 1) { while (true) { if (b_stop()) { return; } _s_long n = 0; for (_s_long i = 0; i < _nth; ++i) { n += bool(_rth.ref()[i]); } if (n <= 1) { break; } sleep_mcs(100); } pcb0->cb_proc(this, _ith, -3, 0); }
+        if (pcb0 && _ith == _nth - 1) { while (true) { if (b_stop()) { return; } _s_long n = 0; for (_s_long i = 0; i < _nth; ++i) { n += bool(_rth.ref()[i]); } if (n <= 1) { break; } sleep_mcs(100, 1); } pcb0->cb_proc(this, _ith, -3, 0); }
       }
       multithread* _pm; cref_t<icb> _cb; _s_long _nth, _ith, _pr; cref_t<char> _rb_run; cref_t<cpparray_t<threadctl> > _rth;
     };
@@ -10362,10 +10424,13 @@ struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
     // NOTE b_on = false only for call during static deinitialization (as bugfix).
   static bool _th_enable(bool b_on = true)
   {
+    static volatile _s_long objstate(0);
+    #ifdef __BORLANDC__
+      if (!b_on && objstate == 0) { return false; } // runtime issue fix, for case of dynamic RTL
+    #endif
     static _s_long fl_deinit(0);
     static deinit_handler __local_dh(fl_deinit); if (sizeof(__local_dh)) {}
     static cref_t<th_handler> x;
-    static volatile _s_long objstate(0);
     if (!b_on)
     {
       if (1)
@@ -10612,7 +10677,7 @@ namespace _api // public API, merged into namespace bmdx_shm
           HANDLE hp = GetCurrentProcess(); SIZE_T nbmin = 0, nbmax = 0;
           bool bto = false;
           t_name_shm csname(__bmdx_allocctl_pre_csname_base); csname += GetCurrentProcessId();
-          critsec_gn cs(csname.c_str()); if (1) { double t0 = clock_ms(); while (!cs.lock()) { sleep_mcs(10000); if (clock_ms() - t0 > 3000) { bto = true; break; } } }
+          critsec_gn cs(csname.c_str()); if (1) { double t0 = clock_ms(); while (!cs.lock()) { sleep_mcs(10000, 1); if (clock_ms() - t0 > 3000) { bto = true; break; } } }
           if (!bto && !!GetProcessWorkingSetSize(hp, &nbmin, &nbmax))
           {
             nbmin += nbx; nbmax += nbx;
@@ -10665,7 +10730,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         HANDLE hp = GetCurrentProcess(); SIZE_T nbmin = 0, nbmax = 0;
         bool bto = false;
         t_name_shm csname(__bmdx_allocctl_pre_csname_base); csname += GetCurrentProcessId();
-        critsec_gn cs(csname.c_str()); if (1) { double t0 = clock_ms(); while (!cs.lock()) { sleep_mcs(10000); if (clock_ms() - t0 > 3000) { bto = true; break; } } }
+        critsec_gn cs(csname.c_str()); if (1) { double t0 = clock_ms(); while (!cs.lock()) { sleep_mcs(10000, 1); if (clock_ms() - t0 > 3000) { bto = true; break; } } }
         if (!bto && !!GetProcessWorkingSetSize(hp, &nbmin, &nbmax) && nbmin >= nbx && nbmax >= nbx)
         {
           nbmin -= nbx; nbmax -= nbx;
@@ -10923,7 +10988,7 @@ namespace _api // public API, merged into namespace bmdx_shm
           }
         }
         if (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms) { return -1; }
-        sleep_mcs(_idle_t_mcs);
+        sleep_mcs(_idle_t_mcs, 1);
         if (!_shmqueue_ctxx_impl::_th_enable()) { return -2; } // the application may be exiting during waiting
       }
     }
@@ -11028,7 +11093,7 @@ namespace _api // public API, merged into namespace bmdx_shm
           }
         }
         if (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms) { return -1; }
-        sleep_mcs(_idle_t_mcs);
+        sleep_mcs(_idle_t_mcs, 1);
         if (!_shmqueue_ctxx_impl::_th_enable()) { return -2; } // the application may be exiting during waiting
       }
     }
@@ -11371,7 +11436,7 @@ namespace _api // public API, merged into namespace bmdx_shm
           res = bsm == 3 ? 2 : 1; return res;
         }
         if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { res = 0; return 0; }
-        sleep_mcs(_idle_t_mcs);
+        sleep_mcs(_idle_t_mcs, 1);
         if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; } // the application may be exiting during waiting
       }
     }
@@ -11481,7 +11546,7 @@ namespace _api // public API, merged into namespace bmdx_shm
           res = 1; return 1;
         }
         if (timeout_ms == 0 || (timeout_ms > 0 && clock_ms() - t0 >= timeout_ms)) { if (this->d) { this->d.clear(); } res = 0; return 0; }
-        sleep_mcs(_idle_t_mcs);
+        sleep_mcs(_idle_t_mcs, 1);
         if (!_shmqueue_ctxx_impl::_th_enable()) { res = -2; return -2; } // the application may be exiting during waiting
       }
     }

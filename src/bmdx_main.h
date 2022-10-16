@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2022-02-17
+// rev. 2022-10-16
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -2221,6 +2221,7 @@ namespace bmdx
       // Returns: true if k was inserted, false if it existed.
       //  NOTE The name map_append means only that inserting pre-sorted keys into the map is optimized.
       //    map_append always inserts any k in the set of existing keys at the place, defined by comparison kf_unity::less12.
+      // See also paramline::list_m.
     bool map_append(const unity& k, const unity& v, bool keep_first = false);
     bool map_del(const unity& k); // true - removed, false - not existed
 
@@ -2356,7 +2357,7 @@ namespace bmdx
       //    a) as string in paramline array format (with "|" char. before each element; leading "|" or "=|" is optional).
       //    b) (path_w(unity&) only) as array of path elements.
       //  path_w automatically creates the given path, if it does not exist.
-      //  If branch element is empty (e.g. just created), and is indexed with the key which is Empty, Int, or Float,
+      //  If branch element is empty (e.g. just created), and is indexed with the key which is utInt,
       //      the branch element is automatically converted to array, and resized to make the index valid.
       //      With other key types, such branch element is converted to hashlist,
       //      and only one element is inserted (the key with and empty value).
@@ -2426,9 +2427,9 @@ namespace bmdx
     unity& pl_dec1v(arrayref_t<char> ssrc);
 
       // Convenience functions for paramline :: encode, encode_tree, encode1v.
-    std::wstring pl_enc();
-    std::wstring pl_enc_tree();
-    std::wstring pl_enc1v();
+    std::wstring pl_enc() const;
+    std::wstring pl_enc_tree() const;
+    std::wstring pl_enc1v() const;
 
 
 
@@ -4235,6 +4236,221 @@ namespace
 
 
 
+  //==  Utility for iterating through utMap, utHash, utUnityArray, and scalar.
+
+    // Iterates through the container, referencing its particular element with pair
+    //    (const unity& first, const unity& second).
+    //  a) for associative array, (first, second) are (key, value).
+    //  b) for utUnityArray, (first, second) both point to the same array element itself.
+    //  c) for scalar, the only one position is valid, like an array with one element.
+    //    (first, second) point to the same scalar value.
+    //  d) for arrays of type other than utUnityArray, (first, second) cannot be used,
+    //    but the array can still be iterated, and indexed with uiterate::pos,
+    //    namely, by x.val<T>(pos), x.ref<T>(pos), or any other like function.
+    //    T may be elem. type, or elem. or array type index ut*.
+    //    Details: see unity::val, unity::ref etc.
+    // Usage:
+    //    for (uiterate x(my_object); x; ++x) { ... x.key()  x->first ... x.value()  x->second ...  }
+    //    for (auto x : uiterate(my_object)) { ... x.first ... x.second ...  }
+  struct uiterate
+  {
+    const unity& x;
+
+      // _t: -2 - non-unity array, -1 - utUnityArray, 0 - scalar or object, 1 - assoc. array
+    s_long pos; signed char _t, _dir, _pad1, _pad2;
+    private: s_ll& _rdata() const { return *(s_ll*)&pos; }
+    public:
+
+      // "a"        - forward iterator at before-begin pos.
+      // "b" or ""  - forward iterator at begin pos.
+      // "d"        - forward iterator at last pos.
+      // "e"        - forward iterator at end (last + 1) pos.
+      //
+      // "-a"       - reverse iterator at the end of x_.
+      // "-b" or "-" - reverse iterator at the last element of x_.
+      // "-d"       - reverse iterator at the first element of x_.
+      // "-e"       - reverse iterator at before-begin pos. in x_.
+      // Reverse iterator position and movement work as like the container was mirrored
+      //  (swap([0],[n-1]), swap([1],[n-2]) ...),
+      //  and the result iterated normally, with forward iterator.
+    uiterate(const unity& x_, const char* spec = "b")
+      : x(x_)
+      {
+        _rdata() = 0;
+        _set_utype();
+        if (!spec) { spec = ""; }
+        bool b_fwd = spec[0] != '-';
+        char tpos = spec[b_fwd ? 0 : 1]; if (!(tpos == 'a' || tpos == 'd' || tpos == 'e')) { tpos = 'b'; }
+        _dir = b_fwd ? 1 : -1;
+        if (b_fwd)
+        {
+          if (_t == 1) { if (tpos == 'b') { pos = x_.assocl_first(); } else if (tpos == 'd') { pos = x_.assocl_last(); } else { pos = x_.assocl_noel(); } }
+            else if (_t < 0) { if (tpos == 'b') { pos = x_.arrlb(); } else if (tpos == 'e') { pos = x_.arrub() + 1; } else if (tpos == 'a') { pos = x_.arrlb() - 1; } else { pos = x_.arrub(); } }
+            else { if (tpos == 'b' || tpos == 'd') { pos = 0; } else { pos = 1; } }
+        }
+        else
+        {
+          if (_t == 1) { if (tpos == 'b') { pos = x_.assocl_last(); } else if (tpos == 'd') { pos = x_.assocl_first(); } else { pos = x_.assocl_noel(); } }
+            else if (_t < 0) { if (tpos == 'b') { pos = x_.arrub(); } else if (tpos == 'e') { pos = x_.arrlb() - 1; } else if (tpos == 'a') { pos = x_.arrub() + 1; } else { pos = x_.arrlb(); } }
+            else { if (tpos == 'b' || tpos == 'd') { pos = 0; } else { pos = 1; } }
+        }
+      }
+    uiterate(const unity& x_, s_long pos_, bool b_forward)        : x(x_) { _rdata() = 0; pos = pos_; _dir = b_forward ? 1 : -1; _set_utype(); }
+    uiterate(const uiterate& x_)                                  : x(x_.x) { _rdata() = x_._rdata(); }
+
+    uiterate& operator=(const uiterate& x_)       { new (this) uiterate(x_); return *this; }
+
+    uiterate& operator++()                        { if (_t == 1) { pos = _dir == 1 ? x.assocl_next(pos) : x.assocl_prev(pos); } else if (_t < 0) { pos += _dir; } else { pos ^= 1; } return *this; }
+    uiterate& operator--()                        { if (_t == 1) { pos = _dir == 1 ? x.assocl_prev(pos) : x.assocl_next(pos); } else if (_t < 0) { pos -= _dir; } else { pos ^= 1; } return *this; }
+
+      // Loop through all elements with operator++: from begin() to and not including (while !=) end()
+    uiterate begin() const                        { return uiterate(x, _dir == 1 ? "b" : "-b"); }
+    uiterate end() const                          { return uiterate(x, _dir == 1 ? "e" : "-e"); }
+      // Loop through all elements with operator--: from d() to and not including (while !=) a()
+    uiterate a() const                        { return uiterate(x, _dir == 1 ? "a" : "-a"); }
+    uiterate d() const                        { return uiterate(x, _dir == 1 ? "d" : "-d"); }
+
+    bool operator==(const uiterate& y) const      { return &x == &y.x && _rdata() == y._rdata(); }
+    bool operator!=(const uiterate& y) const      { return !(*this == y); }
+
+    operator bool() const               { if (_t == 1) { return pos != x.assocl_noel(); } if (_t < 0) { return _dir == 1 ? pos != x.arrub() + 1 : pos != x.arrlb() - 1; } return pos != 1; }
+
+    const unity& key() const            { if (_t == 1) { return x.assocl_key(pos); } else if (_t == 0 && pos == 0) { return x; } return x[pos]; }
+    const unity& value() const          { return _vnc(); }
+
+    struct ref1
+    {
+      const unity& first; const unity& second;
+      ref1(const unity& k, const unity& v) : first(k), second(v) {}
+      ref1* operator->() { return this; }
+    };
+    struct ref2
+    {
+      const unity& first; unity& second;
+      ref2(const unity& k, unity& v) : first(k), second(v) {}
+      ref2* operator->() { return this; }
+    };
+
+    ref1 operator*() const              { return ref1(key(), value()); }
+    ref1 operator()() const             { return **this; }
+    ref1 operator->() const             { return **this; }
+
+  protected:
+    unity& _vnc() const          { unity& z = *(unity*)&x; if (_t == 1) { return z.assocl(pos); } else if (_t == 0 && pos == 0) { return z; } return z.ref<unity>(pos); }
+    void _set_utype() { if (x.isAssoc()) { _t = 1; } else if (x.isArray()) { _t = x.utype() == utUnityArray ? -1 : -2; } else { _t = 0; } }
+  };
+
+    // Same as uiterate, but gives non-constant reference to value.
+    //  (assignable iter.value(), (*iter).second, iter().second, iter->second ...)
+    // Usage:
+    //    for (uiterate_nc x(my_object); x; ++x) { ... x.key() ... x.value()= ...  }
+    //    for (auto x : uiterate_nc(my_object)) { ... x.first ... x.second= ...  }
+  struct uiterate_nc : uiterate
+  {
+    uiterate_nc(const unity& x_, s_long pos_, bool b_forward)       : uiterate(x_, pos_, b_forward) {}
+    uiterate_nc(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
+    uiterate_nc(const uiterate& x_)                                 : uiterate(x_) {}
+
+    uiterate_nc& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+
+    uiterate_nc& operator++()                        { uiterate::operator++(); return *this; }
+    uiterate_nc& operator--()                        { uiterate::operator--(); return *this; }
+
+    uiterate_nc begin() const                        { return uiterate(x, _dir == 1 ? "b" : "-b"); }
+    uiterate_nc end() const                          { return uiterate(x, _dir == 1 ? "e" : "-e"); }
+    uiterate_nc a() const                        { return uiterate(x, _dir == 1 ? "a" : "-a"); }
+    uiterate_nc d() const                        { return uiterate(x, _dir == 1 ? "d" : "-d"); }
+
+    unity& value() const          { return _vnc(); }
+
+    ref2 operator*() const              { return ref2(key(), value()); }
+    ref2 operator()() const             { return **this; }
+    ref2 operator->() const             { return **this; }
+  };
+
+    // Same as uiterate, but dereferencing gives constant reference to key, instead of pair (first, second).
+    //  (iter.key() <=> (*iter), iter(), iter->...)
+    // Usage:
+    //    for (uiterate_k x(my_object); x; ++x) { ... x.key()  *x  x()  x-> ... x.value() ...  }
+    //    for (auto& k : uiterate_k(my_object)) { ... k ... value N/A ...  }
+  struct uiterate_k : uiterate
+  {
+    uiterate_k(const unity& x_, s_long pos_, bool b_forward)       : uiterate(x_, pos_, b_forward) {}
+    uiterate_k(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
+    uiterate_k(const uiterate& x_)                                 : uiterate(x_) {}
+
+    uiterate_k& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+
+    uiterate_k& operator++()                        { uiterate::operator++(); return *this; }
+    uiterate_k& operator--()                        { uiterate::operator--(); return *this; }
+
+    uiterate_k begin() const                        { return uiterate(x, _dir == 1 ? "b" : "-b"); }
+    uiterate_k end() const                          { return uiterate(x, _dir == 1 ? "e" : "-e"); }
+    uiterate_k a() const                        { return uiterate(x, _dir == 1 ? "a" : "-a"); }
+    uiterate_k d() const                        { return uiterate(x, _dir == 1 ? "d" : "-d"); }
+
+    const unity& operator*() const              { return key(); }
+    const unity& operator()() const             { return key(); }
+    const unity* operator->() const              { return &key(); }
+  };
+
+    // Same as uiterate, but dereferencing gives constant reference to value, instead of pair (first, second).
+    //  (iter.value() <=> (*iter), iter(), iter->...)
+    // Usage:
+    //    for (uiterate_v x(my_object); x; ++x) { ... x.key() ... x.value()  *x  x()  x-> ...  }
+    //    for (auto& v : uiterate_v(my_object)) { ... key N/A ... v ...  }
+  struct uiterate_v : uiterate
+  {
+    uiterate_v(const unity& x_, s_long pos_, bool b_forward)       : uiterate(x_, pos_, b_forward) {}
+    uiterate_v(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
+    uiterate_v(const uiterate& x_)                                 : uiterate(x_) {}
+
+    uiterate_v& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+
+    uiterate_v& operator++()                        { uiterate::operator++(); return *this; }
+    uiterate_v& operator--()                        { uiterate::operator--(); return *this; }
+
+    uiterate_v begin() const                        { return uiterate(x, _dir == 1 ? "b" : "-b"); }
+    uiterate_v end() const                          { return uiterate(x, _dir == 1 ? "e" : "-e"); }
+    uiterate_v a() const                        { return uiterate(x, _dir == 1 ? "a" : "-a"); }
+    uiterate_v d() const                        { return uiterate(x, _dir == 1 ? "d" : "-d"); }
+
+    const unity& operator*() const              { return value(); }
+    const unity& operator()() const             { return value(); }
+    const unity* operator->() const              { return &value(); }
+  };
+
+    // Same as uiterate, but dereferencing gives non-constant reference to value, instead of pair (first, second).
+    //  (assignable iter.value(), (*iter), iter(), iter->...)
+    // Usage:
+    //    for (uiterate_vnc x(my_object); x; ++x) { ... x.key() ... x.value()=  *x=  x()=  x-> ...  }
+    //    for (auto& v : uiterate_vnc(my_object)) { ... key N/A ... v= ...  }
+  struct uiterate_vnc : uiterate
+  {
+    uiterate_vnc(const unity& x_, s_long pos_, bool b_forward)       : uiterate(x_, pos_, b_forward) {}
+    uiterate_vnc(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
+    uiterate_vnc(const uiterate& x_)                                 : uiterate(x_) {}
+
+    uiterate_vnc& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+
+    uiterate_vnc& operator++()                        { uiterate::operator++(); return *this; }
+    uiterate_vnc& operator--()                        { uiterate::operator--(); return *this; }
+
+    uiterate_vnc begin() const                        { return uiterate(x, _dir == 1 ? "b" : "-b"); }
+    uiterate_vnc end() const                          { return uiterate(x, _dir == 1 ? "e" : "-e"); }
+    uiterate_vnc a() const                        { return uiterate(x, _dir == 1 ? "a" : "-a"); }
+    uiterate_vnc d() const                        { return uiterate(x, _dir == 1 ? "d" : "-d"); }
+
+    unity& value() const          { return _vnc(); }
+
+    unity& operator*() const              { return value(); }
+    unity& operator()() const             { return value(); }
+    unity* operator->() const              { return &value(); }
+  };
+
+
+
+
     //==  Data trees decoding/encoding.
     //  struct paramline provides original text format, representing
     //    acyclic data trees, consisting of pairs key = value,
@@ -4357,8 +4573,9 @@ namespace
       //  Escaping rules, as well as whole paramline format, are independent on the platform.
       //  More detailed:
       //    2.1. Literal semicolon (;) must be escaped in all cases (\;).
-      //    2.2. Literal 2-byte (CR, LF) sequence should be stated as \~ by default (because pterm2 == wCRLF),
-      //      to avoid splitting the string literal, i.e. if you need to decode multiline strings as single values.
+      //    2.2. When literal value of the given pterm2 must occur in a string,
+      //      it is specified with sequence \~ .
+      //      By default (pterm2 == wCRLF), \~ represents 2-character sequence (CR, LF).
       //    2.3. Literal spaces must be escaped if occurring leftmost/rightmost of keys, values,
       //      and array values.
       //      Unescaped leading and trailing spaces are always stripped off the key or value text before decoding.
@@ -4626,7 +4843,8 @@ namespace
       //      a) utHash (default root container type),
       //      b) utMap (default root type on flag 0x1 set),
       //      c) utUnityArray (when dflt. root type has been changed by path with array spec., e.g. =|\z ).
-      // NOTE With default pterm2, literal CRLF pairs in ssrc must be replaced with special sequence "\~".
+      // NOTE Literal CRLF pairs in ssrc must be specified as special sequence \~ .
+      //    (More detailed: after decoding, occurrences of \~ in strings are replaced with value of pterm2.)
       //    See also decode().
       //
       // Detailed information.
@@ -4842,15 +5060,16 @@ namespace
     friend struct _paramline_branch;
     friend struct _paramline_array_spec;
     friend struct _paramline_test;
-    static void x_encode1n(const unity& x, std::wstring& retval, s_long flags_encdec);
-    static void x_encode1v(const unity& x, std::wstring& retval, s_long flags_encdec, vec2_t<std::wstring, __vecm_tu_selector>* ret_psubarrs, hashx<const unity*, s_long>* phstop);
+    static arrayref_t<wchar_t> x_pterm2_dflt();
+    static void x_encode1n(const unity& x, std::wstring& retval, s_long flags_encdec, const arrayref_t<wchar_t>& pterm2);
+    static void x_encode1v(const unity& x, std::wstring& retval, s_long flags_encdec, vec2_t<std::wstring, __vecm_tu_selector>* ret_psubarrs, hashx<const unity*, s_long>* phstop, const arrayref_t<wchar_t>& pterm2);
     static void x_encode_branch(s_long flags_encdec, const unity& mh, const arrayref_t<wchar_t>& path, std::wstring& sdest, hashx<const unity*, s_long>& hstopk, hashx<const unity*, s_long>& hstopv, arrayref_t<wchar_t> pterm, arrayref_t<wchar_t> pterm2, arrayref_t<wchar_t> pathpfx);
-    static void x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool s_name, bool s_ar_elem, bool b_esc_eqsign);
-    static void x_replace2a(std::wstring& s, s_long flags);
+    static void x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool s_name, bool s_ar_elem, bool b_esc_eqsign, const arrayref_t<wchar_t>& pterm2);
+    static void x_replace2a(std::wstring& s, s_long flags, const arrayref_t<wchar_t>& pterm2);
     static void x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& replflags);
     struct _opt_unity;
     static void x_decode(arrayref_t<wchar_t> ssrc, unity& mha, s_long flags_encdec, arrayref_t<wchar_t> pterm2, _opt_unity* pret_path, s_long* pret_replflags);
-    static void x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_long replflags, unity& vdest);
+    static void x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_long replflags, unity& vdest, const arrayref_t<wchar_t>& pterm2);
     static bool x_decode1v_auto_date(const arrayref_t<wchar_t>& s, unity& retval) __bmdx_noex;
     static bool x_incorrect_numeric_value_str(const arrayref_t<wchar_t>& s, bool b_nans);
     static bool x_incorrect_integer_value_str(const arrayref_t<wchar_t>& s, bool allow_float_str);

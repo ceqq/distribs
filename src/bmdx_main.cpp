@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2022-02-17
+// rev. 2022-10-16
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -41,6 +41,7 @@
 
 #ifndef __bmdx_use_link_h
   #if defined(__linux__) || defined(__SUNPRO_CC) || defined(__sun)
+
     #define __bmdx_use_link_h 1
 
     #if defined(__SUNPRO_CC) || defined(__sun)
@@ -48,27 +49,170 @@
     #endif
     #include <link.h>
 
-    #define __bmdx_Elf_Dyn ElfW(Dyn)
-
-    #if defined(__ANDROID__) || defined(__SUNPRO_CC) || defined(__sun)
-      extern __bmdx_Elf_Dyn _DYNAMIC[];
-    #endif
-
-    static inline __bmdx_Elf_Dyn* __bmdx_DYNAMIC() { return _DYNAMIC; }
   #elif defined(__FreeBSD__)
+
     #define __bmdx_use_link_h 2
     #include <link.h>
+
   #elif (__APPLE__ && __MACH__)
     #define __bmdx_use_link_h 3
+
+    #if bmdx_part_dllmgmt
+      #include <mach-o/dyld.h>
+    #endif
+
+  #elif defined(_bmdxpl_Wnds)
+
+    #define __bmdx_use_link_h -1
+    typedef BOOL (WINAPI *PF_GetModuleHandleExW)(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule);
+    static PF_GetModuleHandleExW f_GetModuleHandleExW()
+    {
+      #ifdef _APISETLIBLOADER_
+        return &GetModuleHandleExW;
+      #else
+        static void* f = 0;
+        if (!f) { f = (void*)GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetModuleHandleExW"); }
+        return (PF_GetModuleHandleExW)f;
+      #endif
+    }
+
   #else
+
     #define __bmdx_use_link_h 0
+
   #endif
 #endif
-
+#if __APPLE__ && __MACH__
+  #if TARGET_OS_IPHONE
+//    NOTE libproc.h may be missing for particular architecture.
+//      Patched: libproc is part of libSystem, which is always loaded,
+//      so the needed symbol (proc_pidpath) address is got via dlsym.
+  #else
+    #include <libproc.h>
+  #endif
+#endif
+#if bmdx_part_dllmgmt && __bmdx_use_link_h > 0 && __bmdx_use_link_h != 3
+    // 1. On all systems, the first callback info describes the main executable.
+    // 2. Address of the first PT_LOAD section in that info can be used to calculate executable base address.
+  static int __x_utils_dl_cb_mod_main_get_addr(struct dl_phdr_info* info, size_t size, void* data_)
+  {
+    (void)size; void** pd = (void**)data_; *pd = 0;
+    if (info->dlpi_phnum == 0) { return 0; } // may occur on Android
+    for (unsigned i = 0; i < info->dlpi_phnum; i++)
+    {
+      if (info->dlpi_phdr[i].p_type == PT_LOAD)
+      {
+        *pd = (void*)(info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
+        break;
+      }
+    }
+    return 1;
+  }
+  extern "C" typedef int (*PF__x_utils_dl_cb_mod_main_get_addr)(struct dl_phdr_info* info, size_t size, void* data_);
+#endif
 
 namespace bmdx_main_intl_lib
 {
 using namespace bmdx;
+
+#if bmdx_part_dllmgmt
+  namespace utils_dl
+  {
+      // 1 - _in_main_exe() is in main executable
+      // 0 - _in_main_exe() is in shared library
+      // -1 - failed to determine code location
+    static int _in_main_exe(__bmdx_noarg1)
+    {
+      unity_common::__Psm pmsm = unity_common::pls_modsm();
+        if (!pmsm) { return -1; }
+      #if __bmdx_use_link_h == 3
+        char buf[(4*PATH_MAX)] = "";
+        char buf2[(4*PATH_MAX)] = "";
+        typedef int (*Fpidpath)(int pid, void* buf, uint32_t bufsize);
+        #if TARGET_OS_IPHONE
+          Fpidpath f = (Fpidpath)dlsym(RTLD_DEFAULT, "proc_pidpath");
+        #else
+          Fpidpath f = &proc_pidpath;
+        #endif
+          if (!f || f(getpid(), buf, sizeof(buf)) <= 0) { return -1; }
+        Dl_info di; std::memset(&di, 0, sizeof(di));
+          if (0 == dladdr((void*)pmsm, &di)) { return -1; }
+        if (!realpath(di.dli_fname, buf2)) { return -1; }
+        if (0 == std::strcmp(buf, buf2)) { return 1; }
+        return 0;
+      #elif __bmdx_use_link_h > 0
+        void* pbase1 = 0;
+        dl_iterate_phdr((PF__x_utils_dl_cb_mod_main_get_addr)&__x_utils_dl_cb_mod_main_get_addr, (void*)&pbase1);
+        void* pbase2 = 0;
+        Dl_info di; std::memset(&di, 0, sizeof(di));
+          if (0 != dladdr((void*)pmsm, &di)) { pbase2 = di.dli_fbase; }
+        if (!(pbase1 && pbase2)) { return -1; }
+        if (pbase2 == pbase1) { return 1; }
+        return 0;
+      #elif __bmdx_use_link_h == -1
+        HMODULE h1 = GetModuleHandleA(0);
+        HMODULE h2 = 0;
+        BOOL b = f_GetModuleHandleExW()(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (WCHAR*)pmsm, &h2);
+          if (!b) { h2 = 0; }
+        FreeLibrary(h1);
+        FreeLibrary(h2);
+        if (!(h1 && h2)) { return -1; }
+        if (h2 == h1) { return 1; }
+        return 0;
+      #else
+        return -1;
+      #endif
+    }
+
+    #if __bmdx_use_link_h > 0
+      static int _mode_dlopen(bool b_au, bool b_noload __bmdx_noarg)
+      {
+        int mode = RTLD_NOW|RTLD_LOCAL;
+        #ifndef __ANDROID__
+          if (b_noload) { mode |= RTLD_NOLOAD; }
+        #endif
+        #ifdef RTLD_FIRST
+          mode |= RTLD_FIRST;
+        #endif
+        #ifdef RTLD_NODELETE
+          if (!b_au) { mode |= RTLD_NODELETE; }
+        #endif
+        return mode;
+      }
+
+        // If non-null handle is returned, it later must be closed by the client.
+      static void* _hmod_self(bool b_au __bmdx_noarg)
+      {
+        int mode = _mode_dlopen(b_au, true);
+        if (_in_main_exe() == 1)
+        {
+          void* h1 = dlopen(0, mode);
+          return h1;
+        }
+        unity_common::__Psm pmsm = unity_common::pls_modsm();
+          if (!pmsm) { return 0; }
+        Dl_info di; std::memset(&di, 0, sizeof(di));
+          if (0 == dladdr((void*)pmsm, &di)) { return 0; }
+          if (!di.dli_fname) { return 0; }
+        void* h1 = dlopen(di.dli_fname, mode);
+        return h1;
+      }
+    #elif __bmdx_use_link_h == -1
+        // If non-null handle is returned, it later must be closed by the client.
+      static HMODULE _hmod_self(bool b_au __bmdx_noarg)
+      {
+        unity_common::__Psm pmsm = unity_common::pls_modsm();
+          if (!pmsm) { return 0; }
+        HMODULE h1 = 0;
+        DWORD mode = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+        if (!b_au) { mode |= GET_MODULE_HANDLE_EX_FLAG_PIN; }
+        BOOL b = f_GetModuleHandleExW()(mode, (WCHAR*)pmsm, &h1);
+          if (b) { return h1; }
+        return 0;
+      }
+    #endif
+  }
+#endif
 
 template<class T> struct weakref_t;
 template<class T>
@@ -1381,7 +1525,6 @@ bool lm_slot_controller::peer_tracker::_cltpt_close(bool b_final) __bmdx_noex
       if (b2) { s_long res = _qum_rcv.bufstate(1); if (res < 0) { _qum_rcv.clear_rq(); b2 = false; } }
     if (b1 || b2)
       { return false; }
-//printf("DISP SHM CLOSED   PT=%p __ %s --> %s \n", this, this->_name_prf.c_str(), this->_name_peerf.c_str());
     _x_close_state = 3;
   }
 
@@ -1464,7 +1607,6 @@ void lm_slot_controller::peer_tracker::_x_init() __bmdx_noex
   s_long res2 = _qinfo_send.attempt_open();
   s_long res3 = _qum_rcv.bufstate(3);
   s_long res4 = _qum_send.bufstate(2);
-//printf("   DISP SHM RES PT=%p  %d %d %d __ %s --> %s \n", this, res2, res3, res4, this->_name_prf.c_str(), this->_name_peerf.c_str());
   if (!(res2 >= 1 && res3 == 3 && res4 >= 0 && res4 != 4)) { _state = -2; return; }
 
   if (this->b_self) { _qinfo_peer_conn_techmsg_sent = true; } // self has already created all its structures and thus does not need any dialog with itself
@@ -2174,7 +2316,7 @@ void lm_slot_controller::_x_close() __bmdx_noex
       if ((pt->_cltpt_close(b_tmo) || b_tmo)  && pt.n_refs() <= 1) { _hpt.remove_i(i); }
     } }
     if (_hpt.n() <= 0) { break; }
-    sleep_mcs(1000);
+    sleep_mcs(1000, 1);
   }
   _x_qinfo_rcv_mark_process_closed();
   _state = -4;
@@ -6021,7 +6163,7 @@ unity* unity::_path_u(const arrayref_t<wchar_t>& keylist, bool forced) __bmdx_no
       }
       else if (!forced) { return 0; }
       bool b(false);
-      meta::s_ll ind(0); try { b = k.utype() == utEmpty || k.utype() == utInt || k.utype() == utFloat; if (b) { ind = k.vint(); } } catch (...) { return 0; }
+      meta::s_ll ind(0); try { b = k.utype() == utInt; if (b) { ind = k.vint(); } } catch (...) { return 0; }
       if (b) { return &this->ua(s_long(ind)); }
       return &this->hash(k);
     }
@@ -6046,7 +6188,7 @@ unity* unity::_path_u(const arrayref_t<wchar_t>& keylist, bool forced) __bmdx_no
       }
       else if (!forced) { return 0; }
       bool b(false);
-      meta::s_ll ind(0); try { b = k.ua(j).utype() == utEmpty || k.ua(j).utype() == utInt || k.ua(j).utype() == utFloat; if (b) { ind = k.ua(j).vint(); } } catch (...) { return 0; }
+      meta::s_ll ind(0); try { b = k.ua(j).utype() == utInt; if (b) { ind = k.ua(j).vint(); } } catch (...) { return 0; }
       if (b) { node = &node->ua(s_long(ind)); } else { node = &node->hash(k.ref<utUnity>(j)); }
       continue;
     }
@@ -6248,19 +6390,60 @@ _fls75 unity::vflstr() const __bmdx_noex
   unity& unity::operator()(const unity& k, const unity& v) { if (isMap()) { map_append(k, v); } else { hash_set(k, v); } return *this; }
 #endif
 
-unity& unity::pl_dech(arrayref_t<wchar_t> ssrc) { return paramline().decode(ssrc, *this, 0); }
-unity& unity::pl_decm(arrayref_t<wchar_t> ssrc) { return paramline().decode(ssrc, *this, 1); }
-unity& unity::pl_dech_tree(arrayref_t<wchar_t> ssrc, s_long flags) { return paramline().decode_tree(ssrc, *this, flags & ~s_long(1)); }
-unity& unity::pl_decm_tree(arrayref_t<wchar_t> ssrc, s_long flags) { return paramline().decode_tree(ssrc, *this, flags | 1); }
-unity& unity::pl_dec1v(arrayref_t<wchar_t> ssrc) { return paramline().decode1v(ssrc, *this); }
+namespace {
+  static bool _b_awc_may_eq_rstr(const arrayref_t<wchar_t>& s, const unity& v)
+  {
+    if (!s.pd() || !v.isString()) { return false; }
+    try {
+      arrayref_t<wchar_t> s2 = v.rstr();
+      const wchar_t* p1 = s2.pd();
+      const wchar_t* p2 = s2._end_u();
+      if (s.pd() >= p1 && s.pd() <= p2) { return true; }
+      if (s.is_nonempty() && p1 >= s.pd() && p1 <= s._end_u()) { return true; }
+      return false;
+    } catch (...) {}
+    return true;
+  }
+}
+
+unity& unity::pl_dech(arrayref_t<wchar_t> ssrc)
+{
+  if (_b_awc_may_eq_rstr(ssrc, *this))
+    { return paramline().decode(std::wstring(ssrc.pd(), ssrc._end_u()), *this, 0); }
+  return paramline().decode(ssrc, *this, 0);
+}
+unity& unity::pl_decm(arrayref_t<wchar_t> ssrc)
+{
+  if (_b_awc_may_eq_rstr(ssrc, *this))
+    { return paramline().decode(std::wstring(ssrc.pd(), ssrc._end_u()), *this, 1); }
+  return paramline().decode(ssrc, *this, 1);
+}
+unity& unity::pl_dech_tree(arrayref_t<wchar_t> ssrc, s_long flags)
+{
+  if (_b_awc_may_eq_rstr(ssrc, *this))
+    { return paramline().decode_tree(std::wstring(ssrc.pd(), ssrc._end_u()), *this, flags & ~s_long(1)); }
+  return paramline().decode_tree(ssrc, *this, flags & ~s_long(1));
+}
+unity& unity::pl_decm_tree(arrayref_t<wchar_t> ssrc, s_long flags)
+{
+  if (_b_awc_may_eq_rstr(ssrc, *this))
+    { return paramline().decode_tree(std::wstring(ssrc.pd(), ssrc._end_u()), *this, flags | 1); }
+  return paramline().decode_tree(ssrc, *this, flags | 1);
+}
+unity& unity::pl_dec1v(arrayref_t<wchar_t> ssrc)
+{
+  if (_b_awc_may_eq_rstr(ssrc, *this))
+    { return paramline().decode1v(std::wstring(ssrc.pd(), ssrc._end_u()), *this); }
+  return paramline().decode1v(ssrc, *this);
+}
 unity& unity::pl_dech(arrayref_t<char> ssrc) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_dech(bsToWs(ssrc.pd(), ssrc.n())); }
 unity& unity::pl_decm(arrayref_t<char> ssrc) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_decm(bsToWs(ssrc.pd(), ssrc.n())); }
 unity& unity::pl_dech_tree(arrayref_t<char> ssrc, s_long flags) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_dech_tree(bsToWs(ssrc.pd(), ssrc.n()), flags); }
 unity& unity::pl_decm_tree(arrayref_t<char> ssrc, s_long flags) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_decm_tree(bsToWs(ssrc.pd(), ssrc.n()), flags); }
 unity& unity::pl_dec1v(arrayref_t<char> ssrc) { if (!ssrc.is_valid()) { ssrc.clear(); } return pl_dec1v(bsToWs(ssrc.pd(), ssrc.n())); }
-std::wstring unity::pl_enc() { return paramline().encode(*this); }
-std::wstring unity::pl_enc_tree() { return paramline().encode_tree(*this); }
-std::wstring unity::pl_enc1v() { return paramline().encode1v(*this); }
+std::wstring unity::pl_enc() const { return paramline().encode(*this); }
+std::wstring unity::pl_enc_tree() const { return paramline().encode_tree(*this); }
+std::wstring unity::pl_enc1v() const { return paramline().encode1v(*this); }
 
 unity::_wr_cstring::_wr_cstring() {}
 unity::_wr_cstring::_wr_cstring(const std::string& x) : t_base(x) {}
@@ -7926,7 +8109,7 @@ unity::o_api::o_api(const unity* pu_) __bmdx_noex
   prc = 0; pidyn = 0;
   pu = const_cast<unity*>(pu_); if (!(pu && pu->isObject())) { return; }
   void* p11 = 0; s_long ff1 = 0;
-  while (true) { p11 = pu->_data.p1; ff1 = pu->ut; void* p12 = pu->_data.p1; s_long ff2 = pu->ut; if (p11 == p12 && ff1 == ff2) { break; } sleep_mcs(100); }
+  while (true) { p11 = pu->_data.p1; ff1 = pu->ut; void* p12 = pu->_data.p1; s_long ff2 = pu->ut; if (p11 == p12 && ff1 == ff2) { break; } sleep_mcs(100, 1); }
   pidyn = (ff1 & xfObjItfsList) ? (_o_itfslist*)p11 : 0;
   prc = pidyn ? pidyn->prc : (_o_refcnt*)p11;
 }
@@ -8316,15 +8499,15 @@ struct _paramline_branch
     //  Sets result into ret_spath.
     // Returns: ret_spath.
     // NOTE ret_spath may be safely the same object as any of arguments.
-  static arrayref_t<wchar_t> _add_to_path_with_enc1v_ar(bool b_enc1v, bool b_bse, const arrayref_t<wchar_t>& pathpfx, const arrayref_t<wchar_t>& curr_path, const unity& k, hashx<const unity*, s_long>& hstopv, std::wstring& ret_spath __bmdx_noarg)
+  static arrayref_t<wchar_t> _add_to_path_with_enc1v_ar(bool b_enc1v, bool b_bse, const arrayref_t<wchar_t>& pathpfx, const arrayref_t<wchar_t>& curr_path, const unity& k, hashx<const unity*, s_long>& hstopv, std::wstring& ret_spath, const arrayref_t<wchar_t>& pterm2 __bmdx_noarg)
   {
     std::wstring s1;
     if (b_enc1v)
     {
       if (k.isArray())
-        { s1 = _vstr_scalar(k); }
+        { paramline::x_repl_e1(_vstr_scalar(k), s1, false, true, false, pterm2); }
       else
-        { paramline::x_encode1v(k, s1, pled__ar_elem, 0, &hstopv); }
+        { paramline::x_encode1v(k, s1, pled__ar_elem, 0, &hstopv, pterm2); }
     }
     else
     {
@@ -8339,9 +8522,9 @@ struct _paramline_branch
       if (k.isEmpty()) { if (b_bse) { s1 = L"\\e"; } }
         else if (k.isString()) { s1 = k.rstr(); }
         else { s1 = _vstr_scalar(k); }
-      paramline::x_encode1v(unity(s1), s1, pled__ar_elem, 0, 0);
+      paramline::x_encode1v(unity(s1), s1, pled__ar_elem, 0, 0, pterm2);
     }
-    paramline::x_replace2a(s1, 1);
+    paramline::x_replace2a(s1, 1, pterm2);
     add_to_path(pathpfx, curr_path, s1, s1);
     ret_spath.swap(s1);
     return ret_spath;
@@ -8767,7 +8950,7 @@ unity& paramline::decode1v(arrayref_t<wchar_t> ssrc0, unity& dest)
     x_replace4(ssrc0, s, replflags);
     _t_wz pos0 = s.find(wpterm_short); if (pos0 != nposw) { s.resize(pos0); }
     arrayref_t<wchar_t> ssv = _trim_arrayref(arrayref_t<wchar_t>(s), L" ");
-    x_decode1v(ssv, false, replflags, dest);
+    x_decode1v(ssv, false, replflags, dest, x_pterm2_dflt());
   }
   catch(_XUBase&) { throw; }
   catch(std::exception& e) { throw XUExec("decode1v.1", e.what(), _fls75(ssrc0.pd(), ssrc0.n())); }
@@ -8802,9 +8985,9 @@ unity& paramline::decode1v(arrayref_t<wchar_t> ssrc0, unity& dest)
   //    NOTE This flag should be used with pled__use_array only,
   //      because direct overwriting string values in associative mha
   //      might lose multipart array modifiers (multiple pairs "key = \z<spec.>")
-void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec, arrayref_t<wchar_t> pterm_0, _opt_unity* pret_path, s_long* pret_replflags)
+void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec, arrayref_t<wchar_t> pterm2_0, _opt_unity* pret_path, s_long* pret_replflags)
 {
-  if (!(ssrc0.is_valid() && pterm_0.is_valid())) { throw XUExec("decode.3"); }
+  if (!(ssrc0.is_valid() && pterm2_0.is_valid())) { throw XUExec("decode.3"); }
   const bool b_use_array = !!(ff_encdec & pled__use_array);
   const bool b_strvals = !!(ff_encdec & pled__get_strvals);
   const bool b_use_map = !b_use_array && !!(ff_encdec & pled_use_map);
@@ -8815,7 +8998,7 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
   {
     if (pret_path) { pret_path->b_has_v = false; pret_path->v.clear(); }
 
-    arrayref_t<wchar_t> pterm = pterm_0.is_empty() ? wCRLF : pterm_0;
+    arrayref_t<wchar_t> pterm2 = pterm2_0.is_empty() ? wCRLF : pterm2_0;
     if (b_use_map) { mha.map_clear(false); }
       else if (b_use_array) { mha.arr_init<utUnity>(0); }
       else { mha.hash_clear(false); }
@@ -8823,12 +9006,12 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
     s_long replflags(0);
     x_replace4(ssrc0, src_, replflags);
       if (pret_replflags) { *pret_replflags = replflags; }
-    src_ = replace(src_, wpterm_short, pterm);
+    src_ = replace(src_, wpterm_short, pterm2);
     arrayref_t<wchar_t> src_ar = src_;
     s_ll pos0(0), pos2(0);
     while(pos0 < src_ar.n())
     {
-      pos2 = _find_str_linear(src_ar, pterm, pos0);
+      pos2 = _find_str_linear(src_ar, pterm2, pos0);
 
       arrayref_t<wchar_t> s_(&src_ar[pos0], pos2 - pos0);
       s_ll pos_eq = _find_str_linear(s_, arrayref_t<wchar_t>(weterm_short), 0);
@@ -8838,7 +9021,7 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
       arrayref_t<wchar_t> ssv;
         if (b_has_asg) { ssv = _trim_arrayref(s_.range_intersect(pos_eq + 1), L" "); }
 
-      pos0 = pos2 + pterm.n();
+      pos0 = pos2 + pterm2.n();
         if (rsk.is_empty() && !b_has_asg) { continue; }
 
         // Special case: values with implicit empty key ("=<value>") are considered branch paths.
@@ -8848,7 +9031,7 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
         if (!pret_path->b_has_v || b_overwrite)
         {
           pret_path->v.clear();
-          x_decode1v(ssv, false, replflags | plrf_use_path_array_modifiers, pret_path->v);
+          x_decode1v(ssv, false, replflags | plrf_use_path_array_modifiers, pret_path->v, pterm2);
           pret_path->b_has_v = true;
         }
         continue;
@@ -8857,14 +9040,14 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
       unity ku;
         if (b_1v_for_names)
         {
-          x_decode1v(rsk, false, replflags, ku);
+          x_decode1v(rsk, false, replflags, ku, pterm2);
         }
         else
         {
           ku.u_clear(utString);
           std::wstring& ks = ku.rstr();
           ks.append(rsk.pd(), rsk._end_u());
-          x_replace2a(ks, replflags);
+          x_replace2a(ks, replflags, pterm2);
         }
 
       if (b_use_array)
@@ -8880,7 +9063,7 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
             if (v.isLocal()) { v.rx<utString>().swap(s); }
               else { v = s; }
           }
-          else { x_decode1v(ssv, false, replflags, v); }
+          else { x_decode1v(ssv, false, replflags, v, pterm2); }
         }
         continue;
       }
@@ -8902,7 +9085,7 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
         }
         else
         {
-          x_decode1v(ssv, false, replflags | f1 | f2, v);
+          x_decode1v(ssv, false, replflags | f1 | f2, v, pterm2);
         }
       }
       else
@@ -8916,11 +9099,11 @@ void paramline::x_decode(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec
   catch(...) { throw XUExec("decode.2", src_); }
 }
 
-unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec, arrayref_t<wchar_t> pterm_0)
+unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_encdec, arrayref_t<wchar_t> pterm2_0)
 {
-  if (!(ssrc0.is_valid() && pterm_0.is_valid())) { throw XUExec("decode_tree.3"); }
+  if (!(ssrc0.is_valid() && pterm2_0.is_valid())) { throw XUExec("decode_tree.3"); }
   try {
-    arrayref_t<wchar_t> pterm2 = pterm_0.length() == 0 ? wCRLF : pterm_0;
+    arrayref_t<wchar_t> pterm2 = pterm2_0.length() == 0 ? wCRLF : pterm2_0;
     const bool b_1v_for_names = !!(ff_encdec & pled_encdec1v_for_names);
     const bool b_overwrite = !!(ff_encdec & pled_overwrite_dup_keys);
     const bool b_clear = (ff_encdec & 0x4) == 0;
@@ -9120,7 +9303,7 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_e
                 if (op_type != _noop)
                 {
                   unity v;
-                    if (sv0.isString()) { x_decode1v(sv0.rstr(), false, replflags, v); }
+                    if (sv0.isString()) { x_decode1v(sv0.rstr(), false, replflags, v, pterm2); }
 
                   if (op_type == op_append_seq && v.utype() == utUnityArray)
                   {
@@ -9175,7 +9358,7 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_e
                       s_long rff = replflags;
                         if (b_v_ex) { rff |= plrf_value_exists; }
                         if (b_overwrite) { rff |= plrf_allow_modify_all; }
-                      x_decode1v(sv0.rstr(), false, rff, vdest);
+                      x_decode1v(sv0.rstr(), false, rff, vdest, pterm2);
                     }
                     else
                     {
@@ -9203,7 +9386,7 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_e
                     s_long rff = replflags;
                       if (b_v_ex) { rff |= plrf_value_exists; }
                       if (b_overwrite) { rff |= plrf_allow_modify_all; }
-                    x_decode1v(sv0.rstr(), false, rff, vdest);
+                    x_decode1v(sv0.rstr(), false, rff, vdest, pterm2);
                   }
                   else
                   {
@@ -9268,21 +9451,21 @@ unity& paramline::decode_tree(arrayref_t<wchar_t> ssrc0, unity& mha, s_long ff_e
   return mha;
 }
 
-std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, s_long ff_encdec, arrayref_t<wchar_t> pterm_0)
+std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, s_long ff_encdec, arrayref_t<wchar_t> pterm1_0)
 {
-  if (!pterm_0.is_valid()) { throw XUExec("encode.3"); }
+  if (!pterm1_0.is_valid()) { throw XUExec("encode.3"); }
   try
   {
     sdest.clear(); if (!mh.isAssoc() || mh.assocS_c() == 0) { return sdest; }
-    arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
+    arrayref_t<wchar_t> pterm1 = pterm1_0.length() == 0 ? wpterm : pterm1_0;
     hashx<const unity*, s_long> hstop;
     s_long pos = mh.assocl_first();
     while (pos != mh.assocl_noel())
     {
       std::wstring sk, s1, s2;
-      x_encode1n(mh.assocl_key(pos), sk, ff_encdec & _pled__mask__encode);
+      x_encode1n(mh.assocl_key(pos), sk, ff_encdec & _pled__mask__encode, x_pterm2_dflt());
       vec2_t<std::wstring, __vecm_tu_selector> xsubarrs;
-      x_encode1v(mh.assocl_c(pos), s2, _pled__nullflags, &xsubarrs, &hstop);
+      x_encode1v(mh.assocl_c(pos), s2, _pled__nullflags, &xsubarrs, &hstop, x_pterm2_dflt());
       if (1)
       {
         s1 += sk;
@@ -9290,14 +9473,14 @@ std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, s_long ff_
       }
       for (s_long j = 0; j < xsubarrs.n(); ++j)
       {
-        s1.append(pterm.pd(), pterm._end_u());
+        s1.append(pterm1.pd(), pterm1._end_u());
         s1 += sk;
         s1 += weterm;
         s1 += xsubarrs[j];
       }
-      x_replace2a(s1, 1);
+      x_replace2a(s1, 1, x_pterm2_dflt());
       pos = mh.assocl_next(pos);
-      if (pos != mh.assocl_noel()) { s1.append(pterm.pd(), pterm._end_u()); }
+      if (pos != mh.assocl_noel()) { s1.append(pterm1.pd(), pterm1._end_u()); }
       sdest += s1;
     }
     return sdest;
@@ -9309,7 +9492,7 @@ std::wstring& paramline::encode(const unity& mh, std::wstring& sdest, s_long ff_
 
 std::wstring paramline::encode1n(const unity& name, s_long ff_encdec)
 {
-  try { std::wstring s; x_encode1n(name, s, ff_encdec & _pled__mask__encode); x_replace2a(s, 1); return s; }
+  try { std::wstring s; x_encode1n(name, s, ff_encdec & _pled__mask__encode, x_pterm2_dflt()); x_replace2a(s, 1, x_pterm2_dflt()); return s; }
   catch(_XUBase&) { throw; }
   catch(std::exception& e) { throw XUExec("encode1n.1", e.what(), name.vflstr()); }
   catch(...) { throw XUExec("encode1n.2", name.vflstr()); }
@@ -9320,8 +9503,8 @@ std::wstring& paramline::encode1v(const unity& value, std::wstring& s)
   try
   {
     hashx<const unity*, s_long> hstop;
-    x_encode1v(value, s, _pled__nullflags, 0, &hstop);
-    x_replace2a(s, 1);
+    x_encode1v(value, s, _pled__nullflags, 0, &hstop, x_pterm2_dflt());
+    x_replace2a(s, 1, x_pterm2_dflt());
     return s;
   }
   catch(_XUBase&) { throw; }
@@ -9363,7 +9546,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
       const unity* px = &_paramline_branch::deref_pu_once(mha.assocl_c(pos), _empty, &hstopv);
 
       std::wstring sk;
-        x_encode1n(*pk, sk, ff_encdec & _pled__mask__encode);
+        x_encode1n(*pk, sk, ff_encdec & _pled__mask__encode, pterm2);
             // Key, represented as empty string, is ignored because it conflicts with path specifier key.
             // Except for when the key occurs in path only (i.e. leads to assoc. array).
           if (sk.empty() && !px->isAssoc()) { continue; }
@@ -9377,7 +9560,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
         std::wstring _sp;
             // NOTE b_enc1v = true ensures compaibility with non-array-aware paramline,
             //    when encoding paths of assoc. arrays.
-          _paramline_branch::_add_to_path_with_enc1v_ar(true, b_bse, pathpfx, path, *pk, hstopv, _sp);
+          _paramline_branch::_add_to_path_with_enc1v_ar(true, b_bse, pathpfx, path, *pk, hstopv, _sp, pterm2);
         x_encode_branch(ff_encdec, *px, _sp, sdest, hstopk, hstopv, pterm, pterm2, pathpfx);
         continue;
       }
@@ -9388,7 +9571,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
       if (b_uar)
       {
         std::wstring _sp;
-          _paramline_branch::_add_to_path_with_enc1v_ar(b_1v_for_names, b_bse, pathpfx, path, *pk, hstopv, _sp);
+          _paramline_branch::_add_to_path_with_enc1v_ar(b_1v_for_names, b_bse, pathpfx, path, *pk, hstopv, _sp, pterm2);
           _paramline_branch::collect_array_subbranches(pathpfx, _sp, *px, hstopv, abr, false);
       }
 
@@ -9396,7 +9579,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
       std::wstring s1, s2;
         // NOTE If b_uar, hstopv is not used with *px twice, because it's already been used
         //  during collect_array_subbranches call, see above.
-      x_encode1v(*px, s2, pled__enc_assoc_as_empty, &xsubarrs, b_uar ? 0 : &hstopv);
+      x_encode1v(*px, s2, pled__enc_assoc_as_empty, &xsubarrs, b_uar ? 0 : &hstopv, pterm2);
       if (1)
       {
         s1 += sk;
@@ -9409,7 +9592,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
         s1 += weterm;
         s1 += xsubarrs[j];
       }
-      x_replace2a(s1, 1);
+      x_replace2a(s1, 1, pterm2);
 
       if (!b_line1_data && path.is_nonempty()) { b_line1_data = true; sdest.append(path.pd(), path._end_u()); }
       if (b_line1_data) { sdest.append(pterm.pd(), pterm._end_u()); }
@@ -9454,7 +9637,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
     std::wstring s1, s2;
       // NOTE If b_uar, hstopv is not used with *px twice, because it's already been used
       //  during collect_array_subbranches call, see above.
-    x_encode1v(*pa, s2, pled__enc_assoc_as_empty | pled__enc1v_for_array_area, &xsubarrs, b_uar ? 0 : &hstopv);
+    x_encode1v(*pa, s2, pled__enc_assoc_as_empty | pled__enc1v_for_array_area, &xsubarrs, b_uar ? 0 : &hstopv, pterm2);
     if (1)
     {
       s1 += wao_setseq;
@@ -9466,7 +9649,7 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
       s1.append(pterm.pd(), pterm._end_u());
       s1 += xsubarrs[j];
     }
-    x_replace2a(s1, 1);
+    x_replace2a(s1, 1, pterm2);
 
     sdest += path_full;
     sdest.append(pterm.pd(), pterm._end_u());
@@ -9481,9 +9664,9 @@ void paramline::x_encode_branch(s_long ff_encdec, const unity& mha, const arrayr
   }
 }
 
-std::wstring& paramline::encode_tree(const unity& _mha0, std::wstring& sdest, s_long ff_encdec, arrayref_t<wchar_t> pterm_0, arrayref_t<wchar_t> pterm2_0)
+std::wstring& paramline::encode_tree(const unity& _mha0, std::wstring& sdest, s_long ff_encdec, arrayref_t<wchar_t> pterm1_0, arrayref_t<wchar_t> pterm2_0)
 {
-  if (!(pterm_0.is_valid() && pterm2_0.is_valid())) { throw XUExec("encode_tree.3"); }
+  if (!(pterm1_0.is_valid() && pterm2_0.is_valid())) { throw XUExec("encode_tree.3"); }
   try
   {
     hashx<const unity*, s_long> hstopk, hstopv;
@@ -9491,13 +9674,13 @@ std::wstring& paramline::encode_tree(const unity& _mha0, std::wstring& sdest, s_
     const unity& mha = _paramline_branch::deref_pu_once(_mha0, _empty, &hstopv);
     sdest.clear();
       if (!(mha.isAssoc() || mha.isArray())) { return sdest; }
-    arrayref_t<wchar_t> pterm = pterm_0.length() == 0 ? wpterm : pterm_0;
+    arrayref_t<wchar_t> pterm1 = pterm1_0.length() == 0 ? wpterm : pterm1_0;
     arrayref_t<wchar_t> pterm2 = pterm2_0.length() == 0 ? wCRLF : pterm2_0;
     arrayref_t<wchar_t> pathpfx = _trim_arrayref(arrayref_t<wchar_t>(weterm), L" ", true, true);
     s_long ff = 0;
       if (ff_encdec & pled_encdec1v_for_names) { ff |= pled_encdec1v_for_names; }
       if (ff_encdec & pled_enc_empty_key_as_bse) { ff |= pled_enc_empty_key_as_bse; }
-    x_encode_branch(ff, mha, L"", sdest, hstopk, hstopv, pterm, pterm2, pathpfx);
+    x_encode_branch(ff, mha, L"", sdest, hstopk, hstopv, pterm1, pterm2, pathpfx);
     return sdest;
   }
   catch(_XUBase&) { throw; }
@@ -9546,10 +9729,15 @@ void paramline::_list_hx_set_u ( unity& hdest, s_long fk, _rcu x1, _rcu x2, _rcu
   for(s_long ind = 0; ind < a.n(); ind += 2) { hdest.hash_set(*a[ind], ind + 1 < a.n() ? *a[ind+1] : unity(), true); }
 }
 
+arrayref_t<wchar_t> paramline::x_pterm2_dflt()
+{
+  static arrayref_t<wchar_t> x(wCRLF);
+  return x;
+}
   // ff_encdec:
   //    pled__ar_elem,
   //    _pled__mask__encode: pled_enc_empty_key_as_bse, pled_encdec1v_for_names
-void paramline::x_encode1n(const unity& x, std::wstring& retval, s_long ff_encdec)
+void paramline::x_encode1n(const unity& x, std::wstring& retval, s_long ff_encdec, const arrayref_t<wchar_t>& pterm2)
 {
   const bool b_ar_elem = !!(ff_encdec & pled__ar_elem);
   const bool b_bse = !!(ff_encdec & pled_enc_empty_key_as_bse);
@@ -9557,7 +9745,7 @@ void paramline::x_encode1n(const unity& x, std::wstring& retval, s_long ff_encde
   if (b_1v_for_names)
   {
     hashx<const unity*, s_long> hstop;
-    x_encode1v(x, retval, pled_encdec1v_for_names | (b_bse ? pled_enc_empty_key_as_bse : _pled__nullflags), 0, &hstop);
+    x_encode1v(x, retval, pled_encdec1v_for_names | (b_bse ? pled_enc_empty_key_as_bse : _pled__nullflags), 0, &hstop, pterm2);
     return;
   }
   retval.clear();
@@ -9566,8 +9754,12 @@ void paramline::x_encode1n(const unity& x, std::wstring& retval, s_long ff_encde
     if (b_bse) { retval = L"\\e"; }
     return;
   }
-  if (x.isString()) { x_repl_e1(x.cref<utString>().ref(), retval, !b_ar_elem, b_ar_elem, false); return; }
-  x_repl_e1(_vstr_scalar(x), retval, !b_ar_elem, b_ar_elem, false);
+  if (x.isString())
+  {
+    x_repl_e1(x.cref<utString>().ref(), retval, !b_ar_elem, b_ar_elem, false, pterm2);
+    return;
+  }
+  x_repl_e1(_vstr_scalar(x), retval, !b_ar_elem, b_ar_elem, false, pterm2);
 }
 
   // _x0 - a) if value - encoded as is.
@@ -9601,7 +9793,7 @@ void paramline::x_encode1n(const unity& x, std::wstring& retval, s_long ff_encde
   // Returns:
   //  retval, *ret_psubarrs.
   //  The resulting strings must be processed with x_replace2a, to get final strings for external client.
-void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_encdec, vec2_t<std::wstring, __vecm_tu_selector>* ret_psubarrs, hashx<const unity*, s_long>* phstop)
+void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_encdec, vec2_t<std::wstring, __vecm_tu_selector>* ret_psubarrs, hashx<const unity*, s_long>* phstop, const arrayref_t<wchar_t>& pterm2)
 {
   const bool b_ar_elem = !!(ff_encdec & pled__ar_elem);
   const bool b_enc_assoc_as_empty = !!(ff_encdec & pled__enc_assoc_as_empty);
@@ -9633,7 +9825,7 @@ void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_enc
           s_long ff = 0;
             if (b_enc_assoc_as_empty) { ff |= pled__enc_assoc_as_empty; }
           vec2_t<std::wstring, __vecm_tu_selector> xsubarrs;
-          x_encode1v(rxelem, sv, ff, &xsubarrs, phstop);
+          x_encode1v(rxelem, sv, ff, &xsubarrs, phstop, pterm2);
           std::wstring prefix;
             if (!b_enc_for_array_area) { prefix += L"\\z"; }
             prefix += itows(ind, true);
@@ -9650,7 +9842,7 @@ void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_enc
           s_long ff = 0;
             if (1) { ff |= pled__ar_elem; }
             if (b_enc_assoc_as_empty) { ff |= pled__enc_assoc_as_empty; }
-          x_encode1v(rxelem, sv, ff, 0, phstop);
+          x_encode1v(rxelem, sv, ff, 0, phstop, pterm2);
           vlist += sv;
         }
       }
@@ -9710,7 +9902,7 @@ void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_enc
     {
       const s_long ind = i + x.arrlb();
       std::wstring sv;
-      x_encode1v(b_uar ? x[ind] : x.val<utUnity>(ind), sv, ff, 0, phstop);
+      x_encode1v(b_uar ? x[ind] : x.val<utUnity>(ind), sv, ff, 0, phstop, pterm2);
       retval += L'|';
       retval += sv;
     }
@@ -9751,7 +9943,7 @@ void paramline::x_encode1v(const unity& _x0, std::wstring& retval, s_long ff_enc
     case utString:
       {
         cref_t<std::wstring> r_s = x.cref<utString>();
-        x_repl_e1(r_s.ref(), retval, false, b_ar_elem, b_enc_name);
+        x_repl_e1(r_s.ref(), retval, false, b_ar_elem, b_enc_name, pterm2);
 //                  std::wstring s = _trim(retval, L" ");
 //                  if (s.length() == 0) { goto lInsertStringPrefix; }
 //                  if (wstring_like(s.substr(0,1), L"[0123456789.+-]")) { goto lInsertStringPrefix; }
@@ -9769,32 +9961,26 @@ lInsertStringPrefix:
       {
         s_long ff = 0;
           if (b_ar_elem) { ff |= pled__ar_elem; }
-        x_encode1v(_vstr_scalar(x), retval, ff, 0, phstop);
+        x_encode1v(_vstr_scalar(x), retval, ff, 0, phstop, pterm2);
         break;
       }
     default: // unknown type, maybe assoc. array
       if (x.isAssoc() && b_enc_assoc_as_empty)
-        { x_encode1v(unity(), retval, ff_encdec, 0, phstop); }
+        { x_encode1v(unity(), retval, ff_encdec, 0, phstop, pterm2); }
       else
       {
         s_long ff = 0;
           if (b_ar_elem) { ff |= pled__ar_elem; }
-        x_encode1v(_vstr_scalar(x), retval, ff, 0, phstop);
+        x_encode1v(_vstr_scalar(x), retval, ff, 0, phstop, pterm2);
       }
       break;
   }
 }
 
-void paramline::x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool b_name, bool b_ar_elem, bool b_esc_eqsign)
+void paramline::x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool b_name, bool b_ar_elem, bool b_esc_eqsign, const arrayref_t<wchar_t>& pterm2)
 {
   if (s1.is_empty())
     { return; }
-  if (s1.n() == 1)
-  {
-    if (b_name) { switch (s1[0]) { case L';': case L' ': case L'=': case L'\\': s2.clear(); s2 += L'\\'; s2 += s1[0]; break; default: s2.assign(s1.pd(), s1._end_u()); break; } }
-      else { switch (s1[0]) { case L';': case L' ': case L'=': case L'|': case L'\\': s2.clear(); s2 += L'\\'; s2 += s1[0]; break; default: s2.assign(s1.pd(), s1._end_u()); break; } }
-    return;
-  }
   s_ll ps = 0, n = s1.n();
   s2.clear();
     if (n > 40)
@@ -9807,65 +9993,55 @@ void paramline::x_repl_e1(const arrayref_t<wchar_t>& s1, std::wstring& s2, bool 
         s2.reserve(z);
       }
     }
-  wchar_t c0 = s1[ps];
-  switch (c0)
-  {
-    case L'\\':
-    {
-      ++ps; wchar_t c = s1[ps];
-      switch (c)
-      {
-        case L'\\': s2 += L"`b`b`b`b"; ++ps; break;
-        case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b`b`b~"; ++ps; } else { s2 += L"`b`b\r"; } break;
-        case L' ': case L';': case L'=': case L'~': case L'|': s2 += L"`b`b"; break;
-        default: if (b_name) { s2 += L"`b"; } else { s2 += L"`b`b"; } break;
-      }
-      break;
-    }
-    case L' ': s2 += L"`b "; ++ps; break;
-    case L';': s2 += L"`b`,"; ++ps; break;
-    case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b~"; ++ps; } else { s2 += c0; } break;
-    case L'=': if (b_name || b_esc_eqsign) { s2 += L"`b`e"; } else { s2 += c0; } ++ps; break;
-    case L'|': if (b_name) { s2 += c0; } else { s2 += L"`b`v"; } ++ps; break;
-    case L'`': s2 += L"`a"; ++ps; break;
-    default: s2 += c0; ++ps; break;
-  }
+  const wchar_t cterm2_0 = pterm2[0];
   while (ps < n)
   {
-    c0 = s1[ps];
+    wchar_t c0 = s1[ps];
+    if (c0 == cterm2_0 && pterm2.is_eq(s1.range_intersect(ps, ps + pterm2.n()))) // "c0 == cterm2_0" - just an optimization
+      { s2 += L"`b~"; ps += pterm2.n(); continue; }
     switch (c0)
     {
       case L'\\':
       {
         ++ps;
-        if (ps < n)
+        if (ps >= n) { s2 += c0; continue; }
+
+        wchar_t c = s1[ps];
+        if (c == cterm2_0 && pterm2.is_eq(s1.range_intersect(ps, ps + pterm2.n()))) // "c == cterm2_0" - just an optimization
+          { s2 += L"`b`b`b~"; ps += pterm2.n(); continue; }
+        switch (c)
         {
-          wchar_t c = s1[ps];
-          switch (c)
-          {
-            case L'\\': s2 += L"`b`b`b`b"; ++ps; continue;
-            case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b`b`b~"; ++ps; } else { s2 += L"`b`b\r"; } continue;
-            case L';': case L'=': case L'|': case L'~': case L' ': s2 += L"`b`b"; continue;
-            default: s2 += c0; continue;
-          }
+          case L'\\': s2 += L"`b`b`b`b"; ++ps; continue;
+          case L' ': case L';': case L'=': case L'~': case L'|': s2 += L"`b`b"; continue;
+          default:
+            if (ps == 1) { if (b_name) { s2 += L"`b"; } else { s2 += L"`b`b"; } }
+              else { s2 += c0; }
+            continue;
         }
-        else { s2 += c0; continue; }
       }
       case L';': s2 += L"`b`,"; ++ps; continue;
-      case L'\r': ++ps; if (ps < n && s1[ps] == L'\n') { s2 += L"`b~"; ++ps; } else { s2 += c0; } continue;
       case L'=': if (b_name || b_esc_eqsign) { s2 += L"`b`e"; } else { s2 += c0; } ++ps; continue;
-      case L'|': if (b_ar_elem) { s2 += L"`b`v"; } else { s2 += c0; } ++ps; continue;
+      case L' ': if (ps == 0) { s2 += L"`b"; } s2 += L' '; ++ps; continue;
+      case L'|':
+      {
+        if (ps == 0) { if (b_name) { s2 += c0; } else { s2 += L"`b`v"; } }
+          else { if (b_ar_elem) { s2 += L"`b`v"; } else { s2 += c0; } }
+        ++ps; continue;
+      }
       case L'`': s2 += L"`a"; ++ps; continue;
       default: s2 += c0; ++ps; continue;
     }
   }
-  size_t i_back = s2.size() - 1;
-  c0 = s2[i_back];
-  if (c0 == L' ' || c0 == L'\\')
-    { s2[i_back] = L'\\'; s2 += c0; }
+  if (s2.size() > 0)
+  {
+    size_t i_back = s2.size() - 1;
+    wchar_t c0 = s2[i_back];
+    if (c0 == L' ' || c0 == L'\\')
+      { s2[i_back] = L'\\'; s2 += c0; }
+  }
 }
 
-void paramline::x_replace2a(std::wstring& s, s_long replflags)
+void paramline::x_replace2a(std::wstring& s, s_long replflags, const arrayref_t<wchar_t>& pterm2)
 {
   if (replflags & plrf_has_esc_seq)
   {
@@ -9879,7 +10055,7 @@ void paramline::x_replace2a(std::wstring& s, s_long replflags)
         {
           case L'b': s[pd++] = L'\\'; ++ps; continue;
           case L'v': s[pd++] = L'|'; ++ps; continue;
-          case L'n': s[pd++] = L'\r'; s[pd++] = L'\n'; ++ps; continue;
+          case L'n': { for (s_ll i = 0; i < pterm2.n(); ++i) { s[pd++] = pterm2[i]; } ++ps; continue; }
           case L',': s[pd++] = L';'; ++ps; continue;
           case L's': s[pd++] = L' '; ++ps; continue;
           case L'e': s[pd++] = L'='; ++ps; continue;
@@ -9963,7 +10139,7 @@ void paramline::x_replace4(arrayref_t<wchar_t> s1, std::wstring& s2, s_long& rep
   //      b) cleared (if plrf_value_exists is unset) and assigned a new value,
   //      c) modified (if contains an array and plrf_value_exists is set, and sv specifies some array updates).
 
-void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_long replflags, unity& vdest)
+void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_long replflags, unity& vdest, const arrayref_t<wchar_t>& pterm2)
 {
   typedef _paramline_array_spec t_asp;
   arrayref_t<wchar_t> part;
@@ -10022,7 +10198,7 @@ void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_lon
           {
             s_long replf2 = replflags & ~plrf_value_exists;
             unity u;
-              paramline::x_decode1v(_trim_arrayref(asp.rvalue, L" "), v_ar_elem, replf2, u);
+              paramline::x_decode1v(_trim_arrayref(asp.rvalue, L" "), v_ar_elem, replf2, u, pterm2);
             if (asp.b_op_append_vec && u.utype() == utUnityArray)
             {
               s_long j = vdest.arrub() + 1;
@@ -10056,7 +10232,7 @@ void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_lon
             s_long ind = s_long(asp.iassign);
             s_long replf2 = replflags & ~plrf_value_exists;
               if (vdest.u_has(ind, 1)) { replf2 |= plrf_value_exists; replf2 |= plrf_allow_modify_all; }
-            paramline::x_decode1v(_trim_arrayref(asp.rvalue, L" "), v_ar_elem, replf2, vdest.ua(ind));
+            paramline::x_decode1v(_trim_arrayref(asp.rvalue, L" "), v_ar_elem, replf2, vdest.ua(ind), pterm2);
           }
         }
 
@@ -10070,7 +10246,7 @@ void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_lon
       {
         std::wstring s;
         s.assign(&ssv[2], ssv._end_u());
-        x_replace2a(s, replflags);
+        x_replace2a(s, replflags, pterm2);
         if (vdest.isLocal()) { vdest.clear(); vdest.rx<utString>().swap(s); }
           else { vdest = s; }
       }
@@ -10109,7 +10285,7 @@ void paramline::x_decode1v(const arrayref_t<wchar_t>& ssv, bool v_ar_elem, s_lon
         }
         else
         {
-          x_decode1v(ssv2, true, replflags, rx);
+          x_decode1v(ssv2, true, replflags, rx, pterm2);
         }
       }
       return;
@@ -10128,14 +10304,14 @@ lAutoDetectType:
     {
       if (_sv_dflt.isNonempty()) { vdest.swap(_sv_dflt); }
         else { vdest = ssv; }
-      x_replace2a(vdest.rstr(), replflags);
+      x_replace2a(vdest.rstr(), replflags, pterm2);
     }
     else
     {
       std::wstring s;
       if (_sv_dflt.isNonempty()) { s.swap(_sv_dflt.rstr()); }
         else { s.assign(ssv.pd(), ssv._end_u()); }
-      x_replace2a(s, replflags);
+      x_replace2a(s, replflags, pterm2);
       vdest = s;
     }
     return;
@@ -10180,8 +10356,8 @@ bool paramline::x_incorrect_integer_value_str(const arrayref_t<wchar_t>& s_, boo
   }
 }
 
-unity& paramline::decode(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags_encdec, arrayref_t<wchar_t> pterm_0)
-  { x_decode(ssrc0, mh, flags_encdec & _pled__mask__decode, pterm_0, 0, 0); return mh; }
+unity& paramline::decode(arrayref_t<wchar_t> ssrc0, unity& mh, s_long flags_encdec, arrayref_t<wchar_t> pterm2)
+  { x_decode(ssrc0, mh, flags_encdec & _pled__mask__decode, pterm2, 0, 0); return mh; }
 unity paramline::decode(arrayref_t<wchar_t> ssrc, s_long flags_encdec, arrayref_t<wchar_t> pterm2)
   { unity x; decode(ssrc, x, flags_encdec, pterm2); return x; }
 unity paramline::decode1v(arrayref_t<wchar_t> ssrc)
@@ -10525,16 +10701,6 @@ namespace bmdx
     #include <sys/sysctl.h>
   #endif
 
-  #if __APPLE__ && __MACH__
-    #if TARGET_OS_IPHONE
-//    NOTE libproc.h may be missing for particular architecture.
-//      Patched: libproc is part of libSystem, which is always loaded,
-//      so the needed symbol (proc_pidpath) address is got via dlsym.
-    #else
-      #include <libproc.h>
-    #endif
-  #endif
-
 static int __buf_argc = 0;
 static char __buf_argv[65000] = "_\0\0";
 
@@ -10767,33 +10933,36 @@ namespace bmdx
       // full path and filename of this exe (calculated once)
     static const char* _cmd_myexe_buf()
     {
-      static bool initDone(false); static char buf[2048] = "_";
-      if (!initDone)
-      {
-        critsec_t<static_init_lks> __lock(10,-1); if (sizeof(__lock)) {}
-        #if defined(__FreeBSD__)
-          int mib[4]; mib[0] = CTL_KERN; mib[1] = KERN_PROC; mib[2] = KERN_PROC_PATHNAME; mib[3] = -1;
-          size_t n = sizeof(buf);
-          sysctl(mib, 4, buf, &n, 0, 0);
-          buf[n] = '\0';
-        #elif __APPLE__ && __MACH__
-          typedef int (*Fpidpath)(int pid, void* buf, uint32_t bufsize);
-          #if TARGET_OS_IPHONE
-            Fpidpath f = (Fpidpath)dlsym(RTLD_DEFAULT, "proc_pidpath");
-          #else
-            Fpidpath f = &proc_pidpath;
-          #endif
-          if (!f || f(getpid(), buf, sizeof(buf)) <= 0) { buf[0] = '_'; buf[1] = '\0'; }
+      static bool initDone(false);
+      #if __APPLE__ && __MACH__
+        static char buf[(4*PATH_MAX)] = "_";
+      #else
+        static char buf[2048] = "_";
+      #endif
+      if (initDone) { return buf; }
+      critsec_t<static_init_lks> __lock(10,-1); if (sizeof(__lock)) {}
+      #if defined(__FreeBSD__)
+        int mib[4]; mib[0] = CTL_KERN; mib[1] = KERN_PROC; mib[2] = KERN_PROC_PATHNAME; mib[3] = -1;
+        size_t n = sizeof(buf);
+        sysctl(mib, 4, buf, &n, 0, 0);
+        buf[n] = '\0';
+      #elif __APPLE__ && __MACH__
+        typedef int (*Fpidpath)(int pid, void* buf, uint32_t bufsize);
+        #if TARGET_OS_IPHONE
+          Fpidpath f = (Fpidpath)dlsym(RTLD_DEFAULT, "proc_pidpath");
         #else
-          int n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-          if (n <= 0) { n = readlink("/proc/curproc/exe", buf, sizeof(buf) - 1); }
-          if (n <= 0) { n = readlink("/proc/curproc/file", buf, sizeof(buf) - 1); }
-          if (n <= 0) { n = readlink("/proc/self/path/a.out", buf, sizeof(buf) - 1); } // __sun
-          if (n > 0) { buf[n] = '\0'; }
-            else { buf[0] = '_'; buf[1] = '\0'; }
+          Fpidpath f = &proc_pidpath;
         #endif
-        initDone = true;
-      }
+        if (!f || f(getpid(), buf, sizeof(buf)) <= 0) { buf[0] = '_'; buf[1] = '\0'; }
+      #else
+        int n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (n <= 0) { n = readlink("/proc/curproc/exe", buf, sizeof(buf) - 1); }
+        if (n <= 0) { n = readlink("/proc/curproc/file", buf, sizeof(buf) - 1); }
+        if (n <= 0) { n = readlink("/proc/self/path/a.out", buf, sizeof(buf) - 1); } // __sun
+        if (n > 0) { buf[n] = '\0'; }
+          else { buf[0] = '_'; buf[1] = '\0'; }
+      #endif
+      initDone = true;
       return buf;
     }
     std::wstring cmd_myexe()
@@ -11576,10 +11745,6 @@ bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath==".
   extern "C" __BMDX_DLLEXPORT bmdx::unity_common::__Psm __bmdx_ls_modsm() { return bmdx::unity_common::ls_modsm; }
 #endif
 
-#if bmdx_part_dllmgmt && __bmdx_use_link_h == 3 // MACH
-  #include <mach-o/dyld.h>
-#endif
-
 namespace bmdx
 {
 
@@ -11603,7 +11768,7 @@ s_long unity::sig_struct() __bmdx_noex
 
     unity_common::__Psm pmsm_rl; prequest prq; union { meta::s_ll __2; HMODULE handle; }; pget_modsm pgms; struct _flags { char b_au; char htype; }; union { _flags f; void* __3; };
 
-    _mod_exhandle(bool b_autounload = true) __bmdx_noex { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
+    _mod_exhandle(bool b_autounload = true __bmdx_noarg) __bmdx_noex { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
 
     bool b_h() const __bmdx_noex { return f.htype > 0; }
     bool b_msm() const __bmdx_noex { return b_h() && pmsm_rl; }
@@ -11615,20 +11780,36 @@ s_long unity::sig_struct() __bmdx_noex
       ~_mod_exhandle() __bmdx_noex { if (f.b_au) { mod_unload(); } }
 
         // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
-      s_long mod_load(const char* name, s_long flags) __bmdx_noex
+        // flags:
+        //    0x100 - ignore name, create handle to itself instead.
+      s_long mod_load(const char* name, s_long flags __bmdx_noarg) __bmdx_noex
       {
-        if (f.htype > 0) { return 0; } if (!name) { return -1; }
+        if (f.htype > 0) { return 0; }
 
-        HMODULE h = 0;
-        if (*name == '\0') { h = GetModuleHandleA(0); f.htype = 2; }
-          else { h = LoadLibraryA(name); if (!h) { return -1; } f.htype = 1; }
-        handle = h;
+        const bool b_self = !!(flags & 0x100);
+        if (b_self)
+        {
+          int t = utils_dl::_in_main_exe();
+            if (!(t == 1 || t == 0)) { return -1; }
+          HMODULE h = utils_dl::_hmod_self(!!f.b_au);
+            if (!h) { return -1; }
+          f.htype = t == 1 ? 2 : 1;
+          handle = h;
+        }
+        else
+        {
+          if (!name) { return -1; }
+          HMODULE h = 0;
+          if (*name == '\0') { h = GetModuleHandleA(0); f.htype = 2; }
+            else { h = LoadLibraryA(name); if (!h) { return -1; } f.htype = 1; }
+          handle = h;
+        }
 
         prq = (prequest)sym("bmdx_mod_request");
         pgms = (pget_modsm)sym("__bmdx_ls_modsm");
         return 1;
       }
-      void mod_unload() __bmdx_noex
+      void mod_unload(__bmdx_noarg1) __bmdx_noex
       {
         if (f.htype == 1) { FreeLibrary(handle); }
         if (f.htype > 0) { handle = 0; f.htype = 0; }
@@ -11655,113 +11836,90 @@ s_long unity::sig_struct() __bmdx_noex
     bool b_gms() const __bmdx_noex { return b_h() && pgms; }
     bool b_mainexe() const __bmdx_noex { return f.htype == 2; }
 
-    _mod_exhandle(bool b_autounload = true) __bmdx_noex { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
+    _mod_exhandle(bool b_autounload = true __bmdx_noarg) __bmdx_noex { __2 = 0; __3 = 0; pmsm_rl = 0; handle = 0; prq = 0; pgms = 0; f.htype = 0; f.b_au = b_autounload; }
 
 
     #if bmdx_part_dllmgmt
       ~_mod_exhandle() __bmdx_noex { if (f.b_au) { mod_unload(); } }
 
         // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
-      s_long mod_load(const char* name, s_long flags) __bmdx_noex
+        // flags:
+        //    0x100 - ignore name, create handle to itself instead.
+        //    (flags & 3) == 1 use  RTLD_DEEPBIND if available.
+        //    (flags & 3) == 0 do not use  RTLD_DEEPBIND.
+        //    (flags & 3) == 2 automatic choice (Linux/g++ - enable, others - disable).
+      s_long mod_load(const char* name, s_long flags __bmdx_noarg) __bmdx_noex
       {
-        if (f.htype > 0) { return 0; } if (!name) { return -1; }
+        if (f.htype > 0) { return 0; }
 
-        int mode = RTLD_NOW|RTLD_LOCAL;
-        #ifndef __ANDROID__
-          mode |= RTLD_NOLOAD;
-        #endif
-        #ifdef RTLD_DEEPBIND
-          if ((flags & 3) == 1) { mode |= RTLD_DEEPBIND; } // set on
-            else if ((flags & 3) == 0) { } // leave deepb. off by dflt.
-            else // enable only for g++ (detect based on __GNUC__)
-            {
-              #if defined(__clang__)
-              #elif defined(__GNUC__)
-                  mode |= RTLD_DEEPBIND;
-              #else
-              #endif
-            }
-        #endif
-        #ifdef RTLD_FIRST
-          mode |= RTLD_FIRST;
-        #endif
-        #ifdef RTLD_NODELETE
-          if (!f.b_au) { mode |= RTLD_NODELETE; }
-        #endif
-        void* h = 0;
-        bool b_trg_is_exe = *name == '\0';
-        if (b_trg_is_exe)
+        const bool b_self = !!(flags & 0x100);
+        if (b_self)
         {
-          #ifdef RTLD_MAIN_ONLY
-            h = RTLD_MAIN_ONLY;
-          #else
-            h = dlopen(0, mode);
+          int t = utils_dl::_in_main_exe();
+            if (!(t == 1 || t == 0)) { return -1; }
+          void* h = utils_dl::_hmod_self(!!f.b_au);
             if (!h) { return -1; }
-          #endif
-          f.htype = 2;
+          f.htype = t == 1 ? 2 : 1;
+          handle = h;
         }
         else
         {
-          h = dlopen(name, mode);
-          #ifndef __ANDROID__
-            if (!h) { mode &= ~RTLD_NOLOAD; h = dlopen(name, mode); }
+          if (!name) { return -1; }
+          int mode = utils_dl::_mode_dlopen(f.b_au, true);
+          #ifdef RTLD_DEEPBIND
+            if ((flags & 3) == 1) { mode |= RTLD_DEEPBIND; } // set on
+              else if ((flags & 3) == 0) { } // leave deepb. off by dflt.
+              else // enable only for g++ (detect based on __GNUC__)
+              {
+                #if defined(__clang__)
+                #elif defined(__GNUC__)
+                    mode |= RTLD_DEEPBIND;
+                #else
+                #endif
+              }
           #endif
-          if (!h) { return -1; }
-          f.htype = 1;
+          void* h = 0;
+          bool b_trg_is_exe = *name == '\0';
+          if (b_trg_is_exe)
+          {
+            #ifdef RTLD_MAIN_ONLY
+              h = RTLD_MAIN_ONLY;
+            #else
+              h = dlopen(0, mode);
+              if (!h) { return -1; }
+            #endif
+            f.htype = 2;
+          }
+          else
+          {
+            h = dlopen(name, mode);
+            #ifndef __ANDROID__
+              if (!h) { mode &= ~RTLD_NOLOAD; h = dlopen(name, mode); }
+            #endif
+            if (!h) { return -1; }
+            f.htype = 1;
+          }
+          handle = h;
         }
-        handle = h;
 
         prq = (prequest)sym("bmdx_mod_request");
         pgms = (pget_modsm)sym("__bmdx_ls_modsm");
-        if (!pgms && b_trg_is_exe)
+        if (!pgms)
         {
-          // NOTE The below setting pgms = <value> means that the current module has detected h being its own handle,
-          //    so that __bmdx_ls_modsm may be addressed directly.
-          //    In case of main executable, this eliminates "-Wl,-E" linker arg. requirement for use of PCOS
-          //    (except for systems where link.h is not available).
-          #if __bmdx_use_link_h == 1 // Linux
-            for (__bmdx_Elf_Dyn* dyn = __bmdx_DYNAMIC(); dyn->d_tag != DT_NULL; ++dyn)
-            {
-              if (dyn->d_tag != DT_DEBUG) { continue; }
-              struct r_debug* prd = ((struct r_debug*)dyn->d_un.d_ptr);
-                if (!prd) { continue; }
-              struct link_map* plm = prd->r_map;
-              while (plm)
-              {
-                if ((void*)plm->l_ld == (void*)__bmdx_DYNAMIC())
-                {
-                  pgms = (pget_modsm)&__bmdx_ls_modsm;
-                  break;
-                }
-                plm = plm->l_next;
-              }
-              break;
-            }
-          #elif __bmdx_use_link_h == 2 // FreeBSD
-            struct link_map* plm_h = 0; dlinfo(h, RTLD_DI_LINKMAP, &plm_h);
-            struct link_map* plm_self = 0; dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &plm_self);
-            if (plm_h && plm_self && plm_h->l_addr == plm_self->l_addr)
-            {
-              pgms = &__bmdx_ls_modsm;
-            }
-          #elif __bmdx_use_link_h == 3 // MACH
-            Dl_info x; std::memset(&x, 0, sizeof(x));
-            int res = dladdr((void*)&__bmdx_ls_modsm, &x);
-            if (res)
-            {
-              uint32_t sz = 2048;
-              char buf[2048] = { 0 };
-              res = _NSGetExecutablePath(buf, &sz);
-              if (res == 0 && 0 == std::strcmp(buf, x.dli_fname))
-              {
-                pgms = &__bmdx_ls_modsm;
-              }
-            }
-          #endif
+          if (b_self) { pgms = (pget_modsm)&__bmdx_ls_modsm; }
+          else
+          {
+              // If the current module has detected h being its own handle, it assigns pgms directly.
+              //  This is useful, particularly, in Linux, because it overcomes the effect of "-Wl,-E" switch
+              //  missing at build time.
+            void* h2 = utils_dl::_hmod_self(true);
+            if (h2 == handle) { pgms = (pget_modsm)&__bmdx_ls_modsm; }
+            if (h2) { dlclose(h2); }
+          }
         }
         return 1;
       }
-      void mod_unload() __bmdx_noex
+      void mod_unload(__bmdx_noarg1) __bmdx_noex
       {
         #ifdef RTLD_MAIN_ONLY
         #else
@@ -11886,7 +12044,7 @@ unity_common::f_ls_modsm unity::mod_handle::_pmsm_rl() const __bmdx_noex
 unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
 {
   unity::mod_handle h;
-  unity_common::f_ls_modsm pmsm = unity_common::pls_modsm();
+  unity_common::f_ls_modsm pmsm = unity_common::ls_modsm;
   #if bmdx_part_dllmgmt
     unity_common::f_ls_modsm offer = pmsm;
   #else
@@ -11899,16 +12057,14 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
     cv_ff::cv_rootldr::PFinit_by_pmsm f_ibp = (cv_ff::cv_rootldr::PFinit_by_pmsm)pmsm_rl(unity_common::msm_rl_init_by_pmsm);
     if (f_ibp) { try { f_ibp(pmsm, b_autounload, &h); } catch (...) {} }
 
-      // If handle is not found, but the current module is root loader, check if it's main executable
-      //  (can be done because exe's handle can be got without knowing its name).
-      // ~!!! Later, this can be replaced by system-dependent getting handle of the current shared object.
+      // It the current module is the root loader, it can create and store a handle to itself.
     if (!h && pmsm_rl == pmsm)
     {
       mod_handle he;
       cv_ff::cv_rootldr::PFinit_handle f_ih = (cv_ff::cv_rootldr::PFinit_handle)pmsm_rl(unity_common::msm_rl_init_handle);
       if (f_ih)
       {
-        try { f_ih(&he, "", 1, (bmdx_mod_load_def_flags & 0)); } catch (...) {}
+        try { f_ih(&he, 0, 0x100 + (b_autounload ? 1 : 0), (bmdx_mod_load_def_flags & 0)); } catch (...) {}
         if (he._pmsm() == pmsm) { h = he; }
       }
     }
@@ -11933,11 +12089,15 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
   }
 
     // NOTE Finit_handle assumes that it's called in root loader module (see also unity::mod).
-    // flags0: 0x1 - remember to autounload when ref. cnt. == 0 (if possible).
+    // flags0:
+    //    0x1 - remember to autounload when ref. cnt. == 0 (if possible).
+    //    0x100 - ignore name, create handle to itself instead.
   s_long cv_ff::cv_rootldr::Finit_handle(unity::mod_handle* pmh, const char* name, s_long flags0, s_long flags)
   {
     if (!pmh) { return 0; }
     if (pmh->_rex) { return -1; }
+    flags &= ~0xff00;
+    flags |= (flags0 & 0xff00);
 
     cref_t<unity::mod_handle::_stg_mh> rd;
       if (!rd.create0(true)) { return -2; }
@@ -11953,19 +12113,12 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
 
     unity::_mod_exhandle::pget_modsm pgms = rd.ref()().pgms;
     unity_common::f_ls_modsm pmsm = pgms ? pgms() : 0;
-    if (pmsm)
+    PFrootldr f_rl = pmsm ? (PFrootldr)pmsm(unity_common::msm_rootldr) : 0;
+    if (f_rl)
     {
-      PFrootldr f_rl = (PFrootldr)pgms()(unity_common::msm_rootldr);
-      if (f_rl)
-      {
-        s_long f = 0;
-        try { f = f_rl(unity_common::ls_modsm, 0); } catch (...) {}
+      s_long f = 0;
+      try { f = f_rl(unity_common::ls_modsm, 0); } catch (...) {}
         if (!f) { return -7; } // this is not expected to occur, because Frootldr does not fail on offer != 0
-
-          //~!!! This disables autounloading the shared library - rootldr on last ref. des., for case when it has loaded itself at least once.
-          //  May be replaced with check "if root loader still contains any other libraries handles, which cannot be immediately released".
-        if ((f & 4) && *name != '\0') { b_au = 0; }
-      }
     }
 
     unity::mod_handle::t_nativehandle handle = rd.ref()().handle;
@@ -11980,8 +12133,22 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
       try { phm->hmsm[(void*)pmsm] = handle; } catch (...) {} // if this fails, it's not critical (no need to unload the library)
     }
 
-    if (!b_au) { e->v.ref()().f.b_au = 0; }
-    pmh->_rex = rd; // does not fail here
+    if (1)
+    {
+      unity::_mod_exhandle& h = rd.ref()();
+        // Even if autounload on ref. count 0 is allowed by client,
+        //  but the module is at once shared library and a root loader,
+        //  the autounload will be disabled,
+        //  because at that time the module may hold handles to child modules,
+        //  in rsth, and also in PCOS objects.
+        //  (Automatic tracking of these references would be costly.
+        //  If automatic unload is quite necessary, the client can ensure it by keeping
+        //  main executable single possible root loader,
+        //  which means that all its direct and indirect child libraries, which use BMDX,
+        //  are loaded via unity::mod().)
+      if (!b_au || (!h.b_mainexe() && pmsm && pmsm == h.pmsm_rl)) { h.f.b_au = 0; }
+    }
+    pmh->_rex = rd; // ref. copy does not fail
     return 1;
   }
     // NOTE Fdestroy_handle assumes that it's called in root loader module (see also unity::mod).
@@ -13290,7 +13457,7 @@ void dispatcher_mt::thread_proxy::th_lqsd_impl::_thread_proc()
       if (nm > 0) { break; }
       const s_ll dtmcs = bmdx_minmax::myllmin(sleep1_max, sleep_total - s_ll(1000 * (clock_ms() - t0)));
       if (dtmcs < 0) { break; }
-      sleep_mcs(dtmcs, sleep_total >= sleep1_max ? 1 : 0);
+      sleep_mcs(dtmcs, 1);
     }
   }
 lExit: _r_ths.clear();
@@ -16195,7 +16362,7 @@ void dispatcher_mt::thread_proxy::_s_disp_ctor(dispatcher_mt* pdisp, arrayref_t<
   {
     rses.__set_ses_state(0); // dispatcher session ends due to initialization error
     if (1) { critsec_t<dispatcher_mt> __lock(10, -1, &rses.lkd_disp_nprx); if (sizeof(__lock)) {} rses.nprx -= 1; }
-    _s_thh_signal_stop(rses); while (_s_thh_active(rses)) { sleep_mcs(100); }
+    _s_thh_signal_stop(rses); while (_s_thh_active(rses)) { sleep_mcs(100, 1); }
     pdisp->_r_ths.clear();
   }
 }
@@ -16213,7 +16380,7 @@ void dispatcher_mt::thread_proxy::_s_disp_dtor(dispatcher_mt* pdisp) __bmdx_noex
   {
     cch_session& rses = *pdisp->_r_ths._pnonc_u();
     int e = rses.exitmode;
-    if (e == 2) { while (rses.nprx > 0 || _s_thh_active(rses)) { sleep_mcs(100); } } // NOTE this loop exits only when all clients session references are released (i.e. may wait while any client thread is busy or sleeping, or infinitely if it's been terminated by force).
+    if (e == 2) { while (rses.nprx > 0 || _s_thh_active(rses)) { sleep_mcs(100, 1); } } // NOTE this loop exits only when all clients session references are released (i.e. may wait while any client thread is busy or sleeping, or infinitely if it's been terminated by force).
     pdisp->_r_ths.clear();
   }
 }
