@@ -1,4 +1,4 @@
-// rev. 2022-10-16
+// rev. 2023-01-12
 =======================================================================================================================
 === HOW TO INCLUDE THE LIBRARY INTO YOUR PROJECT ===
 =======================================================================================================================
@@ -136,6 +136,16 @@ g++                                  -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O0
 For 32-bit executable: use -m32 instead of -m64
 
 ==================================
+Linux Ubuntu 22.04
+
+All compiler notes are same as for Ubuntu 18.04.
+
+Tested compilers:
+
+gcc version 11.3.0 (Ubuntu 11.3.0-1ubuntu1~22.04), target: x86_64-linux-gnu
+Ubuntu clang version 14.0.0-1ubuntu1, target: x86_64-pc-linux-gnu
+
+==================================
 macOS 10.15.6
 
 1. (common) Do not link C, C++ libs. statically into program. This produces faulty binaries.
@@ -158,7 +168,7 @@ macOS 10.15.6
 
 
   -----------------------------------------------------
-  Apple clang version 11.0.3 (clang-1103.0.32.59), x86_64-apple-darwin19.6.0
+  Apple clang version 12.0.0 (clang-1200.0.32.27), x86_64-apple-darwin19.6.0
 
 clang               -m64 -O2 -o test1 test1.cpp bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
 clang -shared -Wall -m64 -O2 -o test1.so test1.cpp bmdx_main.cpp -lstdc++ -lm -ldl -lpthread
@@ -186,7 +196,7 @@ iOS
 
 
   -----------------------------------------------------
-  XCode 9.2 / Clang / LLVM 9.0.0.
+  XCode 12.2, / Apple clang version 12.0.0
 
   Specific options (in build settings):
     executable: Symbols Hidden By Default = No, Dead Code Stripping = No
@@ -194,7 +204,8 @@ iOS
   Explanation: by default, extern "C" symbols are hidden in the executable, but not in the shared libraries.
 
 ==================================
-Windows 8.1, 10 (x64)
+Windows 8.1 x64, ver. 6.3, build 9600
+Windows 10 x64, ver. 21H2, build 19044.1415
 
 Compiler-related notes.
   1. MSVC, Intel C++
@@ -388,7 +399,7 @@ g++ -Wl,-E                                               -m64 -fno-use-linker-pl
 g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I$incl1 -I$incl2 -O1 -o test1.so test1.cpp bmdx_main.cpp -L$lib1 -L$lib2 -lpthread
 g++ -shared -fPIC -Wall                                  -m64 -fno-use-linker-plugin -Wl,-Bsymbolic -I$incl1 -I$incl2 -O0 -o test1.so test1.cpp bmdx_main.cpp -L$lib1 -L$lib2 -lpthread
 
-----------------------------------
+==================================
 FreeBSD 12.1
 
 1. All notes, made for FreeBSD 10.1, apply here too.
@@ -413,9 +424,9 @@ g++ -static-libgcc -static-libstdc++ -shared -fPIC -Wall -m64 -Wl,-Bsymbolic -O1
 g++ -shared -fPIC -Wall                                  -m64 -Wl,-Bsymbolic -O0 -o test1.so test1.cpp bmdx_main.cpp -lpthread
 
 ==================================
-Raspberry Pi 4 Model B / Ubuntu 20.04.3 LTS
+Raspberry Pi 4 Model B / Ubuntu 20.04
 
-All the above considerations for Ubuntu 18.04 are also valid here.
+All compiler notes are same as for Ubuntu 18.04.
 
   -----------------------------------------------------
   gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1), aarch64-linux-gnu

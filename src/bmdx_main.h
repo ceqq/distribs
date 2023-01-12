@@ -1,12 +1,12 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2022-10-16
+// rev. 2023-01-12
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 //
-// Copyright 2004-2021 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2023 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -41,6 +41,28 @@
   #pragma clang diagnostic ignored "-Wunused-parameter"
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
   #pragma clang diagnostic ignored "-Wunused-function"
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic ignored "-Wpragmas"
+  #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+  #pragma GCC diagnostic ignored "-Wstrict-overflow"
+  #pragma GCC diagnostic ignored "-Wint-in-bool-context"
+  #pragma GCC diagnostic ignored "-Wclass-memaccess"
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wunused-function"
+  #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
+  #pragma GCC diagnostic ignored "-Wnonnull-compare"
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+  #pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+#ifdef _MSC_VER
+  #pragma warning(push)
+  #pragma warning(disable:4290)
+  #pragma warning(disable:4100)
+  #pragma warning(disable:4616)
+  #pragma warning(disable:4355)
 #endif
 
 #include "bmdx_config.h"
@@ -995,7 +1017,7 @@ namespace bmdx
   {
     typedef I __t_i;
     o_ibind(meta::noarg_tu_t<T> = meta::noarg_tu_t<T>()) : __p_itfs(0) {}
-    virtual ~o_ibind() {}
+    virtual ~o_ibind() __bmdx_exany {}
 
       // Should return ptr. to object of class, implementing the interface, normally o_iimpl<T, I>.
     virtual I* __pMyI() = 0;
@@ -1500,6 +1522,7 @@ namespace bmdx
       // NOTE Tests are able to return false on this == 0.
     inline bool isScalar() const __bmdx_noex { return this && utype() <= utString; }
     inline bool isArray() const __bmdx_noex { return this && !!(ut & utArray); }
+    inline bool isUnityArray() const __bmdx_noex { return this && utype() == utUnityArray; }
     inline bool isObject() const __bmdx_noex { return this && utype() == utObject; }
     bool isAssoc() const __bmdx_noex; // true if unity is utHash or utMap
 
@@ -3022,6 +3045,11 @@ namespace bmdx
         //      0 - do not use RTLD_DEEPBIND even if available.
         //          Symbols binding occurs according to factual compiler options set.
         //      2 - automatic choice (Linux/g++ - enable, others - disable).
+        //    flag 0x4 (appeared first in BMDX 1.5 2022-11-15):
+        //      a) Windows: assume module name (path) being encoded in UTF-8 instead of system encoding.
+        //          In this case, use LoadLibraryW to load module.
+        //          (If the flag is not set, LoadLibraryA is used.)
+        //      b) POSIX systems: ignored (using dlopen(name...)).
         // NOTE mod(), mod_handle::request(), and other functions
         //    may be safely called from multiple threads.
         // NOTE The client must ensure that no high-level cross-module objects
@@ -4107,12 +4135,21 @@ namespace
 
   //==  Utilities.
 
-  std::wstring cmd_myexe(); // full path and filename of this exe (calculated once)
+    // Full path and filename of this exe (calculated once).
+    // NOTE POSIX: it is assumed that original program path was encoded as UTF-8.
+  std::wstring cmd_myexe();
     // Command line, without executable path/filename.
-    //  b_quoting true: quote strings with special characters and white spaces.
-    //  b_quoting false: only concatenate all arguments as they are.
+    //  b_quoting:
+    //        a) true: get command line as array of arguments, quote each argument, then concatenate all using space character.
+    //        b) false / command line is available only as array of arguments: concatenate arguments as they are, using space character.
+    //        c) false / command line is available as whole: return arguments string exactly as supplied on program start.
+    // NOTE POSIX: it is assumed that original program arguments were encoded as UTF-8.
   std::wstring cmd_string(bool b_quoting = true);
-  unity cmd_array(); // argv (0-based string array of command line arguments, size >= 1; 0 - program name (not exactly executable name/path), 1..* - dequoted arguments)
+    // argv (0-based string array of command line arguments, size >= 1;
+    //    0 - program name (not exactly executable name/path),
+    //    1..* - dequoted arguments).
+    // NOTE POSIX: it is assumed that original program arguments were encoded as UTF-8.
+  unity cmd_array();
 
     // Prepare single command line argument with properly escaped and replaced characters.
     //  See original processctl::ff_mc::arg1() for details.
@@ -5098,44 +5135,40 @@ namespace
       pdDoNotChange // do not complete path
   };
 
-      // NOTE For wide-character functions of file_utils:
-      //    where system API call is required for perform an operation,
-      //    wide string arguments are first converted to 1-byte character string,
-      //    based on system-default locale (equiv. to std::setlocale(..., "")).
   struct file_utils
   {
-        // Returns true is pathstr specifies the full path.
-        // Returns false for relative paths.
-        // The function analyzes both correct and incorrect paths.
+      // Returns true is pathstr specifies the full path.
+      // Returns false for relative paths.
+      // The function analyzes both correct and incorrect paths.
     bool is_full_path(const std::wstring& pathstr) const;
     bool is_full_path(const std::string& pathstr) const;
 
-        // Get path without filename (just remove the last path element).
+      // Get path without filename (just remove the last path element).
     std::wstring strip_path(const std::wstring& pathstr) const;
     std::string strip_path(const std::string& pathstr) const;
 
-        // Get filename (the last path element).
+      // Get filename (the last path element).
     std::wstring strip_filename(const std::wstring& pathstr) const;
     std::string strip_filename(const std::string& pathstr) const;
 
-        // Returns pathstr without the last extsep and the characters after,
-        //  if this extsep occurs after the last path separator.
+      // Returns pathstr without the last extsep and the characters after,
+      //  if this extsep occurs after the last path separator.
     std::wstring remove_ext(const std::wstring& pathstr, const std::wstring& extsep = L".") const;
     std::string remove_ext(const std::string& pathstr, const std::string& extsep = ".") const;
 
-        // Inserts s_add into copy of pathstr before the last occurrence of extsep,
-        //  if this extsep occurs after the last path separator.
-        //  Otherwise, returns pathstr + s_add.
+      // Inserts s_add into copy of pathstr before the last occurrence of extsep,
+      //  if this extsep occurs after the last path separator.
+      //  Otherwise, returns pathstr + s_add.
     std::wstring add_to_name(const std::wstring& pathstr, const std::wstring& s_add, const std::wstring& extsep = L".") const;
     std::string add_to_name(const std::string& pathstr, const std::string& s_add, const std::string& extsep = ".") const;
 
-        // Replace filename part in fnp with another filename fn.
+      // Replace filename part in fnp with another filename fn.
     std::wstring replace_filename(const std::wstring& fnp, const std::wstring& fn) const;
     std::string replace_filename(const std::string& fnp, const std::string& fn) const;
 
-        // Joins two path parts (or copies pathstr, if pathstr2 is omitted).
-        // Then, deletes all duplicate slashes.
-        // Finally, deletes the last slash, if the path has no characters after it.
+      // Joins two path parts (or copies pathstr, if pathstr2 is omitted).
+      // Then, deletes all duplicate slashes.
+      // Finally, deletes the last slash, if the path has no characters after it.
     std::wstring join_path(const std::wstring& pathstr, const std::wstring& pathstr2 = L"") const;
     std::wstring join_path(const std::wstring& ps1, const std::wstring& ps2, const std::wstring& ps3) const;
     std::wstring join_path(const std::wstring& ps1, const std::wstring& ps2, const std::wstring& ps3, const std::wstring& ps4) const;
@@ -5144,60 +5177,76 @@ namespace
     std::string join_path(const std::string& ps1, const std::string& ps2, const std::string& ps3) const;
     std::string join_path(const std::string& ps1, const std::string& ps2, const std::string& ps3, const std::string& ps4) const;
 
-        // Returns True if path contains slash at the end.
+      // Returns true if path contains slash at the end.
     bool has_rightmost_patshep(const std::wstring& pathstr) const;
     bool has_rightmost_patshep(const std::string& pathstr) const;
 
-        // Returns false if path contains invalid symbols
-        //   or incorrectly represents path in some other way.
-        // Otherwise returns true.
+      // Returns false if path contains invalid symbols
+      //   or incorrectly represents path in some other way.
+      // Otherwise returns true.
     bool is_valid_path(const std::wstring& pathstr) const;
     bool is_valid_path(const std::string& pathstr) const;
 
-        // If sPath is already a full path, it is returned as is.
-        // If sPath starts with ".", the point is removed, and the result is prepended with the current directory, then the path is regarded as complete.
-        // In other cases, a predefined path, selected by pd argument, is prepended to sPath.
-        //  For pd = pdUserDefinedDir, the function uses sUserDefDir. If sUserDefDir is not specified, it is assumed to be this application executable file path.
-    std::wstring complete_path(const std::wstring& sPath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir = L"") const;
-    std::string complete_path(const std::string& sPath, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir = "") const;
+      // If pathstr is already a full path, it is returned as is.
+      // If pathstr starts with ".", the point is removed, and the result is prepended with the current directory, then the path is regarded as complete.
+      // In other cases, a predefined path, selected by pd argument, is prepended to pathstr.
+      //  For pd = pdUserDefinedDir, the function uses sUserDefDir. If sUserDefDir is not specified, it is assumed to be this application executable file path.
+    std::wstring complete_path(const std::wstring& pathstr, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir = L"") const;
+    std::string complete_path(const std::string& pathstr, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir = "") const;
 
-        // Returns true if file exists (and is not a directory).
-        //  If sPath contains rightmost path separator character,
-        //  the function always returns false.
-    bool is_ex_file(const std::wstring& sPath) const;
-    bool is_ex_file(const std::string& sPath) const;
+      // Returns true if file exists (and is not a directory).
+      //  If pathstr contains rightmost path separator character,
+      //  the function always returns false.
+      // The function is similar to file_io::is_ex_file.
+    bool is_ex_file(const std::wstring& pathstr) const;
+    bool is_ex_file(const std::string& pathstr) const;
 
-        // Returns true if directory exists (and is not a file).
-        //  sPath may or may not contain rightmost path separator character,
-        //  this does not influence the behavior.
-    bool is_ex_dir(const std::wstring& sPath) const;
-    bool is_ex_dir(const std::string& sPath) const;
+      // Returns true if directory exists (and is not a file).
+      //  pathstr may or may not contain rightmost path separator character,
+      //  this does not influence the behavior.
+      // The function is similar to file_io::is_ex_dir.
+    bool is_ex_dir(const std::wstring& pathstr) const;
+    bool is_ex_dir(const std::string& pathstr) const;
 
-        // Non-recursive sequential expansion of environment variables in s.
-        //  1. Converts tokens, limited by '%', into corresponding values of env. variables (std::getenv).
-        //  2. If variable is not found in the environment, its name is replaced with an empty string.
-        //  3. Sequence "%%" in s is treated specially:
-        //    a) if met beyond variable name, it is immediately converted to single literal percent sign, unrelated to env. variables.
-        //    b) if met inside variable name, ends the name and immediately marks the beginning of the next variable name.
-        // NOTE std::wstring version of expand_env_nr:
-        //    1. Converts tokens, limited by '%', into 1-byte character string.
-        //    2. Gets env. variable value.
-        //    3. Converts the value back to std::wstring.
-        //    Conversions are based on system-default locale (equiv. to std::setlocale(..., "")).
-        //    See also wsToBs(), bsToWs().
+      // Non-recursive sequential expansion of environment variables in s.
+      //  1. Converts tokens, limited by '%', into corresponding values of env. variables (std::getenv).
+      //  2. If variable is not found in the environment, its name is replaced with an empty string.
+      //  3. Sequence "%%" in s is treated specially:
+      //    a) if met beyond variable name, it is immediately converted to single literal percent sign, unrelated to env. variables.
+      //    b) if met inside variable name, ends the name and immediately marks the beginning of the next variable name.
+      // NOTE std::wstring version of expand_env_nr:
+      //    1. Converts tokens, limited by '%', into 1-byte character string.
+      //    2. Gets env. variable value.
+      //    3. Converts the value back to std::wstring.
+      //    Conversions are based on system-default locale (equiv. to std::setlocale(..., "")).
+      //    See also wsToBs(), bsToWs().
     std::wstring expand_env_nr(const std::wstring& s) const;
     std::string expand_env_nr(const std::string& s) const;
 
-        // Recursively create directories to ensure that sPath exists.
-        //  On success (all was created or already existed) returns true.
-        // NOTE POSIX: mk_subdir creates each non-existing directory in sPath
-        //  with permissions 0777.
-        //  For already existing directories, their current permissions are not modified.
-    bool mk_subdir(const std::wstring& sPath) const;
-    bool mk_subdir(const std::string& sPath) const;
+      // Recursively create directories to ensure that pathstr exists.
+      //  On success (all was created or already existed) returns true.
+      // NOTE POSIX: mk_subdir creates each non-existing directory in pathstr
+      //  with permissions 0777.
+      //  For already existing directories, their current permissions are not modified.
+    bool mk_subdir(const std::wstring& pathstr) const;
+    bool mk_subdir(const std::string& pathstr) const;
 
+      // Deletes single file or empty directory.
+      //  The function is similar to file_io::remove_one.
+      // flags:
+      //  0x2: allow removal if path specifies a file.
+      //  0x4: allow removal if path specifies a directory.
+      // Returns:
+      //  1 - success.
+      //  0 - path does not exist.
+      //  -1 - bad argument (path is null or empty string, also (flags & 6) == 0).
+      //  -2 - common case failure.
+      //  -3 - removal failed (file/directory exists).
+      //  -4 - removal of existing file/directory is not allowed by flags.
+    int remove_one(const std::wstring& pathstr, s_long flags = 0x6);
+    int remove_one(const std::string& pathstr, s_long flags = 0x6);
 
-      // Loads whole file into wide-character string.
+      // Loads whole file (pathstr) into wide-character string.
       //  format_string should contain
       //    1) one of "binary" or "text".
       //      For "binary", the input data is treated as plain array of bytes,
@@ -5223,10 +5272,10 @@ namespace
       // Returns:
       //    On success: string with the loaded characters (but see also ret_s).
       //    On failure or wrong args.: utEmpty.
-    unity load_text(const std::string& format_string, const std::wstring& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
-    unity load_text(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const;
+    unity load_text(const std::string& format_string, const std::wstring& pathstr, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const __bmdx_noex;
+    unity load_text(const std::string& format_string, const std::string& pathstr, EFileUtilsPredefinedDir pd = pdCurDir, unity& ret_s = unity::_0nc) const __bmdx_noex;
 
-      // Saves characters of wide-character string str to the specified file.
+      // Saves characters of wide-character string str to the specified file (pathstr_target).
       //  format_string should contain
       //    1) one of "binary" or "text".
       //      For "binary", characters from str are 1:1 converted to output, according to selected encoding,
@@ -5247,39 +5296,43 @@ namespace
       // Returns:
       //    On success: true.
       //    On failure or wrong args.: false.
-    bool save_text(const std::string& format_string, const std::wstring& str, const std::wstring& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
-    bool save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
+    bool save_text(const std::string& format_string, const std::wstring& str, const std::wstring& pathstr_target, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
+    bool save_text(const std::string& format_string, const std::wstring& str, const std::string& pathstr_target, EFileUtilsPredefinedDir pd = pdCurDir, const std::wstring& sUserDefDir = L"") const __bmdx_noex;
 
 
       // Loads bytes from the given file into dest.
-      //  (Same as file_io::load_bytes.)
+      //    (Same as file_io::load_bytes.)
+      //  flags:
+      //    0x2 - load file sequentially, until EOF (instead of getting file length and loading length bytes as whole).
+      //      This can be used for dynamically updated files or special file systems,
+      //      where file seeking to end of file works actually incorrectly.
       // Returns:
       //  1 - success.
       //  0 - file does not exist.
       //  -1 - memory alloc. error, or wrong arguments.
       //  -2 - file i/o error. NOTE On i/o error, dest may be left modified.
-    int load_bytes(const std::wstring& fnp, std::string& dest) __bmdx_noex;
-    int load_bytes(const std::string& fnp, std::string& dest) __bmdx_noex;
-    int load_bytes(const char* fnp, std::string& dest) __bmdx_noex;
+    int load_bytes(arrayref_t<wchar_t> fnp, std::string& dest, s_long flags = 0) __bmdx_noex;
+    int load_bytes(arrayref_t<char> fnp, std::string& dest, s_long flags = 0) __bmdx_noex;
 
       // Saves bytes from src to the given file.
-      //  (Same as file_io::save_bytes.)
-      //  b_append == false truncates the file before writing, if it exists.
-      //  if n == 0, pdata may be 0.
+      //    (Same as file_io::save_bytes.)
+      // b_append: false truncates the file before writing, if it exists.
       // Returns:
       //  1 - success.
       //  0 - failed to create file (or open the existing file for writing).
       //  -1 - data size too large, or memory alloc. error, or wrong arguments.
       //  -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-    int save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) __bmdx_noex;
-    int save_bytes(const std::string& fnp, const std::string& src, bool b_append) __bmdx_noex;
-    int save_bytes(const char* fnp, const std::string& src, bool b_append) __bmdx_noex;
-    int save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) __bmdx_noex;
+    int save_bytes(arrayref_t<wchar_t> fnp, arrayref_t<char> src, bool b_append) __bmdx_noex;
+    int save_bytes(arrayref_t<char> fnp, arrayref_t<char> src, bool b_append) __bmdx_noex;
 
   private:
-    static bool xHasCurDirShortCut(const std::wstring& sPath);
-    static bool xHasCurDirShortCut(const std::string& sPath);
-    static bool xmk_subdir(const std::string& sPath, int level);
+    bool xHasCurDirShortCut(const std::wstring& pathstr) const;
+    bool xHasCurDirShortCut(const std::string& pathstr) const;
+    bool xmk_subdir(const std::string& pathstr, int level) const;
+    #ifdef _bmdxpl_Wnds
+      struct __utils_l2;
+      bool xmk_subdir(const std::wstring& pathstr, int level) const;
+    #endif
   };
 
 
@@ -6090,7 +6143,7 @@ namespace
 
 
 
-    virtual ~i_dispatcher_mt(){}
+    virtual ~i_dispatcher_mt() __bmdx_exany {}
   };
 
 
@@ -6341,6 +6394,12 @@ namespace yk_c
   }
 }
 
+#ifdef _MSC_VER
+  #pragma warning(pop)
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic pop
+#endif
 #if defined(__clang__)
   #pragma clang diagnostic pop
 #endif

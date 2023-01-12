@@ -1,12 +1,12 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2022-10-16
+// rev. 2023-01-12
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 //
-// Copyright 2004-2021 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2023 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -97,22 +97,25 @@
 
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
+  #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
   #pragma GCC diagnostic ignored "-Wstrict-overflow"
-  #pragma GCC diagnostic ignored "-Wdeprecated"
   #pragma GCC diagnostic ignored "-Wint-in-bool-context"
   #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
 #ifdef _MSC_VER
+  #pragma warning(push)
   #pragma warning(disable:4290)
-  #pragma warning(disable:4099)
 #endif
+
   // Rough platform selector
 #ifdef _WIN32
   #define _bmdxpl_Wnds
 #else
   #define _bmdxpl_Psx
 #endif
+
 #undef _yk_reg
 #if __cplusplus > 199711L
   #define _yk_reg
@@ -160,7 +163,6 @@
   #define __bmdx_null_pchar ((char*)1 - 1)
 #endif
 
-
 namespace yk_c { namespace { struct __vecm_tu_selector; } }
 namespace bmdx_meta
 {
@@ -202,7 +204,7 @@ namespace bmdx_meta
 #define _u_ll ::bmdx_meta::u_ll
 
 
-
+  // All systems
 #include <new>
 #include <typeinfo>
 #include <string>
@@ -215,12 +217,118 @@ namespace bmdx_meta
 #include <cstddef>
 #include <climits>
 #include <limits>
-#if !defined(PATH_MAX) && defined(__linux__) // for Raspberry Pi 4, GCC 10+
-  #include <linux/limits.h>
-#endif
+#include <map>
 #include <sys/types.h>
 #include <sys/stat.h>
 
+  // Windows
+#ifdef _bmdxpl_Wnds
+
+  #include <windows.h>
+  #include <io.h>
+  #include <direct.h>
+  #include <conio.h>
+
+#endif
+
+  // POSIX + non-portable
+#ifdef _bmdxpl_Psx
+
+  #include <unistd.h>
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <dlfcn.h>
+  #include <termios.h>
+  #include <pthread.h>
+  #include <signal.h>
+  #include <setjmp.h>
+  #include <sys/time.h>
+  #include <sys/wait.h>
+  #include <sys/mman.h>
+
+  #if defined(__SUNPRO_CC) || defined(__sun)
+    #include <thread.h>
+    #define __bmdx_tidh_t thread_t
+    #define __bmdx_tidh_t_none ((thread_t)0)
+  #elif __APPLE__ && __MACH__
+    #define __bmdx_tidh_t ::bmdx_meta::u_ll
+    #define __bmdx_tidh_t_none ((::bmdx_meta::u_ll)0)
+  #elif defined(__FreeBSD__)
+    #include <sys/thr.h>
+    #define __bmdx_tidh_t long
+    #define __bmdx_tidh_t_none ((long)0)
+  #else
+      // SYS_*
+      // NOTE Already included: sys/types.h (pid_t), unistd.h (__NR_*)
+    #include <sys/syscall.h>
+    #define __bmdx_tidh_t pid_t
+    #define __bmdx_tidh_t_none ((pid_t)0)
+  #endif
+
+  #ifndef __ANDROID__
+    #include <spawn.h>
+  #endif
+
+  #if __APPLE__ && __MACH__
+    #include <mach/mach_time.h>
+    #include <TargetConditionals.h>
+  #endif
+
+  #include <sched.h>
+
+  #if 0
+  #elif __APPLE__ && __MACH__
+  #elif defined(__FreeBSD__)
+  #elif defined(__SUNPRO_CC) || defined(__sun)
+  #elif defined(__ANDROID__)
+    #include <sys/socket.h>
+    #include <sys/un.h>
+    #include <linux/ashmem.h>
+    #include <linux/ioctl.h>
+  #else
+    #include <sys/file.h>
+  #endif
+
+  #if !defined(PATH_MAX) && defined(__linux__) // for Raspberry Pi 4, GCC 10+
+    #include <linux/limits.h>
+  #endif
+
+#endif
+
+inline int __bmdx_linux_SCHED_DEADLINE()
+{
+  #if defined(__linux__) && !defined(__ANDROID__) && defined(SCHED_DEADLINE)
+    return SCHED_DEADLINE;
+  #else
+    return 6;
+  #endif
+}
+inline int __bmdx_psx_SCHED_FIFO()
+{
+  #if defined(_bmdxpl_Psx) && defined(SCHED_FIFO)
+    return SCHED_FIFO;
+  #else
+    return 1;
+  #endif
+}
+inline int __bmdx_psx_SCHED_RR()
+{
+  #if defined(_bmdxpl_Psx) && defined(SCHED_RR)
+    return SCHED_RR;
+  #else
+    return 2;
+  #endif
+}
+inline int __bmdx_psx_SCHED_OTHER()
+{
+  #if defined(_bmdxpl_Psx) && defined(SCHED_OTHER)
+    return SCHED_OTHER;
+  #else
+    return 0;
+  #endif
+}
+
+  // std::isfinite
 #if (defined(_MSC_VER) && _MSC_VER < 1800)
   #include <float.h>
   #define __bmdx_isfinite _finite
@@ -234,12 +342,7 @@ namespace bmdx_meta
   #define __bmdx_isfinite std::isfinite
 #endif
 
-#ifdef _bmdxpl_Wnds
-  #include <windows.h>
-  #include <io.h>
-  #include <direct.h>
-  #include <conio.h>
-#endif
+  // atomics
 #if __bmdx_cfg_atomic_allow_emul && defined(_bmdxpl_Wnds)
   #define __bmdx_atomic_use_emul 1
 #else
@@ -2153,7 +2256,7 @@ namespace bmdx
     inline void _free(void* p) __bmdx_noex { if (!p) { return; } if (_psf1 && _psf1 == _carray_tu_alloc_t<T>::_s_psf1()) { _carray_tu_alloc_t<T>::_sf_free(p); return; } ((F_free)_pff[2])(p); }
 
     inline void _destroy(T* pd_, _t_size i0, _t_size i2) __bmdx_noex { (void)pd_; while (i0 < i2) { try { for (; i0 < i2; ++i0) { (pd_ + i0)->~T(); } } catch (...) { ++i0; } } }
-    inline void _destroy1(T* pd_) __bmdx_noex { try { pd_->~T(); } catch (...) {} }
+    inline void _destroy1(T* pd_) __bmdx_noex { (void)pd_; try { pd_->~T(); } catch (...) {} }
 
   private:
     _carray_base_t(const _carray_base_t&); _carray_base_t& operator=(const _carray_base_t&);
@@ -3672,6 +3775,10 @@ namespace bmdx
 
 
 #ifdef _bmdxpl_Wnds
+
+  #define __bmdx_tidh_t HANDLE
+  #define __bmdx_tidh_t_none ((HANDLE)0)
+
 namespace bmdx
 {
   #ifndef __bmdx__clock_ms
@@ -3693,7 +3800,7 @@ namespace bmdx
     typedef LONG _t_win_NTSTATUS;
     typedef _t_win_NTSTATUS (__stdcall *f_setres)(ULONG RequestedResolution, BOOLEAN Set, PULONG ActualResolution);
     static f_setres f(0);
-    if (!f) { f = (f_setres)GetProcAddress(GetModuleHandleA("ntdll"), "ZwSetTimerResolution"); }
+    if (!f) { f = (f_setres)GetProcAddress(GetModuleHandleA("ntdll.dll"), "ZwSetTimerResolution"); }
     if (!f) { return 0; }
     ULONG actres(0);
     _t_win_NTSTATUS res = f(t100ns > 0 ? t100ns : 1, TRUE, &actres);
@@ -3707,7 +3814,7 @@ namespace bmdx
     typedef LONG _t_win_NTSTATUS;
     typedef _t_win_NTSTATUS (__stdcall *f_sleep)(BOOL Alertable, PLARGE_INTEGER Interval);
     static f_sleep f = 0;
-    if (!f) { f = (f_sleep)GetProcAddress(GetModuleHandleA("ntdll"), "NtDelayExecution"); }
+    if (!f) { f = (f_sleep)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtDelayExecution"); }
     if (!f) { return false; }
     LARGE_INTEGER t;
     t.QuadPart = -tmcs * 10;
@@ -3950,13 +4057,13 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (!prio) { return 0; }
     switch (prio)
     {
+      case 1: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_IDLE)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 2: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_LOWEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
+      case 3: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_BELOW_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
       case 4: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
       case 5: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_ABOVE_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
       case 6: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_HIGHEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
       case 7: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_TIME_CRITICAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 3: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_BELOW_NORMAL)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 2: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_LOWEST)); SetThreadPriorityBoost(p->th, FALSE); return b; }
-      case 1: { _s_long b = !!(SetThreadPriority(p->th, THREAD_PRIORITY_IDLE)); SetThreadPriorityBoost(p->th, FALSE); return b; }
       default: return 0;
     }
   }
@@ -4049,25 +4156,6 @@ template<class T, class _> _critsec_data0_t<T> _critsec_tu_static_t<T, _>::dat =
 
 #ifdef _bmdxpl_Psx
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <dlfcn.h>
-#include <termios.h>
-#include <pthread.h>
-#include <signal.h>
-#include <setjmp.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <errno.h>
-
-#ifndef __ANDROID__
-  #include <spawn.h>
-#endif
-
-#if __APPLE__ && __MACH__
-  #include <mach/mach_time.h>
-  #include <TargetConditionals.h>
-#endif
 extern char **environ;
 namespace bmdx
 {
@@ -4131,6 +4219,7 @@ namespace bmdx
     enum { n1e9 = 1000000000 };
     _s_ll tns = t * 1000;
     #if __APPLE__ && __MACH__
+    #elif defined(__FreeBSD__) && __FreeBSD_version < 1101000
     #else
       if (flags & 4)
       {
@@ -4270,6 +4359,7 @@ struct _threadctl_ctx_data
     char trq; // 1 == termination request (checked by SIGUSR1 handler)
   };
   _sjctx sjctx;
+  union { _s_ll __2; __bmdx_tidh_t tid; };
 };
 struct _threadctl_tid_data
 {
@@ -4417,7 +4507,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_set_priority(_threadctl_ctx_data* p, _s_long prio) __bmdx_noex
   {
     if (!p) { return 0; }
-    struct __local
+    struct __local1
     {
         // level: 0 - min, 1 - avg, 2 - high, 3 - highest.
       bool set_sp(int pl, sched_param& sp, int level)
@@ -4435,22 +4525,25 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
       }
     };
 
-    int pl; struct sched_param sp; int lev;
-    if (pthread_getschedparam(p->th, &pl, &sp) != 0) { return 0; }
-    int pl_low = SCHED_OTHER;
+    int pl = 0; struct sched_param sp; std::memset(&sp, 0, sizeof(sp)); int lev = 0;
+    int pl_idle = SCHED_OTHER;
     #ifdef SCHED_IDLE
-      pl_low = SCHED_IDLE;
+      pl_idle = SCHED_IDLE;
+    #endif
+    int pl_batch = SCHED_OTHER;
+    #ifdef SCHED_BATCH
+      pl_batch = SCHED_BATCH;
     #endif
 
     switch (prio)
     {
-      case 4: { pl = SCHED_OTHER; lev = 3; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 5: { pl = SCHED_RR; lev = 1; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 6: { pl = SCHED_RR; lev = 2; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 7: { pl = SCHED_FIFO; lev = 3; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 1: { pl = pl_low; lev = 0; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 2: { pl = SCHED_OTHER; lev = 1; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
-      case 3: { pl = SCHED_OTHER; lev = 2; _s_long b = __local().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 1: { pl = pl_idle; lev = 0; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 2: { pl = pl_batch; lev = 2; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 3: { pl = SCHED_OTHER; lev = 2; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 4: { pl = SCHED_OTHER; lev = 3; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 5: { pl = SCHED_RR; lev = 1; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 6: { pl = SCHED_RR; lev = 2; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
+      case 7: { pl = SCHED_FIFO; lev = 3; _s_long b = __local1().set_sp(pl, sp, lev) && 0 == pthread_setschedparam(p->th, pl, &sp); return b; }
       default: return 0;
     }
   }
@@ -4484,9 +4577,11 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_ctx_release(_threadctl_ctx_data* p, _s_long what) __bmdx_noex;
   static _s_long _th_ctx_rel_handle(_threadctl_ctx_data*) __bmdx_noex { return 1; }
 
+  static __bmdx_tidh_t th_get_tid(_threadctl_ctx_data* p) __bmdx_noex;
+
   static void* sm(_s_long ind)
   {
-    enum { size = 20 };
+    enum { size = 21 };
     static void* smt[size] =
     {
       0, // 0
@@ -4509,6 +4604,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
       (void*)(__bmdx_null_pchar + sizeof(_threadctl_tid_data::t_native_tid)), // 17
       0, // 18
       (void*)tid_is_eq, // 19
+      (void*)th_get_tid // 20
     };
     return ind >= 0 && ind < size ? smt[ind] : 0;
   }
@@ -4722,7 +4818,9 @@ namespace bmdx
 
     struct ff_mc
     {
-        // Returns thread ID of the current (caller's) thread.
+        // System-independent (wrapped) ID of the current (caller's) thread.
+        // NOTE This kind of thread ID can be used only for thread identification.
+        //  For thread manipulation, use non-portable ID or handle, obtained from threadctl::set_sched_para.
       tid tid_self() __bmdx_noex
       {
         #ifdef _bmdxpl_Wnds
@@ -4750,6 +4848,9 @@ namespace bmdx
       }
     threadctl& operator=(const threadctl& x)    { threadctl x3(x); swap(x3); return *this; }
 
+      // System-independent (wrapped) ID of the thread, controlled by *this.
+      // NOTE This kind of thread ID can be used only for thread identification.
+      //  For thread manipulation, use non-portable ID or handle, obtained from threadctl::set_sched_para.
       // !is_null() when thread is running.
     const tid& th_id() const __bmdx_noex { return _tid; }
 
@@ -4836,7 +4937,7 @@ namespace bmdx
       //  3 - below normal,
       //  2 - low,
       //  1 - background.
-    bool set_priority(_s_long p) __bmdx_noex
+    bool set_priority(_s_long p __bmdx_noarg) __bmdx_noex
     {
       if (!_pctx) { return false; }
       typedef _s_long (*Pset_priority)(_threadctl_ctx_data* p, _s_long prio); Pset_priority f_set_priority = (Pset_priority)_pctx->__dat.pthsm(10);
@@ -4844,6 +4945,357 @@ namespace bmdx
       bool b = false;
       try { b = !! f_set_priority(&_pctx->__dat, p); } catch (...) {}
       return b;
+    }
+
+      // Integer result of function call + optional text message (for errors).
+    struct t_res
+    {
+      typedef bmdx_str::flstr_t<200> t_str;
+      _s_ll res;
+      t_str msg;
+      t_res(_s_ll res_ = 0, const bmdx_str::flstr_t<200>& msg_ = "") { this->set(res_, msg_); }
+      t_res& clear() { return this->set(); }
+      t_res& set(_s_ll res_ = 0, const bmdx_str::flstr_t<200>& msg_ = "") { res= res_; msg = msg_; return *this; }
+      template<class T> t_res& operator<<(const T& s) { msg += s; return *this; }
+      operator _s_ll() const { return res; }
+    };
+
+    struct t_sched_para
+    {
+      typedef unsigned char t_flag;
+
+
+        // All systems
+            //
+            // NOTE Order of operations: getting thread ID (in Windows: thread handle), setting CPU affinity mask,
+            //    setting scheduling policy, setting scheduling policy parameters.
+            //
+            // a) 0 - skip getting system ID or handle of the thread.
+            // b) 1 - get system ID (in Windows: handle) of the thread.
+            //  See also any_tmo_tid_mcs.
+      t_flag any_b_get_tid;
+            // Timeout for getting thread ID, from thread itself.
+            // This setting is actual in some of POSIX systems only,
+            //  where pthread is incapable of converting its handle to system handle.
+            //  On other systems, the parameter is ignored,
+            //  as thread ID or handle is obtained by direct call,
+            //  without cooperation between the current and the managed thread.
+            // Dflt. = 0 (no waiting).
+            // -1: wait until the thread reports its ID or exits.
+            //    If thread is not run, return immediately w/o ID or handle value.
+            // >= 0: wait this number of microseconds until thread ID becomes available.
+      _s_long any_tmo_tid_mcs;
+            // a) If any_b_get_tid == 1, receives ID or handle of the thread, assigned by system.
+            //  The ID/handle may be used to manipulate thread in system-specific way.
+            //  NOTE Windows: do not close the handle after use,
+            //    because it's closed automatically by ~threadctl() or clear().
+            // b) Otherwise, not modified.
+      mutable __bmdx_tidh_t any_ret_tid;
+
+
+        // Windows
+            //
+            // a) 0 - skip thread priority setting.
+            // b) 1 - set thread priority.
+      t_flag win_b_set_prio;
+            // Any of THREAD_PRIORITY_* constants.
+            // Typical values: -15 -2 -1 0 1 2 15; 0 = NORMAL.
+      _s_long win_prio;
+            // a) 0 - disable priority boost.
+            // b) 1 - enable priority boost.
+            // b) -1 - do not modify priority boost.
+      _s_long win_boost;
+
+
+        // Linux
+            //
+            // a) 0 - skip CPU affinity setting.
+            // b) 1 - set affinity, using lin_mask1, lin_mask2. (Requires any_b_get_tid = 1)
+      t_flag lin_b_set_affinity;
+            // a) 0 - skip thread scheduling policy & priority setting.
+            // b) 1 - set both thread scheduling policy, and priority, as follows:
+            //    b.a) lin_sched_priority for SCHED_RR, SCHED_FIFO.
+            //    b.b) lin_dl_period_mcs, lin_dl_dl_mcs, lin_dl_runtime_mcs for SCHED_DEADLINE.
+            //      NOTE SCHED_DEADLINE (only) requires any_b_get_tid = 1.
+      t_flag lin_b_set_sched;
+            //
+            // CPU affinity masks for CPUs 0..63, 64..127.
+            // Dflt. 0 (would fail with such mask).
+      _u_ll lin_mask1, lin_mask2;
+            // Scheduling policy (e.g. SCHED_OTHER (dflt.), SCHED_RR, SCHED_DEADLINE).
+      _s_long lin_sched_policy;
+            // Priority value.
+            //  Automatically limited to be [min..max], allowed by system.
+            //  Should be meaningfully set for SCHED_RR, SCHED_FIFO only.
+            //  Dflt.: 0 (the only value for SCHED_OTHER).
+            //  Example: lin_sched_priority = sched_get_priority_max(SCHED_RR)
+            //  SCHED_OTHER, SCHED_IDLE, SCHED_BATCH: only 0 is accepted by system.
+            //  SCHED_DEADLINE: this parameter is not used.
+      _s_long lin_sched_priority;
+            // SCHED_DEADLINE policy only parameters, in microseconds.
+            //  Must be lin_dl_runtime_mcs <= lin_dl_dl_mcs <= lin_dl_period_mcs.
+            //  Additionally, if lin_dl_dl_mcs < 0, it's automatically set = lin_dl_period_mcs.
+            //  Dflt.: 1000, -1 (makes 1000), 500.
+            // NOTE Setting DL policy and these parameters together with CPU mask may require using Linux CPU sets,
+            //  or disabling DL policy checks by writing -1 to /proc/sys/kernel/sched_rt_runtime_us
+            //  (see 4.1 in
+            //    https://www.kernel.org/doc/Documentation/scheduler/sched-deadline.txt
+            //  )
+      _s_ll lin_dl_period_mcs, lin_dl_dl_mcs, lin_dl_runtime_mcs;
+
+
+        // All POSIX systems, except for Linux
+            //
+            //  Action of these parameters is similar to lin_b_set_sched, lin_sched_policy, lin_sched_priority.
+            //  NOTE Only the following policies are expected to be awlays defined and work correctly on all systems:
+            //      SCHED_OTHER, SCHED_RR, SCHED_FIFO
+            //    One can use __bmdx_psx_<policy>() instead of those names,
+            //    in order to avoid explicit conditional compilation.
+      t_flag psx_b_set_sched;
+      _s_long psx_sched_policy;
+      _s_long psx_sched_priority;
+
+      t_sched_para(__bmdx_noarg1)
+      {
+        any_b_get_tid = 0;                // do not return thread ID or handle
+        any_tmo_tid_mcs = 0;              // use thread ID if it's already set by the thread, exit with error if not
+        any_ret_tid = __bmdx_tidh_t_none; // invalid thread ID or handle
+        win_b_set_prio = 0;         // do not modify thread priority
+        win_prio = 0;               // THREAD_PRIORITY_NORMAL
+        win_boost = -1;             // do not modify priority boost flag
+        lin_b_set_affinity = 0;     // do not set CPU affinity mask for the thread
+        lin_b_set_sched = 0;        // do not set thread scheduling policy & priority
+        lin_mask1 = lin_mask2 = 0;  // no CPUs specified in this mask
+        lin_sched_policy = __bmdx_psx_SCHED_OTHER();
+        lin_sched_priority = 0;     // dflt. priority low-priority threads (SCHED_OTHER)
+        lin_dl_period_mcs = 1000;   // SCHED_DEADLINE: schedule the thread each 1000 mcs
+        lin_dl_dl_mcs = -1;         // SCHED_DEADLINE: actually set same value as lin_dl_period_mcs
+        lin_dl_runtime_mcs = 500;   // SCHED_DEADLINE: ensure the thread working not less than 500 mcs per period
+        psx_b_set_sched = 0;        // do not set thread scheduling policy & priority
+        psx_sched_policy = __bmdx_psx_SCHED_OTHER();
+        psx_sched_priority = 0;     // dflt. priority low-priority threads (SCHED_OTHER)
+      }
+
+        // true if no thread parameters setting is specified by *this.
+      bool b_get_only(__bmdx_noarg1) const
+      {
+        return
+          win_b_set_prio == 0
+          && win_boost == -1
+          && lin_b_set_affinity == 0
+          && lin_b_set_sched == 0
+          && psx_b_set_sched == 0
+        ;
+      }
+    };
+
+    #if defined(__linux__)
+      struct _t_sched_attr_np
+      {
+        bmdx_meta::u_long size;
+        bmdx_meta::u_long sched_policy;
+        _u_ll sched_flags;
+        _s_long sched_nice; // SCHED_NORMAL, SCHED_BATCH
+        bmdx_meta::u_long sched_priority; // SCHED_FIFO, SCHED_RR
+        _u_ll sched_runtime; // SCHED_DEADLINE (nsec)
+        _u_ll sched_deadline; // -"-
+        _u_ll sched_period; // -"-
+        _t_sched_attr_np() { std::memset(this, 0, sizeof(*this)); size = sizeof(*this);  }
+        int set_attrs(__bmdx_tidh_t tid, unsigned int flags = 0) const { return syscall(__NR_sched_setattr, tid, this, flags); }
+        int get_attrs(__bmdx_tidh_t tid, unsigned int flags = 0) { return syscall(__NR_sched_getattr, tid, this, sizeof(*this), flags); }
+          // Returns thread's scheduling policy SCHED_*, or -1 / errno on error.
+        static int get_policy(__bmdx_tidh_t tid) { _t_sched_attr_np a; int res = a.get_attrs(tid); if (res == 0) { return a.sched_policy; } return -1; }
+          // Returns thread ID (that from system API, not pthread's), or -1 / errno on error.
+        static __bmdx_tidh_t get_tid() { return __bmdx_tidh_t(syscall(__NR_gettid)); }
+          // mask1: CPUs 0..63, mask2: CPUs 64..128.
+        static int set_affinity(__bmdx_tidh_t tid, _u_ll mask1, _u_ll mask2 = 0)
+        {
+          long int ncores = sysconf(_SC_NPROCESSORS_CONF);
+            if (ncores <= 0) { return EFAULT; }
+          int setsize = CPU_ALLOC_SIZE(ncores);
+          cpu_set_t* pcpus = CPU_ALLOC(ncores);
+            if (!pcpus) { return ENOMEM; }
+          CPU_ZERO_S(setsize, pcpus);
+          for (int ibit = 0; ibit < 128; ++ibit)
+          {
+            if (ibit >= ncores) { break; }
+            bool b = ((ibit < 64 ? mask1 : mask2) & (1ull << (ibit & 0x3f))) != 0;
+            if (b) { CPU_SET_S(ibit, setsize, pcpus); }
+          }
+          int res = sched_setaffinity(tid, setsize, pcpus);
+          CPU_FREE(pcpus);
+          if (res == 0) { return 0; }
+          return errno;
+        }
+      };
+    #endif
+
+      // A) System-depedent setting thread scheduling parameters and CPU affinity.
+      //  The function makes one or more system calls, to fullfill scheduling requirements,
+      //    specified in p.
+      // B) If modifications are not necessary, the function may be used just for getting
+      //    thread ID or handle, allowing for platform-dependent thread manipuation.
+      //    (This operation, if requested by the client, is done in the first order.)
+      //    NOTE If you need thread identification only: use threadctl::tid.
+      // In case of error, the function exits at once, not trying to complete all actions.
+      // NOTE
+      //    1. Action of this function is quite different depending on platform,
+      //      and heavily depends on user permissions.
+      //    2. The function operates mainly in the current binary module,
+      //      due to threading system API being global.
+      //    3. Currently, scheduling parameters *modification* is implemented only for:
+      //      Linux
+      //      Windows
+      //    4. Where the function is implemented, it completely supersedes set_priority(),
+      //      providing finer control on thread scheduling.
+      //      For other systems, just use set_priority().
+      // Returns:
+      //  1 - success.
+      //  -1 - bad parameter(s).
+      //  -2 - general failure (mostly, system API errors). See details in msg.
+      //  -3 - not implemented on this platform, use set_priority() instead.
+      //  -4 - thread is not running (state() != 2).
+      //  -5 - (Linux only) timeout when waiting for the thread returning its own ID.
+      //  -6 - (Linux only & the thread is from another binary module)
+      //      thread ID getting is not supported in the module owning the thread.
+    t_res set_sched_para(const t_sched_para& p __bmdx_noarg)
+    {
+      t_res res = 1;
+      if (state() < 1) { return -4; }
+
+      __bmdx_tidh_t tid_sys = __bmdx_tidh_t_none;
+
+        // Getting system ID or handle for manipulating the thread works on all platforms.
+        // ID is available since the moment the thread has started, even if it has finished already.
+        //  (In the latter case, the ID is not reliable, due to possible reuse for another thread or process.)
+      #ifdef _bmdxpl_Wnds
+        tid_sys = _pctx->__dat.th;
+        if (p.any_b_get_tid == 1) { p.any_ret_tid = tid_sys; }
+        else if (p.any_b_get_tid == 0) {}
+        else { res.res = -1; res.msg = "bad any_b_get_tid="; res.msg += p.any_b_get_tid; return res; }
+      #endif
+      #ifdef _bmdxpl_Psx
+        pthread_t tid_pthread = _pctx->__dat.th; if (sizeof(tid_pthread)) {}
+        if (p.any_b_get_tid == 1)
+        {
+          if (p.any_tmo_tid_mcs < -1) { res.res = -1; res.msg = "bad any_tmo_tid_mcs="; res.msg += p.any_tmo_tid_mcs; return res; }
+          #if __APPLE__ && __MACH__
+            pthread_threadid_np(tid_pthread, &tid_sys);
+          #else
+            typedef __bmdx_tidh_t (*Pget_tid)(_threadctl_ctx_data* p); Pget_tid f_get_tid = (Pget_tid)_pctx->__dat.pthsm(20);
+            if (!f_get_tid) { res.res = -6; res.msg = "get_tid not implemented on thread's side"; return res; }
+            tid_sys = f_get_tid(&_pctx->__dat);
+            if (tid_sys == __bmdx_tidh_t_none && p.any_tmo_tid_mcs != 0)
+            {
+              double t1 = clock_ms();
+              while (1)
+              {
+                sleep_mcs(100, 1);
+                tid_sys = f_get_tid(&_pctx->__dat);
+                if (tid_sys != __bmdx_tidh_t_none) { break; }
+                if (p.any_tmo_tid_mcs > 0)
+                {
+                  double t2 = clock_ms();
+                  if (t2 - t1 >= p.any_tmo_tid_mcs / 1000.) { break; }
+                }
+              }
+            }
+            if (tid_sys == __bmdx_tidh_t_none) { res.res = -5; res.msg = "get_tid timed out, any_tmo_tid_mcs="; res.msg += p.any_tmo_tid_mcs; return res; }
+          #endif
+          p.any_ret_tid = tid_sys;
+        }
+        else if (p.any_b_get_tid == 0) {}
+        else { res.res = -1; res.msg = "bad any_b_get_tid="; res.msg += p.any_b_get_tid; return res; }
+      #endif
+
+      if (p.b_get_only()) { return res; }
+      if (state() != 2) { return -4; }
+
+      #if defined(_bmdxpl_Wnds)
+
+        if (p.win_b_set_prio == 1)
+        {
+          bool b = !!SetThreadPriority(_pctx->__dat.th, (int)p.win_prio);
+            if (!b) { res.res = -2; res.msg = "SetThreadPriority failed"; return res; }
+        }
+        else if (p.win_b_set_prio == 0) {}
+        else { res.res = -1; res.msg = "bad win_b_set_prio="; res.msg += p.win_b_set_prio; return res; }
+
+        if (p.win_boost == 1 || p.win_boost == 0)
+        {
+          bool b = !!SetThreadPriorityBoost(_pctx->__dat.th, !p.win_boost);
+            if (!b) { res.res = -2; res.msg = "SetThreadPriorityBoost failed"; return res; }
+        }
+        else if (p.win_boost == -1) {}
+        else { res.res = -1; res.msg = "bad win_boost="; res.msg += p.win_boost; return res; }
+
+      #elif defined(__linux__)
+
+        if (p.lin_b_set_affinity == 1)
+        {
+          if (tid_sys == __bmdx_tidh_t_none) { res.res = -1; res.msg = "thread CPU affinity failure: tid_sys = none"; return res; }
+          int res2 = _t_sched_attr_np::set_affinity(tid_sys, p.lin_mask1, p.lin_mask2);
+          if (res2 != 0) { res.res = -2; res.msg = "thread CPU affinity failure:"; res.msg += errno; res.msg += ":"; res.msg += strerror(errno); return res; }
+        }
+        else if (p.lin_b_set_affinity == 0) {}
+        else { res.res = -1; res.msg = "bad lin_b_set_affinity="; res.msg += p.lin_b_set_affinity; return res; }
+
+        if (p.lin_b_set_sched == 1)
+        {
+          if (tid_sys == __bmdx_tidh_t_none)
+          {
+            if (p.lin_sched_policy == __bmdx_linux_SCHED_DEADLINE()) { res.res = -1; res.msg = "thread policy setting failure: tid_sys = none, lin_sched_policy="; res.msg += p.lin_sched_policy; return res; }
+            int res2 = 0;
+            int pl = (int)p.lin_sched_policy;
+            struct sched_param sp; std::memset(&sp, 0, sizeof(sp));
+            sp.sched_priority = (int)p.lin_sched_priority;
+            res2 = pthread_setschedparam(tid_pthread, pl, &sp);
+              if (res2 != 0) { res.res = -2; res.msg = "thread priority (pthread_setschedparam) failure:"; res.msg += res2; res.msg += ":"; res.msg += strerror(res2); return res; }
+          }
+          else
+          {
+            threadctl::_t_sched_attr_np a;
+            a.sched_policy = p.lin_sched_policy;
+            if (p.lin_sched_policy == __bmdx_linux_SCHED_DEADLINE())
+            {
+              if (p.lin_dl_dl_mcs < -1) { res.res = -1; res.msg = "bad lin_dl_dl_mcs="; res.msg += p.lin_dl_dl_mcs; return res; }
+              a.sched_period = p.lin_dl_period_mcs * 1000;
+              a.sched_deadline = (p.lin_dl_dl_mcs >= 0 ? p.lin_dl_dl_mcs : p.lin_dl_period_mcs) * 1000;
+              a.sched_runtime = p.lin_dl_runtime_mcs  * 1000;
+            }
+            else
+            {
+              if (p.lin_sched_priority < 0) { res.res = -1; res.msg = "bad lin_dl_dl_mcs="; res.msg += p.lin_dl_dl_mcs; return res; }
+              a.sched_priority = (bmdx_meta::u_long)p.lin_sched_priority;
+            }
+            int res2 = a.set_attrs(tid_sys);
+              if (res2 != 0) { res.res = -2; res.msg = "thread priority (sched_setattr) failure:"; res.msg += errno; res.msg += ":"; res.msg += strerror(errno); return res; }
+          }
+        }
+        else if (p.lin_b_set_sched == 0) {}
+        else { res.res = -1; res.msg = "bad lin_b_set_sched="; res.msg += p.lin_b_set_sched; return res; }
+
+      #elif defined(_bmdxpl_Psx)
+
+        if (p.psx_b_set_sched == 1)
+        {
+          int res2 = 0;
+          int pl = (int)p.psx_sched_policy;
+          struct sched_param sp; std::memset(&sp, 0, sizeof(sp));
+          sp.sched_priority = (int)p.psx_sched_priority;
+          res2 = pthread_setschedparam(tid_pthread, pl, &sp);
+            if (res2 != 0) { res.res = -2; res.msg = "thread priority (pthread_setschedparam) failure:"; res.msg += res2; res.msg += ":"; res.msg += strerror(res2); return res; }
+        }
+        else if (p.psx_b_set_sched == 0) {}
+        else { res.res = -1; res.msg = "bad psx_b_set_sched="; res.msg += p.psx_b_set_sched; return res; }
+
+      #else
+
+        res.res = -3;
+
+      #endif
+
+      return res;
     }
 
       // Sets b_stop() flag of the target thread to 1 (or to given v), only in case if the current flag value is 0.
@@ -5013,6 +5465,14 @@ namespace bmdx
       // See processctl::launch for description of this flag.
     bool b_literal_args;
 
+      // Windows only:
+      //  a) true: assume all strings passed into launch() (fnp_process, args, dir_startup)
+      //    being UTF-8 ecoded, decode them and use wide char functions to start the process
+      //    (CreateProcessW, _wsystem).
+      //  b) false (dflt.): do not modify input strings, use non-Unicode API to start the process
+      //    (CreateProcessA, system).
+    bool b_wnds_use_wchar;
+
       // dir_startup is non-empty:
       //      If b_shell == false, the current directory of the launched process
       //        will be set to dir_startup (should be full path, otherwise effect is undefined across platforms).
@@ -5037,7 +5497,7 @@ namespace bmdx
       //      launch() fails (returns false).
     EPlspecPosixExecType psx_force_exectype;
 
-    processctl_launch_hints() { b_literal_args = false; psx_force_exectype = ppet_auto; }
+    processctl_launch_hints() { b_literal_args = false; b_wnds_use_wchar = false; psx_force_exectype = ppet_auto; }
   };
 }
 
@@ -5119,58 +5579,113 @@ namespace bmdx
         //    On success, launch() returns true.
         //    On failure, launch() returns false.
       bool launch(const std::string& fnp_process, const std::string& args, bool b_shell = false, const processctl_launch_hints* hints = 0) __bmdx_noex
-      { try {
-        clear();
-        if (fnp_process.empty()) { return false; }
+      {
+        try {
+          clear();
+          if (fnp_process.empty()) { return false; }
 
-        std::string a2; size_t pos = 0, pos2 = 0, end = std::string::npos;
-        while (pos < args.length())
-        {
-          pos2 = args.find('\0', pos);
-          if (pos2 == end) { pos2 = args.length(); }
-          if (pos > 0) { a2 += ' '; }
-          if (hints && hints->b_literal_args)
+          if (hints && hints->b_wnds_use_wchar)
           {
-            a2 += args.substr(pos, pos2 - pos);
-            if (pos2 + 1 == args.length()) { a2 += ' '; }
-          }
-          else
-          {
-            a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
-            if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
-          }
-          pos = pos2 + 1;
-        }
+            std::wstring a2; size_t pos = 0, pos2 = 0, end = std::wstring::npos;
+            while (pos < args.length())
+            {
+              pos2 = args.find('\0', pos);
+              if (pos2 == end) { pos2 = args.length(); }
+              if (pos > 0) { a2 += L' '; }
+              if (hints && hints->b_literal_args)
+              {
+                a2 += bmdx_str::conv::bsws_utf8(args.substr(pos, pos2 - pos));
+                if (pos2 + 1 == args.length()) { a2 += L' '; }
+              }
+              else
+              {
+                a2 += bmdx_str::conv::bsws_utf8(ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell));
+                if (pos2 + 1 == args.length()) { a2 += L' '; a2 += bmdx_str::conv::bsws_utf8(ff_mc().arg1(std::string(), b_shell)); }
+              }
+              pos = pos2 + 1;
+            }
 
-        if (b_shell)
-        {
-          std::string s = "start \" \" ";
-          if (fnp_process[0] != '\"') { s += '\"'; }
-          s += fnp_process;
-          if (fnp_process[fnp_process.length() - 1] != '\"') { s += '\"'; }
+            std::wstring wfnpprc = bmdx_str::conv::bsws_utf8(fnp_process);
+            if (b_shell)
+            {
+              std::wstring s = L"start \" \" ";
+              if (wfnpprc[0] != L'\"') { s += L'\"'; }
+              s += wfnpprc;
+              if (wfnpprc[wfnpprc.length() - 1] != L'\"') { s += L'\"'; }
+              if (a2.length()) { s += L' '; s += a2; }
+              int res = _wsystem(s.c_str());
+              return res == 0;
+            }
+
+            std::wstring s;
+            std::wstring wdirst;
+              if (hints && hints->dir_startup.length()) { wdirst = bmdx_str::conv::bsws_utf8(hints->dir_startup); }
+            if (wfnpprc.find(L' ') != end) { s = L"\"" + wfnpprc + L"\""; } else { s = wfnpprc; }
+            if (a2.length()) { s += L' '; s += a2; }
+            STARTUPINFOW si; PROCESS_INFORMATION pi; ZeroMemory(&si, sizeof(si)); ZeroMemory(&pi, sizeof(pi));
+            BOOL res = CreateProcessW
+            (
+              wfnpprc.c_str(), &s[0], 0, 0, FALSE, CREATE_NEW_CONSOLE,
+              0, wdirst.length() ? wdirst.c_str() : 0,
+              &si, &pi
+            );
+            if (!res) { return false; }
+            _hp = pi.hProcess;
+            _ht = pi.hThread;
+            _pid = pi.dwProcessId;
+            _exited = false;
+            return true;
+          }
+
+          std::string a2; size_t pos = 0, pos2 = 0, end = std::string::npos;
+          while (pos < args.length())
+          {
+            pos2 = args.find('\0', pos);
+            if (pos2 == end) { pos2 = args.length(); }
+            if (pos > 0) { a2 += ' '; }
+            if (hints && hints->b_literal_args)
+            {
+              a2 += args.substr(pos, pos2 - pos);
+              if (pos2 + 1 == args.length()) { a2 += ' '; }
+            }
+            else
+            {
+              a2 += ff_mc().arg1(args.substr(pos, pos2 - pos), b_shell);
+              if (pos2 + 1 == args.length()) { a2 += ' '; a2 += ff_mc().arg1(std::string(), b_shell); }
+            }
+            pos = pos2 + 1;
+          }
+
+          if (b_shell)
+          {
+            std::string s = "start \" \" ";
+            if (fnp_process[0] != '\"') { s += '\"'; }
+            s += fnp_process;
+            if (fnp_process[fnp_process.length() - 1] != '\"') { s += '\"'; }
+            if (a2.length()) { s += ' '; s += a2; }
+            int res = system(s.c_str());
+            return res == 0;
+          }
+
+          std::string s;
+          if (fnp_process.find(' ') != end) { s = "\"" + fnp_process + "\""; } else { s = fnp_process; }
           if (a2.length()) { s += ' '; s += a2; }
-          int res = system(s.c_str());
-          return res == 0;
-        }
+          STARTUPINFOA si; PROCESS_INFORMATION pi; ZeroMemory(&si, sizeof(si)); ZeroMemory(&pi, sizeof(pi));
+          BOOL res = CreateProcessA
+          (
+            fnp_process.c_str(), &s[0], 0, 0, FALSE, CREATE_NEW_CONSOLE,
+            0, (hints && hints->dir_startup.length()) ? hints->dir_startup.c_str() : 0,
+            &si, &pi
+          );
+          if (!res) { return false; }
+          _hp = pi.hProcess;
+          _ht = pi.hThread;
+          _pid = pi.dwProcessId;
+          _exited = false;
+          return true;
 
-        std::string s;
-        if (fnp_process.find(' ') != end) { s = "\"" + fnp_process + "\""; } else { s = fnp_process; }
-        if (a2.length()) { s += ' '; s += a2; }
-        STARTUPINFOA si; PROCESS_INFORMATION pi; ZeroMemory(&si, sizeof(si)); ZeroMemory(&pi, sizeof(pi));
-        BOOL res = CreateProcessA
-        (
-          fnp_process.c_str(), &s[0], 0, 0, FALSE, CREATE_NEW_CONSOLE,
-          0, (hints && hints->dir_startup.length()) ? hints->dir_startup.c_str() : 0,
-          &si, &pi
-        );
-        if (!res) { return false; }
-        _hp = pi.hProcess;
-        _ht = pi.hThread;
-        _pid = pi.dwProcessId;
-        _exited = false;
-        return true;
-
-      } catch (...) { return false; } }
+        } catch (...) { return false; }
+      }
 
         // Waits for the launched process completion, return its exit code or termination code.
         //  NOTE (Platform-dependent: This function is not protected against PID reuse.)
@@ -5203,6 +5718,8 @@ namespace bmdx
           //  b_shell true replaces CR and LF characters with ' ', intended for passing single line into system().
           //  In all cases, horz./vert. tab. and formfeed characters are kept.
           //  Other ASCII control characters (0..31) are replaced with '?'.
+          // NOTE s may be represented a) in single-byte system ecoding, b) in UTF-8,
+          //  both cases are processed correctly.
         std::string arg1(const arrayref_t<char>& s, bool b_shell = false)
         {
           bool b = false;
@@ -5668,6 +6185,8 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
           //  b_shell true replaces CR and LF characters with ' ', intended for passing single line into system().
           //  In all cases, horz./vert. tab. and formfeed characters are kept.
           //  Other ASCII control characters (0..31) are replaced with '?'.
+          // NOTE s can be a) in UTF-8, b) in single-byte ecoding,
+          //  both cases are processed correctly.
         std::string arg1(const std::string& s, bool b_shell = false)
         {
           bool b = false;
@@ -5711,7 +6230,15 @@ static void _threadctl_thproc_impl(void* _p) __bmdx_noex
     if (!pbase) { return; }
 
   _threadctl_ctx_data& d = pbase->__dat;
-
+  #if defined(__FreeBSD__)
+    thr_self(&d.tid);
+  #elif defined(__SUNPRO_CC) || defined(__sun)
+    d.tid = thr_self();
+  #elif __APPLE__ && __MACH__
+    pthread_threadid_np(NULL, &d.tid);
+  #else
+    d.tid = __bmdx_tidh_t(syscall(__NR_gettid));
+  #endif
   pthread_setspecific(*pk, &d.sjctx);
 
   _threadctl_tu_static_t<>::_threadctl_thproc_cleanup __cln(_p); if (sizeof(__cln)) {}
@@ -5738,6 +6265,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
   std::memset(&p->th, 0, sizeof(p->th));
   _critsec_tu_static_t<_threadctl_ctx_data>::csdata_init(&p->csd);
   std::memset(&p->sjctx, 0, sizeof(p->sjctx));
+  p->__2 = 0; p->tid = __bmdx_tidh_t_none;
   return 1;
 }
   //    2 - terminated. threadctl is cleared.
@@ -5822,6 +6350,12 @@ _s_long _threadctl_tu_static_t<_>::th_terminate(_threadctl_ctx_data* p, _s_long 
   }
   return -3;
 }
+template<class _>
+__bmdx_tidh_t _threadctl_tu_static_t<_>::th_get_tid(_threadctl_ctx_data* p) __bmdx_noex
+{
+  if (!p) { return __bmdx_tidh_t_none; }
+  return p->tid;
+}
   }
 #endif
 
@@ -5851,22 +6385,25 @@ _s_long _threadctl_tu_static_t<_>::th_terminate(_threadctl_ctx_data* p, _s_long 
 #endif
 
 
-#if defined(_MSC_VER)
-  #define __bmdx_std_fopen_s fopen_s
-#else
-  #define __bmdx_std_fopen_s std::fopen_s
-#endif
 #ifdef _bmdxpl_Wnds
-  #define __bmdx_std_getcwd _getcwd
-  #define __bmdx_std_mkdir _mkdir
+  #define __bmdx_std_getcwd ::_getcwd
+  #define __bmdx_std_mkdir ::_mkdir
+  #define __bmdx_std_rmdir ::_rmdir
   #define __bmdx_std_mkdir_arg2
-  #define __bmdx_std_access _access
+  #define __bmdx_std_access ::_access
+  #define __bmdx_wnds_wgetcwd ::_wgetcwd
+  #define __bmdx_wnds_wmkdir ::_wmkdir
+  #define __bmdx_wnds_wrmdir ::_wrmdir
+  #define __bmdx_wnds_wremove ::_wremove
+  #define __bmdx_wnds_waccess ::_waccess
+  #define __bmdx_wnds_wstat ::_wstat
 #endif
 #ifdef _bmdxpl_Psx
-  #define __bmdx_std_getcwd getcwd
-  #define __bmdx_std_mkdir mkdir
+  #define __bmdx_std_getcwd ::getcwd
+  #define __bmdx_std_mkdir ::mkdir
+  #define __bmdx_std_rmdir ::rmdir
   #define __bmdx_std_mkdir_arg2 , 0777
-  #define __bmdx_std_access access
+  #define __bmdx_std_access ::access
 #endif
 namespace bmdx
 {
@@ -6067,7 +6604,7 @@ namespace bmdx
       // c) Special case, e.g. for use_release storage mode (see iref2::assign impl.).
       //    If p == 0: return a pointer to static or other existing object.
       // d) On any construction failure, generate an exception.
-    struct i_new { virtual T* operator()(T* p) const = 0; virtual ~i_new() {} };
+    struct i_new { virtual T* operator()(T* p) const = 0; virtual ~i_new() __bmdx_exany {} };
 
       // Trivial i_new impl. for constructors with different num. of args.
     struct args0_t : i_new { virtual T* operator()(T* p) const { if (p) { new (p) T(); return p; } else { return new T(); } } };
@@ -7521,29 +8058,89 @@ namespace bmdx
        typedef off64_t t_offset;
     #endif
 
+    private:
+        // Temporary string container, holding a copy of the original string,
+        //  with null character added.
+        //  If the original string length, in characters, <= ncmax_fixed, no dynamic allocation is done.
+        // NOTE Copying/assignment of the object is fast and faultless, but, after that,
+        //  data of both the original and the copy should be threated as constant
+        //  (by-val/by-ref behavior is undefined).
+      template<class C, int ncmax_fixed>
+      struct _hlp_cstr_t
+      {
+        _hlp_cstr_t(arrayref_t<C> data __bmdx_noarg)
+        {
+          typedef bmdx_str::words::memmove_t<char> t_mm;
+          b_d1 = 1;
+          d1[0] = 0;
+          pc2 = 0;
+          nc = data.n();
+          if (nc <= 0) { nc = 0; return; }
+          if (nc <= ncmax_fixed)
+          {
+            t_mm::sf_memmove(d1, data.pd(), t_mm::t_pdiff(nc * sizeof(C)));
+            d1[nc] = 0;
+            return;
+          }
+          b_d1 = 0;
+          d2.create2(1, data.pd(), (size_t)nc);
+            if (d2) { pc2 = d2->c_str(); }
+              else { nc = 0; }
+        }
+          // != 0 if constructor has succeeded.
+        const C* c_str() const { return b_d1 ? d1 : pc2; }
+        _s_ll n() const { return nc; }
+      private:
+        bool b_d1;
+        const C* pc2;
+        _s_ll nc;
+        C d1[ncmax_fixed+1];
+        cref_t<std::basic_string<C> > d2;
+      };
+      typedef _hlp_cstr_t<char, 4096> _t_cstr;
+    public:
 
-      // Returns true if the specified path points to the existing file, false in all other cases.
-    static bool is_ex_file(const char* ppath __bmdx_noarg) __bmdx_noex    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFREG); } else { return false; } }
-    static inline bool is_ex_file(const std::string& path __bmdx_noarg) __bmdx_noex    { return is_ex_file(path.c_str()); }
-
-      // Returns true if the specified path points to the existing directory, false in all other cases.
-    static bool is_ex_dir(const char* ppath __bmdx_noarg) __bmdx_noex    { if ( ppath && *ppath != '\0' && 0 == __bmdx_std_access(ppath, __F_OK) ) { struct stat st; return 0 == stat(ppath, &st) && !!(st.st_mode & S_IFDIR); } else { return false; } }
-    static inline bool is_ex_dir(const std::string& path __bmdx_noarg) __bmdx_noex    { return is_ex_dir(path.c_str()); }
+      // Returns true if the specified path points to the existing
+      //  file (is_ex_file) or directory (is_ex_dir), false in all other cases.
+      // flags:
+      //  0x1:
+      //    a) Windows: assume path being encoded in UTF-8 instead of system encoding.
+      //    b) POSIX systems: ignored.
+    static bool is_ex_file(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex           { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, S_IFREG, 0); }
+    static bool is_ex_dir(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex            { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, S_IFDIR, 0); }
 
       // Creates the specified directory (NOTE POSIX: with rwx access),
       //    or does nothing if the directory already exists.
-      //  Returns:
+      // flags:
+      //  0x1:
+      //    a) Windows: assume path being encoded in UTF-8 instead of system encoding.
+      //    b) POSIX systems: ignored.
+      // Returns:
       //    a) true if the directory exists or just created.
       //    b) false on failure.
-    static bool mkdir_rwx(const char* ppath __bmdx_noarg) { if (is_ex_dir(ppath)) { return true; } return 0 == __bmdx_std_mkdir(ppath __bmdx_std_mkdir_arg2); }
-    static bool mkdir_rwx(const std::string& path __bmdx_noarg) { return mkdir_rwx(path.c_str()); }
+    static bool mkdir_rwx(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg){ return _mkdir_rwx(_t_cstr(path).c_str(), flags); }
 
+      // Deletes single file or empty directory.
+      // flags:
+      //  0x1:
+      //    a) Windows: assume path being encoded in UTF-8 instead of system encoding.
+      //    b) POSIX systems: ignored.
+      //  0x2: allow removal if path specifies a file.
+      //  0x4: allow removal if path specifies a directory.
+      // Returns:
+      //  1 - success.
+      //  0 - path does not exist.
+      //  -1 - bad argument (path is null or empty string, also (flags & 6) == 0).
+      //  -2 - common case failure.
+      //  -3 - removal failed (file/directory exists).
+      //  -4 - removal of existing file/directory is not allowed by flags.
+    static int remove_one(arrayref_t<char> path, _s_long flags = 0x6 __bmdx_noarg){ return _remove_one(_t_cstr(path).c_str(), flags); }
 
 
 
     //  is_open, result.
     //  open, close, seek, seek_end, tell, read, write, flush.
-    //  static: is_ex_file, is_ex_dir, load_bytes, save_bytes
+    //  static: is_ex_file, is_ex_dir, load_bytes, save_bytes, mkdir_rwx.
 
     file_io() __bmdx_noex : _desc(0), _nwr(0), _mode(0), _res(0) { __pad4 = 0; _last_op_wr = 0; }
     ~file_io() __bmdx_noex { if (is_open()) { close(); } }
@@ -7562,6 +8159,18 @@ namespace bmdx
     inline t_handle _handle() const { return _desc; }
 
       // Opens or reopens a file with the specified name and parameters.
+      // pfilename:
+      //    file name (with full or partial or no path)
+      // can_wrcr:
+      //    true - open for read/write + can create if no file exists
+      //    false - open existing file as read-only
+      // wr_trunc (used only if can_wrcr == true):
+      //    true - truncate the file to zero length.
+      //    false - do not truncate the file.
+      // flags:
+      //  0x1:
+      //    a) Windows: assume file name being encoded in UTF-8 instead of system encoding.
+      //    b) POSIX systems: ignored.
       // result():
       //    1 - success,
       //    -1 opening existing file for reading failed,
@@ -7569,19 +8178,38 @@ namespace bmdx
       //    -3 file does not exist, cannot open for reading.
       //    -4 file does not exist, file creation (for r/w) failed.
       //    -5 pfilename is null.
-    inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false) __bmdx_noex
+      //    -6 common-case failure.
+    inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false, _s_long flags = 0 __bmdx_noarg) __bmdx_noex
     {
-      if (!pfilename || *pfilename == '\0') { _res = -5; }
+      (void)flags;
+      if (!(pfilename && !!*pfilename)) { _res = -5; }
       if (is_open()) { close(); }
-      #if defined(_MSC_VER) || defined(__BORLANDC__)
-        if (is_ex_file(pfilename)) { if (can_wrcr) { __bmdx_std_fopen_s(&_desc, pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { __bmdx_std_fopen_s(&_desc, pfilename, "rb"); _res = _desc ? 1 : -1; } }
-          else { if (can_wrcr) { __bmdx_std_fopen_s(&_desc, pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
+      #if defined(_bmdxpl_Wnds)
+        try {
+          std::wstring s;
+          bool b_wstr = !!(flags & 0x1);
+            if (b_wstr) { s = bmdx_str::conv::bsws_utf8(pfilename); }
+          bool b_exf = !!_mask_ex_fs_entry(pfilename, b_wstr ? 0x1 : 0, S_IFREG, &s);
+          const char* pmode = b_exf ? (can_wrcr ? (wr_trunc ? "w+b" : "r+b") : "rb") : (can_wrcr ? "w+b" : 0);
+          const wchar_t* pwcmode = b_wstr ? (b_exf ? (can_wrcr ? (wr_trunc ? L"w+b" : L"r+b") : L"rb") : (can_wrcr ? L"w+b" : 0)) : 0;
+          int res_if_err = b_exf ? (can_wrcr ? -2 : -1) : (can_wrcr ? -4 : -3);
+          #if defined(_CRT_INSECURE_DEPRECATE) || defined(_WSTDIO_S_DEFINED)
+            if (pwcmode) { ::_wfopen_s(&_desc, s.c_str(), pwcmode); _res = _desc ? 1 : res_if_err; }
+              else if (pmode) { ::fopen_s(&_desc, pfilename, pmode); _res = _desc ? 1 : res_if_err; }
+              else { _res = res_if_err; }
+          #else
+            if (pwcmode) { _desc = ::_wfopen(s.c_str(), pwcmode); _res = _desc ? 1 : res_if_err; }
+              else if (pmode) { _desc = ::fopen(pfilename, pmode); _res = _desc ? 1 : res_if_err; }
+              else { _res = res_if_err; }
+          #endif
+        } catch (...) { _res = -6; }
       #else
-        if (is_ex_file(pfilename)) { if (can_wrcr) { _desc = ::fopen(pfilename, wr_trunc ? "w+b" : "r+b"); _res = _desc ? 1 : -2; } else { _desc = ::fopen(pfilename, "rb"); _res = _desc ? 1 : -1; } }
-          else { if (can_wrcr) { _desc = ::fopen(pfilename, "w+b"); _res = _desc ? 1 : -4; } else { _res = -3; } }
-        #ifdef _bmdxpl_Psx
-          if (_desc) { __bmdx_fcntl_set_ocloexec(fileno(_desc)); }
-        #endif
+        bool b_exf = !!_mask_ex_fs_entry(pfilename, 0, S_IFREG, 0);
+        const char* pmode = b_exf ? (can_wrcr ? (wr_trunc ? "w+b" : "r+b") : "rb") : (can_wrcr ? "w+b" : 0);
+        int res_if_err = b_exf ? (can_wrcr ? -2 : -1) : (can_wrcr ? -4 : -3);
+        if (pmode) { _desc = ::fopen(pfilename, pmode); _res = _desc ? 1 : res_if_err; }
+          else { _res = res_if_err; }
+        if (_desc) { __bmdx_fcntl_set_ocloexec(fileno(_desc)); }
       #endif
       _mode = can_wrcr ? 2 : 1;
       if (_res == 1) { std::setvbuf(_desc, 0, _IOFBF, _nwrchunk); }
@@ -7705,7 +8333,7 @@ namespace bmdx
   private:
     file_io& operator=(const file_io&);
 
-    static const int __F_OK = 0;
+    static const int _access_f_ok = 0;
 
     t_handle _desc;
     mutable size_t _nwr;
@@ -7713,8 +8341,9 @@ namespace bmdx
     mutable _s_long _res;
     union { mutable char _last_op_wr; _s_ll __pad4; };
     static const size_t _nwrchunk = 2048;
+    static const size_t _nrdchunk = _nwrchunk;
 
-    inline _s_ll _tell_u() const __bmdx_noex
+    _s_ll _tell_u() const __bmdx_noex
     {
       t_offset pos;
       #if defined(_MSC_VER) || defined(__BORLANDC__)
@@ -7727,7 +8356,7 @@ namespace bmdx
       if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if (pos == t_offset(m)) { return -1; } return _s_ll(pos) & m; }
       return _s_ll(pos);
     }
-    inline int _seek_u(_s_ll pos) __bmdx_noex
+    int _seek_u(_s_ll pos) __bmdx_noex
     {
       if (sizeof(_s_ll) > sizeof(t_offset)) { _s_ll m = 1; _s_ll q = sizeof(t_offset); m <<= 4 * q; m <<= 4 * q; m -= 1; if ((pos & m) != pos) { return -2; } }
       int res;
@@ -7740,60 +8369,106 @@ namespace bmdx
       #endif
       return res;
     }
+      // Checks stat, returns stat::st_mode & entry_type_S_IF.
+    static int _mask_ex_fs_entry(const char* ppath, _s_long flags, int entry_type_S_IF, const std::wstring* opt_pwpath __bmdx_noarg) __bmdx_noex
+    {
+      (void)flags; (void)opt_pwpath;
+      if (!(ppath && !!*ppath)) { return 0; }
+      try {
+        #ifdef _bmdxpl_Wnds
+          if (flags & 0x1)
+          {
+              std::wstring s;
+              if (!opt_pwpath) { std::wstring s2(bmdx_str::conv::bsws_utf8(ppath)); s.swap(s2); }
+              const std::wstring* p = opt_pwpath ? opt_pwpath : &s;
+              if (0 != __bmdx_wnds_waccess(p->c_str(), _access_f_ok)) { return 0; }
+              struct _stat st;
+              if (0 != __bmdx_wnds_wstat(p->c_str(), &st)) { return 0; }
+              return st.st_mode & entry_type_S_IF;
+          }
+        #endif
+        if (0 != __bmdx_std_access(ppath, _access_f_ok)) { return 0; }
+        struct stat st;
+        if (0 != stat(ppath, &st)) { return 0; }
+        return st.st_mode & entry_type_S_IF;
+      } catch (...) {}
+      return 0;
+    }
+    static bool _mkdir_rwx(const char* ppath, _s_long flags __bmdx_noarg)
+    {
+      (void)flags;
+      if (!(ppath && !!*ppath)) { return false; }
+      try {
+        #ifdef _bmdxpl_Wnds
+          if (flags & 0x1)
+          {
+              std::wstring s(bmdx_str::conv::bsws_utf8(ppath));
+              if (!!_mask_ex_fs_entry(ppath, 0x1, S_IFDIR, &s)) { return true; }
+              return 0 == __bmdx_wnds_wmkdir(s.c_str());
+          }
+        #endif
+        if (!!_mask_ex_fs_entry(ppath, 0, S_IFDIR, 0)) { return true; }
+        return 0 == __bmdx_std_mkdir(ppath __bmdx_std_mkdir_arg2);
+      } catch (...) {}
+      return false;
+    }
+    static int _remove_one(const char* ppath, _s_long flags __bmdx_noarg)
+    {
+      if (!(ppath && !!*ppath)) { return -1; }
+      if ((flags & 6) == 0) { return -1; }
+      try {
+        #ifdef _bmdxpl_Wnds
+          if (flags & 0x1)
+          {
+              std::wstring s(bmdx_str::conv::bsws_utf8(ppath));
+              int m = _mask_ex_fs_entry(ppath, 0x1, S_IFREG | S_IFDIR, &s);
+              if (m == 0) { return 0; }
+              if (!(((m & S_IFREG) && (flags & 0x2)) || ((m & S_IFDIR) && (flags & 0x4)))) { return -4; }
+              int res = -1;
+              if (m & S_IFDIR) { res = __bmdx_wnds_wrmdir(s.c_str()); }
+                else { res = __bmdx_wnds_wremove(s.c_str()); }
+              if (res != 0) { return -3; }
+              return 1;
+          }
+        #endif
+        int m = _mask_ex_fs_entry(ppath, 0, S_IFREG | S_IFDIR, 0);
+        if (m == 0) { return 0; }
+        if (!(((m & S_IFREG) && (flags & 0x2)) || ((m & S_IFDIR) && (flags & 0x4)))) { return -4; }
+        int res = -1;
+        if (m & S_IFDIR) { res = __bmdx_std_rmdir(ppath); }
+          else { res = std::remove(ppath); }
+        if (res != 0) { return -3; }
+        return 1;
+      } catch (...) {}
+      return -2;
+    }
 
+    struct _stra_base { typedef std::string::size_type _t_sz; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex = 0; virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex = 0; };
+    struct _stra_str : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { if (n0 < 0) { n0 = 0; } typedef std::string T; _t_sz n = _t_sz(n0); if (_s_ll(n) != n0) { return false; } try { if (n) { ((T*)ps)->resize(n); } else { ((T*)ps)->clear(); } return true; } catch (...) { return false; } } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { typedef std::string T; return &(*(T*)ps)[0]; } };
+    struct _stra_ca : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { if (n0 < 0) { n0 = 0; } typedef _carray_base_t<char> T; return ((T*)ps)->realloc(n0, 0, 0, 0); } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { typedef _carray_base_t<char> T; return ((T*)ps)->pd(); } };
+    struct _stra_rba;
 
-
-
-    private: struct _stra_base; struct _stra_ca;  struct _stra_str;
-    public:
-
-
-          // Loads bytes from the given file into the dest. container. Resizes the container as necessary.
-          // 1 - success.
-          // 0 - file does not exist.
-          // -1 - memory alloc. error, or wrong arguments.
-          // -2 - file i/o error. NOTE On i/o error, dest may be left modified.
-      static inline int load_bytes(const std::string& fnp, std::string& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_str(), &dest); }
-      static inline int load_bytes(const char* fnp, std::string& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_str(), &dest); }
-
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<unsigned char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const std::string& fnp, _carray_base_t<signed char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp.c_str(), _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, _carray_base_t<signed char>& dest __bmdx_noarg) __bmdx_noex { return _load_bytes(fnp, _stra_ca(), &dest); }
-      static inline int load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noarg) __bmdx_noex;
-
-          // Saves bytes from src to the given file.
-          //    b_append == false truncates the file before writing, if it exists.
-          //    if n == 0, pdata may be 0.
-          // 1 - success.
-          // 0 - failed to create file (or open the existing file for writing).
-          // -1 - data size too large, or memory alloc. error, or wrong arguments.
-          // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-      static inline int save_bytes(const char* fnp, const std::string& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, src.c_str(), src.length(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const std::string& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), src.c_str(), _s_ll(src.length()), b_append); }
-
-      static inline int save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, pdata, n0, b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<unsigned char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const char* fnp, const arrayref_t<signed char>& src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, (const char*)src.pd(), src.n(), b_append); }
-      static inline int save_bytes(const std::string& fnp, const arrayref_t<signed char>&  src, bool b_append __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp.c_str(), (const char*)src.pd(), src.n(), b_append); }
-
-
-
-    private:
-      struct _stra_base { typedef std::string::size_type _t_sz; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex = 0; virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex = 0; };
-      struct _stra_str : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { if (n0 < 0) { n0 = 0; } typedef std::string T; _t_sz n = _t_sz(n0); if (_s_ll(n) != n0) { return false; } try { if (n) { ((T*)ps)->resize(n); } else { ((T*)ps)->clear(); } return true; } catch (...) { return false; } } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { typedef std::string T; return &(*(T*)ps)[0]; } };
-      struct _stra_ca : _stra_base { virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { if (n0 < 0) { n0 = 0; } typedef _carray_base_t<char> T; return ((T*)ps)->realloc(n0, 0, 0, 0); } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { typedef _carray_base_t<char> T; return ((T*)ps)->pd(); } };
-      struct _stra_rba;
-
-      static int _load_bytes(const char* fnp, const _stra_base& a, void* ps __bmdx_noarg) __bmdx_noex
+    static int _load_bytes(const char* fnp, const _stra_base& a, void* ps, _s_long flags __bmdx_noarg) __bmdx_noex
+    {
+      if (!fnp) { return -1; }
+      file_io f; f.open(fnp, false, false, flags & 0x1 ? 0x1 : 0);
+        if (!f.is_open()) { return f.result() == -3 ? 0 : -2; }
+      if (flags & 0x2)
       {
-        if (!fnp) { return -1; }
-        file_io f; f.open(fnp, false); if (!f.is_open()) { return f.result() == -3 ? 0 : -2; }
+        char buf[_nrdchunk];
+        std::string s;
+        while (1)
+        {
+          size_t nrd = f.read(buf, _nrdchunk);
+          if (nrd > 0) { try { s.append(&buf[0], &buf[nrd]); } catch (...) { return -2; } }
+          if (nrd == 0 || f.result() < 1) { break; }
+        }
+        if (!a._resize(ps, s.size())) { return -1; }
+        bmdx_str::words::memmove_t<char>::sf_memcpy(a._pd(ps), s.c_str(), s.size());
+        return 1;
+      }
+      else
+      {
         f.seek_end(); if (f.result() < 1) { return -2; }
         _s_ll n0 = f.tell(); if (n0 < 0) { return -2; }
         f.seek(0); if (f.result() < 1) { return -2; }
@@ -7803,43 +8478,60 @@ namespace bmdx
         f.read(a._pd(ps), size_t(n0)); if (f.result() < 1) { a._resize(ps, -1); return -2; }
         return 1;
       }
-      static int _save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append __bmdx_noarg) __bmdx_noex
-      {
-        if (!(fnp && n0 >= 0 && !(n0 && !pdata))) { return -1; }
-        size_t n = size_t(n0); if (_s_ll(n) != n0) { return -1; }
-        file_io f; f.open(fnp, true, !b_append); if (!f.is_open()) { return 0; }
-        if (!n) { return 1; }
-        if (b_append) { f.seek_end(); if (f.result() < 1) { return -2; } }
-        f.write(pdata, n); if (f.result() < 1) { return -2; }
-        return 1;
-      }
+    }
+    static int _save_bytes(const char* fnp, const char* pdata, _s_ll n0, bool b_append, _s_long flags __bmdx_noarg) __bmdx_noex
+    {
+      if (!(fnp && n0 >= 0 && !(n0 && !pdata))) { return -1; }
+      size_t n = size_t(n0); if (_s_ll(n) != n0) { return -1; }
+      file_io f; f.open(fnp, true, !b_append, flags & 0x1 ? 0x1 : 0); if (!f.is_open()) { return 0; }
+      if (!n) { return 1; }
+      if (b_append) { f.seek_end(); if (f.result() < 1) { return -2; } }
+      f.write(pdata, n); if (f.result() < 1) { return -2; }
+      return 1;
+    }
+
+  public:
+
+        // Loads bytes from the given file into the dest. container. Resizes the container as necessary.
+        //  flags:
+        //    0x1:
+        //      a) Windows: assume file name being encoded in UTF-8 instead of system encoding.
+        //      b) POSIX systems: ignored.
+        //    0x2 - load file sequentially, until EOF (instead of getting file length and loading length bytes as whole).
+        //      This can be used for dynamically updated files or special file systems,
+        //      where file seeking to end of file works actually incorrectly.
+        // Returns:
+        //  1 - success.
+        //  0 - file does not exist.
+        //  -1 - memory alloc. error, or wrong arguments.
+        //  -2 - file i/o error. NOTE On i/o error, dest may be left modified.
+    static inline int load_bytes(arrayref_t<char> fnp, std::string& dest,                    _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _load_bytes(_t_cstr(fnp).c_str(), _stra_str(), &dest, flags); }
+    static inline int load_bytes(arrayref_t<char> fnp, _carray_base_t<char>& dest,           _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _load_bytes(_t_cstr(fnp).c_str(), _stra_ca(), &dest, flags); }
+    static inline int load_bytes(arrayref_t<char> fnp, _carray_base_t<unsigned char>& dest,  _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _load_bytes(_t_cstr(fnp).c_str(), _stra_ca(), &dest, flags); }
+    static inline int load_bytes(arrayref_t<char> fnp, _carray_base_t<signed char>& dest,    _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _load_bytes(_t_cstr(fnp).c_str(), _stra_ca(), &dest, flags); }
+    static inline int load_bytes(arrayref_t<char> fnp, cref_t<arrayref_t<char> >& dest,      _s_long flags = 0 __bmdx_noarg) __bmdx_noex;
+
+        // Saves bytes from src to the given file.
+        //  b_append == false truncates the file before writing, if it exists.
+        //    if n == 0, pdata may be 0.
+        //  flags:
+        //    0x1:
+        //      a) Windows: assume file name being encoded in UTF-8 instead of system encoding.
+        //      b) POSIX systems: ignored.
+        // Returns:
+        //  1 - success.
+        //  0 - failed to create file (or open the existing file for writing).
+        //  -1 - data size too large, or memory alloc. error, or wrong arguments.
+        //  -2 - file i/o error. NOTE On i/o error, the file may be left modified.
+    static inline int save_bytes(const char* fnp,      const char* pdata,    _s_ll n0,       bool b_append, _s_long flags     __bmdx_noarg) __bmdx_noex { return _save_bytes(fnp, pdata, n0, b_append, flags); }
+    static inline int save_bytes(arrayref_t<char> fnp, const arrayref_t<char>& src,          bool b_append, _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _save_bytes(_t_cstr(fnp).c_str(), src.pd(), src.n(), b_append, flags); }
+    static inline int save_bytes(arrayref_t<char> fnp, const arrayref_t<unsigned char>& src, bool b_append, _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _save_bytes(_t_cstr(fnp).c_str(), (const char*)src.pd(), src.n(), b_append, flags); }
+    static inline int save_bytes(arrayref_t<char> fnp, const arrayref_t<signed char>&  src,  bool b_append, _s_long flags = 0 __bmdx_noarg) __bmdx_noex { return _save_bytes(_t_cstr(fnp).c_str(), (const char*)src.pd(), src.n(), b_append, flags); }
+
   };
 
 } // end namespace bmdx
 
-
-
-#include <map>
-
-#ifdef _bmdxpl_Psx
-  #include <sys/mman.h>
-  #include <sys/stat.h>
-  #include <fcntl.h>
-
-  #if 0
-  #elif __APPLE__ && __MACH__
-  #elif defined(__FreeBSD__)
-  #elif defined(__SUNPRO_CC) || defined(__sun)
-    #include <thread.h>
-  #elif defined(__ANDROID__)
-    #include <sys/socket.h>
-    #include <sys/un.h>
-    #include <linux/ashmem.h>
-    #include <linux/ioctl.h>
-  #else
-    #include <sys/file.h>
-  #endif
-#endif
 
 
 
@@ -9365,7 +10057,7 @@ namespace _api // public API, merged into namespace bmdx_shm
       //
     virtual void notify_filled(cref_t<t_stringref>& rba) { (void)rba; }
 
-    virtual ~i_allocctl() {}
+    virtual ~i_allocctl() __bmdx_exany {}
   };
 
 }
@@ -9734,7 +10426,7 @@ struct i_shmqueue_ctxx
     //    >= 0 specifies the number of bytes in IPC buffer for the queue. Automatically adjusted to be not less than __bmdx_shmfifo_nbytes_min.
     //    < 0 makes queue with buffer size == __bmdx_shmfifo_nbytes_dflt.
   virtual cref_t<shmqueue_ctx> rqueue(const t_name_shm& name, _s_long autocreate_mode, _s_ll nbhint) = 0;
-  virtual ~i_shmqueue_ctxx() {}
+  virtual ~i_shmqueue_ctxx() __bmdx_exany {}
 };
 
 struct _shmqueue_ctxx_impl : i_shmqueue_ctxx
@@ -11589,10 +12281,10 @@ namespace _api // public API, merged into namespace bmdx_shm
 namespace bmdx
 {
   struct file_io::_stra_rba : _stra_base { typedef cref_t<arrayref_t<char> > t_rba; virtual bool _resize(void* ps, _s_ll n0 __bmdx_noarg) const __bmdx_noex { t_rba& x = *(t_rba*)ps; if (n0 < 0) { x.clear(); return true; } x = ::bmdx_shm::_bmdx_shm::make_rba_z(n0, 1); return !!x; } virtual char* _pd(void* ps __bmdx_noarg) const __bmdx_noex { return (*(t_rba*)ps)->pd(); } };
-  int file_io::load_bytes(const char* fnp, cref_t<arrayref_t<char> >& dest __bmdx_noargt) __bmdx_noex
+  int file_io::load_bytes(arrayref_t<char> fnp, cref_t<arrayref_t<char> >& dest, _s_long flags __bmdx_noargt) __bmdx_noex
   {
     cref_t<arrayref_t<char> > retval;
-    int res = _load_bytes(fnp, _stra_rba(), &retval);
+    int res = _load_bytes(_t_cstr(fnp).c_str(), _stra_rba(), &retval, flags);
     bmdx_str::words::swap_bytes(retval, dest);
     return res;
   }
@@ -11601,5 +12293,12 @@ namespace bmdx
 #undef _s_long
 #undef _s_ll
 #undef _u_ll
+
+#ifdef _MSC_VER
+  #pragma warning(pop)
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic pop
+#endif
 
 #endif // bmdx_cpiomt_H

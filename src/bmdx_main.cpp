@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2022-10-16
+// rev. 2023-01-12
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -9,6 +9,16 @@
   #ifndef __bmdx_main_impl_skip
     #define __bmdx_main_impl_skip
   #endif
+#endif
+
+  // Fix for GCC issue: in shared module,
+  //  '#pragma GCC diagnostic ignored "-Wunused-function"'
+  //  is not working if '#pragma GCC diagnostic pop" is present.
+#undef __bmdx_GNUC_allow_unused
+#if defined(__GNUC__) && !defined(__clang__)
+  #define __bmdx_GNUC_allow_unused __attribute__((unused))
+#else
+  #define __bmdx_GNUC_allow_unused
 #endif
 
 #ifndef bmdx_main_intl_lib_H
@@ -31,11 +41,24 @@
   #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
-  #pragma GCC diagnostic ignored "-Wpragmas"
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+  #pragma GCC diagnostic ignored "-Wstrict-overflow"
+  #pragma GCC diagnostic ignored "-Wint-in-bool-context"
+  #pragma GCC diagnostic ignored "-Wclass-memaccess"
   #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wunused-function"
   #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
   #pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+#ifdef _MSC_VER
+  #pragma warning(push)
+  #pragma warning(disable:4290)
+  #pragma warning(disable:4100)
+  #pragma warning(disable:4616)
+  #pragma warning(disable:4355)
 #endif
 
 
@@ -181,7 +204,7 @@ using namespace bmdx;
       }
 
         // If non-null handle is returned, it later must be closed by the client.
-      static void* _hmod_self(bool b_au __bmdx_noarg)
+      __bmdx_GNUC_allow_unused static void* _hmod_self(bool b_au __bmdx_noarg)
       {
         int mode = _mode_dlopen(b_au, true);
         if (_in_main_exe() == 1)
@@ -199,7 +222,7 @@ using namespace bmdx;
       }
     #elif __bmdx_use_link_h == -1
         // If non-null handle is returned, it later must be closed by the client.
-      static HMODULE _hmod_self(bool b_au __bmdx_noarg)
+      __bmdx_GNUC_allow_unused static HMODULE _hmod_self(bool b_au __bmdx_noarg)
       {
         unity_common::__Psm pmsm = unity_common::pls_modsm();
           if (!pmsm) { return 0; }
@@ -2383,6 +2406,12 @@ bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> n
 #endif // bmdx_part_dispatcher_mt
 } // namespace bmdx_main_intl_lib
 
+#ifdef _MSC_VER
+  #pragma warning(pop)
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic pop
+#endif
 #if defined(__clang__)
   #pragma clang diagnostic pop
 #endif
@@ -2413,6 +2442,26 @@ bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> n
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
   #pragma clang diagnostic ignored "-Wunused-function"
 #endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+  #pragma GCC diagnostic ignored "-Wstrict-overflow"
+  #pragma GCC diagnostic ignored "-Wint-in-bool-context"
+  #pragma GCC diagnostic ignored "-Wclass-memaccess"
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wunused-function"
+  #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
+  #pragma GCC diagnostic ignored "-Wnonnull-compare"
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+  #pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+#ifdef _MSC_VER
+  #pragma warning(push)
+  #pragma warning(disable:4290)
+  #pragma warning(disable:4100)
+  #pragma warning(disable:4616)
+  #pragma warning(disable:4355)
+#endif
 
 using namespace bmdx_main_intl_lib;
 using namespace bmdx_str::words;
@@ -2420,7 +2469,6 @@ using namespace bmdx_str::conv;
 
 #include <iomanip>
 #include <sstream>
-#include <fstream>
 #include <algorithm>
 #include <limits>
 #include <clocale>
@@ -2504,7 +2552,7 @@ namespace bmdx
   #if !__bmdx_use_locale_t
       #define __bmdx_setlocale_name ""
       s_long wsbs_lk_dt() { return 10; } // for _wsToBs, _bsToWs only
-      namespace{ bool ensure_loc(s_long loc_type) { return false;  } }
+      namespace{ __bmdx_GNUC_allow_unused bool ensure_loc(s_long loc_type) { return false;  } }
   #else
     #ifdef _bmdxpl_Wnds
       s_long wsbs_lk_dt() { return -1; } // for _wsToBs, _bsToWs only
@@ -2664,7 +2712,7 @@ namespace {
     return -*s2;
   }
   #if __bmdx_char_case_tables
-    static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long loc_type)
+    __bmdx_GNUC_allow_unused static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long loc_type)
     {
       if (loc_type == 0) { return __wcsncasecmp_curr(s1, s2, n); }
       if (n <= 0) { return 0; }
@@ -2675,7 +2723,7 @@ namespace {
     }
   #elif __bmdx_use_locale_t
     #ifdef _bmdxpl_Psx
-      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long loc_type)
+      __bmdx_GNUC_allow_unused static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long loc_type)
       {
         if (loc_type == 0) { return __wcsncasecmp_curr(s1, s2, n); }
         if (!(loc_type >= 1 && loc_type <= 2 && phloc(loc_type)->b_valid())) { return 0; } // NOTE the caller must not pass wrong loc_type
@@ -2685,7 +2733,7 @@ namespace {
   #else
     #ifdef _bmdxpl_Psx
         // Android-specific.
-      static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long)
+      __bmdx_GNUC_allow_unused static int __wcsncasecmp(const wchar_t* s1, const wchar_t* s2, s_ll n, s_long)
       {
         wchar_t c1, c2;
         if (n <= 0) { return 0; }
@@ -2857,8 +2905,8 @@ namespace bmdx
     //    n == -1 means get all matching chars.
   static std::string trim_n(const std::string& s, _t_sz pos, const std::string& chars, s_long n)
   {
-    struct __local { static int _0() { return 0; } };
-    if (meta::s_ll(pos) < __local::_0()) { pos = 0; } if (pos >= s.size() || n < -1) { return std::string(); }
+    struct __local1 { static int _0() { return 0; } };
+    if (meta::s_ll(pos) < __local1::_0()) { pos = 0; } if (pos >= s.size() || n < -1) { return std::string(); }
     _t_sz pos2 = s.find_first_not_of(chars, pos); if (pos2 == nposc) { pos2 = s.size(); }
     if (n != -1) { if (pos2 > pos + n) { pos2 = pos + n; } }
     return s.substr(pos, pos2 - pos);
@@ -2990,6 +3038,23 @@ namespace
   typedef meta::assert<(sizeof(unity) == 4 * (sizeof(void*) >= sizeof(s_long) ? sizeof(void*) : sizeof(s_long)))>::t_true __check4;
   typedef meta::assert<(sizeof(unsigned long long) >= 8)>::t_true __check5;
 
+  #if defined(_bmdxpl_Wnds)
+    bool __bmdx_wnds_wgetenv(const wchar_t* varname, std::wstring& retval)
+    {
+      #if defined(_CRT_USE_WINAPI_FAMILY_DESKTOP_APP)
+        wchar_t* p = 0; size_t n = 0;
+        _wdupenv_s(&p, &n, varname);
+        if (p) { try { retval = p; } catch (...) { free(p); throw; } free(p); return true; }
+        retval.clear();
+        return false;
+      #else
+        const wchar_t* p = _wgetenv(varname);
+        if (p) { retval = p; return true; }
+        retval.clear();
+        return false;
+      #endif
+    }
+  #endif
   bool __bmdx_std_getenv(const char* varname, std::string& retval)
   {
     #ifdef _MSC_VER
@@ -11201,16 +11266,24 @@ namespace bmdx
 // OS-dependent code. Part 3. File utils.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef _bmdxpl_Wnds
-
-#ifndef F_OK
-#define F_OK  0 /* Check for file existence */
-#endif
-
 
 namespace bmdx
 {
+  struct file_utils::__utils_l2
+  {
+    static const int _access_f_ok = 0;
+    int mask_ex_fs_u(const wchar_t* path)
+    {
+      if (0 != __bmdx_wnds_waccess(path, _access_f_ok)) { return 0; }
+      struct _stat st;
+      if (0 != __bmdx_wnds_wstat(path, &st)) { return 0; }
+      return st.st_mode;
+    }
+    bool is_ex_dir_u(const wchar_t* path) { return !!(mask_ex_fs_u(path) & S_IFDIR); }
+    bool is_ex_file_u(const wchar_t* path) { return !!(mask_ex_fs_u(path) & S_IFREG); }
+  };
+
   bool file_utils::is_full_path(const std::wstring& pathstr) const { return pathstr.length() >= 2 && (wstring_like(pathstr.substr(0, 2), L"[a-zA-Z]:") || pathstr.substr(0, 2) == wpathsep2()); } // <Wnds> </Wnds>
   bool file_utils::is_full_path(const std::string& pathstr) const { return pathstr.length() >= 2 && (wstring_like(bsToWs(pathstr.substr(0, 2)), L"[a-zA-Z]:") || pathstr.substr(0, 2) == cpathsep2()); } // <Wnds> </Wnds>
 
@@ -11235,57 +11308,117 @@ namespace bmdx
     // </Wnds>
   }
 
-  bool file_utils::xmk_subdir(const std::string& sPath, int level)
+  bool file_utils::is_ex_file(const std::wstring& pathstr) const { return __utils_l2().is_ex_file_u(pathstr.c_str()); }
+  bool file_utils::is_ex_dir(const std::wstring& pathstr) const { return __utils_l2().is_ex_dir_u(pathstr.c_str()); }
+
+  bool file_utils::xmk_subdir(const std::wstring& pathstr, int level) const
   {
-    std::string wp;
+    std::wstring wp;
 
     if (level == 0)
     {
-      wp = trim(file_utils().join_path(file_utils().complete_path(sPath, pdCurDir)), cpathsep(), false, true);
+      wp = trim(this->join_path(this->complete_path(pathstr, pdCurDir)), wpathsep(), false, true);
       if (wp.length() == 0) { return false; }
     }
     else
     {
-      wp = trim(sPath, cpathsep(), false, true);
+      wp = trim(pathstr, wpathsep(), false, true);
       if (wp.length() == 0) { return true; }
     }
-    if (file_utils().is_ex_dir(wp)) { return true; }
-    if (!xmk_subdir(file_utils().strip_path(wp), level+1)) { return false; }
+    if (__utils_l2().is_ex_dir_u(wp.c_str())) { return true; }
+    if (!xmk_subdir(this->strip_path(wp), level+1)) { return false; }
 
-    // <Wnds>
-    return 0 == __bmdx_std_mkdir(wp.c_str());
-    // </Wnds>
+    return 0 == __bmdx_wnds_wmkdir(wp.c_str());
   }
 
-  std::wstring file_utils::complete_path(const std::wstring& sPath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const
-    { return bsToWs(complete_path(wsToBs(sPath), pd, wsToBs(sUserDefDir))); }
-  std::string file_utils::complete_path(const std::string& sPath, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir) const
+  std::wstring file_utils::complete_path(const std::wstring& pathstr, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const
   {
-      if (is_full_path(sPath)) { return sPath; }
-      if (xHasCurDirShortCut(sPath)) { char buf[2048]; return join_path(__bmdx_std_getcwd(buf, sizeof(buf)), sPath.substr(1)); }
-      std::string s;
-      switch(pd)
+    if (is_full_path(pathstr)) { return pathstr; }
+    if (xHasCurDirShortCut(pathstr)) { wchar_t buf[2048]; return join_path(__bmdx_wnds_wgetcwd(buf, sizeof(buf) / sizeof(wchar_t)), pathstr.substr(1)); }
+    std::wstring s;
+    switch(pd)
+    {
+      case pdCurDir: { wchar_t buf[2048]; s = join_path(__bmdx_wnds_wgetcwd(buf, sizeof(buf) / sizeof(wchar_t)), pathstr); break; }
+      case pdThisAppDir: { s = join_path(strip_path(cmd_myexe()), pathstr); break; }
+      case pdTempDir:
       {
-          case pdCurDir: { char buf[2048]; s = join_path(__bmdx_std_getcwd(buf,sizeof(buf)), sPath); break; }
-          case pdThisAppDir: { s = join_path(wsToBs(strip_path(cmd_myexe())), sPath); break; }
-          case pdTempDir:
-          {
-              // <Wnds>
-              std::string sv;
-              if (__bmdx_std_getenv("TEMP", sv) || __bmdx_std_getenv("TMP", sv))
-                { s = join_path(sv, sPath); }
-              else { throw XUExec("file_utils::complete_path.1"); }
-              // </Wnds>
-              if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
-              break;
-          }
-          case pdDoNotChange: { s = sPath; break; }
-          default: //pdUserDefinedDir
-              s = join_path(sUserDefDir,sPath);
-              if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
+        std::wstring sv;
+        if (__bmdx_wnds_wgetenv(L"TEMP", sv) || __bmdx_wnds_wgetenv(L"TMP", sv))
+          { s = join_path(sv, pathstr); }
+        else { throw XUExec("file_utils::complete_path(wstring).1"); }
+        if (!is_full_path(s)) { s = join_path(strip_path(cmd_myexe()), s); }
+        break;
       }
-      return s;
+      case pdDoNotChange: { s = pathstr; break; }
+      default: //pdUserDefinedDir
+        s = join_path(sUserDefDir,pathstr);
+        if (!is_full_path(s)) { s = join_path(strip_path(cmd_myexe()), s); }
+    }
+    return s;
   }
+
+  std::string file_utils::complete_path(const std::string& pathstr, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir) const
+  {
+    if (is_full_path(pathstr)) { return pathstr; }
+    if (xHasCurDirShortCut(pathstr)) { char buf[2048]; return join_path(__bmdx_std_getcwd(buf, sizeof(buf)), pathstr.substr(1)); }
+    std::string s;
+    switch(pd)
+    {
+      case pdCurDir: { char buf[2048]; s = join_path(__bmdx_std_getcwd(buf,sizeof(buf)), pathstr); break; }
+      case pdThisAppDir: { s = join_path(wsToBs(strip_path(cmd_myexe())), pathstr); break; }
+      case pdTempDir:
+      {
+        std::string sv;
+        if (__bmdx_std_getenv("TEMP", sv) || __bmdx_std_getenv("TMP", sv))
+          { s = join_path(sv, pathstr); }
+        else { throw XUExec("file_utils::complete_path(wstring).1"); }
+        if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
+        break;
+      }
+      case pdDoNotChange: { s = pathstr; break; }
+      default: //pdUserDefinedDir
+        s = join_path(sUserDefDir,pathstr);
+        if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
+    }
+    return s;
+  }
+
+  bool file_utils::mk_subdir(const std::wstring& pathstr) const { return xmk_subdir(pathstr, 0); }
+  int file_utils::remove_one(const std::wstring& pathstr, s_long flags)
+  {
+      if ((flags & 6) == 0) { return -1; }
+      try {
+        int m = __utils_l2().mask_ex_fs_u(pathstr.c_str());
+        if (m == 0) { return 0; }
+        if (!(((m & S_IFREG) && (flags & 0x2)) || ((m & S_IFDIR) && (flags & 0x4)))) { return -4; }
+        int res = -1;
+        if (m & S_IFDIR) { res = __bmdx_wnds_wrmdir(pathstr.c_str()); }
+          else { res = __bmdx_wnds_wremove(pathstr.c_str()); }
+        if (res != 0) { return -3; }
+        return 1;
+      } catch (...) {}
+      return -2;
+  }
+
+  std::wstring file_utils::expand_env_nr(const std::wstring& s) const
+  {
+    std::wstring s2; _t_wz pos0(0), pos2;
+    do {
+      pos2 = s.find('%', pos0);
+      if (pos2 != nposw)
+      {
+        s2 += s.substr(pos0, pos2 - pos0);
+        pos0 = pos2 + 1;
+        pos2 = s.find('%', pos0);
+        if (pos2 == nposw) { pos0 -= 1; s2 += s.substr(pos0, s.length() - pos0); break; }
+          else if (pos2 > pos0) { std::wstring sv; if (__bmdx_wnds_wgetenv(s.substr(pos0, pos2 - pos0).c_str(), sv)) { s2 += sv; } pos0 = pos2 + 1; }
+          else { s2 += L'%'; pos0 = pos2 + 1; }
+      }
+      else { s2 += s.substr(pos0, s.length() - pos0); break; }
+    } while (pos0 < s.length());
+    return s2;
+  }
+
 
 } // bmdx ns
 #endif // _bmdxpl_Wnds
@@ -11301,52 +11434,56 @@ namespace bmdx
   bool file_utils::is_valid_path(const std::wstring& s) const { if (s.find_first_of(L"\0") != nposw) return false; return true; } // <Psx> </Psx>
   bool file_utils::is_valid_path(const std::string& s) const { if (s.find_first_of("\0") != nposc) return false; return true; } // <Psx> </Psx>
 
-  bool file_utils::xmk_subdir(const std::string& sPath, int level)
+  std::wstring file_utils::complete_path(const std::wstring& pathstr, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const
+    { return bsToWs(complete_path(wsToBs(pathstr), pd, wsToBs(sUserDefDir))); }
+
+  std::string file_utils::complete_path(const std::string& pathstr, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir) const
   {
-    std::string wp;
-
-    if (level == 0)
-    {
-      wp = trim(file_utils().join_path(file_utils().complete_path(sPath, pdCurDir)), cpathsep(), false, true);
-      if (wp.length() == 0) { return false; }
-    }
-    else
-    {
-      wp = trim(sPath, cpathsep(), false, true);
-      if (wp.length() == 0) { return true; }
-    }
-    if (file_utils().is_ex_dir(wp)) { return true; }
-    if (!file_utils().xmk_subdir(file_utils().strip_path(wp), level+1)) { return false; }
-
-    // <Psx>
-    return 0==__bmdx_std_mkdir(wp.c_str(), 0777);
-    // </Psx>
-  }
-
-  std::wstring file_utils::complete_path(const std::wstring& sPath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const
-  { return bsToWs(complete_path(wsToBs(sPath), pd, wsToBs(sUserDefDir))); }
-  std::string file_utils::complete_path(const std::string& sPath, EFileUtilsPredefinedDir pd, const std::string& sUserDefDir) const
-  {
-    if (is_full_path(sPath)) { return sPath; }
-    if (xHasCurDirShortCut(sPath)) { char buf[2048]; return join_path(__bmdx_std_getcwd(buf, sizeof(buf)), sPath.substr(1)); }
+    if (is_full_path(pathstr)) { return pathstr; }
+    if (xHasCurDirShortCut(pathstr)) { char buf[2048]; return join_path(__bmdx_std_getcwd(buf, sizeof(buf)), pathstr.substr(1)); }
     std::string s;
     switch(pd)
     {
-        case pdCurDir: { char buf[2048]; s = join_path(__bmdx_std_getcwd(buf,sizeof(buf)), sPath); break; }
-          case pdThisAppDir: { s = join_path(wsToBs(strip_path(cmd_myexe())), sPath); break; }
+        case pdCurDir: { char buf[2048]; s = join_path(__bmdx_std_getcwd(buf,sizeof(buf)), pathstr); break; }
+          case pdThisAppDir: { s = join_path(wsToBs(strip_path(cmd_myexe())), pathstr); break; }
           case pdTempDir:
               // <Psx>
-              s = join_path(getenv("TMPDIR"), sPath);
+              s = join_path(getenv("TMPDIR"), pathstr);
               // </Psx>
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
               break;
-          case pdDoNotChange: { s = sPath; break; }
+          case pdDoNotChange: { s = pathstr; break; }
           default: //pdUserDefinedDir
-              s = join_path(sUserDefDir,sPath);
+              s = join_path(sUserDefDir,pathstr);
               if (!is_full_path(s)) { s = join_path(wsToBs(strip_path(cmd_myexe())), s); }
       }
       return s;
   }
+
+  bool file_utils::is_ex_file(const std::wstring& pathstr) const { return file_io::is_ex_file(wsToBs(pathstr)); }
+  bool file_utils::is_ex_dir(const std::wstring& pathstr) const { return file_io::is_ex_dir(wsToBs(pathstr)); }
+  bool file_utils::mk_subdir(const std::wstring& pathstr) const { return xmk_subdir(wsToBs(pathstr), 0); }
+  int file_utils::remove_one(const std::wstring& pathstr, s_long flags) { return file_io::remove_one(wsToBs(pathstr), flags & 0x6); }
+
+  std::wstring file_utils::expand_env_nr(const std::wstring& s) const
+  {
+    std::wstring s2; _t_wz pos0(0), pos2;
+    do {
+      pos2 = s.find('%', pos0);
+      if (pos2 != nposw)
+      {
+        s2 += s.substr(pos0, pos2 - pos0);
+        pos0 = pos2 + 1;
+        pos2 = s.find('%', pos0);
+        if (pos2 == nposw) { pos0 -= 1; s2 += s.substr(pos0, s.length() - pos0); break; }
+          else if (pos2 > pos0) { std::string sv; if (__bmdx_std_getenv(wsToBs(s.substr(pos0, pos2 - pos0)).c_str(), sv)) { s2 += bsToWs(sv); } pos0 = pos2 + 1; }
+          else { s2 += L'%'; pos0 = pos2 + 1; }
+      }
+      else { s2 += s.substr(pos0, s.length() - pos0); break; }
+    } while (pos0 < s.length());
+    return s2;
+  }
+
 }
 #endif // _bmdxpl_Psx
 
@@ -11428,34 +11565,10 @@ std::string file_utils::join_path(const std::string& ps1, const std::string& ps2
 bool file_utils::has_rightmost_patshep(const std::wstring& s) const { return s_long(s.length())>=pslen && s.substr(s.length()-pslen)==wpathsep(); }
 bool file_utils::has_rightmost_patshep(const std::string& s) const { return s_long(s.length())>=pslen && s.substr(s.length()-pslen)==cpathsep(); }
 
-bool file_utils::is_ex_file(const std::wstring& sPath) const
-  { return is_ex_file(wsToBs(sPath)); }
-bool file_utils::is_ex_file(const std::string& sPath) const
-  { return file_io::is_ex_file(sPath); }
-
-bool file_utils::is_ex_dir(const std::wstring& sPath) const
-  { return is_ex_dir(wsToBs(sPath)); }
-bool file_utils::is_ex_dir(const std::string& sPath) const
-  { return file_io::is_ex_dir(sPath); }
-
-std::wstring file_utils::expand_env_nr(const std::wstring& s) const
-{
-  std::wstring s2; _t_wz pos0(0), pos2;
-  do {
-    pos2 = s.find('%', pos0);
-    if (pos2 != nposw)
-    {
-      s2 += s.substr(pos0, pos2 - pos0);
-      pos0 = pos2 + 1;
-      pos2 = s.find('%', pos0);
-      if (pos2 == nposw) { pos0 -= 1; s2 += s.substr(pos0, s.length() - pos0); break; }
-        else if (pos2 > pos0) { std::string sv; if (__bmdx_std_getenv(wsToBs(s.substr(pos0, pos2 - pos0)).c_str(), sv)) { s2 += bsToWs(sv); } pos0 = pos2 + 1; }
-        else { s2 += L'%'; pos0 = pos2 + 1; }
-    }
-    else { s2 += s.substr(pos0, s.length() - pos0); break; }
-  } while (pos0 < s.length());
-  return s2;
-}
+bool file_utils::is_ex_file(const std::string& pathstr) const
+  { return file_io::is_ex_file(pathstr); }
+bool file_utils::is_ex_dir(const std::string& pathstr) const
+  { return file_io::is_ex_dir(pathstr); }
 
 std::string file_utils::expand_env_nr(const std::string& s) const
 {
@@ -11476,15 +11589,37 @@ std::string file_utils::expand_env_nr(const std::string& s) const
   return s2;
 }
 
-bool file_utils::mk_subdir(const std::wstring& sPath) const { return xmk_subdir(wsToBs(sPath),0); }
-bool file_utils::mk_subdir(const std::string& sPath) const { return xmk_subdir(sPath,0); }
-unity file_utils::load_text(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd, unity& ret_s) const
-    { return load_text(format_string, bsToWs(sPath), pd, ret_s); }
-unity file_utils::load_text(const std::string& format_string, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, unity& ret_s) const
+bool file_utils::xmk_subdir(const std::string& pathstr, int level) const
 {
+  std::string wp;
+
+  if (level == 0)
+  {
+    wp = trim(this->join_path(this->complete_path(pathstr, pdCurDir)), cpathsep(), false, true);
+    if (wp.length() == 0) { return false; }
+  }
+  else
+  {
+    wp = trim(pathstr, cpathsep(), false, true);
+    if (wp.length() == 0) { return true; }
+  }
+  if (this->is_ex_dir(wp)) { return true; }
+  if (!this->xmk_subdir(this->strip_path(wp), level+1)) { return false; }
+
+  return 0 == __bmdx_std_mkdir(wp.c_str() __bmdx_std_mkdir_arg2);
+}
+
+bool file_utils::mk_subdir(const std::string& pathstr) const { return xmk_subdir(pathstr, 0); }
+
+int file_utils::remove_one(const std::string& pathstr, s_long flags) { return file_io::remove_one(pathstr, flags & 0x6); }
+
+unity file_utils::load_text(const std::string& format_string, const std::string& sPath, EFileUtilsPredefinedDir pd, unity& ret_s) const __bmdx_noex
+    { try { return load_text(format_string, bsToWs(sPath), pd, ret_s); } catch (...) {} return unity(); }
+unity file_utils::load_text(const std::string& format_string, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, unity& ret_s) const __bmdx_noex
+{
+try {
   typedef unsigned char u_char;
 
-  const int ReadBufSize = 2048;
   enum EEncodings { local8bit, lsb8bit, utf8, utf16le, utf16be };
   bool is_binary(false); bool is_text(false); bool is_local8bit(false); bool is_lsb8bit(false); bool is_utf8(false); bool is_utf16le(false); bool is_utf16be(false);
   std::vector<int> encs;
@@ -11505,22 +11640,12 @@ unity file_utils::load_text(const std::string& format_string, const std::wstring
   {
     if (is_binary == is_text) break;
     if (encs.size() == 0) break;
-    std::wstring sPath = complete_path(sPath0,pd);
-    if (!is_ex_file(sPath)) { break; }
-    std::fstream f(wsToBs(sPath).c_str(), std::ios_base::openmode(std::ios_base::binary|std::ios_base::in));
-    if (!f.is_open()) { break; }
-    f >> std::noskipws;
-    char fileBuf[ReadBufSize];
-    f.rdbuf()->pubsetbuf(fileBuf, ReadBufSize);
-      // load whole file
+    std::string sPath = wsToBsUtf8(complete_path(sPath0, pd));
+    if (!file_io::is_ex_file(sPath, 1)) { break; }
+
     std::string s;
-    if (1)
-    {
-      std::stringstream ss;
-      ss << f.rdbuf();
-      std::string s2(ss.str());
-      s.swap(s2);
-    }
+    if (file_io::load_bytes(sPath, s, 1) < 1) { break; }
+
       // Test for allowed encodings.
     unsigned int pos = 0;
     int ind_enc = -1;
@@ -11618,122 +11743,136 @@ lExitFor1:
 
   if (is_successful) { if (&ret_s!=&unity::_0nc) { ret_s = s0; return true; } else { return s0; } }
     else { if (&ret_s!=&unity::_0nc) { ret_s.clear(); return false; } else { return unity(); } }
+
+} catch (...) { return unity(); }
 }
 
-bool file_utils::save_text(const std::string& format_string, const std::wstring& str, const std::string& sTargetFilePath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const __bmdx_noex
-  { return save_text(format_string, str, bsToWs(sTargetFilePath), pd, sUserDefDir); }
+bool file_utils::save_text(const std::string& format_string, const std::wstring& str, const std::string& sPath, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const __bmdx_noex
+  { try { return save_text(format_string, str, bsToWs(sPath), pd, sUserDefDir); } catch (...) {} return false; }
 bool file_utils::save_text(const std::string& format_string, const std::wstring& s0, const std::wstring& sPath0, EFileUtilsPredefinedDir pd, const std::wstring& sUserDefDir) const __bmdx_noex
 {
-  try {
-    typedef unsigned char u_char;
+try {
+  typedef unsigned char u_char;
 
-    bool is_binary(false);
-    bool is_text(false);
-    bool is_truncate(false);
-    bool is_append(false);
-    bool is_local8bit(false);
-    bool is_lsb8bit(false);
-    bool is_utf8(false);
-    bool is_utf16le(false);
-    bool is_utf16be(false);
+  bool is_binary(false);
+  bool is_text(false);
+  bool is_truncate(false);
+  bool is_append(false);
+  bool is_local8bit(false);
+  bool is_lsb8bit(false);
+  bool is_utf8(false);
+  bool is_utf16le(false);
+  bool is_utf16be(false);
 
-    std::vector<std::string> args = splitToVector(format_string, " ");
-    for (unsigned int i = 0; i < args.size(); ++i)
+  std::vector<std::string> args = splitToVector(format_string, " ");
+  for (unsigned int i = 0; i < args.size(); ++i)
+  {
+    if (!is_binary && args[i] == "binary") is_binary = true;
+    if (!is_text && args[i] == "text") is_text = true;
+    if (!is_truncate && args[i] == "truncate") is_truncate = true;
+    if (!is_append && args[i] == "append") is_append = true;
+    if (!is_local8bit && args[i] == "local8bit") is_local8bit = true;
+    if (!is_lsb8bit && args[i] == "lsb8bit") is_lsb8bit = true;
+    if (!is_utf8 && args[i] == "utf8") is_utf8 = true;
+    if (!is_utf16le && args[i] == "utf16le") is_utf16le = true;
+    if (!is_utf16be && args[i] == "utf16be") is_utf16be = true;
+  }
+
+  if (is_binary == is_text) return false;
+  if (is_truncate == is_append) return false;
+  if (int(is_local8bit) + int(is_lsb8bit)  + int(is_utf8) + int(is_utf16le) + int(is_utf16be) != 1) return false;
+
+  const std::wstring* ps2 = &s0;
+
+  file_io f0;
+  f0.open(wsToBsUtf8(complete_path(sPath0, pd, sUserDefDir)).c_str(), true, is_truncate, 1);
+    if (f0.result() < 1) { return false; }
+  f0.seek_end();
+    if (f0.result() < 1) { return false; }
+  std::ostringstream f;
+
+  if (is_utf16le)
+  {
+    if (is_text && (is_truncate || f0.tell() == 0)) { f << '\xff' << '\xfe'; }
+    for (_t_wz i = 0; i < ps2->size(); ++i)
     {
-      if (!is_binary && args[i] == "binary") is_binary = true;
-      if (!is_text && args[i] == "text") is_text = true;
-      if (!is_truncate && args[i] == "truncate") is_truncate = true;
-      if (!is_append && args[i] == "append") is_append = true;
-      if (!is_local8bit && args[i] == "local8bit") is_local8bit = true;
-      if (!is_lsb8bit && args[i] == "lsb8bit") is_lsb8bit = true;
-      if (!is_utf8 && args[i] == "utf8") is_utf8 = true;
-      if (!is_utf16le && args[i] == "utf16le") is_utf16le = true;
-      if (!is_utf16be && args[i] == "utf16be") is_utf16be = true;
+      wchar_t wc = ps2->at(i);
+      if (is_text && wc == L'\n') { f << '\r' << '\0' << '\n' << '\0'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\r') { ++i; } }
+        else if (is_text && wc == L'\r') { f << '\r' << '\0' << '\n' << '\0'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
+        else { f << u_char(wc) << u_char(wc >> 8); }
     }
-
-    if (is_binary == is_text) return false;
-    if (is_truncate == is_append) return false;
-    if (int(is_local8bit) + int(is_lsb8bit)  + int(is_utf8) + int(is_utf16le) + int(is_utf16be) != 1) return false;
-
-    const std::wstring* ps2 = &s0;
-
-    std::fstream f(wsToBs(complete_path(sPath0, pd, sUserDefDir)).c_str(), std::ios_base::openmode(std::ios_base::binary|(is_append?std::ios_base::app|std::ios_base::ate:std::ios_base::trunc)|std::ios_base::out));
-    if (!f.is_open()) { return false; }
-    f << std::noskipws;
-
-    if (is_utf16le)
+  }
+  else if (is_utf16be)
+  {
+    if (is_text && (is_truncate || f0.tell() == 0)) { f << '\xfe' << '\xff'; }
+    for (_t_wz i = 0; i < ps2->size(); ++i)
     {
-      if (is_text && (is_truncate || f.tellp() == std::ostream::pos_type(0))) { f << '\xff' << '\xfe'; }
-      for (_t_wz i = 0; i < ps2->size(); ++i)
-      {
-        wchar_t wc = ps2->at(i);
-        if (is_text && wc == L'\n') { f << '\r' << '\0' << '\n' << '\0'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\r') { ++i; } }
-          else if (is_text && wc == L'\r') { f << '\r' << '\0' << '\n' << '\0'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
-          else { f << u_char(wc) << u_char(wc >> 8); }
-      }
+      wchar_t wc = ps2->at(i);
+      if (is_text && wc == L'\n') { f << '\0' << '\r' << '\0' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\r') { ++i; } }
+        else if (is_text && wc == L'\r') { f << '\0' << '\r' << '\0' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
+        else { f << u_char(wc >> 8) << u_char(wc); }
     }
-    else if (is_utf16be)
+  }
+  else if (is_lsb8bit)
+  {
+    for (_t_wz i = 0; i < ps2->size(); ++i)
     {
-      if (is_text && (is_truncate || f.tellp() == std::ostream::pos_type(0))) { f << '\xfe' << '\xff'; }
-      for (_t_wz i = 0; i < ps2->size(); ++i)
-      {
-        wchar_t wc = ps2->at(i);
-        if (is_text && wc == L'\n') { f << '\0' << '\r' << '\0' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\r') { ++i; } }
-          else if (is_text && wc == L'\r') { f << '\0' << '\r' << '\0' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
-          else { f << u_char(wc >> 8) << u_char(wc); }
-      }
+      wchar_t wc = ps2->at(i);
+      if (is_text && wc == L'\n') { f << '\r' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\r') { ++i; } }
+        else if (is_text && wc == L'\r') { f << '\r' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
+        else { f << char(wc); }
     }
-    else if (is_lsb8bit)
+  }
+  else if (is_utf8)
+  {
+    enum { nbchunk = 200000 };
+    f << "\xef\xbb\xbf";
+    for (_t_sz i = 0; i < ps2->size(); i += nbchunk)
+      { f << wsToBsUtf8(&ps2->at(i), bmdx_minmax::myllmin(ps2->size() - i, nbchunk)); }
+  }
+  else // local8bit
+  {
+    const std::string s2(wsToBs(*ps2));
+    for (_t_sz i = 0; i < s2.size(); ++i)
     {
-      for (_t_wz i = 0; i < ps2->size(); ++i)
-      {
-        wchar_t wc = ps2->at(i);
-        if (is_text && wc == L'\n') { f << '\r' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\r') { ++i; } }
-          else if (is_text && wc == L'\r') { f << '\r' << '\n'; if (i < ps2->size() - 1 && ps2->at(i + 1) == L'\n') { ++i; } }
-          else { f << char(wc); }
-      }
+      char c = s2[i];
+      if (is_text && c == '\n') { f << '\r' << '\n'; if (i < s2.size() - 1 && s2[i + 1] == '\r') { ++i; } }
+        else if (is_text && c == '\r') { f << '\r' << '\n'; if (i < s2.size() - 1 && s2[i + 1] == '\n') { ++i; } }
+        else { f << c; }
     }
-    else if (is_utf8)
-    {
-      enum { nbchunk = 200000 };
-      f << "\xef\xbb\xbf";
-      for (_t_sz i = 0; i < ps2->size(); i += nbchunk)
-        { f << wsToBsUtf8(&ps2->at(i), bmdx_minmax::myllmin(ps2->size() - i, nbchunk)); }
-    }
-    else // local8bit
-    {
-      const std::string s2(wsToBs(*ps2));
-      for (_t_sz i = 0; i < s2.size(); ++i)
-      {
-        char c = s2[i];
-        if (is_text && c == '\n') { f << '\r' << '\n'; if (i < s2.size() - 1 && s2[i + 1] == '\r') { ++i; } }
-          else if (is_text && c == '\r') { f << '\r' << '\n'; if (i < s2.size() - 1 && s2[i + 1] == '\n') { ++i; } }
-          else { f << c; }
-      }
-    }
+  }
 
-    bool good=f.good(); f.close(); return good;
-  } catch (...) { return false; }
+  std::string s = f.str();
+  f0.write(s.c_str(), s.length());
+  return f0.result() >= 1;
+} catch (...) { return false; }
 }
 
-int file_utils::load_bytes(const std::wstring& fnp, std::string& dest) __bmdx_noex { return file_io::load_bytes(wsToBs(fnp), dest); }
-int file_utils::load_bytes(const std::string& fnp, std::string& dest) __bmdx_noex { return file_io::load_bytes(fnp, dest); }
-int file_utils::load_bytes(const char* fnp, std::string& dest) __bmdx_noex { return file_io::load_bytes(fnp, dest); }
+int file_utils::load_bytes(arrayref_t<wchar_t> fnp, std::string& dest, s_long flags) __bmdx_noex
+{
+  try {
+    return file_io::load_bytes(wsbs_utf8(fnp), dest, (flags & 0x2) | 0x1);
+  } catch (...) {}
+  return -1;
+}
+int file_utils::load_bytes(arrayref_t<char> fnp, std::string& dest, s_long flags) __bmdx_noex
+{
+  return file_io::load_bytes(fnp, dest, flags & 0x2);
+}
+int file_utils::save_bytes(arrayref_t<wchar_t> fnp, arrayref_t<char> src, bool b_append) __bmdx_noex
+{
+  try {
+    return file_io::save_bytes(wsbs_utf8(fnp), src, b_append, 1);
+  } catch (...) {}
+  return -1;
+}
+int file_utils::save_bytes(arrayref_t<char> fnp, arrayref_t<char> src, bool b_append) __bmdx_noex
+{
+  return file_io::save_bytes(fnp, src, b_append);
+}
 
-  // Saves bytes from src to the given file.
-  //    b_append == false truncates the file before writing, if it exists.
-  //    if n == 0, pdata may be 0.
-  // 1 - success.
-  // 0 - failed to create file (or open the existing file for writing).
-  // -1 - data size too large, or memory alloc. error, or wrong arguments.
-  // -2 - file i/o error. NOTE On i/o error, the file may be left modified.
-int file_utils::save_bytes(const std::wstring& fnp, const std::string& src, bool b_append) __bmdx_noex { return file_io::save_bytes(wsToBs(fnp), src, b_append); }
-int file_utils::save_bytes(const std::string& fnp, const std::string& src, bool b_append) __bmdx_noex { return file_io::save_bytes(fnp, src, b_append); }
-int file_utils::save_bytes(const char* fnp, const std::string& src, bool b_append) __bmdx_noex { return file_io::save_bytes(fnp, src, b_append); }
-int file_utils::save_bytes(const char* fnp, const char* pdata, meta::s_ll n, bool b_append) __bmdx_noex { return file_io::save_bytes(fnp, pdata, n, b_append); }
-
-bool file_utils::xHasCurDirShortCut(const std::wstring& sPath) { return sPath==L"." || sPath.substr(0,1+pslen)==L"."+wpathsep(); }
-bool file_utils::xHasCurDirShortCut(const std::string& sPath) { return sPath=="." || sPath.substr(0,1+pslen)=="."+cpathsep(); }
+bool file_utils::xHasCurDirShortCut(const std::wstring& pathstr) const { return pathstr==L"." || pathstr.substr(0,1+pslen)==L"."+wpathsep(); }
+bool file_utils::xHasCurDirShortCut(const std::string& pathstr) const { return pathstr=="." || pathstr.substr(0,1+pslen)=="."+cpathsep(); }
 }
 
 
@@ -11781,6 +11920,7 @@ s_long unity::sig_struct() __bmdx_noex
 
         // 1 - success, 0 - already loaded (may be name or other), -1 - failure.
         // flags:
+        //    0x4 - interpret name as UTF-8 and use LoadLibraryW.
         //    0x100 - ignore name, create handle to itself instead.
       s_long mod_load(const char* name, s_long flags __bmdx_noarg) __bmdx_noex
       {
@@ -11801,7 +11941,21 @@ s_long unity::sig_struct() __bmdx_noex
           if (!name) { return -1; }
           HMODULE h = 0;
           if (*name == '\0') { h = GetModuleHandleA(0); f.htype = 2; }
-            else { h = LoadLibraryA(name); if (!h) { return -1; } f.htype = 1; }
+          else if (flags & 0x4)
+          {
+            try {
+              std::wstring wname = bsws_utf8(name);
+              h = LoadLibraryW(wname.c_str());
+            } catch (...) { return -1; }
+            if (!h) { return -1; }
+            f.htype = 1;
+          }
+          else
+          {
+            h = LoadLibraryA(name);
+              if (!h) { return -1; }
+            f.htype = 1;
+          }
           handle = h;
         }
 
@@ -12064,7 +12218,7 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
       cv_ff::cv_rootldr::PFinit_handle f_ih = (cv_ff::cv_rootldr::PFinit_handle)pmsm_rl(unity_common::msm_rl_init_handle);
       if (f_ih)
       {
-        try { f_ih(&he, 0, 0x100 + (b_autounload ? 1 : 0), (bmdx_mod_load_def_flags & 0)); } catch (...) {}
+        try { f_ih(&he, 0, 0x100 + (b_autounload ? 1 : 0), 0); } catch (...) {}
         if (he._pmsm() == pmsm) { h = he; }
       }
     }
@@ -12084,7 +12238,23 @@ unity::mod_handle unity::mod_handle::hself(bool b_autounload) __bmdx_noex
     cv_ff::cv_rootldr::PFinit_handle f_ih = (cv_ff::cv_rootldr::PFinit_handle)pmsm_rl(unity_common::msm_rl_init_handle);
       if (!f_ih) { return mh; }
 
-    try { f_ih(&mh, name, b_au ? 1 : 0, flags); } catch (...) {}
+    try {
+      f_ih(&mh, name, b_au ? 1 : 0, flags);
+      #ifdef _bmdxpl_Wnds
+        if (!mh && name && (flags & 0x4))
+        {
+            // UTF-8 name may have failed in older version of BMDX,
+            // still, if name contains only characters from the system encoding, it may be possible to use LoadLibraryA.
+          std::wstring wn = bsws_utf8(name);
+          std::string name2 = wsToBs(wn);
+          std::wstring wn2 = bsToWs(name2);
+          if (wn2 == wn)
+          {
+            f_ih(&mh, name2.c_str(), b_au ? 1 : 0, flags & ~0x4);
+          }
+        }
+      #endif
+    } catch (...) {}
     return mh;
   }
 
@@ -16471,6 +16641,12 @@ s_long dispatcher_mt::request(s_long rt, unity& retval, const unity& args, s_lon
   s_long cv_ff::cv_mget::Fmget_set_retvals(unity* phm, const cref_t<t_stringref>* patt, unity* pretmsg, cref_t<t_stringref>* retatt, s_long proc_flags) { return -2; }
 #endif // bmdx_part_dispatcher_mt
 
+#ifdef _MSC_VER
+  #pragma warning(pop)
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic pop
+#endif
 #if defined(__clang__)
   #pragma clang diagnostic pop
 #endif

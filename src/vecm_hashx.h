@@ -1,12 +1,12 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2022-10-16
+// rev. 2023-01-12
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
 //
-// Copyright 2004-2021 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
+// Copyright 2004-2023 Yevgueny V. Kondratyev (Dnipro (Dnepropetrovsk), Ukraine)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -43,20 +43,23 @@
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
+  #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wunused-parameter"
   #pragma GCC diagnostic ignored "-Wunused-function"
   #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
   #pragma GCC diagnostic ignored "-Wnonnull-compare"
-  #pragma GCC diagnostic ignored "-Wdeprecated"
   #pragma GCC diagnostic ignored "-Wint-in-bool-context"
   #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 #ifdef _MSC_VER
+  #pragma warning(push)
   #pragma warning(disable:4290)
   #pragma warning(disable:4100)
   #pragma warning(disable:4616)
   #pragma warning(disable:4355)
 #endif
+
 #undef _yk_reg
 #if __cplusplus > 199711L
   #define _yk_reg
@@ -3537,7 +3540,7 @@ struct hashx_common
       //  Consider the following code:
       //      long n = 3, n2 = 30; do { double x = n, y = n2 * 0.1; std::cout << (x == y ? "EQ" : "NEQ") << ' '; --n; n2 -= 10; } while (n);
       //  It prints EQ NEQ NEQ on certain compilers.
-    _vecm_hashx_hdfd inline s_long operator () (double key) const { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; }
+    _vecm_hashx_hdfd inline s_long operator () (double key) const { struct s { double x; s(double x_) { x = x_; } }; s k(key); _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k.x);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; }
 
     template<class T> _vecm_hashx_hdfd inline s_long operator() (const T& key) const { return _hashf_t<T>().F(key); }
 
@@ -5230,6 +5233,12 @@ template<class T1, class T2, class T3, class T4, class T5> struct meta::copy_t<o
 
 } // namespace yk_c
 
+#ifdef _MSC_VER
+  #pragma warning(pop)
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic pop
+#endif
 #if defined(__clang__)
   #pragma clang diagnostic pop
 #endif

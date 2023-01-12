@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2022-10-16
+// rev. 2023-01-12
 // See bmdx_main.h for details.
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
@@ -91,7 +91,9 @@
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
 //  #pragma GCC diagnostic ignored "-Wpragmas"
+//  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 //  #pragma GCC diagnostic ignored "-Wunused-parameter"
+//  #pragma GCC diagnostic ignored "-Wunused-function"
 //  #pragma GCC diagnostic ignored "-Wundefined-bool-conversion"
 //  #pragma GCC diagnostic ignored "-Wnonnull-compare"
 //  #pragma GCC diagnostic ignored "-Wmisleading-indentation"
