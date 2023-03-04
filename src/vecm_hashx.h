@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2023-01-12
+// rev. 2023-03-03
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -40,10 +40,12 @@
   #pragma clang diagnostic ignored "-Wunknown-pragmas"
   #pragma clang diagnostic ignored "-Wunused-parameter"
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
   #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wunused-parameter"
   #pragma GCC diagnostic ignored "-Wunused-function"
@@ -3506,7 +3508,7 @@ struct hashx_common
 
     template<class T, int __vkind = _valkind<T>::result> struct _hashf_t { };
 
-    template<class T> struct _hashf_t<T, 1> { _vecm_hashx_hdfd s_long F(double key) { double k[1] = { key }; _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k[0]);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; } };
+    template<class T> struct _hashf_t<T, 1> { _vecm_hashx_hdfd s_long F(double key) { struct s { double x; s(double x_) { x = x_; } }; s k(key); _yk_reg const s_long* p = reinterpret_cast<const s_long*>(&k.x);  return p[0] >> 17 ^ p[0] * 37 ^ p[1] >> 13 ^ p[1] * 169; } };
     template<class T> struct _hashf_t<T, 2> { _vecm_hashx_hdfd s_long F(s_long key) { return key >> 17 ^ key * 37; } };
     template<class T> struct _hashf_t<T, 3> { _vecm_hashx_hdfd s_long F(const T& key) { const T k[1] = { key }; _yk_reg s_long h = 0; _yk_reg const char* p = reinterpret_cast<const char*>(&k[0]); _yk_reg s_long n = sizeof(T); while (n > 0) { h *= 19; h -= *p++; --n; } h ^= s_long(sizeof(T)); h ^= 53970; return h; } };
 

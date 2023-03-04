@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2023-01-12
+// rev. 2023-03-03
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -39,6 +39,7 @@
   #pragma clang diagnostic ignored "-Wunused-parameter"
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
   #pragma clang diagnostic ignored "-Wunused-function"
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic push
@@ -151,7 +152,7 @@ using namespace bmdx;
       #if __bmdx_use_link_h == 3
         char buf[(4*PATH_MAX)] = "";
         char buf2[(4*PATH_MAX)] = "";
-        typedef int (*Fpidpath)(int pid, void* buf, uint32_t bufsize);
+        typedef int (*Fpidpath)(int pid, void* buf, bmdx_meta::u_long bufsize);
         #if TARGET_OS_IPHONE
           Fpidpath f = (Fpidpath)dlsym(RTLD_DEFAULT, "proc_pidpath");
         #else
@@ -2441,6 +2442,7 @@ bmdx_shm::t_name_shm lm_slot_controller::__make_name_two_impl(arrayref_t<char> n
   #pragma clang diagnostic ignored "-Wunused-parameter"
   #pragma clang diagnostic ignored "-Wundefined-bool-conversion"
   #pragma clang diagnostic ignored "-Wunused-function"
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic push
@@ -11012,7 +11014,7 @@ namespace bmdx
         sysctl(mib, 4, buf, &n, 0, 0);
         buf[n] = '\0';
       #elif __APPLE__ && __MACH__
-        typedef int (*Fpidpath)(int pid, void* buf, uint32_t bufsize);
+        typedef int (*Fpidpath)(int pid, void* buf, bmdx_meta::u_long bufsize);
         #if TARGET_OS_IPHONE
           Fpidpath f = (Fpidpath)dlsym(RTLD_DEFAULT, "proc_pidpath");
         #else
@@ -11062,7 +11064,7 @@ namespace bmdx
         std::string s;
         int n2;
         char buf[100];
-        n2 = std::sprintf(buf, "pargs %i", int(getpid()));
+        n2 = __bmdx_snprintf(buf, sizeof(buf), "pargs %i", int(getpid()));
         if (n2 <= 0) { return argv; }
 
         FILE* f = popen(buf, "r");
@@ -11079,7 +11081,7 @@ namespace bmdx
         _t_sz pos = 0;
         do
         {
-          n2 = std::sprintf(buf, "argv[%i]: ", iarg);
+          n2 = __bmdx_snprintf(buf, sizeof(buf), "argv[%i]: ", iarg);
           if (n2 <= 0) { break; }
           _t_sz pos2 = s.find(buf, pos);
           if (pos2 == end) { break; }
@@ -11273,15 +11275,15 @@ namespace bmdx
   struct file_utils::__utils_l2
   {
     static const int _access_f_ok = 0;
-    int mask_ex_fs_u(const wchar_t* path)
+    int get_st_mode(const wchar_t* path)
     {
       if (0 != __bmdx_wnds_waccess(path, _access_f_ok)) { return 0; }
       struct _stat st;
       if (0 != __bmdx_wnds_wstat(path, &st)) { return 0; }
       return st.st_mode;
     }
-    bool is_ex_dir_u(const wchar_t* path) { return !!(mask_ex_fs_u(path) & S_IFDIR); }
-    bool is_ex_file_u(const wchar_t* path) { return !!(mask_ex_fs_u(path) & S_IFREG); }
+    bool is_ex_dir_u(const wchar_t* path) { return !!file_io::_mask_match_mode(get_st_mode(path), S_IFDIR); }
+    bool is_ex_file_u(const wchar_t* path) { return !!file_io::_mask_match_mode(get_st_mode(path), S_IFREG); }
   };
 
   bool file_utils::is_full_path(const std::wstring& pathstr) const { return pathstr.length() >= 2 && (wstring_like(pathstr.substr(0, 2), L"[a-zA-Z]:") || pathstr.substr(0, 2) == wpathsep2()); } // <Wnds> </Wnds>
@@ -11388,11 +11390,13 @@ namespace bmdx
   {
       if ((flags & 6) == 0) { return -1; }
       try {
-        int m = __utils_l2().mask_ex_fs_u(pathstr.c_str());
-        if (m == 0) { return 0; }
-        if (!(((m & S_IFREG) && (flags & 0x2)) || ((m & S_IFDIR) && (flags & 0x4)))) { return -4; }
+        int m1 = __utils_l2().get_st_mode(pathstr.c_str());
+          if (m1 == 0) { return 0; }
+        const int fl_pair2_low = 0x4; // see _mask_match_mode call with S_IFDIR as arg. below
+        int m2 = file_io::_mask_match_mode(m1, (flags & 0x2) ? S_IFREG : 0, (flags & 0x4) ? S_IFDIR : 0);
+          if (!m2) { return -4; }
         int res = -1;
-        if (m & S_IFDIR) { res = __bmdx_wnds_wrmdir(pathstr.c_str()); }
+        if (m2 & fl_pair2_low) { res = __bmdx_wnds_wrmdir(pathstr.c_str()); }
           else { res = __bmdx_wnds_wremove(pathstr.c_str()); }
         if (res != 0) { return -3; }
         return 1;

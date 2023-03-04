@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-01-12
+// rev. 2023-03-03
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -95,10 +95,17 @@
 #endif
 
 
+#if defined(__clang__)
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Wunknown-pragmas"
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic ignored "-Wpragmas"
   #pragma GCC diagnostic ignored "-Wdeprecated"
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Warray-bounds"
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
   #pragma GCC diagnostic ignored "-Wstrict-overflow"
   #pragma GCC diagnostic ignored "-Wint-in-bool-context"
@@ -340,6 +347,13 @@ inline int __bmdx_psx_SCHED_OTHER()
   #define __bmdx_isfinite finite
 #else
   #define __bmdx_isfinite std::isfinite
+#endif
+
+  // std::snprintf
+#if defined(__SUNPRO_CC) || defined(__ANDROID__)
+  #define __bmdx_snprintf snprintf
+#else
+  #define __bmdx_snprintf std::snprintf
 #endif
 
   // atomics
@@ -587,7 +601,7 @@ namespace bmdx_str
           {
             if (!_rc_hs)
             {
-              struct _name_hs { static inline const char* f() { enum { q = 20, z = 9 }; static char x[] = "__bmdx_aoemulsem_pid\0\0\0\0\0\0\0\0\0\0"; if (x[q+z] == 0) { sprintf(&x[q], "%luX", (long unsigned int)GetCurrentProcessId()); x[q+z] = 1; } return x; } };
+              struct _name_hs { static inline const char* f() { enum { q = 20 }; static bool b_init = 0; static char x[] = "__bmdx_aoemulsem_pid\0\0\0\0\0\0\0\0\0\0\0"; if (!b_init) { __bmdx_snprintf(&x[q], sizeof(x) - size_t(q), "%lu", (long unsigned int)GetCurrentProcessId()); b_init = 1; } return x; } };
               HANDLE h = CreateSemaphoreA(0, 1, 1, _name_hs::f());
               if (!h) { _term_self(); } // CreateSemaphoreA must succeed
               WaitForSingleObjectEx(h, INFINITE, FALSE);
@@ -5962,7 +5976,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 
             if (t_exec == t_h::ppet_auto)
             {
-              #if defined(__GLIBC__) && __bmdx_cfg_allow_vfork
+              #if __bmdx_cfg_allow_vfork && defined(__GLIBC__) && !(__APPLE__ && __MACH__)
                 t_exec = t_h::ppet_vfork;
               #else
                 t_exec = t_h::ppet_fork;
@@ -6397,6 +6411,9 @@ __bmdx_tidh_t _threadctl_tu_static_t<_>::th_get_tid(_threadctl_ctx_data* p) __bm
   #define __bmdx_wnds_wremove ::_wremove
   #define __bmdx_wnds_waccess ::_waccess
   #define __bmdx_wnds_wstat ::_wstat
+  #define __bmdx_stat_mode_char _S_IFCHR
+  #define __bmdx_stat_mode_pipe _S_IFIFO
+  #define __bmdx_stat_mode_block 0
 #endif
 #ifdef _bmdxpl_Psx
   #define __bmdx_std_getcwd ::getcwd
@@ -6404,6 +6421,9 @@ __bmdx_tidh_t _threadctl_tu_static_t<_>::th_get_tid(_threadctl_ctx_data* p) __bm
   #define __bmdx_std_rmdir ::rmdir
   #define __bmdx_std_mkdir_arg2 , 0777
   #define __bmdx_std_access ::access
+  #define __bmdx_stat_mode_char S_IFCHR
+  #define __bmdx_stat_mode_pipe S_IFIFO
+  #define __bmdx_stat_mode_block S_IFBLK
 #endif
 namespace bmdx
 {
@@ -8108,6 +8128,10 @@ namespace bmdx
       //    b) POSIX systems: ignored.
     static bool is_ex_file(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex           { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, S_IFREG, 0); }
     static bool is_ex_dir(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex            { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, S_IFDIR, 0); }
+    static bool is_ex_char_device(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex    { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, __bmdx_stat_mode_char, 0); }
+    static bool is_ex_pipe(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex            { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, __bmdx_stat_mode_pipe, 0); }
+      // NOTE Block device file type is not supported in Windows.
+    static bool is_ex_block_device(arrayref_t<char> path, _s_long flags = 0 __bmdx_noarg) __bmdx_noex         { return !!_mask_ex_fs_entry(_t_cstr(path).c_str(), flags, __bmdx_stat_mode_block, 0); }
 
       // Creates the specified directory (NOTE POSIX: with rwx access),
       //    or does nothing if the directory already exists.
@@ -8332,7 +8356,7 @@ namespace bmdx
 
   private:
     file_io& operator=(const file_io&);
-
+    friend struct file_utils;
     static const int _access_f_ok = 0;
 
     t_handle _desc;
@@ -8369,8 +8393,27 @@ namespace bmdx
       #endif
       return res;
     }
-      // Checks stat, returns stat::st_mode & entry_type_S_IF.
-    static int _mask_ex_fs_entry(const char* ppath, _s_long flags, int entry_type_S_IF, const std::wstring* opt_pwpath __bmdx_noarg) __bmdx_noex
+      // Returns combination of flags, if S_IFMT part of st_mode equals to high or low non-zero dword of pair1, pair2:
+      //    0x1 - for low dword of pair1
+      //    0x2 - for high dword of pair1
+      //    0x4 - for low dword of pair2
+      //    0x8 - for high dword of pair2
+    static int _mask_match_mode(unsigned st_mode, _u_ll pair1, _u_ll pair2 = 0)
+    {
+      unsigned mode_only = st_mode & S_IFMT;
+      unsigned f1 = unsigned(pair1);
+      unsigned f2 = unsigned(pair1 >> 32);
+      unsigned f3 = unsigned(pair2);
+      unsigned f4 = unsigned(pair2 >> 32);
+      int res = 0;
+      if (f1 && mode_only == f1) { res |= 1; }
+      if (f2 && mode_only == f2) { res |= 2; }
+      if (f3 && mode_only == f3) { res |= 4; }
+      if (f4 && mode_only == f4) { res |= 8; }
+      return res;
+    }
+      // Checks stat, returns stat::st_mode matching with high or low non-zero dword of entry_type_S_IF.
+    static int _mask_ex_fs_entry(const char* ppath, _s_long flags, _u_ll entry_type_S_IF, const std::wstring* opt_pwpath __bmdx_noarg) __bmdx_noex
     {
       (void)flags; (void)opt_pwpath;
       if (!(ppath && !!*ppath)) { return 0; }
@@ -8384,13 +8427,13 @@ namespace bmdx
               if (0 != __bmdx_wnds_waccess(p->c_str(), _access_f_ok)) { return 0; }
               struct _stat st;
               if (0 != __bmdx_wnds_wstat(p->c_str(), &st)) { return 0; }
-              return st.st_mode & entry_type_S_IF;
+              return _mask_match_mode(st.st_mode, entry_type_S_IF);
           }
         #endif
         if (0 != __bmdx_std_access(ppath, _access_f_ok)) { return 0; }
-        struct stat st;
+        struct stat st; std::memset(&st, 0, sizeof(st));
         if (0 != stat(ppath, &st)) { return 0; }
-        return st.st_mode & entry_type_S_IF;
+        return _mask_match_mode(st.st_mode, entry_type_S_IF);
       } catch (...) {}
       return 0;
     }
@@ -8417,25 +8460,27 @@ namespace bmdx
       if (!(ppath && !!*ppath)) { return -1; }
       if ((flags & 6) == 0) { return -1; }
       try {
+        const int fl_pair1_low = 0x1;
+        const int fl_pair1_high = 0x2;
         #ifdef _bmdxpl_Wnds
           if (flags & 0x1)
           {
               std::wstring s(bmdx_str::conv::bsws_utf8(ppath));
-              int m = _mask_ex_fs_entry(ppath, 0x1, S_IFREG | S_IFDIR, &s);
-              if (m == 0) { return 0; }
-              if (!(((m & S_IFREG) && (flags & 0x2)) || ((m & S_IFDIR) && (flags & 0x4)))) { return -4; }
+              int m2 = _mask_ex_fs_entry(ppath, 0x1, (_u_ll(S_IFREG) << 32) | S_IFDIR, &s);
+                if (m2 == 0) { return 0; }
+              if (!(((m2 & fl_pair1_high) && (flags & 0x2)) || ((m2 & fl_pair1_low) && (flags & 0x4)))) { return -4; }
               int res = -1;
-              if (m & S_IFDIR) { res = __bmdx_wnds_wrmdir(s.c_str()); }
+              if (m2 & fl_pair1_low) { res = __bmdx_wnds_wrmdir(s.c_str()); }
                 else { res = __bmdx_wnds_wremove(s.c_str()); }
               if (res != 0) { return -3; }
               return 1;
           }
         #endif
-        int m = _mask_ex_fs_entry(ppath, 0, S_IFREG | S_IFDIR, 0);
-        if (m == 0) { return 0; }
-        if (!(((m & S_IFREG) && (flags & 0x2)) || ((m & S_IFDIR) && (flags & 0x4)))) { return -4; }
+        int m2 = _mask_ex_fs_entry(ppath, 0, (_u_ll(S_IFREG) << 32) | S_IFDIR, 0);
+          if (m2 == 0) { return 0; }
+        if (!(((m2 & fl_pair1_high) && (flags & 0x2)) || ((m2 & fl_pair1_low) && (flags & 0x4)))) { return -4; }
         int res = -1;
-        if (m & S_IFDIR) { res = __bmdx_std_rmdir(ppath); }
+        if (m2 & fl_pair1_low) { res = __bmdx_std_rmdir(ppath); }
           else { res = std::remove(ppath); }
         if (res != 0) { return -3; }
         return 1;
@@ -12299,6 +12344,9 @@ namespace bmdx
 #endif
 #if defined(__GNUC__) && !defined(__clang__)
   #pragma GCC diagnostic pop
+#endif
+#if defined(__clang__)
+  #pragma clang diagnostic pop
 #endif
 
 #endif // bmdx_cpiomt_H
