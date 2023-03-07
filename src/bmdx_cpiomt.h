@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-03-03
+// rev. 2023-03-07
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -104,6 +104,7 @@
   #pragma GCC diagnostic ignored "-Wpragmas"
   #pragma GCC diagnostic ignored "-Wdeprecated"
   #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  #pragma GCC diagnostic ignored "-Wdeprecated-copy"
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Warray-bounds"
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"

@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2023-03-03
+// rev. 2023-03-07
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -15276,7 +15276,8 @@ s_long dispatcher_mt::thread_proxy::_s_request(thread_proxy* pprx, cref_t<dispat
           else { retval = n; }
         return 1;
       }
-    } catch (...) { retval.clear(); return -2; }
+    } catch (...) { retval.clear(); }
+    return -2;
   }
   default: { return -1; }
   }
