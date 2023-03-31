@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-03-07
+// rev. 2023-03-31
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -653,7 +653,6 @@ namespace bmdx_str
         // See also atomrdal64_g.
       static inline _s_ll atomrdal64(const volatile void* pint64)
       {
-        if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
         static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
         if (f) { LONG64 xprv = f((volatile LONG64*)pint64, 0, 0); return xprv; }
         _s_ll x; __bmdx_aosem::lock_inpr(1); x = *(volatile _s_ll*)pint64; __bmdx_aosem::lock_inpr(0);
@@ -664,7 +663,6 @@ namespace bmdx_str
         // See also atomwral64_g.
       static inline void atomwral64(volatile void* pint64, _s_ll x)
       {
-        if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; return; }
         static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
         if (f) { LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (f((volatile LONG64*)pint64, x, xprv) != xprv); return; }
         __bmdx_aosem::lock_inpr(1); *(volatile _s_ll*)pint64 = x; __bmdx_aosem::lock_inpr(0);
@@ -684,7 +682,6 @@ namespace bmdx_str
         // atomrdal64_g should be used instead of atomrdal64 when pint64 points to value in shared memory.
       static inline _s_ll atomrdal64_g(const volatile void* pint64)
       {
-        if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
         static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
         if (f) { LONG64 xprv = f((volatile LONG64*)pint64, 0, 0); return xprv; }
         _s_ll x; __bmdx_aosem::lock_g(1); x = *(volatile _s_ll*)pint64; __bmdx_aosem::lock_g(0);
@@ -693,7 +690,6 @@ namespace bmdx_str
         // atomwral64_g should be used instead of atomwral64 when pint64 points to value in shared memory.
       static inline void atomwral64_g(volatile void* pint64, _s_ll x)
       {
-        if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; return; }
         static __bmdx_aosem::PF_intcmpexch64 f = __bmdx_aosem::pf1();
         if (f) { LONG64 xprv; do { xprv = *(volatile LONG64*)pint64; } while (f((volatile LONG64*)pint64, x, xprv) != xprv); return; }
         __bmdx_aosem::lock_g(1); *(volatile _s_ll*)pint64 = x; __bmdx_aosem::lock_g(0);
@@ -714,7 +710,6 @@ namespace bmdx_str
         // See also atomrdal64_g.
       static inline _s_ll atomrdal64(const volatile void* pint64)
       {
-        if (sizeof(void*) == 8) { return *(volatile _s_ll*)pint64; }
         #if __bmdx_atomic_use_std
           enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
           return ((std::atomic<_s_ll>*)pint64)->load();
@@ -733,7 +728,6 @@ namespace bmdx_str
         // See also atomwral64_g.
       static inline void atomwral64(volatile void* pint64, _s_ll x)
       {
-        if (sizeof(void*) == 8) { *(volatile _s_ll*)pint64 = x; return; }
         #if __bmdx_atomic_use_std
           enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 && sizeof(std::atomic<_s_ll>) == 8 ? 1 : 0) }; // require atomic object size == its own value size
           ((std::atomic<_s_ll>*)pint64)->store(x);
