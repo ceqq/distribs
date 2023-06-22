@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2023-03-31
+// rev. 2023-06-22
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -3380,8 +3380,8 @@ namespace
   };
 }
 
-#if _MSC_VER >= 1920
-    // NOTE VS 2019 compiler bug workaround.
+#if _MSC_VER >= 1916
+    // NOTE VS 2017, 2019 compiler bug workaround.
   template<class TA> const vecm::type_descriptor& __yk_c_typer_def() __bmdx_noex { return typer<TA>(); }
   template<class TA, class _bs> const vecm::type_descriptor& __yk_c_typer_def() __bmdx_noex { return typer<TA, _bs>(); }
 #else
