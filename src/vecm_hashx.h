@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2023-06-22
+// rev. 2023-06-22.2
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -91,7 +91,7 @@
   #define __vecm_noargv1
 #endif
 #ifndef __bmdx_noex
-  #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201406)
+  #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201103) || (_MSC_VER >= 1916)
     #define __bmdx_noex noexcept
     #define __bmdx_exs(a)
   #else
@@ -101,7 +101,7 @@
   #if __APPLE__ && __MACH__
     #define __bmdx_use_arg_tu 1
   #endif
-  #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201103)
+  #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201103) || (_MSC_VER >= 1916)
     #define __bmdx_exany noexcept(false)
   #else
     #define __bmdx_exany
