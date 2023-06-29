@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-06-22.2
+// rev. 2023-06-29
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -149,17 +149,14 @@
   #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201103) || (_MSC_VER >= 1916)
     #define __bmdx_noex noexcept
     #define __bmdx_exs(a) noexcept(false)
+    #define __bmdx_exany noexcept(false)
   #else
     #define __bmdx_noex throw()
     #define __bmdx_exs(a) throw(a)
+    #define __bmdx_exany
   #endif
   #if __APPLE__ && __MACH__
     #define __bmdx_use_arg_tu 1
-  #endif
-  #if (__cplusplus >= 201703) || (__APPLE__ && __MACH__ && __cplusplus >= 201103) || (_MSC_VER >= 1916)
-    #define __bmdx_exany noexcept(false)
-  #else
-    #define __bmdx_exany
   #endif
 #endif
 #ifndef __bmdx_use_cptr_cast
@@ -236,6 +233,12 @@ namespace bmdx_meta
   #include <io.h>
   #include <direct.h>
   #include <conio.h>
+
+  #ifdef WINAPI_FAMILY_PARTITION
+    #define __bmdx_wfp WINAPI_FAMILY_PARTITION
+  #else
+    #define __bmdx_wfp(x) 1
+  #endif
 
 #endif
 
@@ -4116,7 +4119,9 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
     if (!p->in_thread) { th_ctx_release(p, 2); return 1; }
 
     if ((flags & 1) && QueueUserAPC(_th_apc_cleanup, p->th, (ULONG_PTR)p)) { }
-      else if (flags & 2) { TerminateThread(p->th, 1); }
+      #if __bmdx_wfp(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM | WINAPI_PARTITION_GAMES)
+        else if (flags & 2) { TerminateThread(p->th, 1); }
+      #endif
       else { return -3; }
     th_ctx_release(p, 2);
     return 2;
@@ -9914,15 +9919,34 @@ namespace _api // public API, merged into namespace bmdx_shm
         else
         {
           if (__p) { UnmapViewOfFile(__p); __p = 0; }
-          if (b_maycreate)
-          {
-            h2 = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nbtotal >> 32), DWORD(nbtotal & 0xffffffffll), _shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str());
-            b_reset = h2 && GetLastError() != ERROR_ALREADY_EXISTS;
-          }
-          else
-          {
-            h2 = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, _shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str());
-          }
+          #if __bmdx_wfp(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_GAMES)
+            if (b_maycreate)
+            {
+              h2 = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nbtotal >> 32), DWORD(nbtotal & 0xffffffffll), _shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str());
+              b_reset = h2 && GetLastError() != ERROR_ALREADY_EXISTS;
+            }
+            else
+            {
+              h2 = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, _shmname_limited_nb(_name, __bmdx_shm_name_max ).c_str());
+            }
+          #else
+            WCHAR wbuf[__bmdx_shm_name_max+1] = {0};
+            const int nc_src = (int)bmdx_minmax::mylmin(__bmdx_shm_name_max, _name.n());
+            int nwc = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, _name.c_str(), nc_src, wbuf, __bmdx_shm_name_max);
+            if (nwc > 0)
+            {
+              wbuf[nwc] = 0;
+              if (b_maycreate)
+              {
+                h2 = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nbtotal >> 32), DWORD(nbtotal & 0xffffffffll), wbuf);
+                b_reset = h2 && GetLastError() != ERROR_ALREADY_EXISTS;
+              }
+              else
+              {
+                h2 = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, wbuf);
+              }
+            }
+          #endif
           if (!h2) { return 0; }
         }
         _s_long* p2 = (_s_long*)MapViewOfFile(h2, FILE_MAP_ALL_ACCESS, 0, 0, SIZE_T(nbtotal));
@@ -11374,7 +11398,7 @@ namespace _api // public API, merged into namespace bmdx_shm
         void* p = mmap(0, size_t(nb_alloc), PROT_READ|PROT_WRITE, f, -1, 0);
         if (p && p != MAP_FAILED) { phw = (_header_whole*)p; }
       #elif defined(_bmdxpl_Wnds)
-        HANDLE hfm = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nb_alloc >> 32), DWORD(nb_alloc & 0xffffffffll), NULL);
+        HANDLE hfm = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, DWORD(nb_alloc >> 32), DWORD(nb_alloc & 0xffffffffll), NULL);
         if (hfm)
         {
           void* p = MapViewOfFile(hfm, FILE_MAP_ALL_ACCESS, 0, 0, SIZE_T(nb_alloc));
@@ -11403,7 +11427,11 @@ namespace _api // public API, merged into namespace bmdx_shm
         bool b = 0 == mlock(phw->mem.pd(), (size_t)phw->mem.n());
       #elif defined(_bmdxpl_Wnds)
         SIZE_T nbx = (SIZE_T)phw->mem.n();
-        bool b = !!VirtualLock(phw->mem.pd(), nbx);
+        #if __bmdx_wfp(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+          bool b = !!VirtualLock(phw->mem.pd(), nbx);
+        #else
+          bool b = false;
+        #endif
         if (!b)
         {
           HANDLE hp = GetCurrentProcess(); SIZE_T nbmin = 0, nbmax = 0;
@@ -11456,7 +11484,12 @@ namespace _api // public API, merged into namespace bmdx_shm
         else { iref2_args_t<t_stringref>::sf_free(hw.mem.pd()); }
     #elif defined(_bmdxpl_Wnds)
       SIZE_T nbx = (SIZE_T)hw.mem.n();
-      if (hw.flags & fl_use_pagelock) { VirtualUnlock(hw.mem.pd(), nbx); }
+      if (hw.flags & fl_use_pagelock)
+      {
+        #if __bmdx_wfp(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+          VirtualUnlock(hw.mem.pd(), nbx);
+        #endif
+      }
       if (hw.flags & _fl_revert_ws)
       {
         HANDLE hp = GetCurrentProcess(); SIZE_T nbmin = 0, nbmax = 0;
