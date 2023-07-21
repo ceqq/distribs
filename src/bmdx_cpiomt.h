@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-06-29
+// rev. 2023-07-14
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -8195,19 +8195,26 @@ namespace bmdx
       //  0x1:
       //    a) Windows: assume file name being encoded in UTF-8 instead of system encoding.
       //    b) POSIX systems: ignored.
+      //  0x2 (Linux only): assume pfilename to be Linux block device, not file.
+      //    wr_trunc arg. will be ignored.
+      //    For other systems: setting this flag is not valid.
       // result():
       //    1 - success,
       //    -1 opening existing file for reading failed,
       //    -2 opening existing file for r/w failed,
-      //    -3 file does not exist, cannot open for reading.
-      //    -4 file does not exist, file creation (for r/w) failed.
-      //    -5 pfilename is null.
+      //    -3 file does not exist (or incompatible type): cannot open for reading.
+      //    -4 file does not exist (or incompatible type): file creation (for r/w) failed.
+      //    -5 a) pfilename is null, b) invalid flags.
       //    -6 common-case failure.
     inline void open(const char* pfilename, bool can_wrcr, bool wr_trunc = false, _s_long flags = 0 __bmdx_noarg) __bmdx_noex
     {
       (void)flags;
-      if (!(pfilename && !!*pfilename)) { _res = -5; }
+      if (!(pfilename && !!*pfilename)) { _res = -5; return; }
       if (is_open()) { close(); }
+      bool b_blk = !!(flags & 2);
+      #ifndef __linux__
+        if (b_blk) { _res = -5; return; }
+      #endif
       #if defined(_bmdxpl_Wnds)
         try {
           std::wstring s;
@@ -8228,15 +8235,18 @@ namespace bmdx
           #endif
         } catch (...) { _res = -6; }
       #else
-        bool b_exf = !!_mask_ex_fs_entry(pfilename, 0, S_IFREG, 0);
-        const char* pmode = b_exf ? (can_wrcr ? (wr_trunc ? "w+b" : "r+b") : "rb") : (can_wrcr ? "w+b" : 0);
+        bool b_exf = !!_mask_ex_fs_entry(pfilename, 0, b_blk ? __bmdx_stat_mode_block : S_IFREG, 0);
+        const char* pmode = b_blk ? (can_wrcr ? "wb" : "rb") : (b_exf ? (can_wrcr ? (wr_trunc ? "w+b" : "r+b") : "rb") : (can_wrcr ? "w+b" : 0));
         int res_if_err = b_exf ? (can_wrcr ? -2 : -1) : (can_wrcr ? -4 : -3);
         if (pmode) { _desc = ::fopen(pfilename, pmode); _res = _desc ? 1 : res_if_err; }
           else { _res = res_if_err; }
         if (_desc) { __bmdx_fcntl_set_ocloexec(fileno(_desc)); }
       #endif
-      _mode = can_wrcr ? 2 : 1;
-      if (_res == 1) { std::setvbuf(_desc, 0, _IOFBF, _nwrchunk); }
+      if (_res == 1)
+      {
+        _mode = can_wrcr ? 2 : 1;
+        std::setvbuf(_desc, 0, _IOFBF, _nwrchunk);
+      }
     }
 
       // result():
@@ -8248,6 +8258,7 @@ namespace bmdx
       if (!is_open()) { _res = 0; return; }
       _res = fclose(_desc) == 0 ? 1 : -1;
       _desc = 0;
+      _mode = 0;
     }
 
       // result():
