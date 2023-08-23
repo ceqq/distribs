@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Polymorphic container for data and objects, message dispatcher, utilities.
-// rev. 2023-07-14
+// rev. 2023-08-21
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -251,10 +251,10 @@ namespace bmdx
     // Scalar types.
     // (utype() & utMaskScalar) makes one of these values.
     utEmpty,
-    utInt,      // integer number, represented by long
+    utInt,      // 64-bit integer number
     utFloat,    // f.p. number, represented by double
     utDate,     // date value, represented by double
-    utChar,     // char
+    utChar,     // 8-bit char
     utString,   // std::wstring
     utObject,   // object + descriptor
     utUnity,     // only in combination with utArray
@@ -856,10 +856,10 @@ namespace bmdx
 
   #if __bmdx_use_arg_tu
     o_iptr_t& operator=(const yk_c::meta::arg_tu_t<o_iptr_t>& x2)        __bmdx_exs(__bmdx_noargt1)
-      { const o_iptr_t& x = x2.x; _p_des(*this); new (this) o_iptr_t(x); return *this; }
+      { const o_iptr_t& x = x2.x; if (this == &x) { return *this; } _p_des(*this); new (this) o_iptr_t(x); return *this; }
   #else
     o_iptr_t& operator=(const o_iptr_t& x)        __bmdx_exs(__bmdx_noargt1)
-      { _des(); new (this) o_iptr_t(x); return *this; }
+      { if (this == &x) { return *this; } _des(); new (this) o_iptr_t(x); return *this; }
   #endif
 
 
@@ -1736,6 +1736,7 @@ namespace bmdx
       //  For pval<utt>(ind), the given utt may be either array type or its element type.
       //    ind is arrlb-based.
       //  NOTE The returned pointer may be either checked or safely dereferenced (throws XUExec on 0).
+      // NOTE Array elements (accessed by pval(ind)) are stored in memory non-contiguously.
     template<int utt> inline checked_ptr<typename valtype_t<utt>::t>
       pval(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>())                { return utt == utype() ? _drf_c_i<utt>() : 0; }
     template<class T> inline checked_ptr<T>
@@ -1854,7 +1855,7 @@ namespace bmdx
       //    d) if ind is out of range, XUExec is generated.
       // NOTE rx(), conv(), val() internally use common conversion function, always yielding same results for same original value.
       // NOTE Conversion removes the object name.
-      // NOTE Array, created to replace non-array,  is 1-based by default.
+      // NOTE Array, created to replace non-array, is 1-based by default.
     template<int utt> inline typename valtype_t<utt>::t&
       rx(meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>())                { if (utt == utype()) { return *pval<utt>(); } _x_cnv_this(csNormal, utt, false); if (utt == utype()) { return *pval<utt>(); } throw XUConvFailed("rx", _tname0(utype()), _tname0(utt)); }
     template<class T> inline T&
@@ -2000,6 +2001,7 @@ namespace bmdx
       //    3) csLazy -- non-transactional. Clears or initializes / the object to the target type. On alloc. error, sets utEmpty and generates XUConvFailed.
       // arr_init<utt>:
       //  Both scalar and array type is accepted. Array element type is resolved automatically.
+      // NOTE Array elements are stored in memory non-contiguously.
     template<int utt> vec2_t<typename valtype_t<utt & utMaskNoArray>::t>&
       arr_init(s_long arrlb, EConvStrength cs = csNormal, meta::noargi_tu_t<utt> = meta::noargi_tu_t<utt>())        { return arr_init<typename valtype_t<utt & utMaskNoArray>::t>(arrlb, cs); }
     template<class T> vec2_t<T>&
@@ -4338,7 +4340,7 @@ namespace
     uiterate(const unity& x_, s_long pos_, bool b_forward)        : x(x_) { _rdata() = 0; pos = pos_; _dir = b_forward ? 1 : -1; _set_utype(); }
     uiterate(const uiterate& x_)                                  : x(x_.x) { _rdata() = x_._rdata(); }
 
-    uiterate& operator=(const uiterate& x_)       { new (this) uiterate(x_); return *this; }
+    uiterate& operator=(const uiterate& x_)       { if (this == &x_) { return *this; } new (this) uiterate(x_); return *this; }
 
     uiterate& operator++()                        { if (_t == 1) { pos = _dir == 1 ? x.assocl_next(pos) : x.assocl_prev(pos); } else if (_t < 0) { pos += _dir; } else { pos ^= 1; } return *this; }
     uiterate& operator--()                        { if (_t == 1) { pos = _dir == 1 ? x.assocl_prev(pos) : x.assocl_next(pos); } else if (_t < 0) { pos -= _dir; } else { pos ^= 1; } return *this; }
@@ -4391,7 +4393,7 @@ namespace
     uiterate_nc(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
     uiterate_nc(const uiterate& x_)                                 : uiterate(x_) {}
 
-    uiterate_nc& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+    uiterate_nc& operator=(const uiterate& x_)       { if (this == &x_) { return *this; } uiterate::operator=(x_); return *this; }
 
     uiterate_nc& operator++()                        { uiterate::operator++(); return *this; }
     uiterate_nc& operator--()                        { uiterate::operator--(); return *this; }
@@ -4419,7 +4421,7 @@ namespace
     uiterate_k(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
     uiterate_k(const uiterate& x_)                                 : uiterate(x_) {}
 
-    uiterate_k& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+    uiterate_k& operator=(const uiterate& x_)       { if (this == &x_) { return *this; } uiterate::operator=(x_); return *this; }
 
     uiterate_k& operator++()                        { uiterate::operator++(); return *this; }
     uiterate_k& operator--()                        { uiterate::operator--(); return *this; }
@@ -4445,7 +4447,7 @@ namespace
     uiterate_v(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
     uiterate_v(const uiterate& x_)                                 : uiterate(x_) {}
 
-    uiterate_v& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+    uiterate_v& operator=(const uiterate& x_)       { if (this == &x_) { return *this; } uiterate::operator=(x_); return *this; }
 
     uiterate_v& operator++()                        { uiterate::operator++(); return *this; }
     uiterate_v& operator--()                        { uiterate::operator--(); return *this; }
@@ -4471,7 +4473,7 @@ namespace
     uiterate_vnc(const unity& x_, const char* spec = "b")            : uiterate(x_, spec) {}
     uiterate_vnc(const uiterate& x_)                                 : uiterate(x_) {}
 
-    uiterate_vnc& operator=(const uiterate& x_)       { uiterate::operator=(x_); return *this; }
+    uiterate_vnc& operator=(const uiterate& x_)       { if (this == &x_) { return *this; } uiterate::operator=(x_); return *this; }
 
     uiterate_vnc& operator++()                        { uiterate::operator++(); return *this; }
     uiterate_vnc& operator--()                        { uiterate::operator--(); return *this; }

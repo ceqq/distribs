@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-07-14
+// rev. 2023-08-21
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -2727,7 +2727,7 @@ namespace bmdx
     //cringbuf1_t(const cringbuf1_t& x);
     //~cringbuf1_t() __bmdx_noex;
 
-    cringbuf1_t& operator=(const cringbuf1_t& x) { cringbuf1_t a2(x); swap(a2); return *this; }
+    cringbuf1_t& operator=(const cringbuf1_t& x) { if (this == &x) { return *this; } cringbuf1_t a2(x); swap(a2); return *this; }
 
       // Remove all values, release all dynamic allocations.
       //  Set the container capacity to 0. Set navl(), ipush(), ipop() = 0.
@@ -2940,7 +2940,7 @@ namespace bmdx
 
     ~cppringbuf1_t() __bmdx_noex { _a_pop_n(navl()); }
 
-    cppringbuf1_t& operator=(const cppringbuf1_t& x) { cppringbuf1_t a2(x); swap(a2); return *this; }
+    cppringbuf1_t& operator=(const cppringbuf1_t& x) { if (this == &x) { return *this; } cppringbuf1_t a2(x); swap(a2); return *this; }
 
       // Remove all values, release all dynamic allocations.
       //  Set the container capacity to 0. Set navl(), ipush(), ipop() = 0.
@@ -3352,7 +3352,7 @@ namespace bmdx
       _capmax = q._capmax;
     }
 
-    vnnqueue_t& operator=(const vnnqueue_t& q) { vnnqueue_t q2(q); bmdx_str::words::swap_bytes(*this, q2); return *this; }
+    vnnqueue_t& operator=(const vnnqueue_t& q) { if (this == &q) { return *this; } vnnqueue_t q2(q); bmdx_str::words::swap_bytes(*this, q2); return *this; }
 
     ~vnnqueue_t() __bmdx_noex { pop_n(-1); _link_free_to_cpush(1, 0); _cols_release(); }
 
@@ -4731,7 +4731,7 @@ namespace bmdx
     }
 
     critsec_t(const critsec_t& x __bmdx_noarg) { new (this) critsec_t(x._flags._bl ? 10 : -1, x._flags._tms, x._p); }
-    critsec_t& operator=(const critsec_t& x) { critsec_t cs3(x); bmdx_str::words::swap_bytes(*this, cs3); return *this; }
+    critsec_t& operator=(const critsec_t& x) { if (this == &x) { return *this; } critsec_t cs3(x); bmdx_str::words::swap_bytes(*this, cs3); return *this; }
 
     private:
       _critsec_data0_t<T>* _p; typename _critsec_data0_t<T>::t_flags _flags;
@@ -4799,7 +4799,7 @@ namespace bmdx
       tid(const t_native_tid& x_ __bmdx_noarg) __bmdx_noex    { _threadctl_tu_static_t<>::_tid_set(_dat, x_); }
       tid(const tid& x_) __bmdx_noex    { _dat = x_._dat; }
       tid& operator=(const t_native_tid& x_) __bmdx_noex    { _threadctl_tu_static_t<>::_tid_set(_dat, x_); return *this; }
-      tid& operator=(const tid& x_) __bmdx_noex    { _dat = x_._dat; return *this; }
+      tid& operator=(const tid& x_) __bmdx_noex    { if (this == &x_) { return *this; } _dat = x_._dat; return *this; }
 
         // Comparison is not trivial.
       bool operator==(const tid& x_) const __bmdx_noex { if (!_dat.psm) { return !x_._dat.psm; } if (!x_._dat.psm) { return false; } typedef _s_long (*Peq)(const _threadctl_tid_data* p_my, const _threadctl_tid_data* p2); try { Peq f_eq = (Peq)_dat.psm(19); if (!f_eq) { return false; } return !!f_eq(&_dat, &x_._dat); } catch (...) {} return false; }
@@ -4860,7 +4860,7 @@ namespace bmdx
         _pctx = x._pctx;
         _tid = x._tid;
       }
-    threadctl& operator=(const threadctl& x)    { threadctl x3(x); swap(x3); return *this; }
+    threadctl& operator=(const threadctl& x)    { if (this == &x) { return *this; } threadctl x3(x); swap(x3); return *this; }
 
       // System-independent (wrapped) ID of the thread, controlled by *this.
       // NOTE This kind of thread ID can be used only for thread identification.
@@ -6806,7 +6806,7 @@ namespace bmdx
         // Copying and assignment do not generate exceptions,
         //  because the reference remains valid and locked.
       safe_refnc(const safe_refnc& x __bmdx_noarg) __bmdx_noex        : __lock(x.ref), ref(x.ref), xnc(x.xnc) {}
-      void operator=(const safe_refnc& x) __bmdx_noex    { safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
+      void operator=(const safe_refnc& x) __bmdx_noex    { if (this == &x) { return; } safe_refnc temp(x); bmdx_str::words::swap_bytes(*this, temp); }
     private:
       static T& _ref(const cref_t& r __bmdx_noarg) __bmdx_exs(exc_ref_ts)    { T* p = r._pnonc_u(); if (!p) { throw exc_ref_ts(); } return *p; }
     };
@@ -6951,7 +6951,7 @@ namespace bmdx
 
     ~cref_t() __bmdx_noex    { if (!_ph) { return; } t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); }
 
-    cref_t& operator=(const cref_t& x) __bmdx_noex    { cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
+    cref_t& operator=(const cref_t& x) __bmdx_noex    { if (this == &x) { return *this; } cref_t temp(x); t_lock __lock(*this); if (sizeof(__lock)) {} _reset(); _p = temp._p; _ph = temp._ph; temp._p = 0; temp._ph = 0; _ps = temp._ps; return *this; }
 
       // NOTE Clearing does not change the critical section used for object locking, only ensures it to be non-0.
       //  Assign another empty cref_t instead of clear(), for guaranteed setting the default critical section.

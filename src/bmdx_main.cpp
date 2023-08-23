@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2023-07-14
+// rev. 2023-08-21
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -292,7 +292,7 @@ struct weakref_t
   weakref_t(const weakref_t& w) : info(w.info), pwk(w.pwk) {} // NOTE weakref_t() is not locked => w must not be modified concurrently with weakref_t()
     // NOTE assignment: both *this and x must not be modified concurrently with assignment *this = x
   void operator=(const refmaker_t<T>& x) __bmdx_noex { info = x.info; pwk = x.strongref._pnonc_u(); }
-  void operator=(const weakref_t<T>& x) __bmdx_noex { info = x.info; pwk = x.pwk; }
+  void operator=(const weakref_t& x) __bmdx_noex { if (this == &x) { return; } info = x.info; pwk = x.pwk; }
 };
 } // namespace bmdx_main_intl_lib
 namespace yk_c
@@ -6282,7 +6282,7 @@ void unity::clear() __bmdx_noex
   ut = utEmpty;
 }
 
-unity& unity::operator=(const unity& src) { _x_asg(src, 0); return *this; }
+unity& unity::operator=(const unity& src) { if (this == &src) { return *this; } _x_asg(src, 0); return *this; }
 unity& unity::operator=(const std::wstring& src)
 {
   std::wstring* next = cv_ff::cv_wstring::Lnew(pmsm, src.length(), cv_ff::cv_wstring::Fp0(&src), cv_ff::cv_wstring::Fwcs(), 0);
@@ -12146,7 +12146,7 @@ unity::mod_handle::mod_handle(const mod_handle& h1) __bmdx_noex
   try { f_ch(&h1, this); } catch (...) {}
 }
 void unity::mod_handle::operator=(const mod_handle& h1) __bmdx_noex
-  { mod_handle h3(h1); this->clear(); this->swap(h3); }
+  { if (this == &h1) { return; } mod_handle h3(h1); this->clear(); this->swap(h3); }
 void unity::mod_handle::swap(mod_handle& h1) __bmdx_noex
   { bmdx_str::words::swap_bytes(*this, h1); }
 void unity::mod_handle::clear() __bmdx_noex

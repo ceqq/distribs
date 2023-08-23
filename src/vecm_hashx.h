@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2023-07-14
+// rev. 2023-08-21
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -4655,6 +4655,7 @@ namespace _yk_c2
         template<class TA2, class _bs2> inline explicit vec2_t(const vec2_t<TA2, _bs2>& x __vecm_noarg) : vecm(yk_c::__yk_c_typer_def<_v2ta_a<ta_value>, _bs>, 0) { if (_l_copy(&x, x.rvecm(), 0) == 1) { return; } throw exc_vec2_t("vec2_t(c vec2_t<TA2>&)"); }
       inline vec2_t& operator=(const vec2_t& x) __bmdx_exs(exc_vec2_t  __vecm_noargt)
       {
+        if (this == &x) { return *this; }
           // NOTE actual copying is done in the binary module of *this.
         if (vec2_copy(x, true) == 1) { return *this; } throw exc_vec2_t("vec2_t.operator=");
       }
