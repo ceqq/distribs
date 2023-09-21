@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  High-performance multipart vectors, associative arrays with access by both key and ordinal number. Standalone header.
-// rev. 2023-08-21
+// rev. 2023-09-11
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -4574,6 +4574,7 @@ namespace _yk_c2
       }
       static s_long _ls_swap(void* p1, void* p2) __bmdx_noex
       {
+        if (p1 == p2) { return true; }
         typedef vec2_t<TA, __vecm_tu_selector> Q; enum { _nq = sizeof(Q), _nst = 1 + _nq / sizeof(meta::s_ll) };
         Q* pct1 = reinterpret_cast<Q*>(p1); Q* pct2 = reinterpret_cast<Q*>(p2);
         if (pct1->locality() != 1 || pct2->locality() != 1) { return false; }
