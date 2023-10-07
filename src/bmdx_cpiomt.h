@@ -1,7 +1,7 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
 //  Cross-platform input/output, IPC, multithreading. Standalone header.
-// rev. 2023-09-11
+// rev. 2023-10-07
 //
 // Contacts: bmdx-dev [at] mail [dot] ru, z7d9 [at] yahoo [dot] com
 // Project website: hashx.dp.ua
@@ -380,7 +380,15 @@ inline int __bmdx_psx_SCHED_OTHER()
 #if __bmdx_atomic_use_cc_atomic_h
   #include <sys/atomic.h>
 #endif
-
+#if __bmdx_atomic_use_interlocked
+  #if !defined(_M_AMD64) && !defined(_M_IA64) && !defined(_M_X64)
+    #include <intrin.h>
+    #pragma intrinsic (_InterlockedOr)
+    #define InterlockedOr _InterlockedOr
+    #define InterlockedExchange _InterlockedExchange
+    #define InterlockedCompareExchange _InterlockedCompareExchange
+  #endif
+#endif
 
 namespace bmdx
 {
@@ -777,6 +785,62 @@ namespace bmdx_str
 
     #endif
 
+      // Atomically reads x from location pointed to by pint32.
+      // pint32 must be aligned to 4-byte boundary.
+    static inline _s_long atomrdal32(const volatile void* pint32)
+    {
+      #if __bmdx_atomic_use_std
+        enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 ? 1 : 0) }; // require atomic object size == its own value size
+        return ((std::atomic<_s_long>*)pint32)->load();
+      #elif __bmdx_atomic_use_interlocked
+        return InterlockedOr((LONG*)pint32, 0);
+      #elif __bmdx_atomic_use_gcc_sync
+        return __sync_add_and_fetch((volatile _s_long*)pint32, 0);
+      #elif __bmdx_atomic_use_cc_atomic_h
+        return atomic_or_32_nv((volatile uint32_t*)pint32, 0);
+      #else
+        enum { e1 = 1 / 0 }; // OS/compiler must supply atomic read/write funcs.
+      #endif
+    }
+      // Atomically writes x to location pointed to by pint32.
+      // pint32 must be aligned to 4-byte boundary.
+    static inline void atomwral32(volatile void* pint32, _s_long x)
+    {
+      #if __bmdx_atomic_use_std
+        enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 ? 1 : 0) }; // require atomic object size == its own value size
+        ((std::atomic<_s_long>*)pint32)->store(x);
+      #elif __bmdx_atomic_use_interlocked
+        InterlockedExchange((volatile LONG*)pint32, x);
+      #elif __bmdx_atomic_use_gcc_sync
+        __sync_bool_compare_and_swap((volatile _s_long*)pint32, atomrdal32(pint32), x);
+      #elif __bmdx_atomic_use_cc_atomic_h
+        atomic_swap_32((volatile uint32_t*)pint32, x);
+      #else
+        enum { e1 = 1 / 0 }; // OS/compiler must supply atomic read/write funcs.
+      #endif
+    }
+      // Atomically adds x to value pointed to by pint32.
+      // pint32 must be aligned to 4-byte boundary.
+      // Returns the result of addition.
+    static inline _s_long atomadd32(volatile void* pint32, _s_long x)
+    {
+      #if __bmdx_atomic_use_std
+        enum { e0 = 1 / (sizeof(std::atomic<_s_long>) == 4 ? 1 : 0) }; // require atomic object size == its own value size
+        return ((std::atomic<_s_long>*)pint32)->fetch_add(x) + x;
+      #elif __bmdx_atomic_use_interlocked
+        #ifdef InterlockedAdd
+          return InterlockedAdd((volatile LONG*)pint32, x);
+        #else
+          LONG xprv; do { xprv = *(volatile LONG*)pint32; } while (InterlockedCompareExchange((volatile LONG*)pint32, xprv + x, xprv) != xprv); return xprv + x;
+        #endif
+      #elif __bmdx_atomic_use_gcc_sync
+        return __sync_add_and_fetch((volatile _s_long*)pint32, x);
+      #elif __bmdx_atomic_use_cc_atomic_h
+        return _s_long(atomic_add_32_nv((volatile uint32_t*)pint32, x));
+      #else
+        enum { e1 = 1 / 0 }; // OS/compiler must supply atomic add func.
+      #endif
+    }
 
     template<class T, class Aux = bmdx_meta::nothing, class _ = yk_c::__vecm_tu_selector> struct memmove_t
     {
@@ -2830,7 +2894,7 @@ namespace bmdx
       if (n == 0) { return 1; }
       if (n > nfree()) { return -1; }
       _s_ll np2 = n;
-      t_value* p2 = a.pd() + _ipush % a.n();
+      t_value* p2 = a.pd() + _s_ll(_u_ll(_ipush) % a.n());
       const t_value* const pe = a.pd() + a.n();
       try { do { *p2++ = *pss++; if (p2 == pe) { p2 = a.pd(); } } while (--np2); } catch (...) { return -3; }
       bmdx_str::words::atomadd64(&_ipush, n);
@@ -2843,7 +2907,7 @@ namespace bmdx
       // NOTE tail may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency:
       //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
-    t_value& tail(_s_ll ineg) __bmdx_noex { _s_ll i = (bmdx_str::words::atomrdal64(&_ipush) + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
+    t_value& tail(_s_ll ineg) __bmdx_noex { _s_ll i = _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipush) + ineg) % a.n()); if (i < 0) { i += a.n(); } return a[i]; }
     const t_value& tail(_s_ll ineg) const __bmdx_noex { return ((cringbuf1_t*)this)->tail(ineg); }
 
     // CONSUMER part
@@ -2862,14 +2926,14 @@ namespace bmdx
       //      If n2 > 0, the second contiguous part (n2 values), starts at &(*this)[navl_contig()].
       // Concurrency:
       //    same as navl(), only navl_contig() may not be used to access the second contiguous part of values.
-    _s_ll navl_contig() const __bmdx_noex { if (a.n() <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64(&_ipush), ipo = bmdx_str::words::atomrdal64(&_ipop); return bmdx_minmax::myllmin(a.n() - ipo % a.n(), ipu - ipo); }
+    _s_ll navl_contig() const __bmdx_noex { if (a.n() <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64(&_ipush), ipo = bmdx_str::words::atomrdal64(&_ipop); return bmdx_minmax::myllmin(a.n() - _s_ll(_u_ll(ipo) % a.n()), ipu - ipo); }
 
       // Pop one value.
       // Returns:
       //    true - popped successfully,
       //    false - not popped because the buffer is currently empty.
       // Concurrency: may be safely called by Consumer only.
-    bool pop_1() __bmdx_noex { if (bmdx_str::words::atomrdal64(&_ipush) <= _ipop) { return false; } bmdx_str::words::atomadd64(&_ipop, 1); return true; }
+    bool pop_1() __bmdx_noex { if (bmdx_str::words::atomrdal64(&_ipush) - _ipop <= 0) { return false; } bmdx_str::words::atomadd64(&_ipop, 1); return true; }
 
       // Pop multiple values.
       //    n >= 0 specifies max. number of values to be popped.
@@ -2886,7 +2950,7 @@ namespace bmdx
       //    [0] - is the element that would be popped next.
       // NOTE operator[] may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency: may be safely called by Consumer only.
-    t_value& operator[] (_s_ll i) __bmdx_noex { _s_ll j = (bmdx_str::words::atomrdal64(&_ipop) + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
+    t_value& operator[] (_s_ll i) __bmdx_noex { _s_ll j = _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipop) + i) % a.n()); if (j < 0) { j += a.n(); } return a[j]; }
     const t_value& operator[] (_s_ll i) const __bmdx_noex { return ((cringbuf1_t&)*this)[i]; }
 
   private:
@@ -2896,7 +2960,7 @@ namespace bmdx
     static void _a_copy_n_u(carray_t<t_value, false>& adest, _s_ll idest, const carray_t<t_value, false>& asrc, _s_ll isrc, _s_ll n) // memory copying (without array capacity and other checks)
     {
       if (n <= 0) { return; }
-      const _s_ll i1 = isrc % asrc.n(); const _s_ll i2 = idest % adest.n();
+      const _s_ll i1 = _s_ll(_u_ll(isrc) % asrc.n()); const _s_ll i2 = _s_ll(_u_ll(idest) % adest.n());
       _s_ll n1 = asrc.n() - i1; _s_ll n2 = adest.n() - i2; const t_value* p1 = asrc.pd() + i1; t_value* p2 = adest.pd() + i2;
       _s_ll ncp = bmdx_minmax::myllmin(n1, n2, n);
       bmdx_str::words::memmove_t<t_value>::sf_memcpy(p2, p1, sizeof(t_value) * ncp);
@@ -3055,7 +3119,7 @@ namespace bmdx
       // NOTE tail() may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency:
       //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
-    t_value& tail(_s_ll ineg) __bmdx_noex { _s_ll i = (bmdx_str::words::atomrdal64(&_ipush) + ineg) % a.n(); if (i < 0) { i += a.n(); } return a[i]; }
+    t_value& tail(_s_ll ineg) __bmdx_noex { _s_ll i = _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipush) + ineg) % a.n()); if (i < 0) { i += a.n(); } return a[i]; }
     const t_value& tail(_s_ll ineg) const __bmdx_noex { return ((cppringbuf1_t*)this)->tail(ineg); }
 
     // CONSUMER part
@@ -3074,14 +3138,14 @@ namespace bmdx
       //      If n2 > 0, the second contiguous part (n2 values), starts at &(*this)[navl_contig()].
       // Concurrency:
       //    same as navl(), only navl_contig() may not be used to access the second contiguous part of values.
-    _s_ll navl_contig() const __bmdx_noex { if (a.n() <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64(&_ipush), ipo = bmdx_str::words::atomrdal64(&_ipop); return bmdx_minmax::myllmin(a.n() - ipo % a.n(), ipu - ipo); }
+    _s_ll navl_contig() const __bmdx_noex { if (a.n() <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64(&_ipush), ipo = bmdx_str::words::atomrdal64(&_ipop); return bmdx_minmax::myllmin(a.n() - _s_ll(_u_ll(ipo) % a.n()), ipu - ipo); }
 
       // Pop one element.
       // Returns:
       //    true - popped successfully,
       //    false - not popped because the buffer is currently empty.
       // Concurrency: may be safely called by Consumer only.
-    bool pop_1() __bmdx_noex { if (bmdx_str::words::atomrdal64(&_ipush) <= _ipop) { return false; } _a_pop_1(); return true; }
+    bool pop_1() __bmdx_noex { if (bmdx_str::words::atomrdal64(&_ipush) - _ipop <= 0) { return false; } _a_pop_1(); return true; }
 
       // Pop multiple elements.
       //    n >= 0 specifies max. number of values to be popped.
@@ -3096,7 +3160,7 @@ namespace bmdx
       // Same as pop_1(), but does not call element destructor.
       //  (For use with efficient memory copying on popping elements of movable types.)
       // Concurrency: may be safely called by Consumer only.
-    bool discard_1() __bmdx_noex { if (bmdx_str::words::atomrdal64(&_ipush) <= _ipop) { return false; } bmdx_str::words::atomadd64(&_ipop, 1); return true; }
+    bool discard_1() __bmdx_noex { if (bmdx_str::words::atomrdal64(&_ipush) - _ipop <= 0) { return false; } bmdx_str::words::atomadd64(&_ipop, 1); return true; }
 
       // Same as pop_n(), but does not call elements' destructors.
       //  (For use with efficient memory copying on popping elements of movable types.)
@@ -3107,7 +3171,7 @@ namespace bmdx
       //    [0] - is the element that would be popped next.
       // NOTE operator[] may not be called on empty buffer (on ncap() == 0) - this would cause page fault.
       // Concurrency: may be safely called by Consumer only.
-    t_value& operator[] (_s_ll i) __bmdx_noex { _s_ll j = (bmdx_str::words::atomrdal64(&_ipop) + i) % a.n(); if (j < 0) { j += a.n(); } return a[j]; }
+    t_value& operator[] (_s_ll i) __bmdx_noex { _s_ll j = _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipop) + i) % a.n()); if (j < 0) { j += a.n(); } return a[j]; }
     const t_value& operator[] (_s_ll i) const __bmdx_noex { return ((cppringbuf1_t&)*this)[i]; }
 
   private:
@@ -3117,15 +3181,15 @@ namespace bmdx
     typedef carray_t<t_value, false> _t_a;
     typedef typename _t_a::_t_size _t_size;
     struct __a2 : carray_t<t_value, false> { void _destroy(T* pd_, _t_size i0, _t_size i2) { this->_t_a::_destroy(pd_, i0, i2); } void _destroy1(T* pd_) { this->_t_a::_destroy1(pd_); } };
-    void _a_pop_1() { const _s_ll j = _ipop; static_cast<__a2*>(&a)->_destroy1(a.pd() + j % a.n()); bmdx_str::words::atomwral64(&_ipop, j + 1); }
+    void _a_pop_1() { const _s_ll j = _ipop; static_cast<__a2*>(&a)->_destroy1(a.pd() + _s_ll(_u_ll(j) % a.n())); bmdx_str::words::atomwral64(&_ipop, j + 1); }
     _s_ll _a_pop_n(_s_ll n) { const _s_ll j = _ipop; n = bmdx_minmax::myllmin(n, bmdx_str::words::atomrdal64(&_ipush) - j, a.n()); if (n <= 0) { return 0; } _a_destroy_n_u(a, j, n); bmdx_str::words::atomwral64(&_ipop, j + n); return n; }
-    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = ind0 % a.n(); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2*>(&a)->_destroy(a.pd(), _t_size(i0), _t_size(i2)); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2*>(&a)->_destroy(a.pd(), 0, _t_size(i2)); } }
+    static void _a_destroy_n_u(carray_t<t_value, false>& a, _s_ll ind0, _s_ll n) { if (n <= 0) { return; } _s_ll i0 = _s_ll(_u_ll(ind0) % a.n()); _s_ll i2 = bmdx_minmax::myllmin(i0 + n, a.n()); static_cast<__a2*>(&a)->_destroy(a.pd(), _t_size(i0), _t_size(i2)); i2 = n - (i2 - i0); if (i2 > 0) { static_cast<__a2*>(&a)->_destroy(a.pd(), 0, _t_size(i2)); } }
     static bool _a_copy_n_u(carray_t<t_value, false>& adest, _s_ll idest, const carray_t<t_value, false>& asrc, _s_ll isrc, _s_ll n) // transactional copying (without array capacity and other checks)
     {
       if (n <= 0) { return true; }
       _s_ll n2 = n;
-      const t_value* p1 = asrc.pd() + isrc % asrc.n(); const t_value* p1e = asrc.pd() + asrc.n();
-      t_value* p2 = adest.pd() + idest % adest.n(); const t_value* const p2e = adest.pd() + adest.n();
+      const t_value* p1 = asrc.pd() + _s_ll(_u_ll(isrc) % asrc.n()); const t_value* p1e = asrc.pd() + asrc.n();
+      t_value* p2 = adest.pd() + _s_ll(_u_ll(idest) % adest.n()); const t_value* const p2e = adest.pd() + adest.n();
       try { do { new (p2) t_value(*p1); ++p2; ++p1; if (p1 == p1e) { p1 = asrc.pd(); } if (p2 == p2e) { p2 = adest.pd(); } } while (--n2); }
       catch (...) { _a_destroy_n_u(adest, idest, n - n2); return false; }
       return true;
@@ -3137,7 +3201,7 @@ namespace bmdx
       if (n == 0) { return 1; }
       if (n > nfree()) { return -1; }
       _s_ll np2 = n;
-      t_value* p2 = a.pd() + _ipush % a.n();
+      t_value* p2 = a.pd() + _s_ll(_u_ll(_ipush) % a.n());
       const t_value* const pe = a.pd() + a.n();
       try { do { f(p2); ++p2; if (p2 == pe) { p2 = a.pd(); } } while (--np2); }
       catch (...) { _a_destroy_n_u(a, _ipush, n - np2); return -3; }
@@ -3245,16 +3309,16 @@ namespace bmdx
 
         // Index of the currently addressed element in the current column.
         //  The value is valid only if col() != 0. See also col().
-      _s_ll irow() const __bmdx_noex { return _i % _ct->_m; }
+      _s_ll irow() const __bmdx_noex { return _s_ll(_u_ll(_i) % _ct->_m); }
 
         // Returns true if iterator points to valid element, false otherwise.
-      bool b_elem() const __bmdx_noex { return _i >= _ipop && _i < _ipush; }
+      bool b_elem() const __bmdx_noex { return _i - _ipop >= 0 && _i - _ipush < 0; }
 
         // Returns true if the current iterator position is before the beginning of sequence.
-      bool b_bbeg() const __bmdx_noex { return _i < _ipop; }
+      bool b_bbeg() const __bmdx_noex { return _i - _ipop < 0; }
 
         // Returns true if the current iterator position >= end of sequence.
-      bool b_aend() const __bmdx_noex { return _i >= _ipush; }
+      bool b_aend() const __bmdx_noex { return _i - _ipush >= 0; }
 
         // This function may be used to access the current element or any element in the currently addressed column.
         // Returns:
@@ -3269,7 +3333,7 @@ namespace bmdx
         //  NOTE Iterators from different containers may not be compared or in any other way related.
       vnnqueue_t* ctnr() const __bmdx_noex { return _ct; }
 
-      inline reference operator*() const { if (!(_i >= _ipop && _i < _ipush)) { throw exc_range(); } return _c->data()[_i % _ct->_m]; }
+      inline reference operator*() const { if (!(_i - _ipop >= 0 && _i - _ipush < 0)) { throw exc_range(); } return _c->data()[_s_ll(_u_ll(_i) % _ct->_m)]; }
       inline pointer operator->() const { return &**this; }
 
 
@@ -3289,9 +3353,9 @@ namespace bmdx
       {
         if (delta == 0) { return *this; }
         volatile _s_ll i2 = _i + delta; // i2 is const ("volatile" suppresses a warning)
-        const bool bl = i2 < _ipop, br = i2 > _ipush;
+        const bool bl = i2 - _ipop < 0, br = i2 - _ipush > 0;
         if (!_c || bl || br || _ipush == _ipop) { _i = i2; return *this; } // if i2 is out of valid range, _ic continues to hold a real position
-        const _s_ll nsteps = (bl ? _ipop : (br ? _ipush : i2)) - (_ic - _ic % _ct->_m); // valid pos. rel. to c beginning
+        const _s_ll nsteps = (bl ? _ipop : (br ? _ipush : i2)) - (_ic - _s_ll(_u_ll(_ic) % _ct->_m)); // valid pos. rel. to c beginning
         if (nsteps > 0) { _s_ll icol = nsteps / _ct->_m; while (icol--) { _c = _c->_next; } }
         else if (nsteps < 0) { _s_ll icol = (nsteps + 1 - _ct->_m) / _ct->_m; while (icol++) { _c = _c->_prev; } }
         _i = _ic = i2;
@@ -3318,10 +3382,10 @@ namespace bmdx
         // NOTE Comparisons generate an exception if compared iterators belong to different containers.
       inline bool operator==(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i == x._i; }
       inline bool operator!=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i != x._i; }
-      inline bool operator>(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i > x._i; }
-      inline bool operator<(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i < x._i; }
-      inline bool operator>=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i >= x._i; }
-      inline bool operator<=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i <= x._i; }
+      inline bool operator>(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i - x._i > 0; }
+      inline bool operator<(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i - x._i < 0; }
+      inline bool operator>=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i - x._i >= 0; }
+      inline bool operator<=(const iterator_type& x) const { if (_ct != x._ct) { throw exc_iter(); } return _i - x._i <= 0; }
     };
     typedef iterator_t<false> iterator; typedef iterator_t<true> const_iterator;
     typedef T value_type; typedef T t_value;
@@ -3453,7 +3517,7 @@ namespace bmdx
         if (nrsv == 0 && na == 0) { _cols_release(); _col_scalars_reset(); _caps_reset(); }
         else
         {
-          const _s_ll n0 = na - _ipush % _m;
+          const _s_ll n0 = na - _s_ll(_u_ll(_ipush) % _m);
           _s_ll nrfact = n0 <= 0 ? 0 : (n0 + _m - 1) / _m * _m;
           column* cf = _cpush;
           while (nrfact < nrsv)
@@ -3512,7 +3576,7 @@ namespace bmdx
       //    the returned value is reliable for Consumer only.
       //    For Supplier, the capacity may decrease at any time between ncapeff() and value pushing.
       //      Use pre-set reserve and cap. hints to ensure enough place.
-    _s_ll ncapeff() const __bmdx_noex { _s_ll n = ncapp(); if (n == 0) { return 0; } n = n + _m - 1 - bmdx_str::words::atomrdal64(&_ipop) % _m; if (_capmax >= 0) { n = bmdx_minmax::myllmin(n, _capmax); } return n; }
+    _s_ll ncapeff() const __bmdx_noex { _s_ll n = ncapp(); if (n == 0) { return 0; } n = n + _m - 1 - _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipop)) % _m); if (_capmax >= 0) { n = bmdx_minmax::myllmin(n, _capmax); } return n; }
 
       // Absolute indices to the beginning and the end of sequence.
     _s_ll ipop() const __bmdx_noex { return bmdx_str::words::atomrdal64(&_ipop); }
@@ -3558,7 +3622,7 @@ namespace bmdx
       // Generates an exception on no elements in queue.
       // Concurrency:
       //    this function is UNSAFE to call by any side (due to unexpected bounds modification and queue exhausting).
-    t_value& back() { if (navl() <= 0) { throw exc_range(); } const _s_ll j = bmdx_str::words::atomrdal64(&_ipush) % _m - 1; if (j >= 0) { return _cpush->data()[j]; } else { return _cpush->_prev->data()[_m-1]; } }
+    t_value& back() { if (navl() <= 0) { throw exc_range(); } const _s_ll j = _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipush)) % _m) - 1; if (j >= 0) { return _cpush->data()[j]; } else { return _cpush->_prev->data()[_m-1]; } }
     const t_value& back() const { return ((vnnqueue_t*)this)->back(); }
 
       // Returns ref. to absolute pos. (ipush() + ineg).
@@ -3575,7 +3639,7 @@ namespace bmdx
       // Returns ref. to the element that would be popped next.
       // Generates an exception on no elements in queue.
       // Concurrency: may be safely called by Consumer only.
-    t_value& front() { if (navl() <= 0) { throw exc_range(); } return _cpop->data()[bmdx_str::words::atomrdal64(&_ipop) % _m]; }
+    t_value& front() { if (navl() <= 0) { throw exc_range(); } return _cpop->data()[_s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipop)) % _m)]; }
     const t_value& front() const { return ((vnnqueue_t*)this)->front(); }
 
       // Iterators may be safely created and their position manipulated at any time
@@ -3593,7 +3657,7 @@ namespace bmdx
       //    [0] - is the element that would be popped next, same as front().
       // Access time: proportional to i / m(). Hint: use iterator for sequential access.
       // Concurrency: may be safely called by Consumer only.
-    t_value& operator[](_s_ll i) { const _s_ll na = navl(); if (!(i >= 0 && i < na)) { throw exc_range(); } i += bmdx_str::words::atomrdal64(&_ipop) % _m; _s_ll icol = i / _m; column* c = _cpop; while (icol--) { c = c->_next; } return c->data()[i % _m]; }
+    t_value& operator[](_s_ll i) { const _s_ll na = navl(); if (!(i >= 0 && i < na)) { throw exc_range(); } i += _s_ll(_u_ll(bmdx_str::words::atomrdal64(&_ipop)) % _m); _s_ll icol = i / _m; column* c = _cpop; while (icol--) { c = c->_next; } return c->data()[_s_ll(_u_ll(i) % _m)]; }
     const t_value& operator[](_s_ll i) const { return ((vnnqueue_t&)*this)[i]; }
 
       // Removes one element.
@@ -3602,7 +3666,7 @@ namespace bmdx
       //    a) true if element existed (it was anyway removed).
       //    b) false otherwise.
       // Concurrency: may be safely called by Consumer only.
-    bool pop_1() __bmdx_noex { const _s_ll i0 = _ipop; const _s_ll i2 = bmdx_str::words::atomrdal64(&_ipush); if (i2 > i0) { _pop_range(i0, i0 + 1); return true; } return false; }
+    bool pop_1() __bmdx_noex { const _s_ll i0 = _ipop; const _s_ll i2 = bmdx_str::words::atomrdal64(&_ipush); if (i2 - i0 > 0) { _pop_range(i0, i0 + 1); return true; } return false; }
 
       // Removes multiple elements.
       //    n >= 0 specifies max. number of values to be popped.
@@ -3630,10 +3694,10 @@ namespace bmdx
 
     void _pop_range(_s_ll i0, _s_ll i2) // constraints: i0 == _ipop, i2 <= _ipush
     {
-      _s_ll ir = i0 % _m;
+      _s_ll ir = _s_ll(_u_ll(i0) % _m);
       _s_ll nccurr = bmdx_str::words::atomrdal64(&_cap_push); nccurr += _cap_pop;
       const _s_ll ncmin = _capmin >= 0 ? 2 + _capmin / _m : 2;
-      while (i0 < i2)
+      while (i0 - i2 < 0)
       {
         _destroy1(_cpop->data() + ir);
         ++i0;
@@ -3682,7 +3746,7 @@ namespace bmdx
 
       inew = (char*)cfl->_next - (char*)0;
       column* cf = cfl;
-      if (1) { cfl->_next = 0; _s_ll i = inew; while (--i > _ilnkused) { column* c = cf->_prev; c->_next = cf; cf = c; } }
+      if (1) { cfl->_next = 0; _s_ll i = inew; while (--i - _ilnkused > 0) { column* c = cf->_prev; c->_next = cf; cf = c; } }
       cend->_next = cf; cf->_prev = cend; _cfree_prv = cfl; bmdx_str::words::atomwral64(&_ilnkused, inew);
 
       return 1;
@@ -3725,7 +3789,7 @@ namespace bmdx
     {
       const _s_ll na = navl();
       if (_capmax >= 0 && na >= _capmax) { return -1; }
-      const _s_ll ir = _ipush % _m;
+      const _s_ll ir = _s_ll(_u_ll(_ipush) % _m);
       const bool b_lastpos = ir + 1 == _m;
       if (!_cpush || (b_lastpos && !_cpush->_next)) { _s_long res = _link_free_to_cpush(0, 1); if (res != 1) { return res; } }
       try { f(_cpush->data() + ir); } catch (...) { return -3; }
@@ -3740,7 +3804,7 @@ namespace bmdx
       if (ndelta == 0) { return 1; }
       const _s_ll na = navl();
       if (_capmax >= 0 && na + ndelta > _capmax) { return -1; }
-      const _s_ll ir = _ipush % _m;
+      const _s_ll ir = _s_ll(_u_ll(_ipush) % _m);
       if (!_cpush || (ir + ndelta >= _m && !_cpush->_next)) { _s_long res = _link_free_to_cpush(0, 1); if (res != 1) { return res; } }
       ndelta -= (_m - ir); if (ndelta < 0) { return 1; }
       column* cf = _cpush;
@@ -3759,7 +3823,7 @@ namespace bmdx
       if (n2 < 0) { return -1; }
       if (n2 == 0) { return 1; }
       _s_long res = _incr_rsv(n2); if (res != 1) { return res; }
-      const _s_ll ir = _ipush % _m;
+      const _s_ll ir = _s_ll(_u_ll(_ipush) % _m);
       column* cf = _cpush; _s_ll npushed = 0, ir2 = ir;
       for (; npushed < n2; ++npushed) { try { f(cf->data() + ir2); } catch (...) { break; } ir2 += 1; if (ir2 >= _m) { cf = cf->_next; ir2 = 0; } }
       if (npushed < n2) { for (_s_ll i = 0; i < npushed; ++i) { ir2 -= 1; if (ir2 < 0) { cf = cf->_prev; ir2 = _m - 1; } _destroy1(cf->data() + ir2); } return -3; }
@@ -3942,10 +4006,13 @@ struct _threadctl_ctx_data
   void* pctxbase;
   void* pthdata;
   mutable volatile _s_long bs;
-  volatile _s_long in_ctl;
+  volatile _s_long nctl; // number of threadtcl objects, referring to this context
   volatile char in_thread, b_own, __pad1, __pad2;
   _t_threadctl_nat_handle th;
   _critsec_data0_t<_threadctl_ctx_data> csd;
+  _s_long in_ctl() const { return bmdx_str::words::atomrdal32(&nctl); }
+  void in_ctl_set(_s_long x) { return bmdx_str::words::atomwral32(&nctl, x); }
+  _s_long in_ctl_add(_s_long x) { return bmdx_str::words::atomadd32(&nctl, x); }
 };
 struct _threadctl_tid_data
 {
@@ -4050,13 +4117,13 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) __bmdx_noex
   {
     if (!p) { return 0; }
-    if (p->in_ctl > 0 || p->in_thread) { return false; }
+    if (p->in_ctl() > 0 || p->in_thread) { return false; }
     _threadctl_tid_data::t_native_tid tid1;
     do
     {
-      p->in_ctl = 1; p->in_thread = 1;
+      p->in_ctl_set(1); p->in_thread = 1;
       try { p->th = CreateThread(0, 0, &_threadctl_thproc, p, 0, &tid1); } catch (...) {}
-      if (!p->th) { p->in_ctl = 0; p->in_thread = 0; break; }
+      if (!p->th) { p->in_ctl_set(0); p->in_thread = 0; break; }
 
       if (pret_tidobj) { _tid_set(*pret_tidobj, tid1); }
       return 1;
@@ -4093,7 +4160,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) __bmdx_noex
   {
     if (!p) { return 0; }
-    if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl <= 1))) { p->bs = 1; }
+    if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl() <= 1))) { p->bs = 1; }
     if (!p->in_thread) { th_ctx_release(p, 2); return 1; }
     if (timeout_ms < 0) { th_ctx_release(p, 2); return -1; }
     _s_long t = timeout_ms;
@@ -4362,7 +4429,7 @@ struct _threadctl_ctx_data
   void* pctxbase;
   void* pthdata;
   mutable volatile _s_long bs;
-  volatile _s_long in_ctl;
+  volatile _s_long nctl;
   volatile char in_thread, b_own, __pad1, __pad2;
   _t_threadctl_nat_handle th;
   _critsec_data0_t<_threadctl_ctx_data> csd;
@@ -4374,6 +4441,9 @@ struct _threadctl_ctx_data
   };
   _sjctx sjctx;
   union { _s_ll __2; __bmdx_tidh_t tid; };
+  _s_long in_ctl() const { return bmdx_str::words::atomrdal32(&nctl); }
+  void in_ctl_set(_s_long x) { return bmdx_str::words::atomwral32(&nctl, x); }
+  _s_long in_ctl_add(_s_long x) { return bmdx_str::words::atomadd32(&nctl, x); }
 };
 struct _threadctl_tid_data
 {
@@ -4499,7 +4569,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_start(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj) __bmdx_noex
   {
     if (!p) { return 0; }
-    if (p->in_ctl > 0 || p->in_thread) { return false; }
+    if (p->in_ctl() > 0 || p->in_thread) { return false; }
     _threadctl_tid_data::t_native_tid tid1;
     do
     {
@@ -4508,9 +4578,9 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
       pthread_attr_t a; pthread_attr_init(&a);
       pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
       int res(0);
-      p->in_ctl = 1; p->in_thread = 1;
+      p->in_ctl_set(1); p->in_thread = 1;
       res = pthread_create(&tid1, &a, (PF_threadctl_thproc)&_threadctl_thproc, p);
-      if (res != 0) { p->in_ctl = 0; p->in_thread = 0; break; }
+      if (res != 0) { p->in_ctl_set(0); p->in_thread = 0; break; }
       p->th = tid1;
       if (pret_tidobj) { _tid_set(*pret_tidobj, tid1); }
       return 1;
@@ -4575,7 +4645,7 @@ template<class _ = __vecm_tu_selector> struct _threadctl_tu_static_t
   static _s_long th_stop(_threadctl_ctx_data* p, _s_long timeout_ms) __bmdx_noex
   {
     if (!p) { return 0; }
-    if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl <= 1))) { p->bs = 1; }
+    if (!p->bs && (timeout_ms >= -1 || timeout_ms <= -4 || (timeout_ms == -2 && p->in_ctl() <= 1))) { p->bs = 1; }
     if (!p->in_thread) { _threadctl_tu_static_t<_>::th_ctx_release(p, 2); return 1; }
     if (timeout_ms < 0) { _threadctl_tu_static_t<_>::th_ctx_release(p, 2); return -1; }
     _s_long t = timeout_ms;
@@ -4905,7 +4975,7 @@ namespace bmdx
       //    false - thread failed to start.
     bool start(ctx_base* p __bmdx_noarg) __bmdx_noex
     {
-      if (_pctx || !p || p->__dat.in_thread || p->__dat.in_ctl > 0) { return false; }
+      if (_pctx || !p || p->__dat.in_thread || p->__dat.in_ctl() > 0) { return false; }
       typedef _s_long (*Pstart)(_threadctl_ctx_data* p, _threadctl_tid_data* pret_tidobj); Pstart f_start = (Pstart)p->__dat.pthsm(9);
       if (!f_start) { return false; }
       _tid.clear();
@@ -5421,7 +5491,7 @@ struct _threadctl_tu_static_t<_>::_threadctl_thproc_cleanup
     _p = 0;
   }
 };
-  // what: 1 - unset thread proc. flag (in_thread), 2 - unset threadctl flag (in_ctl).
+  // what: 1 - unset thread proc. flag (in_thread), 2 - unset threadctl flag (decrease nctl).
   //  Returns:
   //    2 - the last flag has been unset, the context data (p) and all associated objects are deleted and no longer valid.
   //    1 - the specified flag has been unset (now or already), p remains valid.
@@ -5431,19 +5501,19 @@ template<class _>
 _s_long _threadctl_tu_static_t<_>::th_ctx_release(_threadctl_ctx_data* p, _s_long what) __bmdx_noex
 {
   if (!p) { return -1; }
-  if (!p->in_thread && p->in_ctl <= 0) { return -1; }
+  if (!p->in_thread && p->in_ctl() <= 0) { return -1; }
   _s_long res = 0;
   if (what == 1)
   {
     if (!p->in_thread) { return 1; }
     critsec_t<_threadctl_ctx_data> __lock(10, -1, &p->csd); if (sizeof(__lock)) {}
-    res = 1; p->in_thread = 0; if (p->in_ctl <= 0) { res = 2; }
+    res = 1; p->in_thread = 0; if (p->in_ctl() <= 0) { res = 2; }
   }
   else if (what == 2)
   {
-    if (p->in_ctl <= 0) { return 1; }
+    if (p->in_ctl() <= 0) { return 1; }
     critsec_t<_threadctl_ctx_data> __lock(10, -1, &p->csd); if (sizeof(__lock)) {}
-    res = 1; --p->in_ctl; if (!p->in_thread && p->in_ctl == 0) { res = 2; }
+    res = 1; p->in_ctl_add(-1); if (!p->in_thread && p->in_ctl() == 0) { res = 2; }
   }
   if (res == 2)
   {
@@ -5459,7 +5529,7 @@ _s_long _threadctl_tu_static_t<_>::th_in_ctl_incr(_threadctl_ctx_data* p) __bmdx
 {
   if (!p) { return 0; }
   critsec_t<_threadctl_ctx_data> __lock(10, -1, &p->csd); if (sizeof(__lock)) {}
-  ++p->in_ctl;
+  p->in_ctl_add(1);
   return 1;
 }
 
@@ -5776,7 +5846,7 @@ static void _threadctl_thproc_impl(void* _p) __bmdx_noex
 
   try { pbase->_thread_proc(); } catch (...) {}
 }
-  // NOTE Both in_thread and in_ctl are set to 0.
+  // NOTE Both in_thread and nctl are set to 0.
   // NOTE b_own is set to 0.
   //  To enable autodeleting the context object (factual pctx type) by th_ctx_release,
   //    set p->b_own = 1 after th_ctx_init.
@@ -5787,7 +5857,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 {
   if (!(p && pctxbase)) { return -1; }
   p->pthsm = _threadctl_tu_static_t<>::sm; p->pctxbase = pctxbase; p->pthdata = pthdata;
-  p->bs = 0; p->in_ctl = 0; p->in_thread = 0; p->b_own = 0; p->__pad1 = 0; p->__pad2 = 0;
+  p->bs = 0; p->in_ctl_set(0); p->in_thread = 0; p->b_own = 0; p->__pad1 = 0; p->__pad2 = 0;
   std::memset(&p->th, 0, sizeof(p->th));
   _critsec_tu_static_t<_threadctl_ctx_data>::csdata_init(&p->csd);
   return 1;
@@ -6264,7 +6334,7 @@ static void _threadctl_thproc_impl(void* _p) __bmdx_noex
   }
   d.sjctx.state = 2;
 }
-  // NOTE Both in_thread and in_ctl are set to 0.
+  // NOTE Both in_thread and nctl are set to 0.
   // NOTE b_own is set to 0.
   //  To enable autodeleting the context object (factual pctx type) by th_ctx_release,
   //    set p->b_own = 1 after th_ctx_init.
@@ -6275,7 +6345,7 @@ _s_long _threadctl_tu_static_t<_>::th_ctx_init(_threadctl_ctx_data* p, void* pct
 {
   if (!(p && pctxbase)) { return -1; }
   p->pthsm = _threadctl_tu_static_t<>::sm; p->pctxbase = pctxbase; p->pthdata = pthdata;
-  p->bs = 0; p->in_ctl = 0; p->in_thread = 0; p->b_own = 0; p->__pad1 = 0; p->__pad2 = 0;
+  p->bs = 0; p->in_ctl_set(0); p->in_thread = 0; p->b_own = 0; p->__pad1 = 0; p->__pad2 = 0;
   std::memset(&p->th, 0, sizeof(p->th));
   _critsec_tu_static_t<_threadctl_ctx_data>::csdata_init(&p->csd);
   std::memset(&p->sjctx, 0, sizeof(p->sjctx));
@@ -9096,13 +9166,13 @@ namespace _api // public API, merged into namespace bmdx_shm
       _s_ll i2 = _ipush, i1 = bmdx_str::words::atomrdal64_g(&_ipop);
       _s_ll n = _n - (i2 - i1);
       _s_ll __np = nmax >= n ? n : _s_ll(nmax);
-      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - _s_ll(i2 % _n));
+      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - _s_ll(_u_ll(i2) % _n));
       if (n1 > 0)
       {
-        bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + _ipush % _n, p, size_t(n1));
+        bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + _s_ll(_u_ll(_ipush) % _n), p, size_t(n1));
         p += n1;
         _s_ll n2 = __np - n1;
-        if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + (_ipush + n1) % _n, p, size_t(n2)); }
+        if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(&d[0] + _s_ll(_u_ll(_ipush + n1) % _n), p, size_t(n2)); }
         bmdx_str::words::atomadd64_g(&_ipush, __np); // the last action "commits" pushing (important if the object is in shared memory)
        }
       return __np;
@@ -9117,12 +9187,12 @@ namespace _api // public API, merged into namespace bmdx_shm
       _s_ll i2 = _ipush, i1 = bmdx_str::words::atomrdal64_g(&_ipop);
       _s_ll n = _n - (i2 - i1);
       _s_ll __np = nmax >= n ? n : _s_ll(nmax);
-      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - i2 % _n);
+      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - _s_ll(_u_ll(i2) % _n));
       if (n1 > 0)
       {
-        std::memset(&d[0] + _ipush % _n, b, size_t(n1));
+        std::memset(&d[0] + _s_ll(_u_ll(_ipush) % _n), b, size_t(n1));
         _s_ll n2 = __np - n1;
-        if (n2 > 0) { std::memset(&d[0] + (_ipush + n1) % _n, b, size_t(n2)); }
+        if (n2 > 0) { std::memset(&d[0] + _s_ll(_u_ll(_ipush + n1) % _n), b, size_t(n2)); }
         bmdx_str::words::atomadd64_g(&_ipush, __np); // the last action "commits" pushing (important if the object is in shared memory)
       }
       return __np;
@@ -9137,10 +9207,10 @@ namespace _api // public API, merged into namespace bmdx_shm
     void _rcv_set_ipop(_s_ll ipop) __bmdx_noex { bmdx_str::words::atomwral64_g(&_ipop, ipop); } // for skipping data if needed
 
       // How many bytes, which may be popped, are located contiguously. [0..npop()].
-    _s_ll navl_contig() const __bmdx_noex { if (_n <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64_g(&_ipush), ipo = bmdx_str::words::atomrdal64_g(&_ipop); return bmdx_minmax::myllmin(_n - ipo % _n, ipu - ipo); }
+    _s_ll navl_contig() const __bmdx_noex { if (_n <= 0) { return 0; } _s_ll ipu = bmdx_str::words::atomrdal64_g(&_ipush), ipo = bmdx_str::words::atomrdal64_g(&_ipop); return bmdx_minmax::myllmin(_n - _s_ll(_u_ll(ipo) % _n), ipu - ipo); }
 
       // Pointer to the next byte that would be popped.
-    const char* peek1() const __bmdx_noex { return &d[0] + bmdx_str::words::atomrdal64_g(&_ipop) % _n; }
+    const char* peek1() const __bmdx_noex { return &d[0] + _s_ll(_u_ll(bmdx_str::words::atomrdal64_g(&_ipop)) % _n); }
 
       // If nmax > 0, pops min(nmax, npop()) bytes from the queue into pdest.
       // If b_do_pop == false, ipop() is not increased, so the client just gets a copy of buffer data.
@@ -9154,13 +9224,13 @@ namespace _api // public API, merged into namespace bmdx_shm
       _s_ll i1 = _ipop, i2 = bmdx_str::words::atomrdal64_g(&_ipush);
       _s_ll n = i2 - i1;
       _s_ll __np = nmax >= n ? n : _s_ll(nmax);
-      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - i1 % _n);
+      _s_ll n1 = bmdx_minmax::myllmin(__np, n, _n - _s_ll(_u_ll(i1) % _n));
       if (n1 > 0)
       {
-        bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + _ipop % _n, size_t(n1), pchs);
+        bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + _s_ll(_u_ll(_ipop) % _n), size_t(n1), pchs);
         pdest += n1;
         _s_ll n2 = __np - n1;
-        if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + (_ipop + n1) % _n, size_t(n2), pchs); }
+        if (n2 > 0) { bmdx_str::words::memmove_t<char>::sf_memcpy(pdest, &d[0] + _s_ll(_u_ll(_ipop + n1) % _n), size_t(n2), pchs); }
         if (b_do_pop) { bmdx_str::words::atomadd64_g(&_ipop, __np); } // the last action "commits" popping (important if the object is in shared memory)
       }
       return __np;

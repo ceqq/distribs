@@ -1,6 +1,6 @@
 // BMDX library 1.5 RELEASE for desktop & mobile platforms
 //  (binary modules data exchange)
-// rev. 2023-09-11
+// rev. 2023-10-07
 // See bmdx_main.h for details.
 
 #ifndef bmdx_main_H
@@ -1593,7 +1593,7 @@ s_long lm_slot_controller::peer_tracker::_x_qinfo_upd_prc_act_time()
       // When peer process had normally exited, but some data from peer remains
       //  in the local input queue or in shared queue,
       //  reporting hanged status is delayed (until LMSC pops all available messages).
-      if (res2 == 1 || (res1 == 3 && !(ipop1 < ipush1)))
+      if (res2 == 1 || (res1 == 3 && !(ipop1 - ipush1 < 0)))
       {
         if (vids.livecnt() != _qinfo_ids.livecnt()) { _qinfo_ids.livecnt(vids.livecnt()); _qinfo_livecnt_tm = t; return 0; }
           else if (t - _qinfo_livecnt_tm < __lm_slot_controller_peer_prc_hang_toms) { return 0; }
